@@ -1,10 +1,10 @@
 info.app:
-  name: HMPPS Template Kotlin
+  name: HMPPS E-Supervision
   version: 1.0
 
 spring:
   application:
-    name: hmpps-template-kotlin
+    name: esupervision-api
   codec:
     max-in-memory-size: 10MB
 
