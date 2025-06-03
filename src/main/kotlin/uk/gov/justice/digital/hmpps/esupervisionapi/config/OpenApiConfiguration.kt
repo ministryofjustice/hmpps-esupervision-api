@@ -17,9 +17,9 @@ class OpenApiConfiguration(buildProperties: BuildProperties) {
   fun customOpenAPI(): OpenAPI = OpenAPI()
     .servers(
       listOf(
-        Server().url("https://template-kotlin-dev.hmpps.service.justice.gov.uk").description("Development"),
-        Server().url("https://template-kotlin-preprod.hmpps.service.justice.gov.uk").description("Pre-Production"),
-        Server().url("https://template-kotlin.hmpps.service.justice.gov.uk").description("Production"),
+        Server().url("https://esupervision-api-dev.hmpps.service.justice.gov.uk").description("Development"),
+        Server().url("https://esupervision-api-preprod.hmpps.service.justice.gov.uk").description("Pre-Production"),
+        Server().url("https://esupervision-api.hmpps.service.justice.gov.uk").description("Production"),
         Server().url("http://localhost:8080").description("Local"),
       ),
     )
