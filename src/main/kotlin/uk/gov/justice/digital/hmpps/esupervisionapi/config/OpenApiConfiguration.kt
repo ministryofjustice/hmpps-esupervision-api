@@ -27,7 +27,7 @@ class OpenApiConfiguration(buildProperties: BuildProperties) {
       listOf(),
     )
     .info(
-      Info().title("HMPPS Template Kotlin").version(version)
+      Info().title("HMPPS E-Supervision API").version(version)
         .contact(Contact().name("HMPPS Digital Studio").email("feedback@digital.justice.gov.uk")),
     )
   // TODO Add security schema and roles in `.components()` and `.addSecurityItem()`
