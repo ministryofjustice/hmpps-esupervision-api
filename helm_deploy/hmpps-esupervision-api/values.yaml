@@ -1,18 +1,18 @@
 generic-service:
-  nameOverride: hmpps-template-kotlin
+  nameOverride: hmpps-esupervision-api
   productId: "UNASSIGNED" # productId for the product that this belongs too, i.e. DPS001, see README.md for details
 
   replicaCount: 4
 
   image:
-    repository: ghcr.io/ministryofjustice/hmpps-template-kotlin
+    repository: ghcr.io/ministryofjustice/hmpps-esupervision-api
     tag: app_version # override at deployment time
     port: 8080
 
   ingress:
     enabled: true
     host: app-hostname.local # override per environment
-    tlsSecretName: hmpps-template-kotlin-cert
+    tlsSecretName: hmpps-esupervision-api-cert
 
   # Environment variables to load into the deployment
   env:
@@ -34,4 +34,4 @@ generic-service:
       - internal
 
 generic-prometheus-alerts:
-  targetApplication: hmpps-template-kotlin
+  targetApplication: hmpps-esupervision-api
