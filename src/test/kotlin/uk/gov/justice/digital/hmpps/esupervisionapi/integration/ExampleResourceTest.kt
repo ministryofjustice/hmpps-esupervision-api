@@ -4,9 +4,10 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Disabled
 import java.time.LocalDate
 
-// TODO This test exists to support the HMPPS Typescript template and should be removed by the bootstrap process
+@Disabled
 class ExampleResourceTest : IntegrationTestBase() {
 
   @Nested
