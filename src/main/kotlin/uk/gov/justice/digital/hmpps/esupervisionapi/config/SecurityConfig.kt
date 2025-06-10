@@ -6,7 +6,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.web.SecurityFilterChain
-import org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter
 
 @Configuration
 @EnableWebSecurity
@@ -15,12 +14,12 @@ class SecurityConfig {
   @Bean
   fun filterChain(http: HttpSecurity): SecurityFilterChain {
     http
-      .headers { it.frameOptions { it.sameOrigin() }}
+      .headers { it.frameOptions { it.sameOrigin() } }
       .csrf { it.disable() }
       .authorizeHttpRequests { authz ->
         authz
           .requestMatchers(
-              "/**"
+            "/**",
 //            "/practitioners/setup",
 //            "/example/time",
 //            "/h2-console/**",

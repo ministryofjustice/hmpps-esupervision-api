@@ -20,7 +20,7 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
 
   //@PreAuthorize("hasRole('PRACTITIONER')")
   @GetMapping("/")
-  fun getInvites(pageable: Pageable):  ResponseEntity<Page<OffenderInvite>> {
+  fun getInvites(pageable: Pageable): ResponseEntity<Page<OffenderInvite>> {
     val page = offenderInviteService.getAllOffenderInvites(pageable)
     return ResponseEntity.ok(page)
   }

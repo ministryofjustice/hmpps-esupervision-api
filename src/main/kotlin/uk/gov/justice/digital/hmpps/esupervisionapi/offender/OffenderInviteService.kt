@@ -12,24 +12,22 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import java.time.Instant
-import java.time.LocalDate
 import java.time.temporal.ChronoUnit
-import java.time.temporal.TemporalAmount
 import java.util.UUID
 
 fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDate: Instant): OffenderInvite {
   return OffenderInvite(
-      uuid = UUID.randomUUID(),
-      firstName = firstName,
-      lastName = lastName,
-      dateOfBirth = dateOfBirth,
-      createdAt = now,
-      updatedAt = now,
-      expiresOn = expiryDate,
-      email = email,
-      phoneNumber = phoneNumber,
-      practitioner = practitioner,
-    )
+    uuid = UUID.randomUUID(),
+    firstName = firstName,
+    lastName = lastName,
+    dateOfBirth = dateOfBirth,
+    createdAt = now,
+    updatedAt = now,
+    expiresOn = expiryDate,
+    email = email,
+    phoneNumber = phoneNumber,
+    practitioner = practitioner,
+  )
 }
 
 data class CreateInviteResult(val invite: OffenderInvite?, val errorMessage: String?, val offenderInfo: OffenderInfo?)
@@ -66,7 +64,14 @@ class OffenderInviteService(
         try {
           val number = phoneNumUtil.parse(invitee.phoneNumber, "GB")
           if (phoneNumUtil.isValidNumber(number)) {
-            acceptedInvitees.add(invitee.copy(phoneNumber = phoneNumUtil.format(number, PhoneNumberUtil.PhoneNumberFormat.INTERNATIONAL)))
+            acceptedInvitees.add(
+              invitee.copy(
+                phoneNumber = phoneNumUtil.format(
+                  number,
+                  PhoneNumberUtil.PhoneNumberFormat.INTERNATIONAL,
+                ),
+              ),
+            )
           } else {
             invalidInvites.add(Pair(invitee, "Invalid phone number"))
           }
@@ -122,9 +127,9 @@ class OffenderInviteService(
   ): List<OffenderInvite> {
     val duplicateContactOffenders =
       offenderRepository.findWithMatchingContactInfo(emails = inviteEmails, phoneNumbers = invitePhoneNumbers)
-    val duplicateContactInvites =
-      offenderInviteRepository.findWithMatchingContactInfo(
-        emails = inviteEmails, phoneNumbers = invitePhoneNumbers, uuids = saved.map { it.uuid })
+    val duplicateContactInvites = offenderInviteRepository.findWithMatchingContactInfo(
+      emails = inviteEmails, phoneNumbers = invitePhoneNumbers, uuids = saved.map { it.uuid },
+    )
     val duplicateInvites = mutableListOf<OffenderInvite>()
 
     if (duplicateContactInvites.size > 0 || duplicateContactOffenders.size > 0) {
@@ -156,15 +161,27 @@ class OffenderInviteService(
     return duplicateInvites
   }
 
-  private fun extractInvitesContactInfo(invites: Iterable<OffenderInvite>, emails: MutableSet<String>, phoneNumbers: MutableSet<String>): Unit {
+  private fun extractInvitesContactInfo(
+    invites: Iterable<OffenderInvite>,
+    emails: MutableSet<String>,
+    phoneNumbers: MutableSet<String>,
+  ): Unit {
     return extractContactInfo(invites.map { Pair(it.email, it.phoneNumber) }, emails, phoneNumbers)
   }
 
-  private fun extractOffendersContactInfo(offenders: Iterable<Offender>, emails: MutableSet<String>, phoneNumbers: MutableSet<String>): Unit {
-    return extractContactInfo(offenders.map { Pair(it.email, it.phoneNumber)}, emails, phoneNumbers)
+  private fun extractOffendersContactInfo(
+    offenders: Iterable<Offender>,
+    emails: MutableSet<String>,
+    phoneNumbers: MutableSet<String>,
+  ): Unit {
+    return extractContactInfo(offenders.map { Pair(it.email, it.phoneNumber) }, emails, phoneNumbers)
   }
 
-  private fun extractContactInfo(contacts: Iterable<Pair<String?, String?>>, emails: MutableSet<String>, phoneNumbers: MutableSet<String>): Unit {
+  private fun extractContactInfo(
+    contacts: Iterable<Pair<String?, String?>>,
+    emails: MutableSet<String>,
+    phoneNumbers: MutableSet<String>,
+  ): Unit {
     for (pair in contacts) {
       val email = pair.first
       val phoneNumber = pair.second

@@ -53,7 +53,7 @@ open class Offender(
   open var email: String? = null,
   @Column(name = "phone_number")
   open var phoneNumber: String? = null,
-): AEntity()
+) : AEntity()
 
 enum class OffenderInviteStatus {
   CREATED,    // the record has been created, invite possibly scheduled
@@ -78,11 +78,11 @@ open class OffenderInvite(
   open var updatedAt: Instant,
   @Column(name = "expires_on", nullable = false)
   open var expiresOn: Instant?,
-  @Column(name="first_name", nullable = false)
+  @Column(name = "first_name", nullable = false)
   open var firstName: String,
-  @Column(name="last_name", nullable = false)
+  @Column(name = "last_name", nullable = false)
   open var lastName: String,
-  @Column(name="date_of_birth")
+  @Column(name = "date_of_birth")
   open var dateOfBirth: LocalDate,
   @ManyToOne(cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
   @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
@@ -92,9 +92,9 @@ open class OffenderInvite(
   open var email: String? = null,
   @Column(nullable = false)
   @Enumerated(EnumType.STRING)
-  open var status: OffenderInviteStatus = OffenderInviteStatus.CREATED
+  open var status: OffenderInviteStatus = OffenderInviteStatus.CREATED,
   // TODO(rosado): photo url
-): AEntity() {
+) : AEntity() {
 
 }
 
@@ -104,12 +104,14 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
   fun findByPhoneNumber(phoneNumber: String): Optional<Offender>
   fun findByUuid(uuid: UUID): Optional<Offender>
 
-  @Query("""
+  @Query(
+    """
     select o from Offender o 
         where o.status = 'VERIFIED'
             and ((o.email is not null and o.email in :emails)
                  or (o.phoneNumber is not null and o.phoneNumber in :phoneNumbers))
-  """)
+  """,
+  )
   fun findWithMatchingContactInfo(emails: Iterable<String>, phoneNumbers: Iterable<String>): List<Offender>
 }
 
@@ -125,12 +127,18 @@ interface OffenderInviteRepository : org.springframework.data.jpa.repository.Jpa
    * This query can be used to detect if we already invited someone with
    * given email/phone number.
    */
-  @Query("""
+  @Query(
+    """
     select oi from OffenderInvite oi
     where oi.status not in ('EXPIRED', 'APPROVED')
           and oi.uuid not in :uuids
           and ((oi.email is not null and oi.email in :emails)
                or (oi.phoneNumber is not null and oi.phoneNumber in :phoneNumbers))
-  """)
-  fun findWithMatchingContactInfo(uuids: Iterable<UUID>, emails: Iterable<String>, phoneNumbers: Iterable<String>): List<OffenderInvite>
+  """,
+  )
+  fun findWithMatchingContactInfo(
+    uuids: Iterable<UUID>,
+    emails: Iterable<String>,
+    phoneNumbers: Iterable<String>,
+  ): List<OffenderInvite>
 }
