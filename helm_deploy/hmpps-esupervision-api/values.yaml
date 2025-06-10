@@ -27,7 +27,7 @@ generic-service:
 
   namespace_secrets:
     hmpps-esupervision-insights:
-      APPLICATIONINSIGHTS_CONNECTION_STRING: "APPLICATIONINSIGHTS_CONNECTION_STRING"
+      APPLICATIONINSIGHTS_CONNECTION_STRING: "hmpps-esupervision-api-application-insights"
 
   allowlist:
     groups:
