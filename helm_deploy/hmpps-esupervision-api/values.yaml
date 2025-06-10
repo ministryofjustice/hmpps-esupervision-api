@@ -26,7 +26,7 @@ generic-service:
   #     [name of environment variable as seen by app]: [key of kubernetes secret to load]
 
   namespace_secrets:
-    hmpps-esupervision-insights:
+    hmpps-esupervision-api:
       APPLICATIONINSIGHTS_CONNECTION_STRING: "hmpps-esupervision-api-application-insights"
 
   allowlist:
