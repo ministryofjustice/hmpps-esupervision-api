@@ -2,25 +2,19 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Service
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.stereotype.Service
 import java.util.UUID
 
 @Service
 class OffenderService(private val offenderRepository: OffenderRepository) {
 
-  fun createOffender(offender: Offender): Offender {
-    return offenderRepository.save(offender)
-  }
+  fun createOffender(offender: Offender): Offender = offenderRepository.save(offender)
 
-  fun getAllOffenders(pageable: Pageable): Page<Offender> {
-    return offenderRepository.findAll(pageable)
-  }
+  fun getAllOffenders(pageable: Pageable): Page<Offender> = offenderRepository.findAll(pageable)
 
-  fun getOffenderById(id: Long): Offender? {
-    return offenderRepository.findById(id).orElse(null)
-  }
+  fun getOffenderById(id: Long): Offender? = offenderRepository.findById(id).orElse(null)
 
 //  fun updateOffender(id: Long, updatedOffender: Offender): Offender? {
 //    return offenderRepository.findById(id).map { existingOffender ->
@@ -49,5 +43,6 @@ class OffenderService(private val offenderRepository: OffenderRepository) {
 }
 
 enum class DeleteResult {
-  DELETED, NO_RECORD
+  DELETED,
+  NO_RECORD,
 }

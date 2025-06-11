@@ -13,11 +13,10 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
-import java.time.LocalDate
 import java.time.Instant
+import java.time.LocalDate
 import java.util.Optional
 import java.util.UUID
-
 
 /*
  * o -(Practitioner creates an invite)-> INITIAL -(Offender responds to invite)-> WAITING
@@ -29,12 +28,16 @@ import java.util.UUID
 enum class OffenderStatus {
   // record has been created
   INITIAL,
+
   // offender responded to invite, but has not been approved by practitioner yet
   WAITING,
+
   // practitioner approved info & id information submitted by offender
   VERIFIED,
+
   // practitioner rejected info & id information submitted by offender
   REJECTED,
+
   // practitioner (or some kind of admin) disabled the account, no further notifications will be sent
   INACTIVE,
 }
@@ -63,12 +66,16 @@ open class Offender(
 enum class OffenderInviteStatus {
   // the record has been created, invite possibly scheduled
   CREATED,
+
   // an invite has been sent
   SENT,
+
   // offender responded to an invite
   RESPONDED,
+
   // practitioner approved the offender's response
   APPROVED,
+
   // the invite expired
   EXPIRED,
 }
@@ -104,9 +111,7 @@ open class OffenderInvite(
   @Enumerated(EnumType.STRING)
   open var status: OffenderInviteStatus = OffenderInviteStatus.CREATED,
   // TODO(rosado): photo url
-) : AEntity() {
-
-}
+) : AEntity()
 
 @Repository
 interface OffenderRepository : org.springframework.data.jpa.repository.JpaRepository<Offender, Long> {

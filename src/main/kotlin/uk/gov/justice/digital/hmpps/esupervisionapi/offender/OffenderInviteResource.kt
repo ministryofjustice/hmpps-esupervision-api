@@ -13,19 +13,18 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 
-
 @RestController
 @RequestMapping("/offender_invites", produces = ["application/json"])
 class OffenderInviteResource(private val offenderInviteService: OffenderInviteService) {
 
-  //@PreAuthorize("hasRole('PRACTITIONER')")
+  // @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
   @GetMapping("/")
   fun getInvites(pageable: Pageable): ResponseEntity<Page<OffenderInvite>> {
     val page = offenderInviteService.getAllOffenderInvites(pageable)
     return ResponseEntity.ok(page)
   }
 
-  //@PreAuthorize("hasRole('PRACTITIONER')")
+  // @PreAuthorize("hasRole('PRACTITIONER')")
   @PostMapping("/")
   fun createInvites(@RequestBody @Valid inviteInfo: InviteInfo): ResponseEntity<AggregateCreateInviteResult> {
     LOG.info("Creating offender invites")

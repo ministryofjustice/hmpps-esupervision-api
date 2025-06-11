@@ -8,19 +8,13 @@ import java.util.UUID
 class PractitionerService(private val practitionerRepository: PractitionerRepository) {
 
   @Transactional
-  fun createPractitioner(practitioner: Practitioner): Practitioner {
-    return practitionerRepository.save(practitioner)
-  }
+  fun createPractitioner(practitioner: Practitioner): Practitioner = practitionerRepository.save(practitioner)
 
   @Transactional(readOnly = true)
-  fun getAllPractitioners(): List<Practitioner> {
-    return practitionerRepository.findAll()
-  }
+  fun getAllPractitioners(): List<Practitioner> = practitionerRepository.findAll()
 
   @Transactional(readOnly = true)
-  fun getPractitionerById(id: Long): Practitioner? {
-    return practitionerRepository.findById(id).orElse(null)
-  }
+  fun getPractitionerById(id: Long): Practitioner? = practitionerRepository.findById(id).orElse(null)
 
   @Transactional
   fun getPractitionerByUuid(uuid: UUID): Practitioner? {

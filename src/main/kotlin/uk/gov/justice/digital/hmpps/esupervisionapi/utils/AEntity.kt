@@ -11,7 +11,7 @@ abstract class AEntity {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(name = "id")
-  open protected val id: Long = 0
+  protected open val id: Long = 0
 
   override fun equals(other: Any?): Boolean {
     if (this === other) return true

@@ -4,7 +4,6 @@ import com.google.i18n.phonenumbers.NumberParseException
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
@@ -16,17 +15,17 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDate: Instant) = OffenderInvite(
-    uuid = UUID.randomUUID(),
-    firstName = firstName,
-    lastName = lastName,
-    dateOfBirth = dateOfBirth,
-    createdAt = now,
-    updatedAt = now,
-    expiresOn = expiryDate,
-    email = email,
-    phoneNumber = phoneNumber,
-    practitioner = practitioner,
-  )
+  uuid = UUID.randomUUID(),
+  firstName = firstName,
+  lastName = lastName,
+  dateOfBirth = dateOfBirth,
+  createdAt = now,
+  updatedAt = now,
+  expiresOn = expiryDate,
+  email = email,
+  phoneNumber = phoneNumber,
+  practitioner = practitioner,
+)
 
 data class CreateInviteResult(val invite: OffenderInvite?, val errorMessage: String?, val offenderInfo: OffenderInfo?)
 data class AggregateCreateInviteResult(val results: List<CreateInviteResult>) {
@@ -96,7 +95,8 @@ class OffenderInviteService(
       for (invite in duplicateInvites) {
         result.add(
           CreateInviteResult(
-            null, errorMessage = "Contact info already in use",
+            null,
+            errorMessage = "Contact info already in use",
             OffenderInfo(
               firstName = invite.firstName,
               lastName = invite.lastName,
@@ -128,7 +128,9 @@ class OffenderInviteService(
     val duplicateContactOffenders =
       offenderRepository.findWithMatchingContactInfo(emails = inviteEmails, phoneNumbers = invitePhoneNumbers)
     val duplicateContactInvites = offenderInviteRepository.findWithMatchingContactInfo(
-      emails = inviteEmails, phoneNumbers = invitePhoneNumbers, uuids = saved.map { it.uuid },
+      emails = inviteEmails,
+      phoneNumbers = invitePhoneNumbers,
+      uuids = saved.map { it.uuid },
     )
     val duplicateInvites = mutableListOf<OffenderInvite>()
 
@@ -166,7 +168,6 @@ class OffenderInviteService(
     emails: MutableSet<String>,
     phoneNumbers: MutableSet<String>,
   ) = extractContactInfo(invites.map { Pair(it.email, it.phoneNumber) }, emails, phoneNumbers)
-
 
   private fun extractOffendersContactInfo(
     offenders: Iterable<Offender>,
