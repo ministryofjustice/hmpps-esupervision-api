@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -17,14 +18,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 @RequestMapping("/offender_invites", produces = ["application/json"])
 class OffenderInviteResource(private val offenderInviteService: OffenderInviteService) {
 
-  // @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ESUP_PRACTITIONER')")
   @GetMapping("/")
   fun getInvites(pageable: Pageable): ResponseEntity<Page<OffenderInvite>> {
     val page = offenderInviteService.getAllOffenderInvites(pageable)
     return ResponseEntity.ok(page)
   }
 
-  // @PreAuthorize("hasRole('PRACTITIONER')")
+  @PreAuthorize("hasRole('ESUP_PRACTITIONER')")
   @PostMapping("/")
   fun createInvites(@RequestBody @Valid inviteInfo: InviteInfo): ResponseEntity<AggregateCreateInviteResult> {
     LOG.info("Creating offender invites")
