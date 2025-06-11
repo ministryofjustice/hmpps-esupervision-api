@@ -15,8 +15,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDate: Instant): OffenderInvite {
-  return OffenderInvite(
+fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDate: Instant) = OffenderInvite(
     uuid = UUID.randomUUID(),
     firstName = firstName,
     lastName = lastName,
@@ -28,14 +27,12 @@ fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDa
     phoneNumber = phoneNumber,
     practitioner = practitioner,
   )
-}
 
 data class CreateInviteResult(val invite: OffenderInvite?, val errorMessage: String?, val offenderInfo: OffenderInfo?)
 data class AggregateCreateInviteResult(val results: List<CreateInviteResult>) {
   val importedRecords: Int
     get() = results.count { it.invite != null }
 }
-
 
 @Service
 class OffenderInviteService(
@@ -101,8 +98,11 @@ class OffenderInviteService(
           CreateInviteResult(
             null, errorMessage = "Contact info already in use",
             OffenderInfo(
-              firstName = invite.firstName, lastName = invite.lastName,
-              dateOfBirth = invite.dateOfBirth, email = invite.email, phoneNumber = invite.phoneNumber,
+              firstName = invite.firstName,
+              lastName = invite.lastName,
+              dateOfBirth = invite.dateOfBirth,
+              email = invite.email,
+              phoneNumber = invite.phoneNumber,
             ),
           ),
         )
@@ -165,23 +165,20 @@ class OffenderInviteService(
     invites: Iterable<OffenderInvite>,
     emails: MutableSet<String>,
     phoneNumbers: MutableSet<String>,
-  ): Unit {
-    return extractContactInfo(invites.map { Pair(it.email, it.phoneNumber) }, emails, phoneNumbers)
-  }
+  ) = extractContactInfo(invites.map { Pair(it.email, it.phoneNumber) }, emails, phoneNumbers)
+
 
   private fun extractOffendersContactInfo(
     offenders: Iterable<Offender>,
     emails: MutableSet<String>,
     phoneNumbers: MutableSet<String>,
-  ): Unit {
-    return extractContactInfo(offenders.map { Pair(it.email, it.phoneNumber) }, emails, phoneNumbers)
-  }
+  ) = extractContactInfo(offenders.map { Pair(it.email, it.phoneNumber) }, emails, phoneNumbers)
 
   private fun extractContactInfo(
     contacts: Iterable<Pair<String?, String?>>,
     emails: MutableSet<String>,
     phoneNumbers: MutableSet<String>,
-  ): Unit {
+  ) {
     for (pair in contacts) {
       val email = pair.first
       val phoneNumber = pair.second
@@ -194,10 +191,8 @@ class OffenderInviteService(
     }
   }
 
-  fun getAllOffenderInvites(pageable: Pageable): Page<OffenderInvite> {
-    // TODO: select only invites for current user (Practitioner)
-    return offenderInviteRepository.findAll(pageable)
-  }
+  // TODO: select only invites for current user (Practitioner)
+  fun getAllOffenderInvites(pageable: Pageable) = offenderInviteRepository.findAll(pageable)
 
   companion object {
     val LOG: Logger = LoggerFactory.getLogger(this::class.java)

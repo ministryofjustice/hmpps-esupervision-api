@@ -27,11 +27,16 @@ import java.util.UUID
  */
 
 enum class OffenderStatus {
-  INITIAL,  // record has been created
-  WAITING,  // offender responded to invite, but has not been approved by practitioner yet
-  VERIFIED, // practitioner approved info & id information submitted by offender
-  REJECTED, // practitioner rejected info & id information submitted by offender,
-  INACTIVE  // practitioner (or some kind of admin) disabled the account, no further notifications will be sent
+  // record has been created
+  INITIAL,
+  // offender responded to invite, but has not been approved by practitioner yet
+  WAITING,
+  // practitioner approved info & id information submitted by offender
+  VERIFIED,
+  // practitioner rejected info & id information submitted by offender
+  REJECTED,
+  // practitioner (or some kind of admin) disabled the account, no further notifications will be sent
+  INACTIVE,
 }
 
 @Entity
@@ -56,11 +61,16 @@ open class Offender(
 ) : AEntity()
 
 enum class OffenderInviteStatus {
-  CREATED,    // the record has been created, invite possibly scheduled
-  SENT,       // an invite has been sent
-  RESPONDED,  // offender responded to an invite
-  APPROVED,   // practitioner approved the offender's response
-  EXPIRED     // the invite expired
+  // the record has been created, invite possibly scheduled
+  CREATED,
+  // an invite has been sent
+  SENT,
+  // offender responded to an invite
+  RESPONDED,
+  // practitioner approved the offender's response
+  APPROVED,
+  // the invite expired
+  EXPIRED,
 }
 
 /**
