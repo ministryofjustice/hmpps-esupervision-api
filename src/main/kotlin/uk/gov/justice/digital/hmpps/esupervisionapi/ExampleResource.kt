@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDateTime
 
 @RestController
-@PreAuthorize("hasRole('ESUP_PRACTITIONER')")
+@PreAuthorize("hasRole('ROLE_TEMPLATE_KOTLIN__UI')")
 @RequestMapping("/example", produces = ["application/json"])
 class ExampleResource {
   @GetMapping("/time")
