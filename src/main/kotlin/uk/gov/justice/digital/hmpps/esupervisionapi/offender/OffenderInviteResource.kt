@@ -18,14 +18,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 @RequestMapping("/offender_invites", produces = ["application/json"])
 class OffenderInviteResource(private val offenderInviteService: OffenderInviteService) {
 
-  @PreAuthorize("hasRole('ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_TEMPLATE_KOTLIN__UI')")
   @GetMapping("/")
   fun getInvites(pageable: Pageable): ResponseEntity<Page<OffenderInvite>> {
     val page = offenderInviteService.getAllOffenderInvites(pageable)
     return ResponseEntity.ok(page)
   }
 
-  @PreAuthorize("hasRole('ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
   @PostMapping("/")
   fun createInvites(@RequestBody @Valid inviteInfo: InviteInfo): ResponseEntity<AggregateCreateInviteResult> {
     LOG.info("Creating offender invites")
