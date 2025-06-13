@@ -21,6 +21,7 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
   @PreAuthorize("hasRole('ROLE_TEMPLATE_KOTLIN__UI')")
   @GetMapping("/")
   fun getInvites(pageable: Pageable): ResponseEntity<Page<OffenderInvite>> {
+    //  val authentication = SecurityContextHolder.getContext().authentication
     val page = offenderInviteService.getAllOffenderInvites(pageable)
     return ResponseEntity.ok(page)
   }
