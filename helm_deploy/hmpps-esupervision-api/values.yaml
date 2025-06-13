@@ -1,6 +1,7 @@
 generic-service:
   nameOverride: hmpps-esupervision-api
   productId: "HMPPS9999" # productId for the product that this belongs too, i.e. DPS001, see README.md for details
+  serviceAccountName: hmpps-esupervision-api
 
   replicaCount: 4
 
