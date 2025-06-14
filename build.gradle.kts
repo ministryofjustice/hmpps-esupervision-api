@@ -16,8 +16,7 @@ dependencies {
 
   implementation("org.jetbrains.kotlin:kotlin-reflect")
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-  runtimeOnly("com.h2database:h2")
-  // runtimeOnly("org.postgresql:postgresql")
+  runtimeOnly("org.postgresql:postgresql")
   implementation("com.googlecode.libphonenumber:libphonenumber:9.0.7")
 
   developmentOnly("org.springframework.boot:spring-boot-devtools")
