@@ -11,6 +11,8 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
@@ -28,9 +30,6 @@ import java.util.UUID
 enum class OffenderStatus {
   // record has been created
   INITIAL,
-
-  // offender responded to invite, but has not been approved by practitioner yet
-  WAITING,
 
   // practitioner approved info & id information submitted by offender
   VERIFIED,
@@ -52,16 +51,33 @@ open class Offender(
   @Column("last_name", nullable = false)
   open var lastName: String,
   @Column("date_of_birth")
-  open var dateOfBirth: Instant?,
+  open var dateOfBirth: LocalDate?,
   @Column(nullable = false)
   @Enumerated(EnumType.STRING)
+  // @Version
   open var status: OffenderStatus = OffenderStatus.INITIAL,
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
+  @Column(name = "updated_at", nullable = false)
+  open var updatedAt: Instant,
   open var email: String? = null,
   @Column(name = "phone_number")
   open var phoneNumber: String? = null,
-) : AEntity()
+//  @ManyToOne(cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
+//  @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
+//  open var practitioner: Practitioner,
+) : AEntity() {
+  fun dto(): OffenderDto = OffenderDto(
+    uuid = uuid,
+    firstName = firstName,
+    lastName = lastName,
+    dateOfBirth = dateOfBirth,
+    status = status,
+    email = email,
+    phoneNumber = phoneNumber,
+    createdAt = createdAt,
+  )
+}
 
 enum class OffenderInviteStatus {
   // the record has been created, invite possibly scheduled
@@ -75,6 +91,9 @@ enum class OffenderInviteStatus {
 
   // practitioner approved the offender's response
   APPROVED,
+
+  // practitioner rejected the offender's response
+  REJECTED,
 
   // the invite expired
   EXPIRED,
@@ -109,9 +128,23 @@ open class OffenderInvite(
   open var email: String? = null,
   @Column(nullable = false)
   @Enumerated(EnumType.STRING)
+  // @Version
   open var status: OffenderInviteStatus = OffenderInviteStatus.CREATED,
   // TODO(rosado): photo url
-) : AEntity()
+) : AEntity() {
+  fun dto(): OffenderInviteDto = OffenderInviteDto(
+    inviteUuid = uuid,
+    practitionerUuid = practitioner.uuid,
+    status = status,
+    info = OffenderInfo(
+      firstName = firstName,
+      lastName = lastName,
+      dateOfBirth = dateOfBirth,
+      email = email,
+      phoneNumber = phoneNumber,
+    ),
+  )
+}
 
 @Repository
 interface OffenderRepository : org.springframework.data.jpa.repository.JpaRepository<Offender, Long> {

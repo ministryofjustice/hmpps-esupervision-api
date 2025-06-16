@@ -6,12 +6,17 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.multipart.MultipartFile
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.Optional
 import java.util.UUID
 
 fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDate: Instant) = OffenderInvite(
@@ -35,10 +40,12 @@ data class AggregateCreateInviteResult(val results: List<CreateInviteResult>) {
 
 @Service
 class OffenderInviteService(
-  val offenderInviteRepository: OffenderInviteRepository,
-  val offenderRepository: OffenderRepository,
-  val practitionerRepository: PractitionerRepository,
+  private val offenderInviteRepository: OffenderInviteRepository,
+  private val offenderRepository: OffenderRepository,
+  private val practitionerRepository: PractitionerRepository,
 ) {
+
+  fun findByUUID(uuid: UUID): Optional<OffenderInvite> = offenderInviteRepository.findByUuid(uuid)
 
   fun createOffenderInvites(inviteInfo: InviteInfo): AggregateCreateInviteResult {
     val now = Instant.now()
@@ -193,9 +200,68 @@ class OffenderInviteService(
   }
 
   // TODO: select only invites for current user (Practitioner)
-  fun getAllOffenderInvites(pageable: Pageable) = offenderInviteRepository.findAll(pageable)
+  fun getAllOffenderInvites(pageable: Pageable): List<OffenderInviteDto> {
+    val page = offenderInviteRepository.findAll(pageable)
+    return page.content.map { it.dto() }
+  }
+
+  /**
+   * To be called when offender confirms the invitation.
+   * Returns the invite only if it's status was updated.
+   */
+  @Transactional
+  fun confirmOffenderInvite(confirmation: OffenderInviteConfirmation, image: MultipartFile): Optional<OffenderInvite> {
+    val inviteFound = offenderInviteRepository.findByUuid(confirmation.inviteUuid)
+    if (inviteFound.isPresent) {
+      val invite = inviteFound.get()
+      // TODO: we should check for "SENT" here -
+      if (confirmation.info == invite.toOffenderInfo() && (invite.status == OffenderInviteStatus.CREATED || invite.status == OffenderInviteStatus.CREATED)) {
+        val now = Instant.now()
+        invite.status = OffenderInviteStatus.RESPONDED
+        invite.updatedAt = now
+        offenderInviteRepository.save(invite)
+      } else {
+        return Optional.empty()
+      }
+    }
+
+    return inviteFound
+  }
+
+  @Transactional
+  fun approveOffenderInvite(invite: OffenderInvite): Offender {
+    val now = Instant.now()
+    invite.status = OffenderInviteStatus.APPROVED
+    invite.updatedAt = now
+    offenderInviteRepository.save(invite)
+
+    val offender = Offender(
+      uuid = UUID.randomUUID(),
+      firstName = invite.firstName,
+      lastName = invite.lastName,
+      email = invite.email,
+      phoneNumber = invite.phoneNumber,
+      status = OffenderStatus.VERIFIED,
+      dateOfBirth = invite.dateOfBirth,
+      createdAt = now,
+      updatedAt = now,
+      // practitioner = invite.practitioner,
+    )
+    // TODO: verify no active records with same contact info exist
+    return offenderRepository.save(offender)
+  }
+
+  @Transactional
+  fun rejectOffenderInvite(invite: OffenderInvite): OffenderInvite {
+    val now = Instant.now()
+    invite.status = OffenderInviteStatus.REJECTED
+    invite.updatedAt = now
+    return offenderInviteRepository.save(invite)
+  }
 
   companion object {
     val LOG: Logger = LoggerFactory.getLogger(this::class.java)
   }
 }
+
+fun OffenderInvite.toOffenderInfo(): OffenderInfo = OffenderInfo(firstName, lastName, dateOfBirth, email, phoneNumber)
