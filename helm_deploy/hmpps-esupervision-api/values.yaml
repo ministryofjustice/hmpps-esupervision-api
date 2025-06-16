@@ -30,6 +30,13 @@ generic-service:
     hmpps-esupervision-api-application-insights:
       APPLICATIONINSIGHTS_CONNECTION_STRING: "APPLICATIONINSIGHTS_CONNECTION_STRING"
 
+    # postgres connection settings
+    hmpps-esupervision-rds-settings:
+      POSTGRES_ENDPOINT: "rds_instance_endpoint"
+      POSTGRES_USERNAME: "database_username"
+      POSTGRES_PASSWORD: "database_password"
+      POSTGRES_DATABASE: "database_name"
+
   allowlist:
     groups:
       - internal
