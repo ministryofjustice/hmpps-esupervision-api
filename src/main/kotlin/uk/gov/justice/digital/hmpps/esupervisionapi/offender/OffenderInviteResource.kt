@@ -44,20 +44,6 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
       pagination = Pagination(pageNumber = 0, pageSize = 20),
       content = page,
     )
-//    val result = OffenderInvitesDto(
-//      pagination = page.pageable.toPagination(),
-//      content = page.content.map { OffenderInviteDto(
-//        it.uuid,
-//        status = it.status,
-//        practitionerUuid = it.practitioner.uuid,
-//        info = OffenderInfo(
-//          firstName = it.firstName,
-//          lastName = it.lastName,
-//          email = it.email,
-//          phoneNumber = it.phoneNumber,
-//          dateOfBirth = it.dateOfBirth,
-//        )) }
-//    )
     return ResponseEntity.ok(result)
   }
 
