@@ -121,6 +121,19 @@ e.g. `values-dev.yaml`.
 There is also a `docker-compose.yml` that can be used to run a local instance of the template in docker and also an
 instance of HMPPS Auth (required if your service calls out to other services using a token).
 
+The docker-compose configuration defines a local postgres instance used for persistence. Before running services locally,
+define a `.env` file containing the password for the default `postgres` user:
+
+__.env__
+```properties
+POSTGRES_PASSWORD=your_local_dev_password
+```
+
+note this file is also loaded within the Spring boot `application-dev.yml` file so the password does not need to be repeated
+there.
+
+Run services with:
+
 ```bash
 docker compose pull && docker compose up
 ```
