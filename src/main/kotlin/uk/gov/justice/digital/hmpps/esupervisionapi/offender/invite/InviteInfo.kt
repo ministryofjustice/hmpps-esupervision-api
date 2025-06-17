@@ -26,6 +26,7 @@ data class OffenderInviteDto(
   val inviteUuid: UUID,
   val practitionerUuid: UUID,
   val status: OffenderInviteStatus,
+  val photoKey: String? = null,
   val info: OffenderInfo,
 )
 

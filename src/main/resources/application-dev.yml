@@ -27,3 +27,9 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         hbm2ddl:
           auto: update
+
+aws:
+  endpoint-url: "http://localhost:4566"
+  s3:
+    image-uploads: hmpps-esupervision-image-uploads
+    video-uploads: hmpss-esupervision-video-uploads

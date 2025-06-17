@@ -63,9 +63,11 @@ open class Offender(
   open var email: String? = null,
   @Column(name = "phone_number")
   open var phoneNumber: String? = null,
-//  @ManyToOne(cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
-//  @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
-//  open var practitioner: Practitioner,
+  @ManyToOne(cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
+  @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
+  open var practitioner: Practitioner,
+  @Column("photo_key", nullable = false)
+  open var photoKey: String,
 ) : AEntity() {
   fun dto(): OffenderDto = OffenderDto(
     uuid = uuid,
@@ -76,6 +78,7 @@ open class Offender(
     email = email,
     phoneNumber = phoneNumber,
     createdAt = createdAt,
+    photoKey = photoKey,
   )
 }
 
@@ -130,12 +133,14 @@ open class OffenderInvite(
   @Enumerated(EnumType.STRING)
   // @Version
   open var status: OffenderInviteStatus = OffenderInviteStatus.CREATED,
-  // TODO(rosado): photo url
+  @Column("photo_key", nullable = true)
+  open var photoKey: String?,
 ) : AEntity() {
   fun dto(): OffenderInviteDto = OffenderInviteDto(
     inviteUuid = uuid,
     practitionerUuid = practitioner.uuid,
     status = status,
+    photoKey = photoKey,
     info = OffenderInfo(
       firstName = firstName,
       lastName = lastName,

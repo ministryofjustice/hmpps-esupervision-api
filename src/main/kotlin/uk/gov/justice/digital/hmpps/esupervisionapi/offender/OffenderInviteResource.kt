@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import software.amazon.awssdk.services.s3.model.S3Exception
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
@@ -85,13 +86,18 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
       return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Invite not found"))
     }
 
-    val updatedInvite = offenderInviteService.confirmOffenderInvite(confirmationInfo, image)
-    if (updatedInvite.isEmpty) {
-      // the invite status changed already, we did not perform an update
-      return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Could not confirm offender invite"))
-    }
+    try {
+      val updatedInvite = offenderInviteService.confirmOffenderInvite(confirmationInfo, image)
+      if (updatedInvite.isEmpty) {
+        // the invite status changed already, we did not perform an update
+        return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Could not confirm offender invite"))
+      }
 
-    return ResponseEntity.ok(ConfirmationResultDto())
+      return ResponseEntity.ok(ConfirmationResultDto())
+    } catch (e: S3Exception) {
+      LOG.warn("confirmInvite(invite={}), S3 failure: {}", confirmationInfo.inviteUuid, e.message)
+      throw e
+    }
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")

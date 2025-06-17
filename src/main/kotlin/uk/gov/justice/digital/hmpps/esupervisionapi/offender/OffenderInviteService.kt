@@ -14,6 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInvi
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Optional
@@ -30,6 +31,7 @@ fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDa
   email = email,
   phoneNumber = phoneNumber,
   practitioner = practitioner,
+  photoKey = null,
 )
 
 data class CreateInviteResult(val invite: OffenderInvite?, val errorMessage: String?, val offenderInfo: OffenderInfo?)
@@ -43,6 +45,7 @@ class OffenderInviteService(
   private val offenderInviteRepository: OffenderInviteRepository,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
+  private val s3UploadService: S3UploadService,
 ) {
 
   fun findByUUID(uuid: UUID): Optional<OffenderInvite> = offenderInviteRepository.findByUuid(uuid)
@@ -215,8 +218,10 @@ class OffenderInviteService(
     if (inviteFound.isPresent) {
       val invite = inviteFound.get()
       // TODO: we should check for "SENT" here -
-      if (confirmation.info == invite.toOffenderInfo() && (invite.status == OffenderInviteStatus.CREATED || invite.status == OffenderInviteStatus.CREATED)) {
+      if (confirmation.info == invite.toOffenderInfo() && (invite.status == OffenderInviteStatus.CREATED || invite.status == OffenderInviteStatus.RESPONDED)) {
+        val uploadKey = s3UploadService.uploadInvitePhoto(invite, image)
         val now = Instant.now()
+        invite.photoKey = uploadKey
         invite.status = OffenderInviteStatus.RESPONDED
         invite.updatedAt = now
         offenderInviteRepository.save(invite)
@@ -235,6 +240,10 @@ class OffenderInviteService(
     invite.updatedAt = now
     offenderInviteRepository.save(invite)
 
+    if (invite.photoKey == null) {
+      throw RuntimeException("Cannot aprove invite without a photo: invite=${invite.uuid}")
+    }
+
     val offender = Offender(
       uuid = UUID.randomUUID(),
       firstName = invite.firstName,
@@ -245,7 +254,8 @@ class OffenderInviteService(
       dateOfBirth = invite.dateOfBirth,
       createdAt = now,
       updatedAt = now,
-      // practitioner = invite.practitioner,
+      practitioner = invite.practitioner,
+      photoKey = invite.photoKey!!,
     )
     // TODO: verify no active records with same contact info exist
     return offenderRepository.save(offender)

@@ -27,7 +27,7 @@ if (response.status === 200) {
 }
 %}
 
-###
+### Practitioner looks at status of created invites
 GET http://localhost:8080/offender_invites
 Authorization: Bearer {{hmpps_auth.pp}}
 Content-Type: application/json
@@ -64,7 +64,7 @@ Content-Disposition: form-data; name="info.email"
 
 barry@example.com
 --WebAppBoundary
-Content-Disposition: form-data; name="image"; filename="test.png"
+Content-Disposition: form-data; name="image"; filename="guy.png"
 Content-Type: image/png
 
 < ./guy.png

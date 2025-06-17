@@ -14,6 +14,9 @@ dependencies {
   implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8")
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
+  api("software.amazon.awssdk:s3")
+  implementation("software.amazon.awssdk:s3:2.31.63")
+
   implementation("org.jetbrains.kotlin:kotlin-reflect")
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")
   runtimeOnly("org.postgresql:postgresql")

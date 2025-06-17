@@ -14,4 +14,5 @@ data class OffenderDto(
 //  val updatedAt: Instant,
   val email: String? = null,
   val phoneNumber: String? = null,
+  val photoKey: String,
 )
