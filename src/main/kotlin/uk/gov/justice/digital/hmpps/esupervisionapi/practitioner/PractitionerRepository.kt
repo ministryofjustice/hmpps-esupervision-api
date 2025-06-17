@@ -22,7 +22,16 @@ open class Practitioner(
   @Column("phone_number")
   open var phoneNumber: String? = null,
   open var roles: List<String> = listOf(),
-) : AEntity()
+) : AEntity() {
+  fun dto(): PractitionerDto = PractitionerDto(
+    uuid = uuid,
+    firstName = firstName,
+    lastName = lastName,
+    email = email,
+    phoneNumber = phoneNumber,
+    roles = roles,
+  )
+}
 
 @Repository
 interface PractitionerRepository : org.springframework.data.jpa.repository.JpaRepository<Practitioner, Long> {

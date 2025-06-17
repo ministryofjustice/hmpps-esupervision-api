@@ -1,6 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInviteStatus
 import java.time.LocalDate
+import java.util.UUID
 
 data class InviteInfo(
   val invitees: List<OffenderInfo> = emptyList(),
@@ -15,4 +17,23 @@ data class OffenderInfo(
   val dateOfBirth: LocalDate,
   val email: String? = null,
   val phoneNumber: String? = null,
+)
+
+/**
+ *
+ */
+data class OffenderInviteDto(
+  val inviteUuid: UUID,
+  val practitionerUuid: UUID,
+  val status: OffenderInviteStatus,
+  val info: OffenderInfo,
+)
+
+/**
+ * To be supplied by the offender to confirm the invite.
+ */
+data class OffenderInviteConfirmation(
+  val inviteUuid: UUID,
+  // val code: String
+  val info: OffenderInfo,
 )
