@@ -132,6 +132,16 @@ POSTGRES_PASSWORD=your_local_dev_password
 note this file is also loaded within the Spring boot `application-dev.yml` file so the password does not need to be repeated
 there.
 
+You should also configure an API key for the Gov.UK [notify service](https://www.notifications.service.gov.uk/). There is a test
+key in the `hmpps-esupervision-notify-api-key-test` secret within the development namespace which you can use locally. Set the
+`NOTIFY_API_KEY` environment variable when running the service or in your local `.env` file:
+
+```properties
+NOTIFY_API_KEY=notifykey
+```
+
+This key does not send real messages but will appear in the notify dashboard.
+
 Run services with:
 
 ```bash
