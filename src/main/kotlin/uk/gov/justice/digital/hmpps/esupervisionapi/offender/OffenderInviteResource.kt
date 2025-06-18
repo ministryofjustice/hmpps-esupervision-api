@@ -19,6 +19,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.Pagination
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
+import java.time.Duration
 import java.util.UUID
 
 data class ConfirmationResultDto(
@@ -33,7 +35,10 @@ data class OffenderInvitesDto(
 
 @RestController
 @RequestMapping("/offender_invites", produces = ["application/json"])
-class OffenderInviteResource(private val offenderInviteService: OffenderInviteService) {
+class OffenderInviteResource(
+  private val offenderInviteService: OffenderInviteService,
+  private val s3UploadService: S3UploadService
+) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping()
@@ -62,21 +67,21 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
   @PostMapping("/confirm")
   fun confirmInvite(
     @ModelAttribute confirmationInfo: OffenderInviteConfirmation,
-    @RequestParam("image") image: MultipartFile,
   ): ResponseEntity<ConfirmationResultDto> {
-    if (image.isEmpty) {
-      return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Image cannot be empty"))
-    }
+
     val invite = offenderInviteService.findByUUID(confirmationInfo.inviteUuid)
     if (invite.isEmpty) {
       return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Invite not found"))
     }
+    if (!s3UploadService.isInvitePhotoUploaded(invite.get())) {
+      return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "No photo uploaded"))
+    }
 
     try {
-      val updatedInvite = offenderInviteService.confirmOffenderInvite(confirmationInfo, image)
+      val updatedInvite = offenderInviteService.confirmOffenderInvite(confirmationInfo)
       if (updatedInvite.isEmpty) {
         // the invite status changed already, we did not perform an update
-        return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Could not confirm offender invite"))
+        return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Could not confirm offender invite (invalid status change)"))
       }
 
       return ResponseEntity.ok(ConfirmationResultDto())
@@ -106,6 +111,35 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
         "offender" to offender.uuid.toString(),
       ),
     )
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUP_OFFENDER')")
+  @PostMapping("/upload_location")
+  fun  invitePhotoUploadLocation(
+    @RequestParam uuid: UUID,
+    @RequestParam(name="content-type", required = true) contentType: String): ResponseEntity<Map<String, String>> {
+
+    val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
+    if(!supportedContentTypes.contains(contentType)) {
+      return ResponseEntity.badRequest().body(mapOf("error" to "supported content types: $supportedContentTypes"))
+    }
+    val invite = offenderInviteService.findByUUID(uuid)
+    if (invite.isEmpty) {
+      return ResponseEntity.badRequest().body(
+        mapOf(
+          "error" to "No invite found with id $uuid"
+        )
+      )
+    }
+
+    val duration = Duration.ofMinutes(5)
+    val url = s3UploadService.generatePresignedUploadUrl(invite.get(), contentType, duration)
+    LOG.debug("generated invite photo upload url: {}", url)
+    return ResponseEntity.ok(mapOf(
+      "url" to "$url",
+      "contentType" to contentType,
+      "duration" to duration.toString(),
+    ))
   }
 
   companion object {

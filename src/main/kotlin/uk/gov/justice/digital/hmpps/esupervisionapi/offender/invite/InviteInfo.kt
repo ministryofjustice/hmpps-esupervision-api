@@ -35,6 +35,6 @@ data class OffenderInviteDto(
  */
 data class OffenderInviteConfirmation(
   val inviteUuid: UUID,
-  // val code: String
+  val photoContentType: String,
   val info: OffenderInfo,
 )

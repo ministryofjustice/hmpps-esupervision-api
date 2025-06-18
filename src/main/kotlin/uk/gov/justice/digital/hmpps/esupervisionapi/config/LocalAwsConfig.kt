@@ -9,6 +9,8 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.S3Configuration
+import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import java.net.URI
 
 @Configuration
@@ -30,6 +32,16 @@ class LocalAwsConfig {
       .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("any", "any")))
       .build()
   }
+
+  @Bean
+  fun s3Presigner(): S3Presigner = S3Presigner.builder()
+    .serviceConfiguration(
+      S3Configuration.builder()
+        .pathStyleAccessEnabled(true).build())
+    .endpointOverride(URI.create(endpointUrl))
+    .region(Region.of(region))
+    .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("any", "any")))
+    .build()
 
   companion object {
     val LOG = LoggerFactory.getLogger(this::class.java)

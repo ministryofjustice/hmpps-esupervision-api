@@ -38,6 +38,24 @@ if (response.status == 200) {
 }
  %}
 
+### Request upload location for the offender
+POST http://localhost:8080/offender_invites/upload_location?uuid={{invite.uuid}}&content-type=image/png
+Authorization: Bearer {{hmpps_auth.pop}}
+
+> {%
+if (response.status === 200) {
+    const uploadUrl = response.body["url"]
+    client.global.set("invitePhotoUploadUrl", uploadUrl)
+}
+%}
+
+### "Attach" photo to the invite
+PUT {{invitePhotoUploadUrl}}
+Content-Type: image/png
+
+< ./guy.png
+
+
 ### Offender confirms the invite
 POST http://localhost:8080/offender_invites/confirm
 Authorization: Bearer {{hmpps_auth.pop}}
@@ -64,10 +82,9 @@ Content-Disposition: form-data; name="info.email"
 
 barry@example.com
 --WebAppBoundary
-Content-Disposition: form-data; name="image"; filename="guy.png"
-Content-Type: image/png
+Content-Disposition: form-data: name="photoContentType"
 
-< ./guy.png
+image/png
 --WebAppBoundary--
 
 ### Practitioner sees invite status on the dashboard

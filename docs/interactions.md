@@ -31,10 +31,16 @@ sequenceDiagram
     participant Offender
     participant Frontend
     participant Backend
+    participant S3
         
     Offender->>Frontend: Open invite URL
     Frontend->>Backend: Validate invite URL
     Backend-->>Frontend: Invite valid
+    Frontend->>Backend: Get Photo Upload URL
+    Backend-->>Frontend: Return pre-signed URL
+    Frontend-->>Offender: Display photo upload UI
+    Offender->>Frontend: Upload photo
+    Frontend->>S3: Upload photo to pre-signed URL
     Frontend-->>Offender: Display registration form
     Offender->>Frontend: Fill registration form
     Frontend->>Backend: Submit registration data
