@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -40,6 +42,11 @@ class OffenderInviteResource(
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @Operation(
+    summary = "Returns a collection of invite records",
+    description = "The returned invites can be linked to any practitioner.",
+  )
   @GetMapping()
   fun getInvites(pageable: Pageable): ResponseEntity<OffenderInvitesDto> {
     //  val authentication = SecurityContextHolder.getContext().authentication
@@ -52,6 +59,12 @@ class OffenderInviteResource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @Operation(
+    summary = "Creates and starts the invite process.",
+    description = """For each successfully created invite a notification will be scheduled (via specified contact method). 
+      When invite could not be created, `errorMessage` will be set.""",
+  )
   @PostMapping("/")
   fun createInvites(@RequestBody @Valid inviteInfo: InviteInfo): ResponseEntity<AggregateCreateInviteResult> {
     LOG.info("Creating offender invites")
@@ -63,6 +76,15 @@ class OffenderInviteResource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "offender")
+  @Operation(
+    summary = "Confirm the invite on behalf the offender",
+    description = """This step requires that a photo was uploaded (see `/offender_invites/upload_location`)
+      and the submitted information matches the information in the invite record. 
+      Once confirmed, the practitioner will need to approve the submission (e.g. the photo) 
+      via `/offender_invites/approve`.
+    """,
+  )
   @PostMapping("/confirm")
   fun confirmInvite(
     @ModelAttribute confirmationInfo: OffenderInviteConfirmation,
@@ -90,6 +112,12 @@ class OffenderInviteResource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @Operation(
+    summary = "Approve the invite and add offender to the system",
+    description = """To be called on behalf the practitioner when data supplied by the offender confirms their identity.
+    Once approved, the practitioner will be able to schedule "checkins." """,
+  )
   @PostMapping("/approve")
   fun approveInvite(@RequestParam uuid: UUID): ResponseEntity<Map<String, String>> {
     // TODO: settle on return value
@@ -111,7 +139,7 @@ class OffenderInviteResource(
     )
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUP_OFFENDER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/upload_location")
   fun invitePhotoUploadLocation(
     @RequestParam uuid: UUID,
