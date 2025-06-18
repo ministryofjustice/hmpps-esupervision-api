@@ -37,7 +37,8 @@ class LocalAwsConfig {
   fun s3Presigner(): S3Presigner = S3Presigner.builder()
     .serviceConfiguration(
       S3Configuration.builder()
-        .pathStyleAccessEnabled(true).build())
+        .pathStyleAccessEnabled(true).build(),
+    )
     .endpointOverride(URI.create(endpointUrl))
     .region(Region.of(region))
     .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("any", "any")))

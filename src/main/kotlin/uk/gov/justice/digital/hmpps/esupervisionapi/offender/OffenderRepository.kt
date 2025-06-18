@@ -76,7 +76,7 @@ open class Offender(
     email = email,
     phoneNumber = phoneNumber,
     createdAt = createdAt,
-    photoUrl = null
+    photoUrl = null,
   )
 }
 

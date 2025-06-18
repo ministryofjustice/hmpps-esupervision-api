@@ -21,9 +21,7 @@ import java.util.UUID
 data class InvitePhotoKey(
   val invite: UUID,
 ) {
-  fun asString(): String {
-    return "invite-${invite}"
-  }
+  fun asString(): String = "invite-$invite"
 }
 
 @Service
@@ -55,7 +53,6 @@ class S3UploadService(
       return request.key()
     }
     throw RuntimeException("file content type is null for file originalFileName='${image.originalFilename}'")
-
   }
 
   /**
@@ -68,7 +65,7 @@ class S3UploadService(
   fun generatePresignedUploadUrl(
     invite: OffenderInvite,
     contentType: String = "application/octet-stream",
-    duration: Duration
+    duration: Duration,
   ): URL {
     val putRequest = putObjectRequest(invite, contentType)
     val presignRequest = PutObjectPresignRequest.builder()
@@ -92,5 +89,4 @@ class S3UploadService(
       return false
     }
   }
-
 }

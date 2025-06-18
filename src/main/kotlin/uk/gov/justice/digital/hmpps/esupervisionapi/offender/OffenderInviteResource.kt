@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import org.springframework.web.multipart.MultipartFile
 import software.amazon.awssdk.services.s3.model.S3Exception
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
@@ -37,7 +36,7 @@ data class OffenderInvitesDto(
 @RequestMapping("/offender_invites", produces = ["application/json"])
 class OffenderInviteResource(
   private val offenderInviteService: OffenderInviteService,
-  private val s3UploadService: S3UploadService
+  private val s3UploadService: S3UploadService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -68,7 +67,6 @@ class OffenderInviteResource(
   fun confirmInvite(
     @ModelAttribute confirmationInfo: OffenderInviteConfirmation,
   ): ResponseEntity<ConfirmationResultDto> {
-
     val invite = offenderInviteService.findByUUID(confirmationInfo.inviteUuid)
     if (invite.isEmpty) {
       return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Invite not found"))
@@ -115,31 +113,33 @@ class OffenderInviteResource(
 
   @PreAuthorize("hasRole('ROLE_ESUP_OFFENDER')")
   @PostMapping("/upload_location")
-  fun  invitePhotoUploadLocation(
+  fun invitePhotoUploadLocation(
     @RequestParam uuid: UUID,
-    @RequestParam(name="content-type", required = true) contentType: String): ResponseEntity<Map<String, String>> {
-
+    @RequestParam(name = "content-type", required = true) contentType: String,
+  ): ResponseEntity<Map<String, String>> {
     val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
-    if(!supportedContentTypes.contains(contentType)) {
+    if (!supportedContentTypes.contains(contentType)) {
       return ResponseEntity.badRequest().body(mapOf("error" to "supported content types: $supportedContentTypes"))
     }
     val invite = offenderInviteService.findByUUID(uuid)
     if (invite.isEmpty) {
       return ResponseEntity.badRequest().body(
         mapOf(
-          "error" to "No invite found with id $uuid"
-        )
+          "error" to "No invite found with id $uuid",
+        ),
       )
     }
 
     val duration = Duration.ofMinutes(5)
     val url = s3UploadService.generatePresignedUploadUrl(invite.get(), contentType, duration)
     LOG.debug("generated invite photo upload url: {}", url)
-    return ResponseEntity.ok(mapOf(
-      "url" to "$url",
-      "contentType" to contentType,
-      "duration" to duration.toString(),
-    ))
+    return ResponseEntity.ok(
+      mapOf(
+        "url" to "$url",
+        "contentType" to contentType,
+        "duration" to duration.toString(),
+      ),
+    )
   }
 
   companion object {

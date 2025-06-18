@@ -5,10 +5,8 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
-import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.web.multipart.MultipartFile
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
@@ -34,7 +32,6 @@ fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDa
   practitioner = practitioner,
 )
 
-
 data class CreateInviteResult(
   val invite: OffenderInvite?,
   /**
@@ -44,7 +41,8 @@ data class CreateInviteResult(
   /**
    * Set only when an invite could not be created.
    */
-  val offenderInfo: OffenderInfo?)
+  val offenderInfo: OffenderInfo?,
+)
 data class AggregateCreateInviteResult(val results: List<CreateInviteResult>) {
   val importedRecords: Int
     get() = results.count { it.invite != null }
