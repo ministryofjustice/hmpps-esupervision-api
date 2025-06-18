@@ -54,7 +54,7 @@ class OffenderInviteResource(
     return ResponseEntity.notFound().build()
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @Operation(
     summary = "Returns a collection of invite records",
