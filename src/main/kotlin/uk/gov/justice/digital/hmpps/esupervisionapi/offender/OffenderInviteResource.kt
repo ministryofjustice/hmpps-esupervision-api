@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.ModelAttribute
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -41,7 +42,19 @@ class OffenderInviteResource(
   private val s3UploadService: S3UploadService,
 ) {
 
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "offender")
+  @GetMapping("/{uuid}", produces = ["application/json"])
+  fun getInvite(@PathVariable uuid: UUID): ResponseEntity<OffenderInviteDto> {
+    val invite = offenderInviteService.findByUUID(uuid)
+    if (invite.isPresent) {
+      return ResponseEntity.ok(invite.get().dto())
+    }
+
+    return ResponseEntity.notFound().build()
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
   @Tag(name = "practitioner")
   @Operation(
     summary = "Returns a collection of invite records",
@@ -85,11 +98,12 @@ class OffenderInviteResource(
       via `/offender_invites/approve`.
     """,
   )
-  @PostMapping("/confirm")
+  @PostMapping("/{uuid}/confirm")
   fun confirmInvite(
+    @PathVariable uuid: UUID,
     @ModelAttribute confirmationInfo: OffenderInviteConfirmation,
   ): ResponseEntity<ConfirmationResultDto> {
-    val invite = offenderInviteService.findByUUID(confirmationInfo.inviteUuid)
+    val invite = offenderInviteService.findByUUID(uuid)
     if (invite.isEmpty) {
       return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Invite not found"))
     }
@@ -98,7 +112,7 @@ class OffenderInviteResource(
     }
 
     try {
-      val updatedInvite = offenderInviteService.confirmOffenderInvite(confirmationInfo)
+      val updatedInvite = offenderInviteService.confirmOffenderInvite(uuid, confirmationInfo)
       if (updatedInvite.isEmpty) {
         // the invite status changed already, we did not perform an update
         return ResponseEntity.badRequest().body(ConfirmationResultDto(error = "Could not confirm offender invite (invalid status change)"))
@@ -106,7 +120,7 @@ class OffenderInviteResource(
 
       return ResponseEntity.ok(ConfirmationResultDto())
     } catch (e: S3Exception) {
-      LOG.warn("confirmInvite(invite={}), S3 failure: {}", confirmationInfo.inviteUuid, e.message)
+      LOG.warn("confirmInvite(invite={}), S3 failure: {}", uuid, e.message)
       throw e
     }
   }
@@ -118,8 +132,8 @@ class OffenderInviteResource(
     description = """To be called on behalf the practitioner when data supplied by the offender confirms their identity.
     Once approved, the practitioner will be able to schedule "checkins." """,
   )
-  @PostMapping("/approve")
-  fun approveInvite(@RequestParam uuid: UUID): ResponseEntity<Map<String, String>> {
+  @PostMapping("/{uuid}/approve")
+  fun approveInvite(@PathVariable uuid: UUID): ResponseEntity<Map<String, String>> {
     // TODO: settle on return value
     val invite = offenderInviteService.findByUUID(uuid)
     if (invite.isEmpty) {
@@ -140,9 +154,16 @@ class OffenderInviteResource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  @PostMapping("/upload_location")
+  @Tag(name = "offender")
+  @Operation(
+    summary = "Request a photo upload location (an URL)",
+    description = """The returned URL expires after 5 minutes.
+      To upload the image, the client must use `PUT` method and use the same content-type 
+      as the one passed to this endpoint.""",
+  )
+  @PostMapping("/{uuid}/upload_location")
   fun invitePhotoUploadLocation(
-    @RequestParam uuid: UUID,
+    @PathVariable uuid: UUID,
     @RequestParam(name = "content-type", required = true) contentType: String,
   ): ResponseEntity<Map<String, String>> {
     val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")

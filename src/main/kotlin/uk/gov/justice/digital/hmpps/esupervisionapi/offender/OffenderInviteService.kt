@@ -225,8 +225,11 @@ class OffenderInviteService(
    * Returns the invite only if it's status was updated.
    */
   @Transactional
-  fun confirmOffenderInvite(confirmation: OffenderInviteConfirmation): Optional<OffenderInvite> {
-    val inviteFound = offenderInviteRepository.findByUuid(confirmation.inviteUuid)
+  fun confirmOffenderInvite(
+    inviteUuid: UUID,
+    confirmation: OffenderInviteConfirmation,
+  ): Optional<OffenderInvite> {
+    val inviteFound = offenderInviteRepository.findByUuid(inviteUuid)
     if (inviteFound.isPresent) {
       val invite = inviteFound.get()
       // TODO: we should check for "SENT" here -
