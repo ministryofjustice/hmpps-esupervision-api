@@ -1,5 +1,4 @@
 ### Practitioner invites people to the app
-
 POST http://localhost:8080/offender_invites/
 Content-Type: application/json
 Authorization: Bearer {{hmpps_auth.pp}}
@@ -27,6 +26,7 @@ if (response.status === 200) {
 }
 %}
 
+
 ### Practitioner looks at status of created invites
 GET http://localhost:8080/offender_invites
 Authorization: Bearer {{hmpps_auth.pp}}
@@ -38,8 +38,9 @@ if (response.status == 200) {
 }
  %}
 
+
 ### Request upload location for the offender
-POST http://localhost:8080/offender_invites/upload_location?uuid={{invite.uuid}}&content-type=image/png
+POST http://localhost:8080/offender_invites/{{invite.uuid}}/upload_location?content-type=image/png
 Authorization: Bearer {{hmpps_auth.pop}}
 
 > {%
@@ -49,6 +50,7 @@ if (response.status === 200) {
 }
 %}
 
+
 ### "Attach" photo to the invite
 PUT {{invitePhotoUploadUrl}}
 Content-Type: image/png
@@ -57,14 +59,10 @@ Content-Type: image/png
 
 
 ### Offender confirms the invite
-POST http://localhost:8080/offender_invites/confirm
+POST http://localhost:8080/offender_invites/{{invite.uuid}}/confirm
 Authorization: Bearer {{hmpps_auth.pop}}
 Content-Type: multipart/form-data; boundary=WebAppBoundary
 
---WebAppBoundary
-Content-Disposition: form-data; name="inviteUuid"
-
-{{invite.uuid}}
 --WebAppBoundary
 Content-Disposition: form-data; name="info.firstName"
 
@@ -87,12 +85,14 @@ Content-Disposition: form-data: name="photoContentType"
 image/png
 --WebAppBoundary--
 
+
 ### Practitioner sees invite status on the dashboard
 GET http://localhost:8080/offender_invites
 Authorization: Bearer {{hmpps_auth.pp}}
 
+
 ### Practitioner approves invite -> offender record added
-POST http://localhost:8080/offender_invites/approve?uuid={{invite.uuid}}
+POST http://localhost:8080/offender_invites/{{invite.uuid}}/approve
 Authorization: Bearer {{hmpps_auth.pp}}
 
 
