@@ -80,3 +80,6 @@ management:
     info:
       cache:
         time-to-live: 2000ms
+
+aws:
+  region-name: eu-west-2

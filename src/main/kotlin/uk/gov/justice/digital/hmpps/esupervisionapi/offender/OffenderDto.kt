@@ -11,7 +11,9 @@ data class OffenderDto(
   val dateOfBirth: LocalDate?,
   val status: OffenderStatus = OffenderStatus.INITIAL,
   val createdAt: Instant,
-//  val updatedAt: Instant,
+  // val updatedAt: Instant,
   val email: String? = null,
   val phoneNumber: String? = null,
+  // not every context requires the photo URL, so we only include when needed
+  val photoUrl: String?,
 )

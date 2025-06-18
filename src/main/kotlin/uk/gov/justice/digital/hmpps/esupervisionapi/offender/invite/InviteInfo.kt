@@ -26,6 +26,10 @@ data class OffenderInviteDto(
   val inviteUuid: UUID,
   val practitionerUuid: UUID,
   val status: OffenderInviteStatus,
+  /**
+   * If set, it will be set to a pre-signed S3 URL
+   */
+  val photoUrl: String? = null,
   val info: OffenderInfo,
 )
 
@@ -33,7 +37,6 @@ data class OffenderInviteDto(
  * To be supplied by the offender to confirm the invite.
  */
 data class OffenderInviteConfirmation(
-  val inviteUuid: UUID,
-  // val code: String
+  val photoContentType: String,
   val info: OffenderInfo,
 )

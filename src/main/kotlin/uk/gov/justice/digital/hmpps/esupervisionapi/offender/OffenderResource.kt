@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -18,10 +20,11 @@ data class Offenders(
 @RequestMapping("/offenders", produces = ["application/json"])
 class OffenderResource(
   private val offenderService: OffenderService,
-  private val offenderRepository: OffenderRepository,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @Operation(summary = "Returns a collection of offender records")
   @GetMapping
   fun getOffenders(): ResponseEntity<Offenders> {
     val pageRequest = PageRequest.of(0, 20)

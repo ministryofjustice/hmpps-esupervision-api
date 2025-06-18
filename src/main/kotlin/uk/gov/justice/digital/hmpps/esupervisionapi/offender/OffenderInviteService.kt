@@ -7,13 +7,13 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.web.multipart.MultipartFile
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Optional
@@ -32,7 +32,17 @@ fun OffenderInfo.asInviteInfo(practitioner: Practitioner, now: Instant, expiryDa
   practitioner = practitioner,
 )
 
-data class CreateInviteResult(val invite: OffenderInvite?, val errorMessage: String?, val offenderInfo: OffenderInfo?)
+data class CreateInviteResult(
+  val invite: OffenderInvite?,
+  /**
+   * Set only when an invite could not be created
+   */
+  val errorMessage: String?,
+  /**
+   * Set only when an invite could not be created.
+   */
+  val offenderInfo: OffenderInfo?,
+)
 data class AggregateCreateInviteResult(val results: List<CreateInviteResult>) {
   val importedRecords: Int
     get() = results.count { it.invite != null }
@@ -43,10 +53,15 @@ class OffenderInviteService(
   private val offenderInviteRepository: OffenderInviteRepository,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
+  private val s3UploadService: S3UploadService,
 ) {
 
   fun findByUUID(uuid: UUID): Optional<OffenderInvite> = offenderInviteRepository.findByUuid(uuid)
 
+  /**
+   * Takes a collection of data, where each item represents minimal data required to send an invite.
+   *
+   */
   fun createOffenderInvites(inviteInfo: InviteInfo): AggregateCreateInviteResult {
     val now = Instant.now()
     val expiryDate = now.plus(5, ChronoUnit.DAYS)
@@ -210,12 +225,15 @@ class OffenderInviteService(
    * Returns the invite only if it's status was updated.
    */
   @Transactional
-  fun confirmOffenderInvite(confirmation: OffenderInviteConfirmation, image: MultipartFile): Optional<OffenderInvite> {
-    val inviteFound = offenderInviteRepository.findByUuid(confirmation.inviteUuid)
+  fun confirmOffenderInvite(
+    inviteUuid: UUID,
+    confirmation: OffenderInviteConfirmation,
+  ): Optional<OffenderInvite> {
+    val inviteFound = offenderInviteRepository.findByUuid(inviteUuid)
     if (inviteFound.isPresent) {
       val invite = inviteFound.get()
       // TODO: we should check for "SENT" here -
-      if (confirmation.info == invite.toOffenderInfo() && (invite.status == OffenderInviteStatus.CREATED || invite.status == OffenderInviteStatus.CREATED)) {
+      if (confirmation.info == invite.toOffenderInfo() && (invite.status == OffenderInviteStatus.CREATED || invite.status == OffenderInviteStatus.RESPONDED)) {
         val now = Instant.now()
         invite.status = OffenderInviteStatus.RESPONDED
         invite.updatedAt = now
@@ -230,6 +248,8 @@ class OffenderInviteService(
 
   @Transactional
   fun approveOffenderInvite(invite: OffenderInvite): Offender {
+    // NOTE: we verified during the "confirm" step that a photo was uploaded
+
     val now = Instant.now()
     invite.status = OffenderInviteStatus.APPROVED
     invite.updatedAt = now
@@ -245,7 +265,7 @@ class OffenderInviteService(
       dateOfBirth = invite.dateOfBirth,
       createdAt = now,
       updatedAt = now,
-      // practitioner = invite.practitioner,
+      practitioner = invite.practitioner,
     )
     // TODO: verify no active records with same contact info exist
     return offenderRepository.save(offender)

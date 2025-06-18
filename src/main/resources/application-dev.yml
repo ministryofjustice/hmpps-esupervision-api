@@ -1,20 +1,6 @@
-hmpps-auth:
-  url: "http://localhost:8090/auth"
-
 spring:
   config:
     import: "optional:file:.env[.properties]"
-  datasource:
-    url: jdbc:postgresql://localhost:5432/postgres
-    driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: ${POSTGRES_PASSWORD}
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      idle-timeout: 60000
-      connection-timeout: 30000
-      pool-name: HikariPool-esupervision
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true
@@ -27,3 +13,12 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         hbm2ddl:
           auto: update
+
+logging:
+  level:
+    org.springframework.web: INFO
+
+aws:
+  s3:
+    image-uploads: hmpps-esupervision-image-uploads
+    video-uploads: hmpss-esupervision-video-uploads

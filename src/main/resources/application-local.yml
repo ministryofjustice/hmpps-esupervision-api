@@ -1,0 +1,56 @@
+hmpps-auth:
+  url: "http://localhost:8090/auth"
+
+management:
+  security:
+    enabled: false
+  health:
+    probes:
+      enabled: true
+    jms:
+      enabled: true
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,info
+  endpoint:
+    info:
+      enabled: true
+    health:
+      show-details: always
+      path-mapping: "health"
+
+spring:
+  config:
+    import: "optional:file:.env[.properties]"
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 60000
+      connection-timeout: 30000
+      pool-name: HikariPool-esupervision
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        hbm2ddl:
+          auto: update
+
+
+aws:
+  endpoint-url: "http://localhost:4566"
+  s3:
+    image-uploads: hmpps-esupervision-image-uploads
+    video-uploads: hmpss-esupervision-video-uploads

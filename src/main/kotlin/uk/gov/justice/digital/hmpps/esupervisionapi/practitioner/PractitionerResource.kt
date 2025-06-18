@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -14,6 +15,7 @@ import java.util.UUID
 class PractitionerResource(private val practitionerService: PractitionerService) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
   @GetMapping("/{uuid}")
   fun getPractitioner(@PathVariable uuid: UUID): ResponseEntity<Practitioner> {
     val practitioner = practitionerService.getPractitionerByUuid(uuid)
