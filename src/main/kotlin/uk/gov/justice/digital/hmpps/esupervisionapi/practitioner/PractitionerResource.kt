@@ -13,7 +13,7 @@ import java.util.UUID
 @RequestMapping("/practitioners", produces = [APPLICATION_JSON_VALUE])
 class PractitionerResource(private val practitionerService: PractitionerService) {
 
-  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/{uuid}")
   fun getPractitioner(@PathVariable uuid: UUID): ResponseEntity<Practitioner> {
     val practitioner = practitionerService.getPractitionerByUuid(uuid)

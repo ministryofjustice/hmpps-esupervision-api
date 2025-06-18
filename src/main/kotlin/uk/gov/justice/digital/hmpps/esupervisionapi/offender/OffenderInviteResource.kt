@@ -34,7 +34,7 @@ data class OffenderInvitesDto(
 @RequestMapping("/offender_invites", produces = ["application/json"])
 class OffenderInviteResource(private val offenderInviteService: OffenderInviteService) {
 
-  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping()
   fun getInvites(pageable: Pageable): ResponseEntity<OffenderInvitesDto> {
     //  val authentication = SecurityContextHolder.getContext().authentication
@@ -60,7 +60,7 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
     return ResponseEntity.ok(result)
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/")
   fun createInvites(@RequestBody @Valid inviteInfo: InviteInfo): ResponseEntity<AggregateCreateInviteResult> {
     LOG.info("Creating offender invites")
@@ -71,7 +71,7 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
     return ResponseEntity.ok(result)
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUP_OFFENDER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/confirm")
   fun confirmInvite(
     @ModelAttribute confirmationInfo: OffenderInviteConfirmation,
@@ -94,7 +94,7 @@ class OffenderInviteResource(private val offenderInviteService: OffenderInviteSe
     return ResponseEntity.ok(ConfirmationResultDto())
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/approve")
   fun approveInvite(@RequestParam uuid: UUID): ResponseEntity<Map<String, String>> {
     // TODO: settle on return value

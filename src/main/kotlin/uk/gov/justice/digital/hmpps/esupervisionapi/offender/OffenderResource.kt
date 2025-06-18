@@ -21,7 +21,7 @@ class OffenderResource(
   private val offenderRepository: OffenderRepository,
 ) {
 
-  @PreAuthorize("hasRole('ROLE_ESUP_PRACTITIONER')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping
   fun getOffenders(): ResponseEntity<Offenders> {
     val pageRequest = PageRequest.of(0, 20)
