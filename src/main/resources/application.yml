@@ -89,3 +89,5 @@ aws:
 
 notify:
   apiKey: ${NOTIFY_API_KEY}
+  offenderInviteSmsTemplateId: 306223e2-b69c-477f-840c-c98b029021f0
+  offenderInviteEmailTemplateId: fc8394c1-81f4-42ba-80ab-65ebb627daeb
