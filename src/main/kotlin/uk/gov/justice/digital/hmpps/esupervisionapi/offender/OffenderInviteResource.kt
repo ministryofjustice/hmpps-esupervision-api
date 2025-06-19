@@ -20,8 +20,10 @@ import software.amazon.awssdk.services.s3.model.S3Exception
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.Pagination
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.UploadLocationResponse
 import java.time.Duration
 import java.util.UUID
 
@@ -165,17 +167,20 @@ class OffenderInviteResource(
   fun invitePhotoUploadLocation(
     @PathVariable uuid: UUID,
     @RequestParam(name = "content-type", required = true) contentType: String,
-  ): ResponseEntity<Map<String, String>> {
+  ): ResponseEntity<UploadLocationResponse> {
     val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
     if (!supportedContentTypes.contains(contentType)) {
-      return ResponseEntity.badRequest().body(mapOf("error" to "supported content types: $supportedContentTypes"))
+      return ResponseEntity.badRequest().body(
+        UploadLocationResponse(
+          locationInfo = null,
+          errorMessage = "supported content types: $supportedContentTypes",
+        ),
+      )
     }
     val invite = offenderInviteService.findByUUID(uuid)
     if (invite.isEmpty) {
       return ResponseEntity.badRequest().body(
-        mapOf(
-          "error" to "No invite found with id $uuid",
-        ),
+        UploadLocationResponse(locationInfo = null, errorMessage = "No invite found with id $uuid"),
       )
     }
 
@@ -183,10 +188,8 @@ class OffenderInviteResource(
     val url = s3UploadService.generatePresignedUploadUrl(invite.get(), contentType, duration)
     LOG.debug("generated invite photo upload url: {}", url)
     return ResponseEntity.ok(
-      mapOf(
-        "url" to "$url",
-        "contentType" to contentType,
-        "duration" to duration.toString(),
+      UploadLocationResponse(
+        locationInfo = LocationInfo(url, contentType, duration.toString()),
       ),
     )
   }
