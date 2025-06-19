@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteConfirmation
@@ -54,6 +56,7 @@ class OffenderInviteService(
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
+  private val notificationService: NotificationService,
 ) {
 
   fun findByUUID(uuid: UUID): Optional<OffenderInvite> = offenderInviteRepository.findByUuid(uuid)
@@ -136,6 +139,25 @@ class OffenderInviteService(
     }
     invalidInvites.forEach {
       result.add(CreateInviteResult(invite = null, errorMessage = it.second, offenderInfo = it.first))
+    }
+
+    // send notifications for actionable invites
+    result.forEach {
+      if (it.invite != null) {
+        // WARNING: this depends on the routing in the UI project!
+        val inviteId = it.invite.uuid
+        val invitePath = "/register/$inviteId"
+        val inviteMessage = OffenderInviteMessage(
+          firstName = it.invite.firstName,
+          lastName = it.invite.lastName,
+          invitePath = invitePath,
+        )
+
+        // send notification to each notification method for the invite
+        it.invite.notificationMethods().forEach {
+          this.notificationService.notifyOffenderInvite(it, inviteMessage)
+        }
+      }
     }
 
     return AggregateCreateInviteResult(result)

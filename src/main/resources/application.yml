@@ -2,6 +2,9 @@ info.app:
   name: HMPPS E-Supervision
   version: 1.0
 
+app:
+  hostedAt: ${HOSTED_AT}
+
 spring:
   application:
     name: esupervision-api
@@ -83,3 +86,8 @@ management:
 
 aws:
   region-name: eu-west-2
+
+notify:
+  apiKey: ${NOTIFY_API_KEY}
+  offenderInviteSmsTemplateId: 306223e2-b69c-477f-840c-c98b029021f0
+  offenderInviteEmailTemplateId: fc8394c1-81f4-42ba-80ab-65ebb627daeb

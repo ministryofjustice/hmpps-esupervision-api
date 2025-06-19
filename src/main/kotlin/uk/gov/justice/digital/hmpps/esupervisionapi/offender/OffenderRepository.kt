@@ -11,6 +11,9 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInviteDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
@@ -144,6 +147,15 @@ open class OffenderInvite(
       phoneNumber = phoneNumber,
     ),
   )
+
+  fun notificationMethods(): List<NotificationMethod> {
+    val methods = mutableListOf<NotificationMethod>()
+
+    this.email?.let { methods.add(Email(it)) }
+    this.phoneNumber?.let { methods.add(PhoneNumber(it)) }
+
+    return methods
+  }
 }
 
 @Repository
