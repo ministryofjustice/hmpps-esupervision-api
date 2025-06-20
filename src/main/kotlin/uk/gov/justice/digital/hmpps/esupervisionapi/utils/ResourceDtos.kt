@@ -2,7 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
 import org.springframework.data.domain.Pageable
 import java.net.URL
-import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 data class Pagination(
@@ -35,5 +35,5 @@ data class CreateCheckinRequest(
   val practitioner: UUID,
   val offender: UUID,
   val questions: String,
-  val dueDate: Instant,
+  val dueDate: LocalDate,
 )

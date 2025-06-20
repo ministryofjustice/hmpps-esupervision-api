@@ -24,8 +24,8 @@ open class OffenderCheckin(
   @JoinColumn("offender_id", referencedColumnName = "id", nullable = false)
   open var offender: Offender,
 
-  @Column("submitted_at", nullable = false)
-  open var submittedOn: Instant?,
+  @Column("submitted_at", nullable = true)
+  open var submittedAt: Instant?,
 
   @Column("created_at", nullable = false)
   open var createdAt: Instant,
@@ -53,7 +53,7 @@ open class OffenderCheckin(
   @Enumerated(EnumType.STRING)
   open var autoIdCheck: AutomatedIdVerificationResult?,
 
-  @Column("id_check_manual", nullable = false)
+  @Column("id_check_manual", nullable = true)
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult?,
 ) : AEntity() {
@@ -62,7 +62,7 @@ open class OffenderCheckin(
     status = status,
     dueDate = dueDate,
     offender = offender.dto(), // TODO: don't return whole dto, just the uuid
-    submittedOn = submittedOn,
+    submittedOn = submittedAt,
     questions = questions,
     answers = answers,
     reviewedBy = reviewedBy?.uuid,

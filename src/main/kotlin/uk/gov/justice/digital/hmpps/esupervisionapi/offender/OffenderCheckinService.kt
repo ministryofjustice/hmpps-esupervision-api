@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.net.URL
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
 
@@ -33,7 +34,8 @@ class OffenderCheckinService(
 
   fun createCheckin(createCheckin: CreateCheckinRequest): OffenderCheckinDto {
     val now = Instant.now()
-    if (createCheckin.dueDate <= now) {
+    val reqDueDate = Instant.from(createCheckin.dueDate.atStartOfDay(ZoneId.of("UTC")))
+    if (reqDueDate <= now) {
       throw BadArgumentException("Due date is in the past: ${createCheckin.dueDate}")
     }
 
@@ -54,12 +56,12 @@ class OffenderCheckinService(
       createdBy = practitioner,
       createdAt = now,
       offender = offender,
-      submittedOn = null,
+      submittedAt = null,
       reviewedBy = null,
       status = CheckinStatus.CREATED,
       questions = createCheckin.questions,
       answers = null,
-      dueDate = createCheckin.dueDate,
+      dueDate = reqDueDate,
       autoIdCheck = null,
       manualIdCheck = null,
     )
@@ -105,7 +107,7 @@ class OffenderCheckinService(
       throw MissingVideoException("Cannot submit a checkin without a video, checkin ${checkin.uuid}", checkin)
     }
 
-    checkin.submittedOn = now
+    checkin.submittedAt = now
     checkin.answers = checkinInput.answers
     checkin.status = CheckinStatus.SUBMITTED
 

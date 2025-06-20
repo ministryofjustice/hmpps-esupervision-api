@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -49,7 +51,7 @@ class OffenderCheckinResource(
   @PostMapping
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun createChekin(@ModelAttribute createCheckin: CreateCheckinRequest): ResponseEntity<OffenderCheckinDto> {
+  fun createCheckin(@RequestBody @Valid createCheckin: CreateCheckinRequest): ResponseEntity<OffenderCheckinDto> {
     val checkin = offenderCheckinService.createCheckin(createCheckin)
     return ResponseEntity.ok(checkin)
   }
