@@ -77,20 +77,20 @@ class OffenderCheckinService(
    * @throws RuntimeException when no offender or checkin with given uuid exist, or vid
    * @throws MissingVideoException when no video has been uploaded
    */
-  fun submitCheckin(checkinInput: OffenderCheckinSubmission): OffenderCheckinDto {
-    val offender = offenderRepository.findByUuid(checkinInput.offenderUuid)
-    val checkinDto = checkinRepository.findByUuid(checkinInput.offenderUuid)
+  fun submitCheckin(checkinUuid: UUID, checkinInput: OffenderCheckinSubmission): OffenderCheckinDto {
+    val offenderEntity = offenderRepository.findByUuid(checkinInput.offender)
+    val checkinEntity = checkinRepository.findByUuid(checkinUuid)
 
-    if (offender.isEmpty) {
-      throw ResourceNotFoundException("Offender with uuid=${checkinInput.offenderUuid} not found")
+    if (offenderEntity.isEmpty) {
+      throw ResourceNotFoundException("Offender with uuid=${checkinInput.offender} not found")
     }
-    if (checkinDto.isEmpty) {
-      throw ResourceNotFoundException("Checkin with uuid=${checkinInput.offenderUuid} not found")
+    if (checkinEntity.isEmpty) {
+      throw ResourceNotFoundException("Checkin with uuid=${checkinInput.offender} not found")
     }
 
     val now = Instant.now()
 
-    val checkin = checkinDto.get()
+    val checkin = checkinEntity.get()
     if (checkin.dueDate < now) {
       throw InvalidStateTransitionException("Checkin past due date", checkin)
     }

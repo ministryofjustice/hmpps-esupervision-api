@@ -46,7 +46,6 @@ data class OffenderCheckinDto(
  * Holds data submitted as a checkin by the offender.
  */
 data class OffenderCheckinSubmission(
-  val checkinUuid: UUID,
-  val offenderUuid: UUID,
+  val offender: UUID,
   val answers: String,
 )

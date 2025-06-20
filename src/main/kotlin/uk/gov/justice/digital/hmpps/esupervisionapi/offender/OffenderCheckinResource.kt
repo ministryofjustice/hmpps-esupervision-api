@@ -7,7 +7,6 @@ import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -75,8 +74,8 @@ class OffenderCheckinResource(
   @PostMapping("/{uuid}/submit")
   @Tag(name = "offender")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun submitCheckin(@PathVariable uuid: UUID, @ModelAttribute checkinInput: OffenderCheckinSubmission): ResponseEntity<OffenderCheckinDto> {
-    val checkin = offenderCheckinService.submitCheckin(checkinInput)
+  fun submitCheckin(@PathVariable uuid: UUID, @RequestBody @Valid checkinInput: OffenderCheckinSubmission): ResponseEntity<OffenderCheckinDto> {
+    val checkin = offenderCheckinService.submitCheckin(uuid, checkinInput)
     return ResponseEntity.ok(checkin)
   }
 
