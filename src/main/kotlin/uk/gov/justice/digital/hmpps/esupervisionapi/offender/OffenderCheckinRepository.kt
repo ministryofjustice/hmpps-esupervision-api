@@ -5,7 +5,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.JoinColumn
-import jakarta.persistence.OneToOne
+import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
@@ -20,7 +20,7 @@ open class OffenderCheckin(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,
 
-  @OneToOne()
+  @ManyToOne
   @JoinColumn("offender_id", referencedColumnName = "id", nullable = false)
   open var offender: Offender,
 
@@ -30,12 +30,12 @@ open class OffenderCheckin(
   @Column("created_at", nullable = false)
   open var createdAt: Instant,
 
-  @OneToOne()
+  @ManyToOne
   @JoinColumn("reviewed_by", referencedColumnName = "id", nullable = true)
   open var reviewedBy: Practitioner?,
 
-  @OneToOne()
-  @JoinColumn("created_by", referencedColumnName = "id", nullable = true)
+  @ManyToOne
+  @JoinColumn("created_by", referencedColumnName = "id", nullable = false)
   open var createdBy: Practitioner,
 
   @Column(nullable = false)
