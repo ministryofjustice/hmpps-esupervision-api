@@ -4,33 +4,18 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.Pagination
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.util.UUID
-
-data class OffendersDto(
-  val pagination: Pagination,
-  val content: List<OffenderDto>,
-)
 
 @Service
 class OffenderService(private val offenderRepository: OffenderRepository) {
 
-  fun getOffenders(pageable: Pageable): OffendersDto {
+  fun getOffenders(pageable: Pageable): CollectionDto<OffenderDto> {
     val page = offenderRepository.findAll(pageable)
     val offenders = page.content.map { it.dto() }
-    return OffendersDto(pagination = page.pageable.toPagination(), content = offenders)
+    return CollectionDto(page.pageable.toPagination(), offenders)
   }
-
-//  fun updateOffender(id: Long, updatedOffender: Offender): Offender? {
-//    return offenderRepository.findById(id).map { existingOffender ->
-//      val offenderToUpdate = existingOffender.copy(
-//        firstName = updatedOffender.firstName,
-//        lastName = updatedOffender.lastName,
-//      )
-//      offenderRepository.save(offenderToUpdate)
-//    }.orElse(null)
-//  }
 
   fun deleteOffender(uuid: UUID): DeleteResult {
     LOG.info("Attempting to delete offender: $uuid")
