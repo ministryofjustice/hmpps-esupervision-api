@@ -45,7 +45,7 @@ Authorization: Bearer {{hmpps_auth.pop}}
 
 > {%
 if (response.status === 200) {
-    const uploadUrl = response.body["url"]
+    const uploadUrl = response.body["locationInfo"]["url"]
     client.global.set("invitePhotoUploadUrl", uploadUrl)
 }
 %}
