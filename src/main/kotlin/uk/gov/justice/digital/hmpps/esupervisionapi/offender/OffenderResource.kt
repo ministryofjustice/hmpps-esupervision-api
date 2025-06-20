@@ -8,13 +8,8 @@ import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.Pagination
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
-
-data class Offenders(
-  val pagination: Pagination,
-  val content: List<OffenderDto>,
-)
 
 @RestController
 @RequestMapping("/offenders", produces = ["application/json"])
@@ -26,11 +21,11 @@ class OffenderResource(
   @Tag(name = "practitioner")
   @Operation(summary = "Returns a collection of offender records")
   @GetMapping
-  fun getOffenders(): ResponseEntity<Offenders> {
+  fun getOffenders(): ResponseEntity<CollectionDto<OffenderDto>> {
     val pageRequest = PageRequest.of(0, 20)
     val offenders = offenderService.getOffenders(pageable = pageRequest)
     return ResponseEntity.ok(
-      Offenders(
+      CollectionDto(
         pagination = pageRequest.toPagination(),
         content = offenders.content,
       ),

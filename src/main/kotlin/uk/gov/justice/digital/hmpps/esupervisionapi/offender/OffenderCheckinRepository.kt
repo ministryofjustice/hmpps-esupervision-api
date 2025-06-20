@@ -24,13 +24,19 @@ open class OffenderCheckin(
   @JoinColumn("offender_id", referencedColumnName = "id", nullable = false)
   open var offender: Offender,
 
-  @Column("submitted_on", nullable = false)
-  open var submittedOn: Instant,
+  @Column("submitted_at", nullable = false)
+  open var submittedOn: Instant?,
 
-  @Column("reviewed_by")
+  @Column("created_at", nullable = false)
+  open var createdAt: Instant,
+
   @OneToOne()
-  @JoinColumn("practitioner_id", referencedColumnName = "id", nullable = true)
+  @JoinColumn("reviewed_by", referencedColumnName = "id", nullable = true)
   open var reviewedBy: Practitioner?,
+
+  @OneToOne()
+  @JoinColumn("created_by", referencedColumnName = "id", nullable = true)
+  open var createdBy: Practitioner,
 
   @Column(nullable = false)
   @Enumerated(EnumType.STRING)
@@ -39,21 +45,37 @@ open class OffenderCheckin(
   open var questions: String,
 
   open var answers: String?,
+
+  @Column("due_date")
+  open var dueDate: Instant,
+
+  @Column("id_check_auto", nullable = true)
+  @Enumerated(EnumType.STRING)
+  open var autoIdCheck: AutomatedIdVerificationResult?,
+
+  @Column("id_check_manual", nullable = false)
+  @Enumerated(EnumType.STRING)
+  open var manualIdCheck: ManualIdVerificationResult?,
 ) : AEntity() {
   fun dto(): OffenderCheckinDto = OffenderCheckinDto(
     uuid = uuid,
     status = status,
-    offender = offender.dto(),
+    dueDate = dueDate,
+    offender = offender.dto(), // TODO: don't return whole dto, just the uuid
     submittedOn = submittedOn,
     questions = questions,
     answers = answers,
     reviewedBy = reviewedBy?.uuid,
+    createdBy = createdBy.uuid,
+    createdAt = createdAt,
     videoUrl = null,
+    autoIdCheck = autoIdCheck,
+    manualIdCheck = manualIdCheck,
   )
 }
 
 @Repository
-interface OffenderCheckinRepository {
+interface OffenderCheckinRepository : org.springframework.data.jpa.repository.JpaRepository<OffenderCheckin, Long> {
   fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
   fun findByOffender(offender: Offender): Optional<OffenderCheckin>
 }

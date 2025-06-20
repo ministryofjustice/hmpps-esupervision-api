@@ -2,6 +2,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
 import org.springframework.data.domain.Pageable
 import java.net.URL
+import java.time.Instant
+import java.util.UUID
 
 data class Pagination(
   val pageNumber: Int,
@@ -19,4 +21,19 @@ data class LocationInfo(
 data class UploadLocationResponse(
   val locationInfo: LocationInfo?,
   val errorMessage: String? = null,
+)
+
+data class CollectionDto<ElemDto>(
+  val pagination: Pagination,
+  val content: List<ElemDto>,
+)
+
+/**
+ * Everything we need to create a checkin
+ */
+data class CreateCheckinRequest(
+  val practitioner: UUID,
+  val offender: UUID,
+  val questions: String,
+  val dueDate: Instant,
 )
