@@ -73,7 +73,7 @@ class OffenderCheckinResource(
   @PostMapping("/{uuid}/submit")
   @Tag(name = "offender")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun submitCheckin(@ModelAttribute checkinInput: OffenderCheckinSubmission): ResponseEntity<OffenderCheckinDto> {
+  fun submitCheckin(@PathVariable uuid: UUID, @ModelAttribute checkinInput: OffenderCheckinSubmission): ResponseEntity<OffenderCheckinDto> {
     val checkin = offenderCheckinService.submitCheckin(checkinInput)
     return ResponseEntity.ok(checkin)
   }
