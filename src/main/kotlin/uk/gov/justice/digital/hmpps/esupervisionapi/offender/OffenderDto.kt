@@ -17,3 +17,10 @@ data class OffenderDto(
   // not every context requires the photo URL, so we only include when needed
   val photoUrl: String?,
 )
+
+data class OffenderSetupDto(
+  val uuid: UUID,
+  val practitioner: UUID,
+  val offender: UUID,
+  val createdAt: Instant,
+)

@@ -10,10 +10,10 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDO
 import org.springframework.test.context.ActiveProfiles
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInviteService
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.InviteInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import java.time.LocalDate
+import java.util.UUID
 
 @ExtendWith(HmppsAuthApiExtension::class)
 @SpringBootTest(webEnvironment = RANDOM_PORT)
@@ -21,7 +21,7 @@ import java.time.LocalDate
 class OffenderSetup : IntegrationTestBase() {
 
   // @Autowired lateinit var entityManager: EntityManager
-  @Autowired lateinit var offenderInviteService: OffenderInviteService
+  @Autowired lateinit var offenderInviteService: OffenderSetupService
   // @Autowired lateinit var practitionerService: PractitionerService
 
 //  @BeforeEach
@@ -41,17 +41,13 @@ class OffenderSetup : IntegrationTestBase() {
   @Test
   fun `practitioner wants to add few offenders`() {
     // fail { "this does not work" }
-    val result = offenderInviteService.createOffenderInvites(
-      InviteInfo(
-        invitees = listOf(
-          OffenderInfo(
-            firstName = "John",
-            lastName = "Smith",
-            dateOfBirth = LocalDate.of(1980, 1, 1),
-            phoneNumber = "7701023399",
-
-          ),
-        ),
+    val result = offenderInviteService.startOffenderSetup(
+      OffenderInfo(
+        setupUuid = UUID.randomUUID(),
+        firstName = "John",
+        lastName = "Smith",
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+        phoneNumber = "7701023399",
       ),
     )
 

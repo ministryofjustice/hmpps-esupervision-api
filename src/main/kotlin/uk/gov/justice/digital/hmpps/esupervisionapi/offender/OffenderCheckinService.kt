@@ -18,6 +18,7 @@ import java.util.UUID
 
 class MissingVideoException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
 class InvalidStateTransitionException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
+class InvalidOffenderSetupState(message: String, setup: OffenderSetup) : RuntimeException(message)
 
 @Service
 class OffenderCheckinService(

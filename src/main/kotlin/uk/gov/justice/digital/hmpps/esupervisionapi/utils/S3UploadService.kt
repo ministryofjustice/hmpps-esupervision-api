@@ -2,8 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
-import org.springframework.web.multipart.MultipartFile
-import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
@@ -11,7 +9,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInvite
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
 import java.net.URL
 import java.time.Duration
 import java.util.UUID
@@ -19,7 +17,7 @@ import java.util.UUID
 /**
  * Ensure we're being consistent with object keys in S3
  */
-data class InvitePhotoKey(
+data class SetupPhotoKey(
   val invite: UUID,
 ) {
   fun asString(): String = "invite-$invite"
@@ -51,38 +49,23 @@ class S3UploadService(
     return request
   }
 
-  internal fun putObjectRequest(invite: OffenderInvite, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, InvitePhotoKey(invite.uuid).asString(), contentType)
+  internal fun putObjectRequest(setup: OffenderSetup, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, SetupPhotoKey(setup.offender.uuid).asString(), contentType)
 
   internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, CheckinVideoKey(checkin.uuid).asString(), contentType)
 
   /**
-   * Returns the uploaded object key on successful upload.
-   */
-  fun uploadInvitePhoto(invite: OffenderInvite, image: MultipartFile): String {
-    if (image.contentType != null) {
-      val request = putObjectRequest(invite, image.contentType!!)
-      s3uploadClient.putObject(
-        request,
-        RequestBody.fromInputStream(image.inputStream, image.size),
-      )
-      return request.key()
-    }
-    throw RuntimeException("file content type is null for file originalFileName='${image.originalFilename}'")
-  }
-
-  /**
    * Generates a pre-signed URL for uploading a file to S3.
-   * @param invite The offender invite.
+   * @param setup The offender invite.
    * @param contentType content type of the file
    * @param duration The expiration time for the pre-signed URL in minutes.
    * @return A pre-signed URL for uploading the file.
    */
   fun generatePresignedUploadUrl(
-    invite: OffenderInvite,
+    setup: OffenderSetup,
     contentType: String = "application/octet-stream",
     duration: Duration,
   ): URL {
-    val putRequest = putObjectRequest(invite, contentType)
+    val putRequest = putObjectRequest(setup, contentType)
     val presignRequest = PutObjectPresignRequest.builder()
       .putObjectRequest(putRequest)
       .signatureDuration(duration)
@@ -112,10 +95,10 @@ class S3UploadService(
     return s3Presigner.presignPutObject(presignRequest).url()
   }
 
-  fun isInvitePhotoUploaded(invite: OffenderInvite): Boolean {
+  fun isSetupPhotoUploaded(setup: OffenderSetup): Boolean {
     val request = HeadObjectRequest.builder()
       .bucket(imageUploadBucket)
-      .key(InvitePhotoKey(invite.uuid).asString())
+      .key(SetupPhotoKey(setup.offender.uuid).asString())
       .build()
     return isObjectUploaded(request)
   }

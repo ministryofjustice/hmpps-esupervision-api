@@ -12,6 +12,7 @@ data class InviteInfo(
  * Minimal information required to send invite to an offender
  */
 data class OffenderInfo(
+  val setupUuid: UUID,
   val firstName: String,
   val lastName: String,
   val dateOfBirth: LocalDate,
