@@ -22,9 +22,7 @@ class PractitionerResource(private val practitionerService: PractitionerService)
   @Tag(name = "practitioner")
   @PostMapping
   fun createPractitioner(@RequestBody @Valid createRequest: PractitionerDto): ResponseEntity<Object> {
-
     // TODO: validate in a spring-y way
-
     val practitioner = Practitioner(
       uuid = createRequest.uuid,
       firstName = createRequest.firstName,
