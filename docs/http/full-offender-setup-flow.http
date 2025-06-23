@@ -1,0 +1,66 @@
+### Practitioner invites people to the app
+
+< {%
+    const setupUuid = $random.uuid
+    request.variables.set('setupUuid', setupUuid)
+%}
+POST http://localhost:8080/offender_setup
+Content-Type: application/json
+Authorization: Bearer {{hmpps_auth.pp}}
+
+{
+  "setupUuid": "{{$uuid}}",
+  "firstName": "Barry",
+  "lastName": "Bronson",
+  "dateOfBirth": "1990-01-30",
+  "email": "barry@example.com"
+}
+
+
+> {%
+if (response.status === 200) {
+    const offenderUuid = response.body["offender"]
+    client.log(`initiated setup uuid=${offenderUuid}`)
+    client.global.set("offender_uuid", offenderUuid)
+    client.global.set("setup_uuid", response.body["uuid"])
+}
+%}
+
+
+### Request upload location for the offender
+POST http://localhost:8080/offender_setup/{{setup_uuid}}/upload_location?content-type=image/png
+Authorization: Bearer {{hmpps_auth.pop}}
+
+> {%
+if (response.status === 200) {
+    const uploadUrl = response.body["locationInfo"]["url"]
+    client.global.set("invitePhotoUploadUrl", uploadUrl)
+}
+%}
+
+
+### "Attach" photo to the invite
+PUT {{invitePhotoUploadUrl}}
+Content-Type: image/png
+
+< ./guy.png
+
+#### Practitioner sees invite status on the dashboard
+#GET http://localhost:8080/offender_setup
+#Authorization: Bearer {{hmpps_auth.pp}}
+#
+
+### Practitioner completes the offender setup process
+POST http://localhost:8080/offender_setup/{{setup_uuid}}/complete
+Authorization: Bearer {{hmpps_auth.pp}}
+
+
+### Let's verify we created an offender record
+GET http://localhost:8080/offenders
+Authorization: Bearer {{hmpps_auth.pp}}
+Content-Type: application/json
+
+
+### Maybe we need to terminate a setup process?
+POST http://localhost:8080/offender_setup/ef0fc397-f45e-4521-852f-2455ab758300/terminate
+Authorization: Bearer {{hmpps_auth.pp}}
