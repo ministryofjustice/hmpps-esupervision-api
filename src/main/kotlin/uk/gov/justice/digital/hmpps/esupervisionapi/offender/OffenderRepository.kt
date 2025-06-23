@@ -10,22 +10,12 @@ import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.springframework.stereotype.Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
-import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
-import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
 import java.util.UUID
-
-/*
- * o -(Practitioner creates an invite)-> INITIAL -(Offender responds to invite)-> WAITING
- * WAITING -(Practitioner verifies offender)-> VERIFIED
- * WAITING -(Practitioner rejects offender)-> REJECTED
- * VERIFIED -(Practitioner disabled by Practitioner/System)-> INACTIVE
- */
 
 enum class OffenderStatus {
   // record has been created
@@ -85,68 +75,6 @@ open class Offender(
     createdAt = createdAt,
     photoUrl = null,
   )
-}
-
-enum class OffenderInviteStatus {
-  // the record has been created, invite possibly scheduled
-  CREATED,
-
-  // an invite has been sent
-  SENT,
-
-  // offender responded to an invite
-  RESPONDED,
-
-  // practitioner approved the offender's response
-  APPROVED,
-
-  // practitioner rejected the offender's response
-  REJECTED,
-
-  // the invite expired
-  EXPIRED,
-}
-
-/**
- * Represents an intent to invite an offender to the system.
- *
- */
-@Entity
-@Table(name = "offender_invite")
-open class OffenderInvite(
-  @Column(unique = true, nullable = false)
-  open var uuid: UUID,
-  @Column(name = "created_at", nullable = false)
-  open var createdAt: Instant,
-  @Column(name = "updated_at", nullable = false)
-  open var updatedAt: Instant,
-  @Column(name = "expires_on", nullable = false)
-  open var expiresOn: Instant?,
-  @Column(name = "first_name", nullable = false)
-  open var firstName: String,
-  @Column(name = "last_name", nullable = false)
-  open var lastName: String,
-  @Column(name = "date_of_birth")
-  open var dateOfBirth: LocalDate,
-  @ManyToOne(cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
-  @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
-  open var practitioner: Practitioner,
-  @Column("phone_number", nullable = true)
-  open var phoneNumber: String? = null,
-  open var email: String? = null,
-  @Column(nullable = false)
-  @Enumerated(EnumType.STRING)
-  // @Version
-  open var status: OffenderInviteStatus = OffenderInviteStatus.CREATED,
-) : AEntity() {
-  fun notificationMethods(): List<NotificationMethod> {
-    val methods = mutableListOf<NotificationMethod>()
-
-    this.email?.let { methods.add(Email(it)) }
-    this.phoneNumber?.let { methods.add(PhoneNumber(it)) }
-
-    return methods
-  }
 }
 
 @Repository

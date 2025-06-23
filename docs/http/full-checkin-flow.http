@@ -1,6 +1,6 @@
-@practitioner_uuid = 67e80fa6-8852-4350-ab39-aa715ebbbeea
+@practitioner_uuid = 1ba848cf-0fb8-4d24-868c-390a8c0bdb00
 
-## Get practitioner info
+## Get offender info
 GET http://localhost:8080/offenders
 Authorization: Bearer {{hmpps_auth.pp}}
 

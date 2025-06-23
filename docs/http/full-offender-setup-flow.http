@@ -13,7 +13,7 @@ Authorization: Bearer {{hmpps_auth.pp}}
   "firstName": "Barry",
   "lastName": "Bronson",
   "dateOfBirth": "1990-01-30",
-  "email": "barry1@example.com"
+  "email": "barry@example.com"
 }
 
 
@@ -50,7 +50,7 @@ Content-Type: image/png
 #Authorization: Bearer {{hmpps_auth.pp}}
 #
 
-### Practitioner approves invite -> offender record added
+### Practitioner completes the offender setup process
 POST http://localhost:8080/offender_setup/{{setup_uuid}}/complete
 Authorization: Bearer {{hmpps_auth.pp}}
 
