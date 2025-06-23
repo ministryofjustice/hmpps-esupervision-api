@@ -59,3 +59,8 @@ Authorization: Bearer {{hmpps_auth.pp}}
 GET http://localhost:8080/offenders
 Authorization: Bearer {{hmpps_auth.pp}}
 Content-Type: application/json
+
+
+### Maybe we need to terminate a setup process?
+POST http://localhost:8080/offender_setup/ef0fc397-f45e-4521-852f-2455ab758300/terminate
+Authorization: Bearer {{hmpps_auth.pp}}

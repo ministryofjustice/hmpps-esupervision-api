@@ -1,4 +1,4 @@
-@practitioner_uuid = ba097191-8b8a-4d98-82f0-1c1fbb8cff2f
+@practitioner_uuid = 67e80fa6-8852-4350-ab39-aa715ebbbeea
 
 ## Get practitioner info
 GET http://localhost:8080/offenders
@@ -48,6 +48,7 @@ Authorization: Bearer {{hmpps_auth.pop}}
 > {%
     if (response.status === 200) {
         const uploadUrl = response.body["locationInfo"]["url"]
+        client.log("upload url: ", uploadUrl)
         client.global.set("checkinVideoUploadUrl", uploadUrl)
     }
 %}

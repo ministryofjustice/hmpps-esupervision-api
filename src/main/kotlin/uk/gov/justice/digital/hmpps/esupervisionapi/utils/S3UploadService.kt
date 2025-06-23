@@ -42,7 +42,7 @@ class S3UploadService(
 
   private fun putObjectRequest(bucket: String, key: String, contentType: String): PutObjectRequest {
     val request = PutObjectRequest.builder()
-      .bucket(imageUploadBucket)
+      .bucket(bucket)
       .key(key)
       .contentType(contentType)
       .build()
@@ -51,7 +51,7 @@ class S3UploadService(
 
   internal fun putObjectRequest(setup: OffenderSetup, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, SetupPhotoKey(setup.offender.uuid).asString(), contentType)
 
-  internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, CheckinVideoKey(checkin.uuid).asString(), contentType)
+  internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinVideoKey(checkin.uuid).asString(), contentType)
 
   /**
    * Generates a pre-signed URL for uploading a file to S3.
