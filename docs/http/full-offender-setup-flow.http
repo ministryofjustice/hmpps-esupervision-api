@@ -1,15 +1,19 @@
 ### Practitioner invites people to the app
 
+@practitioner_uuid = b6201c70-510e-11f0-aead-e2c91dd81a06
+
 < {%
     const setupUuid = $random.uuid
     request.variables.set('setupUuid', setupUuid)
 %}
-POST http://localhost:8080/offender_setup
+POST {{HOST}}/offender_setup
 Content-Type: application/json
-Authorization: Bearer {{hmpps_auth.pp}}
+Authorization: Bearer {{hmpps_auth.token}}
 
 {
+
   "setupUuid": "{{$uuid}}",
+  "practitionerId": "{{practitioner_uuid}}",
   "firstName": "Barry",
   "lastName": "Bronson",
   "dateOfBirth": "1990-01-30",
@@ -28,8 +32,8 @@ if (response.status === 200) {
 
 
 ### Request upload location for the offender
-POST http://localhost:8080/offender_setup/{{setup_uuid}}/upload_location?content-type=image/png
-Authorization: Bearer {{hmpps_auth.pop}}
+POST {{HOST}}/offender_setup/{{setup_uuid}}/upload_location?content-type=image/png
+Authorization: Bearer {{hmpps_auth.token}}
 
 > {%
 if (response.status === 200) {
@@ -46,21 +50,21 @@ Content-Type: image/png
 < ./guy.png
 
 #### Practitioner sees invite status on the dashboard
-#GET http://localhost:8080/offender_setup
-#Authorization: Bearer {{hmpps_auth.pp}}
+#GET {{HOST}}/offender_setup
+#Authorization: Bearer {{hmpps_auth.token}}
 #
 
 ### Practitioner completes the offender setup process
-POST http://localhost:8080/offender_setup/{{setup_uuid}}/complete
-Authorization: Bearer {{hmpps_auth.pp}}
+POST {{HOST}}/offender_setup/{{setup_uuid}}/complete
+Authorization: Bearer {{hmpps_auth.token}}
 
 
 ### Let's verify we created an offender record
-GET http://localhost:8080/offenders
-Authorization: Bearer {{hmpps_auth.pp}}
+GET {{HOST}}/offenders
+Authorization: Bearer {{hmpps_auth.token}}
 Content-Type: application/json
 
 
 ### Maybe we need to terminate a setup process?
-POST http://localhost:8080/offender_setup/ef0fc397-f45e-4521-852f-2455ab758300/terminate
-Authorization: Bearer {{hmpps_auth.pp}}
+POST {{HOST}}/offender_setup/ef0fc397-f45e-4521-852f-2455ab758300/terminate
+Authorization: Bearer {{hmpps_auth.token}}
