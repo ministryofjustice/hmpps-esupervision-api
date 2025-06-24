@@ -1,8 +1,8 @@
 @practitioner_uuid = 1ba848cf-0fb8-4d24-868c-390a8c0bdb00
 
 ## Get offender info
-GET http://localhost:8080/offenders
-Authorization: Bearer {{hmpps_auth.pp}}
+GET {{HOST}}/offenders
+Authorization: Bearer {{hmpps_auth.token}}
 
 > {%
     const offenderUuid = response.body["content"][0].uuid
@@ -11,8 +11,8 @@ Authorization: Bearer {{hmpps_auth.pp}}
  %}
 
 ### See existing checkins
-GET http://localhost:8080/offender_checkins
-Authorization: Bearer {{hmpps_auth.pp}}
+GET {{HOST}}/offender_checkins
+Authorization: Bearer {{hmpps_auth.token}}
 
 > {%
     client.test("successful response", () => {
@@ -22,8 +22,8 @@ Authorization: Bearer {{hmpps_auth.pp}}
 
 
 ### Create a checkin
-POST http://localhost:8080/offender_checkins
-Authorization: Bearer {{hmpps_auth.pp}}
+POST {{HOST}}/offender_checkins
+Authorization: Bearer {{hmpps_auth.token}}
 Content-Type: application/json
 
 {
@@ -42,8 +42,8 @@ Content-Type: application/json
 %}
 
 ### Request upload location for the offender
-POST http://localhost:8080/offender_checkins/{{checkin_uuid}}/upload_location?content-type=image/png
-Authorization: Bearer {{hmpps_auth.pop}}
+POST {{HOST}}/offender_checkins/{{checkin_uuid}}/upload_location?content-type=image/png
+Authorization: Bearer {{hmpps_auth.token}}
 
 > {%
     if (response.status === 200) {
@@ -61,8 +61,8 @@ Content-Type: image/png
 
 
 ### Submit the checkin
-POST http://localhost:8080/offender_checkins/{{checkin_uuid}}/submit
-Authorization: Bearer {{hmpps_auth.pop}}
+POST {{HOST}}/offender_checkins/{{checkin_uuid}}/submit
+Authorization: Bearer {{hmpps_auth.token}}
 Content-Type: application/json
 
 {
