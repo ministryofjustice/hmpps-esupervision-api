@@ -6,15 +6,17 @@ import org.springframework.http.HttpStatus.BAD_REQUEST
 import org.springframework.http.HttpStatus.FORBIDDEN
 import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
 import org.springframework.http.HttpStatus.NOT_FOUND
+import org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 
 @RestControllerAdvice
-class HmppsTemplateKotlinExceptionHandler {
+class HmppsESupervisionExceptionHandler {
   @ExceptionHandler(ValidationException::class)
   fun handleValidationException(e: ValidationException): ResponseEntity<ErrorResponse> = ResponseEntity
     .status(BAD_REQUEST)
@@ -25,6 +27,17 @@ class HmppsTemplateKotlinExceptionHandler {
         developerMessage = e.message,
       ),
     ).also { log.info("Validation exception: {}", e.message) }
+
+  @ExceptionHandler(BadArgumentException::class)
+  fun handleBadArgumentException(e: BadArgumentException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(UNPROCESSABLE_ENTITY)
+    .body(
+      ErrorResponse(
+        status = UNPROCESSABLE_ENTITY,
+        userMessage = "Unprocessable entity: ${e.message}",
+        developerMessage = e.message,
+      ),
+    ).also { log.info("Bad argument exception: {}", e.message) }
 
   @ExceptionHandler(NoResourceFoundException::class)
   fun handleNoResourceFoundException(e: NoResourceFoundException): ResponseEntity<ErrorResponse> = ResponseEntity

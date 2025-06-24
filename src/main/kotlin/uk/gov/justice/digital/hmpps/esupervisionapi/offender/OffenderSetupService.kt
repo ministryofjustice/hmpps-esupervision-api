@@ -32,6 +32,13 @@ class OffenderSetupService(
       throw BadArgumentException("Setup with UUID ${offenderInfo.setupUuid} already exists")
     }
 
+    val practitionerOption = practitionerRepository.findByUuid(offenderInfo.practitionerId)
+    if (practitionerOption.isEmpty) {
+      throw BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found")
+    }
+
+    val practitioner = practitionerOption.get()
+
     // TODO: add proper validation here
     val phoneNumUtil = PhoneNumberUtil.getInstance()
     var validationFailures = mutableListOf<Pair<OffenderInfo, String>>()
@@ -58,7 +65,6 @@ class OffenderSetupService(
     }
 
     val now = Instant.now()
-    val practitioner = practitionerRepository.findAll()[0] // TODO: fetch user properly when auth is in
     val offender = Offender(
       uuid = UUID.randomUUID(),
       firstName = validatedInfo.firstName,

@@ -12,6 +12,7 @@ data class InviteInfo(
  */
 data class OffenderInfo(
   val setupUuid: UUID,
+  val practitionerId: UUID,
   val firstName: String,
   val lastName: String,
   val dateOfBirth: LocalDate,
