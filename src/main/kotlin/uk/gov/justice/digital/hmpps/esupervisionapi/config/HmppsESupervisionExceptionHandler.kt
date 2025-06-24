@@ -33,9 +33,9 @@ class HmppsESupervisionExceptionHandler {
     .status(UNPROCESSABLE_ENTITY)
     .body(
       ErrorResponse(
-      status = UNPROCESSABLE_ENTITY,
-      userMessage = "Unprocessable entity: ${e.message}",
-      developerMessage = e.message,
+        status = UNPROCESSABLE_ENTITY,
+        userMessage = "Unprocessable entity: ${e.message}",
+        developerMessage = e.message,
       ),
     ).also { log.info("Bad argument exception: {}", e.message) }
 
