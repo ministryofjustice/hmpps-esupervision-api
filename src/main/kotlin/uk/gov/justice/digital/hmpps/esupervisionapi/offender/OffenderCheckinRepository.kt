@@ -7,6 +7,8 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
@@ -78,4 +80,7 @@ open class OffenderCheckin(
 interface OffenderCheckinRepository : org.springframework.data.jpa.repository.JpaRepository<OffenderCheckin, Long> {
   fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
   fun findByOffender(offender: Offender): Optional<OffenderCheckin>
+
+  // returns checkins created by a practitioner with the given uuid
+  fun findAllByCreatedByUuid(practitionerUuid: UUID, pageable: Pageable): Page<OffenderCheckin>
 }
