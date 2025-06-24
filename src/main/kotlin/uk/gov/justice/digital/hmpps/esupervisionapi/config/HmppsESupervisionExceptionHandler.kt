@@ -31,11 +31,13 @@ class HmppsESupervisionExceptionHandler {
   @ExceptionHandler(BadArgumentException::class)
   fun handleBadArgumentException(e: BadArgumentException): ResponseEntity<ErrorResponse> = ResponseEntity
     .status(UNPROCESSABLE_ENTITY)
-    .body(ErrorResponse(
+    .body(
+      ErrorResponse(
       status = UNPROCESSABLE_ENTITY,
       userMessage = "Unprocessable entity: ${e.message}",
       developerMessage = e.message,
-    ))
+      ),
+    ).also { log.info("Bad argument exception: {}", e.message) }
 
   @ExceptionHandler(NoResourceFoundException::class)
   fun handleNoResourceFoundException(e: NoResourceFoundException): ResponseEntity<ErrorResponse> = ResponseEntity
