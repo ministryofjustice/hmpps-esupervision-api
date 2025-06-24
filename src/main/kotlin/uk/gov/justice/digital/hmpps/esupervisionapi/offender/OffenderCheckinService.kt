@@ -30,7 +30,7 @@ class OffenderCheckinService(
 
   fun getCheckin(uuid: UUID): Optional<OffenderCheckinDto> {
     val checkin = checkinRepository.findByUuid(uuid)
-    return checkin.map { it.dto() }
+    return checkin.map { it.dto(this.s3UploadService) }
   }
 
   fun createCheckin(createCheckin: CreateCheckinRequest): OffenderCheckinDto {
@@ -68,7 +68,7 @@ class OffenderCheckinService(
     )
 
     val saved = checkinRepository.save(checkin)
-    return saved.dto()
+    return saved.dto(this.s3UploadService)
   }
 
   /**
@@ -113,7 +113,7 @@ class OffenderCheckinService(
     checkin.status = CheckinStatus.SUBMITTED
 
     checkinRepository.save(checkin)
-    return checkin.dto()
+    return checkin.dto(this.s3UploadService)
   }
 
   fun generateVideoUploadLocation(checkinUuid: UUID, contentType: String, duration: Duration): URL {
@@ -127,7 +127,7 @@ class OffenderCheckinService(
 
   fun getCheckins(practitionerUuid: UUID, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {
     val page = checkinRepository.findAllByCreatedByUuid(practitionerUuid, pageRequest)
-    val checkins = page.content.map { it.dto() }
+    val checkins = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), checkins)
   }
 }

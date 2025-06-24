@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -15,7 +16,7 @@ data class OffenderDto(
   val email: String? = null,
   val phoneNumber: String? = null,
   // not every context requires the photo URL, so we only include when needed
-  val photoUrl: String?,
+  val photoUrl: URL?,
 )
 
 data class OffenderSetupDto(

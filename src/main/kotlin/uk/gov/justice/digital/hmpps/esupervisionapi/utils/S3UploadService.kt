@@ -3,10 +3,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
@@ -14,12 +16,25 @@ import java.net.URL
 import java.time.Duration
 import java.util.UUID
 
+sealed class S3Keyable {
+  fun toKey(): String {
+    when (this) {
+      is SetupPhotoKey -> {
+        return "invite-${this.invite}"
+      }
+      is CheckinVideoKey -> {
+        return "checkin-${this.checkin}"
+      }
+    }
+  }
+}
+
 /**
  * Ensure we're being consistent with object keys in S3
  */
 data class SetupPhotoKey(
   val invite: UUID,
-) {
+) : S3Keyable() {
   fun asString(): String = "invite-$invite"
 }
 
@@ -28,7 +43,7 @@ data class SetupPhotoKey(
  */
 data class CheckinVideoKey(
   val checkin: UUID,
-) {
+) : S3Keyable() {
   fun asString(): String = "checkin-$checkin"
 }
 
@@ -38,7 +53,7 @@ class S3UploadService(
   val s3Presigner: S3Presigner,
   @Value("\${aws.s3.image-uploads}") private val imageUploadBucket: String,
   @Value("\${aws.s3.video-uploads}") private val videoUploadBucket: String,
-) {
+) : ResourceLocator {
 
   private fun putObjectRequest(bucket: String, key: String, contentType: String): PutObjectRequest {
     val request = PutObjectRequest.builder()
@@ -95,20 +110,35 @@ class S3UploadService(
     return s3Presigner.presignPutObject(presignRequest).url()
   }
 
-  fun isSetupPhotoUploaded(setup: OffenderSetup): Boolean {
-    val request = HeadObjectRequest.builder()
-      .bucket(imageUploadBucket)
-      .key(SetupPhotoKey(setup.offender.uuid).asString())
-      .build()
+  fun bucketFor(key: S3Keyable): String {
+    when (key) {
+      is SetupPhotoKey -> {
+        return this.imageUploadBucket
+      }
+      is CheckinVideoKey -> {
+        return this.videoUploadBucket
+      }
+    }
+  }
+
+  fun getHeadObjectRequest(key: S3Keyable): HeadObjectRequest = HeadObjectRequest.builder()
+    .bucket(this.bucketFor(key))
+    .key(key.toKey())
+    .build()
+
+  fun keyExists(key: S3Keyable): Boolean {
+    val request = getHeadObjectRequest(key)
     return isObjectUploaded(request)
   }
 
+  fun isSetupPhotoUploaded(setup: OffenderSetup): Boolean {
+    val photoKey = SetupPhotoKey(setup.offender.uuid)
+    return keyExists(photoKey)
+  }
+
   fun isCheckinVideoUploaded(checkin: OffenderCheckin): Boolean {
-    val request = HeadObjectRequest.builder()
-      .bucket(videoUploadBucket)
-      .key(CheckinVideoKey(checkin.uuid).asString())
-      .build()
-    return isObjectUploaded(request)
+    val videoKey = CheckinVideoKey(checkin.uuid)
+    return keyExists(videoKey)
   }
 
   private fun isObjectUploaded(request: HeadObjectRequest): Boolean {
@@ -118,5 +148,35 @@ class S3UploadService(
     } catch (e: NoSuchKeyException) {
       return false
     }
+  }
+
+  fun getObjectRequestFor(key: S3Keyable): GetObjectRequest = GetObjectRequest.builder()
+    .bucket(this.bucketFor(key))
+    .key(key.toKey())
+    .build()
+
+  fun presignedGetUrlFor(key: S3Keyable): URL? {
+    val keyExists = this.keyExists(key)
+    if (keyExists) {
+      val getRequest = getObjectRequestFor(key)
+      val presignRequest = GetObjectPresignRequest.builder()
+        .signatureDuration(Duration.ofMinutes(5))
+        .getObjectRequest(getRequest)
+        .build()
+      val presigned = this.s3Presigner.presignGetObject(presignRequest)
+      return presigned.url()
+    } else {
+      return null
+    }
+  }
+
+  override fun getOffenderPhoto(offenderUuid: UUID): URL? {
+    val photoKey = SetupPhotoKey(offenderUuid)
+    return presignedGetUrlFor(photoKey)
+  }
+
+  override fun getCheckinVideo(checkinUuid: UUID): URL? {
+    val videoKey = CheckinVideoKey(checkinUuid)
+    return presignedGetUrlFor(videoKey)
   }
 }

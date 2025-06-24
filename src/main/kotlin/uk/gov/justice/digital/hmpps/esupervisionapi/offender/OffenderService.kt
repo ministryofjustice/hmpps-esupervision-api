@@ -5,15 +5,19 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.util.UUID
 
 @Service
-class OffenderService(private val offenderRepository: OffenderRepository) {
+class OffenderService(
+  private val offenderRepository: OffenderRepository,
+  private val s3UploadService: S3UploadService,
+) {
 
   fun getOffenders(pageable: Pageable): CollectionDto<OffenderDto> {
     val page = offenderRepository.findAll(pageable)
-    val offenders = page.content.map { it.dto() }
+    val offenders = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), offenders)
   }
 
