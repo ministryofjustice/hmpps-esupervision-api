@@ -7,12 +7,11 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
-import org.springframework.stereotype.Repository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.Pagination
 import java.time.Instant
 import java.util.Optional
 import java.util.UUID
