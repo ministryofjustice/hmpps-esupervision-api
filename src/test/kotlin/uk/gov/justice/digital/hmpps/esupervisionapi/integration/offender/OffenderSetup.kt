@@ -44,6 +44,7 @@ class OffenderSetup : IntegrationTestBase() {
     val result = offenderInviteService.startOffenderSetup(
       OffenderInfo(
         setupUuid = UUID.randomUUID(),
+        practitionerId = UUID.randomUUID(),
         firstName = "John",
         lastName = "Smith",
         dateOfBirth = LocalDate.of(1980, 1, 1),
