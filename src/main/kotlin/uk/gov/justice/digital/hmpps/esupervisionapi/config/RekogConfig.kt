@@ -17,7 +17,6 @@ class RekogConfig(
   @Value("\${rekognition.access_key_id}") val accessKeyId: String,
   @Value("\${rekognition.secret_access_key}") val accessKeySecret: String,
   @Value("\${rekognition.s3_bucket_name}") val bucketName: String,
-  @Value("\${aws.endpoint-url}") val awsEndpointUrl: String,
 ) {
 
   @Autowired
@@ -32,7 +31,7 @@ class RekogConfig(
 
     val profiles = environment.activeProfiles
     if (profiles.contains("local")) {
-      builder.endpointOverride(URI.create(awsEndpointUrl))
+      builder.endpointOverride(URI.create("http://localhost:4566"))
       builder.forcePathStyle(true)
     }
 
