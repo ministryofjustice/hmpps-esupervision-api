@@ -35,7 +35,7 @@ class OffenderInviteResource(
     description = """To be called on behalf the practitioner.
     Once a photo is uploaded and personal details confirmed, the practitioner will be able to schedule "checkins." """,
   )
-  @PostMapping("")
+  @PostMapping
   fun startSetup(@RequestBody @Valid offenderInfo: OffenderInfo): ResponseEntity<OffenderSetupDto> {
     val setup = offenderSetupService.startOffenderSetup(offenderInfo)
     return ResponseEntity.ok(
