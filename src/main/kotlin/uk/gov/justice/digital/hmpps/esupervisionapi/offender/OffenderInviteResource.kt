@@ -21,7 +21,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.UploadLocationResponse
 import java.time.Duration
 import java.util.UUID
 
-
 @RestController
 @RequestMapping("/offender_setup", produces = ["application/json"])
 class OffenderInviteResource(
