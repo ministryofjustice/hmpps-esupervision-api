@@ -74,7 +74,7 @@ open class Offender(
     email = email,
     phoneNumber = phoneNumber,
     createdAt = createdAt,
-    photoUrl = resourceLocator.getOffenderPhoto(uuid),
+    photoUrl = resourceLocator.getOffenderPhoto(this),
   )
 }
 

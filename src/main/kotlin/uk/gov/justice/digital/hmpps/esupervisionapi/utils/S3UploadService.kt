@@ -10,8 +10,11 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import java.net.URL
 import java.time.Duration
 import java.util.UUID
@@ -155,28 +158,31 @@ class S3UploadService(
     .key(key.toKey())
     .build()
 
-  fun presignedGetUrlFor(key: S3Keyable): URL? {
-    val keyExists = this.keyExists(key)
-    if (keyExists) {
-      val getRequest = getObjectRequestFor(key)
-      val presignRequest = GetObjectPresignRequest.builder()
-        .signatureDuration(Duration.ofMinutes(5))
-        .getObjectRequest(getRequest)
-        .build()
-      val presigned = this.s3Presigner.presignGetObject(presignRequest)
-      return presigned.url()
+  fun presignedGetUrlFor(key: S3Keyable): URL {
+    val getRequest = getObjectRequestFor(key)
+    val presignRequest = GetObjectPresignRequest.builder()
+      .signatureDuration(Duration.ofMinutes(5))
+      .getObjectRequest(getRequest)
+      .build()
+    val presigned = this.s3Presigner.presignGetObject(presignRequest)
+    return presigned.url()
+  }
+
+  override fun getOffenderPhoto(offender: Offender): URL? {
+    if (offender.status == OffenderStatus.VERIFIED) {
+      val photoKey = SetupPhotoKey(offender.uuid)
+      return presignedGetUrlFor(photoKey)
     } else {
       return null
     }
   }
 
-  override fun getOffenderPhoto(offenderUuid: UUID): URL? {
-    val photoKey = SetupPhotoKey(offenderUuid)
-    return presignedGetUrlFor(photoKey)
-  }
-
-  override fun getCheckinVideo(checkinUuid: UUID): URL? {
-    val videoKey = CheckinVideoKey(checkinUuid)
-    return presignedGetUrlFor(videoKey)
+  override fun getCheckinVideo(checkin: OffenderCheckin): URL? {
+    if (checkin.status == CheckinStatus.SUBMITTED) {
+      val videoKey = CheckinVideoKey(checkin.uuid)
+      return presignedGetUrlFor(videoKey)
+    } else {
+      return null
+    }
   }
 }
