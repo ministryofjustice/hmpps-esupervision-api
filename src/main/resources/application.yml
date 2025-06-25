@@ -96,7 +96,7 @@ notify:
   offenderInviteEmailTemplateId: fc8394c1-81f4-42ba-80ab-65ebb627daeb
 
 rekognition:
-  region: ${REKOG_AWS_REGION}
+  region: eu-west-2
   access_key_id: ${REKOG_AWS_ACCESS_KEY_ID}
   secret_access_key: ${REKOG_AWS_SECRET_ACCESS_KEY}
-  s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
+#  s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
