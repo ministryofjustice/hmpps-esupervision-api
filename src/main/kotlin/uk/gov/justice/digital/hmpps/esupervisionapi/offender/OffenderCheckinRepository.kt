@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Instant
 import java.util.Optional
 import java.util.UUID
@@ -59,18 +60,18 @@ open class OffenderCheckin(
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult?,
 ) : AEntity() {
-  fun dto(): OffenderCheckinDto = OffenderCheckinDto(
+  fun dto(resourceLocator: ResourceLocator): OffenderCheckinDto = OffenderCheckinDto(
     uuid = uuid,
     status = status,
     dueDate = dueDate,
-    offender = offender.dto(), // TODO: don't return whole dto, just the uuid
+    offender = offender.dto(resourceLocator), // TODO: don't return whole dto, just the uuid
     submittedOn = submittedAt,
     questions = questions,
     answers = answers,
     reviewedBy = reviewedBy?.uuid,
     createdBy = createdBy.uuid,
     createdAt = createdAt,
-    videoUrl = null,
+    videoUrl = resourceLocator.getCheckinVideo(this),
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
   )

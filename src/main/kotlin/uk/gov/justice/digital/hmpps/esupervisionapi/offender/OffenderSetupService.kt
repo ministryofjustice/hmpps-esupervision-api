@@ -106,7 +106,7 @@ class OffenderSetupService(
     offenderRepository.save(offender)
 
     val saved = offenderRepository.save(offender)
-    return saved.dto()
+    return saved.dto(this.s3UploadService)
   }
 
   @Transactional
@@ -129,7 +129,7 @@ class OffenderSetupService(
     val deleted = offenderRepository.save(offender)
     offenderSetupRepository.delete(setup.get())
 
-    return deleted.dto()
+    return deleted.dto(this.s3UploadService)
   }
 
   companion object {

@@ -12,6 +12,7 @@ import jakarta.persistence.Table
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -64,7 +65,7 @@ open class Offender(
   @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
   open var practitioner: Practitioner,
 ) : AEntity() {
-  fun dto(): OffenderDto = OffenderDto(
+  fun dto(resourceLocator: ResourceLocator): OffenderDto = OffenderDto(
     uuid = uuid,
     firstName = firstName,
     lastName = lastName,
@@ -73,7 +74,7 @@ open class Offender(
     email = email,
     phoneNumber = phoneNumber,
     createdAt = createdAt,
-    photoUrl = null,
+    photoUrl = resourceLocator.getOffenderPhoto(this),
   )
 }
 
