@@ -35,7 +35,7 @@ class OffenderCheckinResource(
   @GetMapping(produces = [APPLICATION_JSON_VALUE])
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun getCheckins(@RequestParam("practitionerUuid") practitionerUuid: UUID): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
+  fun getCheckins(@RequestParam("practitionerUuid") practitionerUuid: String): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
     val pageRequest = PageRequest.of(0, 20)
     val checkins = offenderCheckinService.getCheckins(practitionerUuid, pageRequest)
     return ResponseEntity.ok(checkins)

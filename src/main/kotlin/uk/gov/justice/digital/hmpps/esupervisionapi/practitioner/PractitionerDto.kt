@@ -1,9 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
-import java.util.UUID
-
 data class PractitionerDto(
-  val uuid: UUID,
+  val uuid: String,
   val firstName: String,
   val lastName: String,
   val email: String,

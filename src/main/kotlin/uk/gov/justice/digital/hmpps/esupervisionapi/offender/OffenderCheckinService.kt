@@ -125,7 +125,7 @@ class OffenderCheckinService(
     throw ResourceNotFoundException("checkin not found")
   }
 
-  fun getCheckins(practitionerUuid: UUID, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {
+  fun getCheckins(practitionerUuid: String, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {
     val page = checkinRepository.findAllByCreatedByUuid(practitionerUuid, pageRequest)
     val checkins = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), checkins)

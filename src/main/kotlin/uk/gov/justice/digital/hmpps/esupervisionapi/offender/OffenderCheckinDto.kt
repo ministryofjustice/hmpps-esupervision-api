@@ -31,9 +31,9 @@ data class OffenderCheckinDto(
   val submittedOn: Instant?,
   val questions: String,
   val answers: String?,
-  val createdBy: UUID,
+  val createdBy: String,
   val createdAt: Instant,
-  val reviewedBy: UUID?,
+  val reviewedBy: String?,
   /**
    * Will be set to pre-signed S3 URL
    */
