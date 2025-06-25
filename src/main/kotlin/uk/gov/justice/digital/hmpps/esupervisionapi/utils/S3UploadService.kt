@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.services.s3.S3Client
@@ -52,7 +53,7 @@ data class CheckinVideoKey(
 
 @Service
 class S3UploadService(
-  val s3uploadClient: S3Client,
+  @Qualifier("MOJ") val s3uploadClient: S3Client,
   val s3Presigner: S3Presigner,
   @Value("\${aws.s3.image-uploads}") private val imageUploadBucket: String,
   @Value("\${aws.s3.video-uploads}") private val videoUploadBucket: String,

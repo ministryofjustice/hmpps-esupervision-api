@@ -51,3 +51,9 @@ notify:
   apiKey: notused
   offenderInviteSmsTemplateId: 306223e2-b69c-477f-840c-c98b029021f0
   offenderInviteEmailTemplateId: fc8394c1-81f4-42ba-80ab-65ebb627daeb
+
+rekognition:
+  region: eu-west-2
+  access_key_id: rekog-key-id
+  secret_access_key: rekog-secret-key
+  s3_bucket_name: rekog-bucket

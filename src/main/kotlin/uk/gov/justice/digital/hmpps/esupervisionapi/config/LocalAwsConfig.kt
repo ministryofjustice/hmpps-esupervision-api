@@ -22,7 +22,7 @@ class LocalAwsConfig {
   @Value("\${aws.endpoint-url}")
   lateinit var endpointUrl: String
 
-  @Bean
+  @Bean(name = ["MOJ"])
   fun s3Client(): S3Client {
     LOG.info("Creating S3 client endpoint={}", endpointUrl)
     return S3Client.builder()

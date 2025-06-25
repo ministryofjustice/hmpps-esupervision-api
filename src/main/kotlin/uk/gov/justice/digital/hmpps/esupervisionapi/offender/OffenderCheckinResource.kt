@@ -2,6 +2,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
@@ -13,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
@@ -24,6 +28,8 @@ import java.util.UUID
 @RequestMapping(path = ["/offender_checkins"])
 class OffenderCheckinResource(
   val offenderCheckinService: OffenderCheckinService,
+  @Qualifier("rekognitionS3Client") val rekognitionS3: S3Client,
+  @Value("\${rekognition.s3_bucket_name}") val rekogBucketName: String,
 ) {
 
   @GetMapping(produces = [APPLICATION_JSON_VALUE])
@@ -84,5 +90,17 @@ class OffenderCheckinResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   fun reviewCheckin(@PathVariable uuid: UUID): ResponseEntity<OffenderCheckinDto> {
     TODO("not implemented yet")
+  }
+
+  // NOTE(rosado): temporary, just to test if we can reach outside
+  @GetMapping("/rekog")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  fun rekog(): ResponseEntity<String> {
+    val result = rekognitionS3.getObject(
+      GetObjectRequest.builder()
+        .bucket(rekogBucketName).key("hello.txt").build(),
+    )
+
+    return ResponseEntity.ok(result.readAllBytes().toString(Charsets.UTF_8))
   }
 }
