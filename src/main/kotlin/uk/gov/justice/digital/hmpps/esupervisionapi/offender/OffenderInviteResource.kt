@@ -21,11 +21,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.UploadLocationResponse
 import java.time.Duration
 import java.util.UUID
 
-data class ConfirmationResultDto(
-  // val offenderUuid: UUID? = null,
-  val error: String? = null,
-)
-
 @RestController
 @RequestMapping("/offender_setup", produces = ["application/json"])
 class OffenderInviteResource(
@@ -40,8 +35,8 @@ class OffenderInviteResource(
     description = """To be called on behalf the practitioner.
     Once a photo is uploaded and personal details confirmed, the practitioner will be able to schedule "checkins." """,
   )
-  @PostMapping("")
-  fun approveInvite(@RequestBody @Valid offenderInfo: OffenderInfo): ResponseEntity<OffenderSetupDto> {
+  @PostMapping
+  fun startSetup(@RequestBody @Valid offenderInfo: OffenderInfo): ResponseEntity<OffenderSetupDto> {
     val setup = offenderSetupService.startOffenderSetup(offenderInfo)
     return ResponseEntity.ok(
       setup,
