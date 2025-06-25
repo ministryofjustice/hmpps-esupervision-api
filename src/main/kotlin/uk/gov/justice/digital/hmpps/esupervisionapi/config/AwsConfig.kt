@@ -15,7 +15,7 @@ class AwsConfig {
   @Value("\${aws.region-name}")
   lateinit var region: String
 
-  @Bean
+  @Bean(name = ["MOJ"])
   fun s3Client(): S3Client = S3Client.builder()
     .region(Region.of(region))
     .build()
