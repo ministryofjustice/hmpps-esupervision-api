@@ -13,7 +13,6 @@ import software.amazon.awssdk.services.s3.S3Client
 import java.net.URI
 
 @Configuration
-@Profile("local")
 class RekogConfig(
   @Value("\${rekognition.region}") val region: String,
   @Value("\${rekognition.access_key_id}") val accessKeyId: String,
