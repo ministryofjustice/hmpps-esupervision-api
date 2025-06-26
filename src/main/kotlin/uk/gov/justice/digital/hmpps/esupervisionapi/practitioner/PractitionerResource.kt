@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder
-import java.util.UUID
 
 @RestController
 @RequestMapping("/practitioners", produces = [APPLICATION_JSON_VALUE])
@@ -43,7 +42,7 @@ class PractitionerResource(private val practitionerService: PractitionerService)
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @GetMapping("/{uuid}")
-  fun getPractitioner(@PathVariable uuid: UUID): ResponseEntity<Practitioner> {
+  fun getPractitioner(@PathVariable uuid: String): ResponseEntity<Practitioner> {
     val practitioner = practitionerService.getPractitionerByUuid(uuid)
     if (practitioner != null) {
       return ResponseEntity.ok(practitioner)

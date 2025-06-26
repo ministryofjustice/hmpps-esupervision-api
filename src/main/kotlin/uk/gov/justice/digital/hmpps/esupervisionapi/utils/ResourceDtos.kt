@@ -32,7 +32,7 @@ data class CollectionDto<ElemDto>(
  * Everything we need to create a checkin
  */
 data class CreateCheckinRequest(
-  val practitioner: UUID,
+  val practitioner: String,
   val offender: UUID,
   val questions: String,
   val dueDate: LocalDate,

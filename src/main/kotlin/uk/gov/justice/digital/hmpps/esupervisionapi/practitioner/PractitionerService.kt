@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.util.UUID
 
 @Service
 class PractitionerService(private val practitionerRepository: PractitionerRepository) {
@@ -17,7 +16,7 @@ class PractitionerService(private val practitionerRepository: PractitionerReposi
   fun getPractitionerById(id: Long): Practitioner? = practitionerRepository.findById(id).orElse(null)
 
   @Transactional
-  fun getPractitionerByUuid(uuid: UUID): Practitioner? {
+  fun getPractitionerByUuid(uuid: String): Practitioner? {
     var found: Practitioner? = null
     try {
       val practitioner = practitionerRepository.findByUuid(uuid)

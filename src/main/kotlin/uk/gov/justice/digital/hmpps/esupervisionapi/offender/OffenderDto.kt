@@ -21,7 +21,7 @@ data class OffenderDto(
 
 data class OffenderSetupDto(
   val uuid: UUID,
-  val practitioner: UUID,
+  val practitioner: String,
   val offender: UUID,
   val createdAt: Instant,
 )

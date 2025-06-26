@@ -83,5 +83,5 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   fun findByOffender(offender: Offender): Optional<OffenderCheckin>
 
   // returns checkins created by a practitioner with the given uuid
-  fun findAllByCreatedByUuid(practitionerUuid: UUID, pageable: Pageable): Page<OffenderCheckin>
+  fun findAllByCreatedByUuid(practitionerUuid: String, pageable: Pageable): Page<OffenderCheckin>
 }

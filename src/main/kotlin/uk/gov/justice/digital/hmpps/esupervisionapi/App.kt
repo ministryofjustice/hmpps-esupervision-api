@@ -21,7 +21,7 @@ class StartupRunner(val practitionerService: PractitionerService) : ApplicationR
     try {
       practitionerService.createPractitioner(
         Practitioner(
-          uuid = UUID.randomUUID(),
+          uuid = UUID.randomUUID().toString(),
           firstName = "John",
           lastName = "Doe",
           email = "john@example.bar",
