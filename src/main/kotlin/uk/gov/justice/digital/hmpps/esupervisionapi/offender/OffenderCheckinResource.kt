@@ -100,7 +100,7 @@ class OffenderCheckinResource(
   @GetMapping("/rekog")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   fun rekog(): ResponseEntity<String> {
-      val result = rekognitionS3.getObject(
+    val result = rekognitionS3.getObject(
       GetObjectRequest.builder()
         .bucket(rekogBucketName).key("hello.txt").build(),
     )
