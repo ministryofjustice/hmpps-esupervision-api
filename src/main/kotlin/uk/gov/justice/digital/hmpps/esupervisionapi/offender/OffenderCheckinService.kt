@@ -121,7 +121,7 @@ class OffenderCheckinService(
   fun generateVideoUploadLocation(checkinUuid: UUID, contentType: String, duration: Duration): URL {
     val checkin = checkinRepository.findByUuid(checkinUuid)
     if (checkin.isPresent) {
-      validateCheckingUpdatable(checkin.get())
+      validateCheckinUpdatable(checkin.get())
       return s3UploadService.generatePresignedUploadUrl(checkin.get(), contentType, duration)
     }
 
@@ -131,7 +131,7 @@ class OffenderCheckinService(
   fun generatePhotoSnapshotLocations(checkinUuid: UUID, contentType: String, number: Long, duration: Duration): List<URL> {
     val checkin = checkinRepository.findByUuid(checkinUuid)
     if (checkin.isPresent) {
-      validateCheckingUpdatable(checkin.get())
+      validateCheckinUpdatable(checkin.get())
       val urls = mutableListOf<URL>()
       for (index in 0..<number) {
         val rekogUrl = rekogS3UploadService.generatePresignedUploadUrl(checkin.get(), contentType, index, duration)
@@ -151,7 +151,7 @@ class OffenderCheckinService(
 
   companion object {
     // checkin has been SUBMITTED so we no longer allow ot overwrite the associated files
-    private fun validateCheckingUpdatable(checkin: OffenderCheckin) {
+    private fun validateCheckinUpdatable(checkin: OffenderCheckin) {
       if (checkin.status != CheckinStatus.CREATED) {
         throw BadArgumentException("You can no longer add photos/videos to checkin with uuid=${checkin.uuid}")
       }
