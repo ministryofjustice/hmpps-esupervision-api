@@ -11,7 +11,7 @@ Authorization: Bearer {{hmpps_auth.token}}
  %}
 
 ### See existing checkins
-GET {{HOST}}/offender_checkins
+GET {{HOST}}/offender_checkins?practitionerUuid={{practitioner_uuid}}
 Authorization: Bearer {{hmpps_auth.token}}
 
 > {%
