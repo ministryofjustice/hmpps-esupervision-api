@@ -142,6 +142,31 @@ NOTIFY_API_KEY=notifykey
 
 This key does not send real messages but will appear in the notify dashboard.
 
+The application needs a number of S3 buckets to function. To allow clients (browsers) to upload 
+files to the bucket (using a pre-signed URLs), we need to apply the following CORS configuration.
+
+```json
+{
+  "CORSRules": [
+    {
+      "AllowedHeaders": ["*"],
+      "AllowedMethods": ["GET", "PUT"],
+      "AllowedOrigins": ["*"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3000
+    }
+  ]
+}
+```
+
+To apply it to your localstack instance, put the above into a file `cors-config.json` and run:
+
+```sh
+awslocal s3api put-bucket-cors --bucket hmpss-esupervision-video-uploads --cors-configuration file://cors-config.json
+awslocal s3api put-bucket-cors --bucket hmpss-esupervision-image-uploads --cors-configuration file://cors-config.json
+```
+
+
 Run services with:
 
 ```bash
