@@ -18,8 +18,12 @@ data class LocationInfo(
   val duration: String,
 )
 
+/**
+ * Note, only one of `locationInfo` or `locations` should be non-null.
+ */
 data class UploadLocationResponse(
   val locationInfo: LocationInfo?,
+  val locations: List<LocationInfo>? = null,
   val errorMessage: String? = null,
 )
 

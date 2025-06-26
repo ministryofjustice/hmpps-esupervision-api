@@ -67,14 +67,18 @@ class OffenderCheckinResource(
   fun uploadLocation(
     @PathVariable uuid: UUID,
     @RequestParam(name = "content-type", required = true) contentType: String,
+    @RequestParam(name = "num-snapshots", required = false) numSnapshots: Long? = null,
   ): ResponseEntity<UploadLocationResponse> {
     val duration = Duration.ofMinutes(10) // TODO: get that from config
-    val url = offenderCheckinService.generateVideoUploadLocation(uuid, contentType, duration)
-    return ResponseEntity.ok(
-      UploadLocationResponse(
-        locationInfo = LocationInfo(url, contentType, duration.toString()),
-      ),
-    )
+    var response: UploadLocationResponse? = null
+    if (numSnapshots != null) {
+      val urls = offenderCheckinService.generatePhotoSnapshotLocations(uuid, contentType, numSnapshots, duration)
+      response = UploadLocationResponse(locationInfo = null, locations = urls.map { LocationInfo(it, contentType, duration.toString()) })
+    } else {
+      val url = offenderCheckinService.generateVideoUploadLocation(uuid, contentType, duration)
+      response = UploadLocationResponse(LocationInfo(url, contentType, duration.toString()))
+    }
+    return ResponseEntity.ok(response)
   }
 
   @PostMapping("/{uuid}/submit")
