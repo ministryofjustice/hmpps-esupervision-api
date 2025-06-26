@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -9,7 +10,12 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.S3Configuration
+import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
+
+private const val LOCAL_AWS = "http://localhost:4566"
 
 @Configuration
 class RekogConfig(
@@ -31,10 +37,40 @@ class RekogConfig(
 
     val profiles = environment.activeProfiles
     if (profiles.contains("local")) {
-      builder.endpointOverride(URI.create("http://localhost:4566"))
+      builder.endpointOverride(URI.create(LOCAL_AWS))
       builder.forcePathStyle(true)
     }
 
     return builder.build()
+  }
+
+  @Bean(name = ["rekognitionS3PreSigner"])
+  fun s3Presigner(): S3Presigner {
+    val credentials = AwsBasicCredentials.create(accessKeyId, accessKeySecret)
+    val builder = S3Presigner.builder()
+      .region(Region.of(region))
+      .credentialsProvider(StaticCredentialsProvider.create(credentials))
+
+    val profiles = environment.activeProfiles
+    if (profiles.contains("local")) {
+      builder
+        .serviceConfiguration(
+          S3Configuration.builder()
+            .pathStyleAccessEnabled(true).build(),
+        )
+        .endpointOverride(URI.create(LOCAL_AWS))
+        .region(Region.of(region))
+    }
+
+    return builder.build()
+  }
+
+  @Bean(name = ["rekognitionS3"])
+  fun s3UploadService(
+    @Qualifier("rekognitionS3Client") s3Client: S3Client,
+    @Qualifier("rekognitionS3PreSigner") s3Presigner: S3Presigner,
+  ): S3UploadService {
+    val service = S3UploadService(s3Client, s3Presigner, bucketName, bucketName)
+    return service
   }
 }

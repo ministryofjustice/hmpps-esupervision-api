@@ -24,10 +24,13 @@ sealed class S3Keyable {
   fun toKey(): String {
     when (this) {
       is SetupPhotoKey -> {
-        return "invite-${this.invite}"
+        return "setup-${this.invite}"
       }
       is CheckinVideoKey -> {
-        return "checkin-${this.checkin}"
+        return "checkin-${this.checkin}/video"
+      }
+      is CheckinPhotoKey -> {
+        return "checkin-${this.checkin}/${this.index}"
       }
     }
   }
@@ -38,18 +41,19 @@ sealed class S3Keyable {
  */
 data class SetupPhotoKey(
   val invite: UUID,
-) : S3Keyable() {
-  fun asString(): String = "invite-$invite"
-}
+) : S3Keyable()
 
 /**
  * Ensure we're being consistent with object keys in S3
  */
 data class CheckinVideoKey(
   val checkin: UUID,
-) : S3Keyable() {
-  fun asString(): String = "checkin-$checkin"
-}
+) : S3Keyable()
+
+data class CheckinPhotoKey(
+  val checkin: UUID,
+  val index: Long,
+) : S3Keyable()
 
 @Service
 class S3UploadService(
@@ -68,9 +72,14 @@ class S3UploadService(
     return request
   }
 
-  internal fun putObjectRequest(setup: OffenderSetup, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, SetupPhotoKey(setup.offender.uuid).asString(), contentType)
+  internal fun putObjectRequest(setup: OffenderSetup, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, SetupPhotoKey(setup.offender.uuid).toKey(), contentType)
 
-  internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinVideoKey(checkin.uuid).asString(), contentType)
+  internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinVideoKey(checkin.uuid).toKey(), contentType)
+
+  /**
+   * We can have multiple checkin photo objects, hence the index param
+   */
+  internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String, index: Long): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinPhotoKey(checkin.uuid, index).toKey(), contentType)
 
   /**
    * Generates a pre-signed URL for uploading a file to S3.
@@ -114,6 +123,20 @@ class S3UploadService(
     return s3Presigner.presignPutObject(presignRequest).url()
   }
 
+  fun generatePresignedUploadUrl(
+    checkin: OffenderCheckin,
+    contentType: String = "application/octet-stream",
+    index: Long,
+    duration: Duration,
+  ): URL {
+    val putRequest = putObjectRequest(checkin, contentType, index)
+    val presignRequest = PutObjectPresignRequest.builder()
+      .putObjectRequest(putRequest)
+      .signatureDuration(duration)
+      .build()
+    return s3Presigner.presignPutObject(presignRequest).url()
+  }
+
   fun bucketFor(key: S3Keyable): String {
     when (key) {
       is SetupPhotoKey -> {
@@ -121,6 +144,9 @@ class S3UploadService(
       }
       is CheckinVideoKey -> {
         return this.videoUploadBucket
+      }
+      is CheckinPhotoKey -> {
+        return this.imageUploadBucket
       }
     }
   }

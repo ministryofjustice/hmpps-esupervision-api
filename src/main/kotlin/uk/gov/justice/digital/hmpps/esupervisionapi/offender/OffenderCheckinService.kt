@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
@@ -26,6 +27,7 @@ class OffenderCheckinService(
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
+  @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
 ) {
 
   fun getCheckin(uuid: UUID): Optional<OffenderCheckinDto> {
@@ -119,7 +121,23 @@ class OffenderCheckinService(
   fun generateVideoUploadLocation(checkinUuid: UUID, contentType: String, duration: Duration): URL {
     val checkin = checkinRepository.findByUuid(checkinUuid)
     if (checkin.isPresent) {
+      validateCheckingUpdatable(checkin.get())
       return s3UploadService.generatePresignedUploadUrl(checkin.get(), contentType, duration)
+    }
+
+    throw ResourceNotFoundException("checkin not found")
+  }
+
+  fun generatePhotoSnapshotLocations(checkinUuid: UUID, contentType: String, number: Long, duration: Duration): List<URL> {
+    val checkin = checkinRepository.findByUuid(checkinUuid)
+    if (checkin.isPresent) {
+      validateCheckingUpdatable(checkin.get())
+      val urls = mutableListOf<URL>()
+      for (index in 0..<number) {
+        val rekogUrl = rekogS3UploadService.generatePresignedUploadUrl(checkin.get(), contentType, index, duration)
+        urls.add(rekogUrl)
+      }
+      return urls
     }
 
     throw ResourceNotFoundException("checkin not found")
@@ -129,5 +147,14 @@ class OffenderCheckinService(
     val page = checkinRepository.findAllByCreatedByUuid(practitionerUuid, pageRequest)
     val checkins = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), checkins)
+  }
+
+  companion object {
+    // checkin has been SUBMITTED so we no longer allow ot overwrite the associated files
+    private fun validateCheckingUpdatable(checkin: OffenderCheckin) {
+      if (checkin.status != CheckinStatus.CREATED) {
+        throw BadArgumentException("You can no longer add photos/videos to checkin with uuid=${checkin.uuid}")
+      }
+    }
   }
 }
