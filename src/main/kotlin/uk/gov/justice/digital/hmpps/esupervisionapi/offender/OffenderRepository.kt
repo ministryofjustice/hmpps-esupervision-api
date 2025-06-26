@@ -10,6 +10,10 @@ import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
@@ -64,7 +68,8 @@ open class Offender(
   @ManyToOne(cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
   @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
   open var practitioner: Practitioner,
-) : AEntity() {
+) : AEntity(),
+  Contactable {
   fun dto(resourceLocator: ResourceLocator): OffenderDto = OffenderDto(
     uuid = uuid,
     firstName = firstName,
@@ -76,6 +81,13 @@ open class Offender(
     createdAt = createdAt,
     photoUrl = resourceLocator.getOffenderPhoto(this),
   )
+
+  override fun contactMethods(): Iterable<NotificationMethod> {
+    val methods = mutableListOf<NotificationMethod>()
+    this.email?.let { methods.add(Email(it)) }
+    this.phoneNumber?.let { methods.add(PhoneNumber(it)) }
+    return methods
+  }
 }
 
 @Repository

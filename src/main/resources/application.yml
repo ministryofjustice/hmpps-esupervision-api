@@ -92,8 +92,12 @@ aws:
 
 notify:
   apiKey: ${NOTIFY_API_KEY}
-  offenderInviteSmsTemplateId: 306223e2-b69c-477f-840c-c98b029021f0
-  offenderInviteEmailTemplateId: fc8394c1-81f4-42ba-80ab-65ebb627daeb
+  sms-templates:
+    POP_CHECKIN_INVITE: d332e869-a667-43ad-8a01-9c2b609e01c8
+    PRACTITIONER_CHECKIN_SUBMITTED: 611d8bed-f8ae-46ec-b38f-9173135d206c
+  email-templates:
+    POP_CHECKIN_INVITE: ab3bd00d-b0e7-477e-abb0-7197ab91aa70
+    PRACTITIONER_CHECKIN_SUBMITTED: 81d859ad-9469-405b-8949-a9d62fe8f080
 
 rekognition:
   region: eu-west-2
