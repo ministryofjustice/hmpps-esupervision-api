@@ -70,3 +70,12 @@ Content-Type: application/json
   "answers": "yellow"
 }
 
+### Review the checkin
+POST {{HOST}}/offender_checkins/{{checkin_uuid}}/review
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+  "practitioner": "{{practitioner_uuid}}",
+  "manualIdCheck": "MATCH"
+}

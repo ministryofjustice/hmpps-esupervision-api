@@ -1,10 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
@@ -16,6 +18,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import kotlin.jvm.optionals.getOrElse
 
 class MissingVideoException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
 class InvalidStateTransitionException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
@@ -149,12 +152,40 @@ class OffenderCheckinService(
     return CollectionDto(page.pageable.toPagination(), checkins)
   }
 
+  fun setAutomatedIdCheckStatus(checkinUuid: UUID, result: AutomatedIdVerificationResult): OffenderCheckinDto {
+    val checkin = checkinRepository.findByUuid(checkinUuid)
+    if (checkin.isPresent) {
+      LOG.info("updating checking with automated id check result: {}, checkin={}", result, checkinUuid)
+      val checkin = checkin.get()
+      checkin.autoIdCheck = result
+      val saved = checkinRepository.save(checkin)
+      return saved.dto(this.s3UploadService)
+    }
+
+    throw ResourceNotFoundException("checkin not found")
+  }
+
+  fun reviewCheckin(checkinUuid: UUID, reviewRequest: CheckinReviewRequest): OffenderCheckinDto {
+    val practitioner = practitionerRepository.findByUuid(reviewRequest.practitioner)
+      .getOrElse { throw BadArgumentException("practitioner not found") }
+    val checkin = checkinRepository.findByUuid(checkinUuid)
+      .getOrElse { throw ResourceNotFoundException("checkin not found") }
+
+    checkin.reviewedBy = practitioner
+    checkin.manualIdCheck = checkin.manualIdCheck
+    checkin.status = CheckinStatus.REVIEWED
+
+    return checkinRepository.save(checkin).dto(this.s3UploadService)
+  }
+
   companion object {
-    // checkin has been SUBMITTED so we no longer allow ot overwrite the associated files
+    // checkin has been SUBMITTED so we no longer allow to overwrite the associated files
     private fun validateCheckinUpdatable(checkin: OffenderCheckin) {
       if (checkin.status != CheckinStatus.CREATED) {
         throw BadArgumentException("You can no longer add photos/videos to checkin with uuid=${checkin.uuid}")
       }
     }
+
+    private val LOG = LoggerFactory.getLogger(this::class.java)
   }
 }

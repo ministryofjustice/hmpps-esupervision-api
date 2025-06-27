@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
@@ -92,8 +93,17 @@ class OffenderCheckinResource(
   @PostMapping("/{uuid}/review")
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun reviewCheckin(@PathVariable uuid: UUID): ResponseEntity<OffenderCheckinDto> {
-    TODO("not implemented yet")
+  fun reviewCheckin(@PathVariable uuid: UUID, reviewRequest: CheckinReviewRequest): ResponseEntity<OffenderCheckinDto> {
+    val checkin = offenderCheckinService.reviewCheckin(uuid, reviewRequest)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PostMapping("/{uuid}/auto_id_check")
+  @Tag(name = "practitioner")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  fun automatedIdentityCheck(@PathVariable uuid: UUID, @RequestParam result: AutomatedIdVerificationResult): ResponseEntity<OffenderCheckinDto> {
+    val checkin = offenderCheckinService.setAutomatedIdCheckStatus(uuid, result)
+    return ResponseEntity.ok(checkin)
   }
 
   // NOTE(rosado): temporary, just to test if we can reach outside
