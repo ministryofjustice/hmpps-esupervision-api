@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -149,12 +150,27 @@ class OffenderCheckinService(
     return CollectionDto(page.pageable.toPagination(), checkins)
   }
 
+  fun setAutomatedIdCheckStatus(checkinUuid: UUID, result: AutomatedIdVerificationResult): OffenderCheckinDto {
+    val checkin = checkinRepository.findByUuid(checkinUuid)
+    if (checkin.isPresent) {
+      LOG.info("updating checking with automated id check result: {}, checkin={}", result, checkinUuid)
+      val checkin = checkin.get()
+      checkin.autoIdCheck = result
+      val saved = checkinRepository.save(checkin)
+      return saved.dto(this.s3UploadService)
+    }
+
+    throw ResourceNotFoundException("checkin not found")
+  }
+
   companion object {
-    // checkin has been SUBMITTED so we no longer allow ot overwrite the associated files
+    // checkin has been SUBMITTED so we no longer allow to overwrite the associated files
     private fun validateCheckinUpdatable(checkin: OffenderCheckin) {
       if (checkin.status != CheckinStatus.CREATED) {
         throw BadArgumentException("You can no longer add photos/videos to checkin with uuid=${checkin.uuid}")
       }
     }
+
+    private val LOG = LoggerFactory.getLogger(this::class.java)
   }
 }

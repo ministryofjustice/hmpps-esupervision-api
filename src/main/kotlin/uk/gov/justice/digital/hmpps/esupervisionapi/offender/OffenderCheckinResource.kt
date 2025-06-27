@@ -96,6 +96,14 @@ class OffenderCheckinResource(
     TODO("not implemented yet")
   }
 
+  @PostMapping("/{uuid}/auto_id_check")
+  @Tag(name = "practitioner")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  fun automatedIdentityCheck(@PathVariable uuid: UUID, @RequestParam result: AutomatedIdVerificationResult): ResponseEntity<OffenderCheckinDto> {
+    val checkin = offenderCheckinService.setAutomatedIdCheckStatus(uuid, result)
+    return ResponseEntity.ok(checkin)
+  }
+
   // NOTE(rosado): temporary, just to test if we can reach outside
   @GetMapping("/rekog")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
