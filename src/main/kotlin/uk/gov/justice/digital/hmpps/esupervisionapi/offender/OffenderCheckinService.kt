@@ -41,22 +41,21 @@ class OffenderCheckinService(
   fun createCheckin(createCheckin: CreateCheckinRequest): OffenderCheckinDto {
     val now = Instant.now()
     val reqDueDate = Instant.from(createCheckin.dueDate.atStartOfDay(ZoneId.of("UTC")))
-    if (reqDueDate <= now) {
+    if (reqDueDate < now) {
       throw BadArgumentException("Due date is in the past: ${createCheckin.dueDate}")
     }
 
-    val offenderDto = offenderRepository.findByUuid(createCheckin.offender)
-    val practitionerDto = practitionerRepository.findByUuid(createCheckin.practitioner)
-
-    if (offenderDto.isEmpty) {
+    val offender = offenderRepository.findByUuid(createCheckin.offender).getOrElse {
       throw ResourceNotFoundException("Offender with uuid=${createCheckin.offender} not found")
     }
-    if (practitionerDto.isEmpty) {
+    val practitioner = practitionerRepository.findByUuid(createCheckin.practitioner).getOrElse {
       throw ResourceNotFoundException("Practitioner with uuid=${createCheckin.practitioner} not found")
     }
 
-    val offender = offenderDto.get()
-    val practitioner = practitionerDto.get()
+    if (offender.status != OffenderStatus.VERIFIED) {
+      throw BadArgumentException("Offender with uuid=${createCheckin.offender} has status ${offender.status}")
+    }
+
     val checkin = OffenderCheckin(
       uuid = UUID.randomUUID(),
       createdBy = practitioner,
