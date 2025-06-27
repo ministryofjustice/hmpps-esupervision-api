@@ -173,6 +173,7 @@ class OffenderCheckinService(
 
     checkin.reviewedBy = practitioner
     checkin.manualIdCheck = checkin.manualIdCheck
+    checkin.status = CheckinStatus.REVIEWED
 
     return checkinRepository.save(checkin).dto(this.s3UploadService)
   }
