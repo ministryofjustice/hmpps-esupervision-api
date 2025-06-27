@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
 import org.springframework.data.domain.Pageable
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import java.net.URL
 import java.time.LocalDate
 import java.util.UUID
@@ -40,4 +41,12 @@ data class CreateCheckinRequest(
   val offender: UUID,
   val questions: String,
   val dueDate: LocalDate,
+)
+
+/**
+ * Submitted on behalf of the practitioner as a review of the checkin.
+ */
+data class CheckinReviewRequest(
+  val practitioner: String,
+  val manualIdCCheck: ManualIdVerificationResult,
 )

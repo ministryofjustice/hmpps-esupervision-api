@@ -6,6 +6,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
@@ -17,6 +18,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import kotlin.jvm.optionals.getOrElse
 
 class MissingVideoException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
 class InvalidStateTransitionException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
@@ -161,6 +163,18 @@ class OffenderCheckinService(
     }
 
     throw ResourceNotFoundException("checkin not found")
+  }
+
+  fun reviewCheckin(checkinUuid: UUID, reviewRequest: CheckinReviewRequest): OffenderCheckinDto {
+    val practitioner = practitionerRepository.findByUuid(reviewRequest.practitioner)
+      .getOrElse { throw BadArgumentException("practitioner not found") }
+    val checkin = checkinRepository.findByUuid(checkinUuid)
+      .getOrElse { throw ResourceNotFoundException("checkin not found") }
+
+    checkin.reviewedBy = practitioner
+    checkin.manualIdCheck = checkin.manualIdCheck
+
+    return checkinRepository.save(checkin).dto(this.s3UploadService)
   }
 
   companion object {
