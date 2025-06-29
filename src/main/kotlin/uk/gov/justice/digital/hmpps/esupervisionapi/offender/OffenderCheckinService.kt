@@ -4,6 +4,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
@@ -30,6 +33,7 @@ class OffenderCheckinService(
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
+  private val notificationService: NotificationService,
   @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
 ) {
 
@@ -73,6 +77,11 @@ class OffenderCheckinService(
     )
 
     val saved = checkinRepository.save(checkin)
+
+    // notify PoP of checkin invite
+    val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
+    this.notificationService.sendMessage(inviteMessage, checkin.offender)
+
     return saved.dto(this.s3UploadService)
   }
 
@@ -118,6 +127,11 @@ class OffenderCheckinService(
     checkin.status = CheckinStatus.SUBMITTED
 
     checkinRepository.save(checkin)
+
+    // notify practitioner that checkin was submitted
+    val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin)
+    this.notificationService.sendMessage(submissionMessage, checkin.createdBy)
+
     return checkin.dto(this.s3UploadService)
   }
 

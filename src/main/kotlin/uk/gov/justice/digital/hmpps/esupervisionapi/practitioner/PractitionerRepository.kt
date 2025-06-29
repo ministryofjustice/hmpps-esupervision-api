@@ -4,6 +4,10 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.util.Optional
 
@@ -21,7 +25,8 @@ open class Practitioner(
   @Column("phone_number")
   open var phoneNumber: String? = null,
   open var roles: List<String> = listOf(),
-) : AEntity() {
+) : AEntity(),
+  Contactable {
   fun dto(): PractitionerDto = PractitionerDto(
     uuid = uuid,
     firstName = firstName,
@@ -30,6 +35,12 @@ open class Practitioner(
     phoneNumber = phoneNumber,
     roles = roles,
   )
+
+  override fun contactMethods(): Iterable<NotificationMethod> {
+    val methods = mutableListOf<NotificationMethod>(Email(this.email))
+    this.phoneNumber?.let { methods.add(PhoneNumber(it)) }
+    return methods
+  }
 }
 
 @Repository

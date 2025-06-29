@@ -1,28 +1,45 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.NotificationsConfig
 import uk.gov.service.notify.NotificationClientApi
 import java.util.UUID
 
 class GovNotifyNotificationService(
-  private val hostedAt: String,
-  private val offenderInviteEmailTemplateId: String,
-  private val offenderInviteSMSTemplateId: String,
   private val notifyClient: NotificationClientApi,
+  private val appConfig: AppConfig,
+  private val notificationsConfig: NotificationsConfig,
 ) : NotificationService {
-  override fun notifyOffenderInvite(
-    method: NotificationMethod,
-    invite: OffenderInviteMessage,
-  ) {
+  override fun sendMessage(message: Message, recipient: Contactable) {
     val reference = UUID.randomUUID().toString()
-    val personalisation = invite.personalisationData(this.hostedAt)
 
-    when (method) {
-      is PhoneNumber -> {
-        val smsResponse = this.notifyClient.sendSms(this.offenderInviteSMSTemplateId, method.phoneNumber, personalisation, reference)
-      }
-      is Email -> {
-        val emailResponse = this.notifyClient.sendEmail(this.offenderInviteEmailTemplateId, method.email, personalisation, reference)
-      }
+    recipient.contactMethods().forEach {
+      dispatchNotification(it, reference, message)
     }
+  }
+
+  fun dispatchNotification(method: NotificationMethod, reference: String, message: Message) {
+    val templateId = this.notificationsConfig.getTemplateId(method, message.templateName)
+    val personalisation = message.personalisationData(this.appConfig)
+
+    try {
+      when (method) {
+        is PhoneNumber -> {
+          val smsResponse = this.notifyClient.sendSms(templateId, method.phoneNumber, personalisation, reference)
+        }
+        is Email -> {
+          val emailResponse = this.notifyClient.sendEmail(templateId, method.email, personalisation, reference)
+        }
+      }
+    } catch (ex: Exception) {
+      // log failure and continue
+      LOGGER.error("Failed to send notification message", ex)
+    }
+  }
+
+  companion object {
+    val LOGGER: Logger = LoggerFactory.getLogger(this::class.java)
   }
 }
