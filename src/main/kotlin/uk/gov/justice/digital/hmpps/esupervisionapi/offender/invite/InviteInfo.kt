@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.time.LocalDate
 import java.util.UUID
 
@@ -15,7 +17,7 @@ data class OffenderInfo(
   val practitionerId: String,
   val firstName: String,
   val lastName: String,
-  val dateOfBirth: LocalDate,
+  @JsonDeserialize(using = LocalDateDeserializer::class) val dateOfBirth: LocalDate,
   val email: String? = null,
   val phoneNumber: String? = null,
 )
