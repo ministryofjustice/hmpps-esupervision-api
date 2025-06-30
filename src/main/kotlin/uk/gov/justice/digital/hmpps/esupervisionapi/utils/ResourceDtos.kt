@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.springframework.data.domain.Pageable
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import java.net.URL
@@ -40,7 +41,7 @@ data class CreateCheckinRequest(
   val practitioner: String,
   val offender: UUID,
   val questions: String,
-  val dueDate: LocalDate,
+  @JsonDeserialize(using = LocalDateDeserializer::class) val dueDate: LocalDate,
 )
 
 /**
