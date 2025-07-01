@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
@@ -104,17 +103,5 @@ class OffenderCheckinResource(
   fun automatedIdentityCheck(@PathVariable uuid: UUID, @RequestParam result: AutomatedIdVerificationResult): ResponseEntity<OffenderCheckinDto> {
     val checkin = offenderCheckinService.setAutomatedIdCheckStatus(uuid, result)
     return ResponseEntity.ok(checkin)
-  }
-
-  // NOTE(rosado): temporary, just to test if we can reach outside
-  @GetMapping("/rekog")
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun rekog(): ResponseEntity<String> {
-    val result = rekognitionS3.getObject(
-      GetObjectRequest.builder()
-        .bucket(rekogBucketName).key("hello.txt").build(),
-    )
-
-    return ResponseEntity.ok(result.readAllBytes().toString(Charsets.UTF_8))
   }
 }
