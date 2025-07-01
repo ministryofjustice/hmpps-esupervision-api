@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -29,7 +30,11 @@ class PractitionerResource(private val practitionerService: PractitionerService)
       email = createRequest.email,
       phoneNumber = createRequest.phoneNumber,
     )
-    practitionerService.createPractitioner(practitioner)
+    try {
+      practitionerService.createPractitioner(practitioner)
+    } catch (e: DataIntegrityViolationException) {
+      return ResponseEntity.badRequest().build()
+    }
 
     val practitionerUrl = ServletUriComponentsBuilder.fromCurrentRequestUri()
       .path("/{uuid}")
