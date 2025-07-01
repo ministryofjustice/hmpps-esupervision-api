@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 
 @RestController
 @RequestMapping("/practitioners", produces = [APPLICATION_JSON_VALUE])
@@ -33,7 +34,7 @@ class PractitionerResource(private val practitionerService: PractitionerService)
     try {
       practitionerService.createPractitioner(practitioner)
     } catch (e: DataIntegrityViolationException) {
-      return ResponseEntity.badRequest().build()
+      throw BadArgumentException("entity with given uuid already exists")
     }
 
     val practitionerUrl = ServletUriComponentsBuilder.fromCurrentRequestUri()
