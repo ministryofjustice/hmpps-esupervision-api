@@ -2,6 +2,7 @@
 
 ## Practitioner account setup
 
+TODO
 
 ## Practitioner adds an Offender to the system
 
@@ -13,18 +14,25 @@ sequenceDiagram
     participant Practitioner
     participant Frontend
     participant Backend
+    participant S3
         
     Practitioner->>Frontend: Open Dashboard/Profile verification
     Frontend-->>Practitioner: Display profile verification page
-    Practitioner->>Frontend: Create invite
-    Frontend-->>Practitioner: Display invite form
+    Practitioner->>Frontend: Add offender
+    Frontend-->>Practitioner: Display form
     Practitioner->>Frontend: Fill invite form
+    Frontend-->>Practitioner: Display photo page
+    Practitioner->>Frontend: Submit Photo
+    Frontend->>S3: Upload photo
     Frontend->>Backend: Create invite 
     Backend-->>Frontend: invite status
     Frontend-->>Practitioner: Display confirmation
 ```
 
-## Offender responds to an invite
+## Offender does a remote checkin
+
+At the start of this scenario, we assume the invite containing the unique checkin link 
+was sent and received by the offender.
 
 ```mermaid
 sequenceDiagram
