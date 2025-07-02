@@ -1,6 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.constraints.NotBlank
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.net.URL
 import java.time.Instant
@@ -18,12 +20,16 @@ data class OffenderDto(
   val email: String? = null,
   val phoneNumber: String? = null,
   // not every context requires the photo URL, so we only include when needed
+  @Schema(description = "A presigned S3 URL")
   val photoUrl: URL?,
 )
 
 data class OffenderSetupDto(
   val uuid: UUID,
+  @Schema(description = "Practitioner's unique ID (this can be NDelius ID)", required = true)
+  @field:NotBlank
   val practitioner: String,
+  @Schema(description = "Offender's unique ID", required = true)
   val offender: UUID,
   val createdAt: Instant,
 )

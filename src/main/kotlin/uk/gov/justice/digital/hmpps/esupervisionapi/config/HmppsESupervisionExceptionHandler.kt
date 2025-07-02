@@ -12,11 +12,26 @@ import org.springframework.security.access.AccessDeniedException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.InvalidStateTransitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 
 @RestControllerAdvice
 class HmppsESupervisionExceptionHandler {
+
+  @ExceptionHandler(InvalidStateTransitionException::class)
+  fun handleInvalidStateTransitionException(e: InvalidStateTransitionException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(BAD_REQUEST)
+    .body(
+      ErrorResponse(
+        status = BAD_REQUEST,
+        userMessage = e.message ?: "Bad Request",
+        developerMessage = "Attempted record modification is invalid (e.g. approving an expired invite etc).",
+      ),
+    ).also {
+      log.info("Encountered an invalid state transition exception: {}", e.message)
+    }
+
   @ExceptionHandler(ValidationException::class)
   fun handleValidationException(e: ValidationException): ResponseEntity<ErrorResponse> = ResponseEntity
     .status(BAD_REQUEST)

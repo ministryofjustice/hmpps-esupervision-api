@@ -3,7 +3,9 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.PageRequest
+import org.springframework.http.HttpMethod
 import org.springframework.stereotype.Service
+import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
@@ -12,7 +14,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.net.URL
@@ -50,10 +51,10 @@ class OffenderCheckinService(
     }
 
     val offender = offenderRepository.findByUuid(createCheckin.offender).getOrElse {
-      throw ResourceNotFoundException("Offender with uuid=${createCheckin.offender} not found")
+      throw BadArgumentException("Offender ${createCheckin.offender} not found")
     }
     val practitioner = practitionerRepository.findByUuid(createCheckin.practitioner).getOrElse {
-      throw ResourceNotFoundException("Practitioner with uuid=${createCheckin.practitioner} not found")
+      throw BadArgumentException("Practitioner ${createCheckin.offender} not found")
     }
 
     if (offender.status != OffenderStatus.VERIFIED) {
@@ -92,19 +93,19 @@ class OffenderCheckinService(
    * @throws MissingVideoException when no video has been uploaded
    */
   fun submitCheckin(checkinUuid: UUID, checkinInput: OffenderCheckinSubmission): OffenderCheckinDto {
-    val offenderEntity = offenderRepository.findByUuid(checkinInput.offender)
-    val checkinEntity = checkinRepository.findByUuid(checkinUuid)
-
-    if (offenderEntity.isEmpty) {
-      throw ResourceNotFoundException("Offender with uuid=${checkinInput.offender} not found")
+    val offender = offenderRepository.findByUuid(checkinInput.offender).getOrElse {
+      throw BadArgumentException("Offender ${checkinInput.offender} not found")
     }
-    if (checkinEntity.isEmpty) {
-      throw ResourceNotFoundException("Checkin with uuid=${checkinInput.offender} not found")
+    val checkin = checkinRepository.findByUuid(checkinUuid).getOrElse {
+      throw NoResourceFoundException(HttpMethod.POST, "/offender_checkins/$checkinUuid")
+    }
+
+    if (offender.status != OffenderStatus.VERIFIED) {
+      throw BadArgumentException("Offender with uuid=${checkin.uuid} has status ${offender.status}")
     }
 
     val now = Instant.now()
 
-    val checkin = checkinEntity.get()
     if (checkin.dueDate < now) {
       throw InvalidStateTransitionException("Checkin past due date", checkin)
     }
@@ -141,7 +142,7 @@ class OffenderCheckinService(
       return s3UploadService.generatePresignedUploadUrl(checkin.get(), contentType, duration)
     }
 
-    throw ResourceNotFoundException("checkin not found")
+    throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid")
   }
 
   fun generatePhotoSnapshotLocations(checkinUuid: UUID, contentType: String, number: Long, duration: Duration): List<URL> {
@@ -156,7 +157,7 @@ class OffenderCheckinService(
       return urls
     }
 
-    throw ResourceNotFoundException("checkin not found")
+    throw NoResourceFoundException(HttpMethod.POST, "/offender_checkins/$checkinUuid")
   }
 
   fun getCheckins(practitionerUuid: String, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {
@@ -175,14 +176,14 @@ class OffenderCheckinService(
       return saved.dto(this.s3UploadService)
     }
 
-    throw ResourceNotFoundException("checkin not found")
+    throw NoResourceFoundException(HttpMethod.POST, "/offender_checkins/$checkinUuid")
   }
 
   fun reviewCheckin(checkinUuid: UUID, reviewRequest: CheckinReviewRequest): OffenderCheckinDto {
     val practitioner = practitionerRepository.findByUuid(reviewRequest.practitioner)
       .getOrElse { throw BadArgumentException("practitioner not found") }
     val checkin = checkinRepository.findByUuid(checkinUuid)
-      .getOrElse { throw ResourceNotFoundException("checkin not found") }
+      .getOrElse { throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid") }
 
     checkin.reviewedBy = practitioner
     checkin.manualIdCheck = checkin.manualIdCheck
