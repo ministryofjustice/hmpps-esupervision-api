@@ -40,18 +40,29 @@ sequenceDiagram
     participant Frontend
     participant Backend
     participant S3
+    participant Rekognition
         
     Offender->>Frontend: Open invite URL
     Frontend->>Backend: Validate invite URL
     Backend-->>Frontend: Invite valid
-    Frontend->>Backend: Get Photo Upload URL
-    Backend-->>Frontend: Return pre-signed URL
-    Frontend-->>Offender: Display photo upload UI
-    Offender->>Frontend: Upload photo
-    Frontend->>S3: Upload photo to pre-signed URL
-    Frontend-->>Offender: Display registration form
-    Offender->>Frontend: Fill registration form
-    Frontend->>Backend: Submit registration data
-    Backend-->>Frontend: Registration success
-    Frontend-->>Offender: Display success message
+    Frontend-->>Offender: Display questions
+    Offender->>Frontend: Submit answer
+    Note over Offender,Frontend: multiple question/answer interactions
+    Frontend->>Backend: Get photo upload URLs
+    Backend-->>Frontend: Return pre-signed photo URL
+    Frontend->>Backend: Get Video upload URLs
+    Backend-->>Frontend: Return pre-signed video URL
+    Frontend->>S3: GET offender reference photo
+    Frontend->>S3: POST offender reference photo for rekognition
+    Frontend-->>Offender: Display /video/record page
+    Offender->>S3: Upload video with presigned URL
+    Offender->>S3: Upload snapshot photo(s) with presigned URL
+    Offender->>Frontend: Signal data has been uploaded
+    Note over Offender,Frontend: We can now call rekognition
+    Frontend->>Rekognition: Compare faces
+    Note over Frontend,Rekognition: Rekognition will use the reference and snapshot photo
+    Offender->>Frontend: Submit
+    Frontend->>Backend: POST /offender_checkins/:uuid/submit
+    Backend-->>Frontend: Success
+    Frontend-->>Offender: Display checking completion message
 ```
