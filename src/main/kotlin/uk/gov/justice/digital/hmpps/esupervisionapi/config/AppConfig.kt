@@ -1,9 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 import java.net.URI
 import java.util.UUID
 
-class AppConfig(private val hostedAt: String) {
+@Component
+class AppConfig(@Value("\${app.hostedAt}") private val hostedAt: String) {
   // WARNING: this depends on the routes in the UI!
   fun checkinSubmitUrl(checkinUuid: UUID): URI = URI(
     "$hostedAt/submission/$checkinUuid",

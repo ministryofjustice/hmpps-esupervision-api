@@ -17,8 +17,8 @@ data class PractitionerCheckinSubmittedMessage(
     "checkinDashboardUrl" to appConfig.checkinDashboardUrl(checkinUuid).toString(),
   )
 
-  override val templateName: String
-    get() = "PRACTITIONER_CHECKIN_SUBMITTED"
+  override val messageType: NotificationType
+    get() = NotificationType.PractitionerCheckinSubmitted
 
   companion object {
     fun fromCheckin(checkin: OffenderCheckin) = PractitionerCheckinSubmittedMessage(
