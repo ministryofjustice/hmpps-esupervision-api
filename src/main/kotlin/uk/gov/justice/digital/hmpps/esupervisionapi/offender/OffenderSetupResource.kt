@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
@@ -26,7 +25,7 @@ import java.util.UUID
 
 @RestController
 @RequestMapping("/offender_setup", produces = ["application/json"])
-class OffenderInviteResource(
+class OffenderSetupResource(
   private val offenderSetupService: OffenderSetupService,
   private val s3UploadService: S3UploadService,
 ) {
