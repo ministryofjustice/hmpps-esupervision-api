@@ -36,7 +36,7 @@ class RekogConfig(
       .credentialsProvider(StaticCredentialsProvider.create(credentials))
 
     val profiles = environment.activeProfiles
-    if (profiles.contains("local") && !profiles.contains("rekog")) {
+    if (profiles.contains("dev") && !profiles.contains("rekog")) {
       builder.endpointOverride(URI.create(LOCAL_AWS))
       builder.forcePathStyle(true)
     }
@@ -52,7 +52,7 @@ class RekogConfig(
       .credentialsProvider(StaticCredentialsProvider.create(credentials))
 
     val profiles = environment.activeProfiles
-    if (profiles.contains("local") && !profiles.contains("rekog")) {
+    if (profiles.contains("dev") && !profiles.contains("rekog")) {
       builder
         .serviceConfiguration(
           S3Configuration.builder()

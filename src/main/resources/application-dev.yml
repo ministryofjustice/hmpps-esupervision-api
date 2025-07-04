@@ -1,9 +1,23 @@
 app:
   hostedAt: http://localhost:3000
 
+hmpps-auth:
+  url: "http://localhost:8090/auth"
+
 spring:
   config:
     import: "optional:file:.env[.properties]"
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_ENDPOINT}/${POSTGRES_DATABASE}
+    driver-class-name: org.postgresql.Driver
+    username: ${POSTGRES_USERNAME}
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 60000
+      connection-timeout: 30000
+      pool-name: HikariPool-esupervision
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true
@@ -21,7 +35,28 @@ logging:
   level:
     org.springframework.web: INFO
 
+management:
+  security:
+    enabled: false
+  health:
+    probes:
+      enabled: true
+    jms:
+      enabled: true
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,info
+  endpoint:
+    info:
+      enabled: true
+    health:
+      show-details: always
+      path-mapping: "health"
+
 aws:
+  endpoint-url: "http://localhost:4566"
   s3:
     image-uploads: hmpps-esupervision-image-uploads
     video-uploads: hmpss-esupervision-video-uploads
@@ -35,6 +70,5 @@ notify:
     POP_CHECKIN_INVITE: ab3bd00d-b0e7-477e-abb0-7197ab91aa70
     PRACTITIONER_CHECKIN_SUBMITTED: 81d859ad-9469-405b-8949-a9d62fe8f080
 
-
 rekognition:
-  s3_bucket_name: user-ids-rekognition-d-2
+  s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
