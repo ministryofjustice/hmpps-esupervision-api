@@ -1,14 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
-import com.google.i18n.phonenumbers.NumberParseException
-import com.google.i18n.phonenumbers.PhoneNumberUtil
 import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
@@ -36,39 +34,14 @@ class OffenderSetupService(
     val practitioner = practitionerRepository.findByUuid(offenderInfo.practitionerId)
       .orElseThrow { BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found") }
 
-    // TODO: add proper validation here
-    val phoneNumUtil = PhoneNumberUtil.getInstance()
-    var validationFailures = mutableListOf<Pair<OffenderInfo, String>>()
-    var validatedInfo = offenderInfo
-    if (offenderInfo.firstName.length <= 2) {
-      validationFailures.add(Pair(offenderInfo, "Invalid first name"))
-    } else if (offenderInfo.lastName.length <= 2) {
-      validationFailures.add(Pair(offenderInfo, "Invalid last name"))
-    } else if (offenderInfo.phoneNumber != null) {
-      try {
-        val number = phoneNumUtil.parse(offenderInfo.phoneNumber, "GB")
-        if (phoneNumUtil.isValidNumber(number)) {
-        } else {
-          validationFailures.add(Pair(offenderInfo, "Invalid phone number"))
-        }
-      } catch (e: NumberParseException) {
-        validationFailures.add(Pair(offenderInfo, "Invalid phone number"))
-      }
-    } else if (offenderInfo.email != null && !offenderInfo.email.contains("@")) {
-      validationFailures.add(Pair(offenderInfo, "Invalid email address"))
-    }
-    if (validationFailures.isNotEmpty()) {
-      throw BadArgumentException(validationFailures.joinToString("\n"))
-    }
-
     val now = Instant.now()
     val offender = Offender(
       uuid = UUID.randomUUID(),
-      firstName = validatedInfo.firstName,
-      lastName = validatedInfo.lastName,
-      dateOfBirth = validatedInfo.dateOfBirth,
-      email = validatedInfo.email,
-      phoneNumber = validatedInfo.phoneNumber,
+      firstName = offenderInfo.firstName,
+      lastName = offenderInfo.lastName,
+      dateOfBirth = offenderInfo.dateOfBirth,
+      email = offenderInfo.email?.lowercase(),
+      phoneNumber = offenderInfo.phoneNumber,
       practitioner = practitioner,
       createdAt = now,
       updatedAt = now,

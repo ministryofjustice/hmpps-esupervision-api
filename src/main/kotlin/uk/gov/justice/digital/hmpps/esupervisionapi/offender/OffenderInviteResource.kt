@@ -5,15 +5,18 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
+import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
@@ -36,7 +39,12 @@ class OffenderInviteResource(
     Once a photo is uploaded and personal details confirmed, the practitioner will be able to schedule "checkins." """,
   )
   @PostMapping
-  fun startSetup(@RequestBody @Valid offenderInfo: OffenderInfo): ResponseEntity<OffenderSetupDto> {
+  fun startSetup(@RequestBody @Valid offenderInfo: OffenderInfo, bindingResult: BindingResult): ResponseEntity<OffenderSetupDto> {
+    if (bindingResult.hasErrors()) {
+      val errors = bindingResult.fieldErrors.associateBy({ it.field }, { it.defaultMessage })
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, errors.toString())
+    }
+
     val setup = offenderSetupService.startOffenderSetup(offenderInfo)
     return ResponseEntity.ok(
       setup,

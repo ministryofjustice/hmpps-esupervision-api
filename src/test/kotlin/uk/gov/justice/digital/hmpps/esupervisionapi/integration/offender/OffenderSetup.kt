@@ -10,8 +10,8 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDO
 import org.springframework.test.context.ActiveProfiles
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import java.time.LocalDate
 import java.util.UUID
 

@@ -13,9 +13,9 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.EntityExchangeResult
 import org.springframework.test.web.reactive.server.WebTestClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.invite.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
@@ -90,8 +90,8 @@ class OffenderSetupTest : IntegrationTestBase() {
       "Offender records should not be added when /offender_setup/start fails",
     )
 
-    val newSetup = offenderInfo.copy(setupUuid = UUID.randomUUID())
-    setupAgain = setupStartRequest(newSetup)
+    val updatedOffenderInfo = offenderInfo.copy(setupUuid = UUID.randomUUID())
+    setupAgain = setupStartRequest(updatedOffenderInfo)
       .exchange()
       .expectStatus().is4xxClientError
 
