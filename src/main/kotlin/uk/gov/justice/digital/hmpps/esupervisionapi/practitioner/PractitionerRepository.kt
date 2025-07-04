@@ -41,6 +41,8 @@ open class Practitioner(
     this.phoneNumber?.let { methods.add(PhoneNumber(it)) }
     return methods
   }
+
+  companion object {}
 }
 
 @Repository

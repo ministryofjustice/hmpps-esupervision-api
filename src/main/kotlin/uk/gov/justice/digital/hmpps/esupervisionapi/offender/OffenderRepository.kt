@@ -65,7 +65,7 @@ open class Offender(
   @Column(name = "phone_number", nullable = true, unique = true)
   open var phoneNumber: String? = null,
 
-  @ManyToOne(cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
+  @ManyToOne(cascade = [CascadeType.DETACH], fetch = FetchType.LAZY)
   @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
   open var practitioner: Practitioner,
 ) : AEntity(),
@@ -107,7 +107,7 @@ open class OffenderSetup(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,
 
-  @ManyToOne(fetch = FetchType.LAZY)
+  @ManyToOne(fetch = FetchType.EAGER)
   @JoinColumn("offender_id", "id")
   open var offender: Offender,
 

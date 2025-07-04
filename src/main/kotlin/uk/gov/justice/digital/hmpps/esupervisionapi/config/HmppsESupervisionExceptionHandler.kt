@@ -11,13 +11,39 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.InvalidOffenderSetupState
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.InvalidStateTransitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 
 @RestControllerAdvice
 class HmppsESupervisionExceptionHandler {
+
+  @ExceptionHandler(ResponseStatusException::class)
+  fun handleResponseStatusException(e: ResponseStatusException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(e.statusCode)
+    .body(
+      ErrorResponse(
+        status = e.statusCode.value(),
+        userMessage = e.message,
+        developerMessage = e.message,
+      ),
+    )
+
+  @ExceptionHandler(InvalidOffenderSetupState::class)
+  fun handleInvalidOffenderSetupState(exception: InvalidOffenderSetupState): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(UNPROCESSABLE_ENTITY)
+    .body(
+      ErrorResponse(
+        status = UNPROCESSABLE_ENTITY,
+        userMessage = exception.message,
+        developerMessage = exception.message,
+      ),
+    ).also {
+      log.info("Could not proceed with operation, setup is incomplete: {}", exception.message)
+    }
 
   @ExceptionHandler(InvalidStateTransitionException::class)
   fun handleInvalidStateTransitionException(e: InvalidStateTransitionException): ResponseEntity<ErrorResponse> = ResponseEntity
