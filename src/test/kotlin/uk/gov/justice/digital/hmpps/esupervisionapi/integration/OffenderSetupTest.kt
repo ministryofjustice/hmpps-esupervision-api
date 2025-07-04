@@ -51,27 +51,14 @@ class OffenderSetupTest : IntegrationTestBase() {
    */
   @Test
   fun `successfully add an offender to the system`() {
-    val offenderInfo = OffenderInfo(
-      UUID.randomUUID(),
-      "alice",
-      "Bob",
-      "Offerman",
-      LocalDate.of(1970, 1, 1),
-      "bob@example.com",
-    )
-
+    val offenderInfo = createOffenderInfo()
     val setup = setupStartRequest(offenderInfo)
       .exchange()
       .expectStatus().isOk
       .expectBody(OffenderSetupDto::class.java)
       .returnResult()
 
-    val setupEntity = offenderSetupRepository.findByUuid(setup.responseBody!!.uuid).get()
-    val offender = offenderRepository.findByUuid(setupEntity.offender.uuid).get()
-    whenever(s3UploadService.isSetupPhotoUploaded(setupEntity))
-      .thenReturn(true)
-    whenever(s3UploadService.getOffenderPhoto(offender))
-      .thenReturn(URI("https://the-bucket/offender-1").toURL())
+    mockPhotoUpload(setup.responseBody!!)
 
     val setupCompletion = setupCompleteRequest(setup)
       .exchange()
@@ -87,16 +74,8 @@ class OffenderSetupTest : IntegrationTestBase() {
 
   @Test
   fun `adding an offender fails in various ways`() {
-    val offenderInfo = OffenderInfo(
-      UUID.randomUUID(),
-      "alice",
-      "Bob",
-      "Offerman",
-      LocalDate.of(1970, 1, 1),
-      "bob@example.com",
-    )
-
-    val setup = setupStartRequest(offenderInfo)
+    val offenderInfo = createOffenderInfo()
+    val setupOK = setupStartRequest(offenderInfo)
       .exchange()
       .expectStatus().isOk
 
@@ -136,6 +115,37 @@ class OffenderSetupTest : IntegrationTestBase() {
     Assertions.assertEquals(2, offenders.size)
   }
 
+  /**
+   * - We start an offender setup process then terminate it
+   * - Then we start setup process again with same information (except setup uuid)
+   * - Then we complete the second setup attempt
+   */
+  @Test
+  fun `terminating an offender setup`() {
+    val offenderInfo = createOffenderInfo()
+    val setupOK = setupStartRequest(offenderInfo)
+      .exchange()
+      .expectStatus().isOk
+
+    val setupTermination = webTestClient.post()
+      .uri("/offender_setup/${offenderInfo.setupUuid}/terminate")
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+
+    val setupAgain = setupStartRequest(offenderInfo.copy(setupUuid = UUID.randomUUID()))
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(OffenderSetupDto::class.java)
+      .returnResult()
+
+    mockPhotoUpload(setupAgain.responseBody!!)
+
+    setupCompleteRequest(setupAgain)
+      .exchange()
+      .expectStatus().isOk
+  }
+
   private fun setupCompleteRequest(setup: EntityExchangeResult<OffenderSetupDto>): WebTestClient.RequestBodySpec = webTestClient.post()
     .uri("/offender_setup/${setup.responseBody!!.uuid}/complete")
     .headers(practitionerRoleAuthHeaders)
@@ -145,7 +155,25 @@ class OffenderSetupTest : IntegrationTestBase() {
     .contentType(MediaType.APPLICATION_JSON)
     .headers(practitionerRoleAuthHeaders)
     .bodyValue(offenderInfo)
+
+  fun mockPhotoUpload(setup: OffenderSetupDto) {
+    val setupEntity = offenderSetupRepository.findByUuid(setup.uuid).get()
+    val offender = offenderRepository.findByUuid(setupEntity.offender.uuid).get()
+    whenever(s3UploadService.isSetupPhotoUploaded(setupEntity))
+      .thenReturn(true)
+    whenever(s3UploadService.getOffenderPhoto(offender))
+      .thenReturn(URI("https://the-bucket/offender-1").toURL())
+  }
 }
+
+fun createOffenderInfo() = OffenderInfo(
+  UUID.randomUUID(),
+  "alice",
+  "Bob",
+  "Offerman",
+  LocalDate.of(1970, 1, 1),
+  "bob@example.com",
+)
 
 /**
  * Creates an example practitioner instance. `name` should be unique.
