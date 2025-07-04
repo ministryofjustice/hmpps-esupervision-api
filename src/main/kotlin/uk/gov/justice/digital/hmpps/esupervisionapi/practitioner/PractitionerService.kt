@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional
 class PractitionerService(private val practitionerRepository: PractitionerRepository) {
 
   @Transactional
-  fun createPractitioner(practitioner: Practitioner): Practitioner = practitionerRepository.save(practitioner)
+  fun createPractitioner(practitioner: Practitioner): PractitionerDto = practitionerRepository.save(practitioner).dto()
 
   @Transactional(readOnly = true)
   fun getAllPractitioners(): List<Practitioner> = practitionerRepository.findAll()

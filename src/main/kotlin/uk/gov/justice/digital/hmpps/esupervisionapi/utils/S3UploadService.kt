@@ -57,8 +57,8 @@ data class CheckinPhotoKey(
 
 @Service
 class S3UploadService(
-  @Qualifier("MOJ") val s3uploadClient: S3Client,
-  val s3Presigner: S3Presigner,
+  @Qualifier("MOJ") private val s3uploadClient: S3Client,
+  private val s3Presigner: S3Presigner,
   @Value("\${aws.s3.image-uploads}") private val imageUploadBucket: String,
   @Value("\${aws.s3.video-uploads}") private val videoUploadBucket: String,
 ) : ResourceLocator {
@@ -72,14 +72,14 @@ class S3UploadService(
     return request
   }
 
-  internal fun putObjectRequest(setup: OffenderSetup, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, SetupPhotoKey(setup.offender.uuid).toKey(), contentType)
+  private fun putObjectRequest(setup: OffenderSetup, contentType: String): PutObjectRequest = putObjectRequest(imageUploadBucket, SetupPhotoKey(setup.offender.uuid).toKey(), contentType)
 
-  internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinVideoKey(checkin.uuid).toKey(), contentType)
+  private fun putObjectRequest(checkin: OffenderCheckin, contentType: String): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinVideoKey(checkin.uuid).toKey(), contentType)
 
   /**
    * We can have multiple checkin photo objects, hence the index param
    */
-  internal fun putObjectRequest(checkin: OffenderCheckin, contentType: String, index: Long): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinPhotoKey(checkin.uuid, index).toKey(), contentType)
+  private fun putObjectRequest(checkin: OffenderCheckin, contentType: String, index: Long): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinPhotoKey(checkin.uuid, index).toKey(), contentType)
 
   /**
    * Generates a pre-signed URL for uploading a file to S3.
@@ -137,7 +137,7 @@ class S3UploadService(
     return s3Presigner.presignPutObject(presignRequest).url()
   }
 
-  fun bucketFor(key: S3Keyable): String {
+  private fun bucketFor(key: S3Keyable): String {
     when (key) {
       is SetupPhotoKey -> {
         return this.imageUploadBucket
@@ -151,12 +151,12 @@ class S3UploadService(
     }
   }
 
-  fun getHeadObjectRequest(key: S3Keyable): HeadObjectRequest = HeadObjectRequest.builder()
+  private fun getHeadObjectRequest(key: S3Keyable): HeadObjectRequest = HeadObjectRequest.builder()
     .bucket(this.bucketFor(key))
     .key(key.toKey())
     .build()
 
-  fun keyExists(key: S3Keyable): Boolean {
+  private fun keyExists(key: S3Keyable): Boolean {
     val request = getHeadObjectRequest(key)
     return isObjectUploaded(request)
   }
@@ -180,12 +180,12 @@ class S3UploadService(
     }
   }
 
-  fun getObjectRequestFor(key: S3Keyable): GetObjectRequest = GetObjectRequest.builder()
+  private fun getObjectRequestFor(key: S3Keyable): GetObjectRequest = GetObjectRequest.builder()
     .bucket(this.bucketFor(key))
     .key(key.toKey())
     .build()
 
-  fun presignedGetUrlFor(key: S3Keyable): URL {
+  private fun presignedGetUrlFor(key: S3Keyable): URL {
     val getRequest = getObjectRequestFor(key)
     val presignRequest = GetObjectPresignRequest.builder()
       .signatureDuration(Duration.ofMinutes(5))

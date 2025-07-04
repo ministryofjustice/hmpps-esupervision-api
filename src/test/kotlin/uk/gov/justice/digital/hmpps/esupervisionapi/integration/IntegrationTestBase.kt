@@ -9,7 +9,10 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.reactive.server.WebTestClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerService
 import uk.gov.justice.hmpps.test.kotlin.auth.JwtAuthorisationHelper
 
 @ExtendWith(HmppsAuthApiExtension::class)
@@ -24,6 +27,12 @@ abstract class IntegrationTestBase {
   protected lateinit var jwtAuthHelper: JwtAuthorisationHelper
 
   @Autowired protected lateinit var practitionerRepository: PractitionerRepository
+
+  @Autowired protected lateinit var practitionerService: PractitionerService
+
+  @Autowired protected lateinit var offenderSetupRepository: OffenderSetupRepository
+
+  @Autowired protected lateinit var offenderRepository: OffenderRepository
 
   internal fun setAuthorisation(
     username: String? = "AUTH_ADM",
