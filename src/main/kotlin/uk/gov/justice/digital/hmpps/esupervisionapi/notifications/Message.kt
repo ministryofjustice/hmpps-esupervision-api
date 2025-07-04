@@ -4,5 +4,5 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 
 interface Message {
   fun personalisationData(appConfig: AppConfig): Map<String, String>
-  val templateName: String
+  val messageType: NotificationType
 }
