@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
@@ -20,6 +22,7 @@ class OffenderSetupService(
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
   private val offenderSetupRepository: OffenderSetupRepository,
+  private val notificationService: NotificationService,
 ) {
 
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetup> = offenderSetupRepository.findByUuid(uuid)
@@ -82,6 +85,11 @@ class OffenderSetupService(
     offenderRepository.save(offender)
 
     val saved = offenderRepository.save(offender)
+
+    // send registration confirmation message to PoP
+    val confirmationMessage = RegistrationConfirmationMessage.fromSetup(setup.get())
+    this.notificationService.sendMessage(confirmationMessage, offender)
+
     return saved.dto(this.s3UploadService)
   }
 
