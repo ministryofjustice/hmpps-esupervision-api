@@ -69,7 +69,6 @@ class OffenderCheckinService(
       submittedAt = null,
       reviewedBy = null,
       status = CheckinStatus.CREATED,
-      questions = createCheckin.questions,
       answers = null,
       dueDate = reqDueDate,
       autoIdCheck = null,

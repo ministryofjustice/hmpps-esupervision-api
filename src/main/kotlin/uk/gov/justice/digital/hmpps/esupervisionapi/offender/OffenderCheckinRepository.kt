@@ -45,8 +45,6 @@ open class OffenderCheckin(
   @Enumerated(EnumType.STRING)
   open var status: CheckinStatus,
 
-  open var questions: String,
-
   open var answers: String?,
 
   @Column("due_date")
@@ -66,7 +64,6 @@ open class OffenderCheckin(
     dueDate = dueDate,
     offender = offender.dto(resourceLocator), // TODO: don't return whole dto, just the uuid
     submittedOn = submittedAt,
-    questions = questions,
     answers = answers,
     reviewedBy = reviewedBy?.uuid,
     createdBy = createdBy.uuid,

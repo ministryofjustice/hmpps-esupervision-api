@@ -29,7 +29,6 @@ data class OffenderCheckinDto(
   val dueDate: Instant,
   val offender: OffenderDto,
   val submittedOn: Instant?,
-  val questions: String,
   val answers: String?,
   val createdBy: String,
   val createdAt: Instant,
