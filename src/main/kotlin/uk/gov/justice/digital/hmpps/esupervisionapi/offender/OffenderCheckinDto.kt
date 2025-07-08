@@ -29,7 +29,7 @@ data class OffenderCheckinDto(
   val dueDate: Instant,
   val offender: OffenderDto,
   val submittedOn: Instant?,
-  val answers: String?,
+  val surveyResponse: SurveyResponseDto?,
   val createdBy: String,
   val createdAt: Instant,
   val reviewedBy: String?,
@@ -46,5 +46,19 @@ data class OffenderCheckinDto(
  */
 data class OffenderCheckinSubmission(
   val offender: UUID,
-  val answers: String,
+  val survey: SurveyResponseDto,
+)
+
+data class SurveyResponseDto(
+  val mentalHealth: String?,
+  val assistance: List<String>,
+  val mentalHealthSupport: String?,
+  val alcoholSupport: String?,
+  val drugsSupport: String?,
+  val moneySupport: String?,
+  val housingSupport: String?,
+  val supportSystemSupport: String?,
+  val otherSupport: String?,
+  val callback: String?,
+  val callbackDetails: String?,
 )
