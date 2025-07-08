@@ -15,11 +15,23 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.InvalidOffenderSetupState
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.InvalidStateTransitionException
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.MissingVideoException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 
 @RestControllerAdvice
 class HmppsESupervisionExceptionHandler {
+
+  @ExceptionHandler(MissingVideoException::class)
+  fun handleMissingVideoException(e: MissingVideoException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(UNPROCESSABLE_ENTITY)
+    .body(
+      ErrorResponse(
+        UNPROCESSABLE_ENTITY,
+        userMessage = "Checkin submission requires a video upload",
+        developerMessage = "No video found for given checkin",
+      ),
+    )
 
   @ExceptionHandler(ResponseStatusException::class)
   fun handleResponseStatusException(e: ResponseStatusException): ResponseEntity<ErrorResponse> = ResponseEntity

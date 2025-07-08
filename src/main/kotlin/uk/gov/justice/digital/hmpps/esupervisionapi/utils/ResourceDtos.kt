@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import jakarta.validation.constraints.NotBlank
 import org.springframework.data.domain.Pageable
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import java.net.URL
@@ -47,6 +48,7 @@ data class CreateCheckinRequest(
  * Submitted on behalf of the practitioner as a review of the checkin.
  */
 data class CheckinReviewRequest(
+  @field:NotBlank
   val practitioner: String,
-  val manualIdCCheck: ManualIdVerificationResult,
+  val manualIdCheck: ManualIdVerificationResult,
 )

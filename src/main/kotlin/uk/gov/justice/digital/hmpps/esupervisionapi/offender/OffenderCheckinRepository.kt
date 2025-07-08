@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -25,7 +26,7 @@ open class OffenderCheckin(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,
 
-  @ManyToOne
+  @ManyToOne(cascade = [CascadeType.DETACH])
   @JoinColumn("offender_id", referencedColumnName = "id", nullable = false)
   open var offender: Offender,
 

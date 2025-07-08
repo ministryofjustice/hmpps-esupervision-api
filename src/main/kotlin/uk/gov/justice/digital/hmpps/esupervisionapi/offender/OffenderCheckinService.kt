@@ -144,7 +144,7 @@ class OffenderCheckinService(
     throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid")
   }
 
-  fun generatePhotoSnapshotLocations(checkinUuid: UUID, contentType: String, number: Long, duration: Duration): List<URL> {
+  fun generatePhotoSnapshotLocations(checkinUuid: UUID, contentType: String, number: Int, duration: Duration): List<URL> {
     val checkin = checkinRepository.findByUuid(checkinUuid)
     if (checkin.isPresent) {
       validateCheckinUpdatable(checkin.get())
@@ -185,7 +185,7 @@ class OffenderCheckinService(
       .getOrElse { throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid") }
 
     checkin.reviewedBy = practitioner
-    checkin.manualIdCheck = checkin.manualIdCheck
+    checkin.manualIdCheck = reviewRequest.manualIdCheck
     checkin.status = CheckinStatus.REVIEWED
 
     return checkinRepository.save(checkin).dto(this.s3UploadService)
