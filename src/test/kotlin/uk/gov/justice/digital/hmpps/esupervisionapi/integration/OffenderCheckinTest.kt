@@ -27,7 +27,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.UploadLocationResponse
 import java.net.URI
-import java.net.URLEncoder
 import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
