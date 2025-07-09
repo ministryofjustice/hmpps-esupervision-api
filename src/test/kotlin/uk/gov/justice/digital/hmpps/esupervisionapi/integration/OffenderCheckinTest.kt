@@ -116,7 +116,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     val submission = OffenderCheckinSubmission(
       offender = offender.uuid,
-      answers = "Yes, it is",
+      survey = mapOf("mood" to "Good" as Object),
     )
     val submitCheckin = submitCheckinRequest(createCheckin, submission)
       .exchange()
@@ -168,7 +168,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     val submission = OffenderCheckinSubmission(
       offender = offender.uuid,
-      answers = "Yes, it is",
+      survey = mapOf("mood" to "OK" as Object),
     )
 
     // we should get a 4xx error because the video was not uploaded
@@ -193,7 +193,6 @@ class OffenderCheckinTest : IntegrationTestBase() {
     val checkinRequest = CreateCheckinRequest(
       "alice",
       offender = offender.uuid,
-      "Is everything ok?",
       dueDate = LocalDate.now().plusDays(2),
     )
     return Pair(offender, checkinRequest)
