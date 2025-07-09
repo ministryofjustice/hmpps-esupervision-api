@@ -122,7 +122,7 @@ class OffenderCheckinService(
     }
 
     checkin.submittedAt = now
-    checkin.surveyResponse = SurveyResponse.fromDto(checkinInput.survey)
+    checkin.surveyResponse = checkinInput.survey
     checkin.status = CheckinStatus.SUBMITTED
 
     checkinRepository.save(checkin)

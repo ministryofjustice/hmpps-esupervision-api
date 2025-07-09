@@ -49,7 +49,7 @@ open class OffenderCheckin(
 
   @Column("survey_response", nullable = true)
   @JdbcTypeCode(SqlTypes.JSON)
-  open var surveyResponse: SurveyResponse?,
+  open var surveyResponse: Map<String, Object>?,
 
   @Column("due_date")
   open var dueDate: Instant,
@@ -68,7 +68,7 @@ open class OffenderCheckin(
     dueDate = dueDate,
     offender = offender.dto(resourceLocator), // TODO: don't return whole dto, just the uuid
     submittedOn = submittedAt,
-    surveyResponse = surveyResponse?.dto(),
+    surveyResponse = surveyResponse,
     reviewedBy = reviewedBy?.uuid,
     createdBy = createdBy.uuid,
     createdAt = createdAt,
