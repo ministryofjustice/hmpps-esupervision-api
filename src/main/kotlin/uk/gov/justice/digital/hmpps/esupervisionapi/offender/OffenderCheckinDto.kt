@@ -48,17 +48,3 @@ data class OffenderCheckinSubmission(
   val offender: UUID,
   val survey: Map<String, Object>,
 )
-
-data class SurveyResponseDto(
-  val mentalHealth: String?,
-  val assistance: List<String>,
-  val mentalHealthSupport: String?,
-  val alcoholSupport: String?,
-  val drugsSupport: String?,
-  val moneySupport: String?,
-  val housingSupport: String?,
-  val supportSystemSupport: String?,
-  val otherSupport: String?,
-  val callback: String?,
-  val callbackDetails: String?,
-)
