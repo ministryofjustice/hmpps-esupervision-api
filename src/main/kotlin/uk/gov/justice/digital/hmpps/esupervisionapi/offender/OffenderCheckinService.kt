@@ -108,9 +108,7 @@ class OffenderCheckinService(
     if (checkin.dueDate < now) {
       throw InvalidStateTransitionException("Checkin past due date", checkin)
     }
-    if (checkin.status != CheckinStatus.CREATED) {
-      throw InvalidStateTransitionException("Can't submit checkin with status=${checkin.status}", checkin)
-    }
+    validateCheckinUpdatable(checkin)
 
     // NOTE(rosado): there's no automated id verification at the moment, so we only check
     // if a video was uploaded. Once automated checkin is in, we can replace this
@@ -183,6 +181,9 @@ class OffenderCheckinService(
       .getOrElse { throw BadArgumentException("practitioner not found") }
     val checkin = checkinRepository.findByUuid(checkinUuid)
       .getOrElse { throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid") }
+    if (checkin.status != CheckinStatus.SUBMITTED) {
+      throw BadArgumentException("Can't review checkin with status=${checkin.status}")
+    }
 
     checkin.reviewedBy = practitioner
     checkin.manualIdCheck = reviewRequest.manualIdCheck
@@ -195,7 +196,7 @@ class OffenderCheckinService(
     // checkin has been SUBMITTED so we no longer allow to overwrite the associated files
     private fun validateCheckinUpdatable(checkin: OffenderCheckin) {
       if (checkin.status != CheckinStatus.CREATED) {
-        throw BadArgumentException("You can no longer add photos/videos to checkin with uuid=${checkin.uuid}")
+        throw BadArgumentException("You can no longer update or add photos/videos to checkin with uuid=${checkin.uuid}")
       }
     }
 
