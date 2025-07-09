@@ -4,13 +4,17 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Import
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
@@ -34,6 +38,9 @@ import java.util.UUID
 @Import(MockS3Config::class)
 class OffenderCheckinTest : IntegrationTestBase() {
 
+  @Qualifier("mockNotificationService")
+  @Autowired
+  private lateinit var notificationService: NotificationService
   private lateinit var practitionerRoleAuthHeaders: (HttpHeaders) -> Unit
 
   @Autowired private lateinit var offenderSetupService: OffenderSetupService
@@ -61,11 +68,12 @@ class OffenderCheckinTest : IntegrationTestBase() {
     practitionerService.createPractitioner(Practitioner.create("Alice"))
     practitionerService.createPractitioner(Practitioner.create("Bob"))
 
-    reset(s3UploadService)
-
     val setup = offenderSetupService.startOffenderSetup(offenderInfo)
     mockSetupPhotoUpload(setup)
     offender = offenderSetupService.completeOffenderSetup(setup.uuid)
+
+    reset(notificationService)
+    reset(s3UploadService)
   }
 
   @AfterEach
@@ -84,6 +92,10 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .expectStatus().isOk
       .expectBody(OffenderCheckinDto::class.java)
       .returnResult().responseBody!!
+
+    val notifInOrder = inOrder(notificationService)
+    // verify offender checking invite was sent
+    notifInOrder.verify(notificationService).sendMessage(any(), any())
 
     Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
 
@@ -123,6 +135,10 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .expectStatus().isOk
       .expectBody(OffenderCheckinDto::class.java)
       .returnResult()
+
+    // verify a notification to the practitioner was sent
+    notifInOrder.verify(notificationService).sendMessage(any(), any())
+    notifInOrder.verifyNoMoreInteractions()
 
     val submittedCheckin = offenderCheckinRepository.findByUuid(submitCheckin.responseBody!!.uuid).get()
     Assertions.assertNotNull(submittedCheckin.status == submitCheckin.responseBody!!.status)
