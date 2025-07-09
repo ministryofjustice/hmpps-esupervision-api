@@ -157,32 +157,6 @@ class OffenderCheckinTest : IntegrationTestBase() {
     Assertions.assertEquals(ManualIdVerificationResult.MATCH, reviewedCheckin.manualIdCheck)
   }
 
-  private fun checkinRequestDto(): Pair<OffenderDto, CreateCheckinRequest> {
-    val offender = offender!!
-    val checkinRequest = CreateCheckinRequest(
-      "alice",
-      offender = offender.uuid,
-      "Is everything ok?",
-      dueDate = LocalDate.now().plusDays(2),
-    )
-    return Pair(offender, checkinRequest)
-  }
-
-  private fun submitCheckinRequest(
-    checkin: OffenderCheckinDto,
-    submission: OffenderCheckinSubmission,
-  ): WebTestClient.RequestHeadersSpec<*> = webTestClient.post()
-    .uri("/offender_checkins/${checkin.uuid}/submit")
-    .contentType(MediaType.APPLICATION_JSON)
-    .headers(practitionerRoleAuthHeaders)
-    .bodyValue(submission)
-
-  private fun createCheckinRequest(checkinRequest: CreateCheckinRequest): WebTestClient.RequestHeadersSpec<*> = webTestClient.post()
-    .uri("/offender_checkins")
-    .contentType(MediaType.APPLICATION_JSON)
-    .headers(practitionerRoleAuthHeaders)
-    .bodyValue(checkinRequest)
-
   @Test
   fun `a checkin can be submitted only once`() {
     val (offender, checkinRequest) = checkinRequestDto()
@@ -213,6 +187,32 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .exchange()
       .expectStatus().is4xxClientError
   }
+
+  private fun checkinRequestDto(): Pair<OffenderDto, CreateCheckinRequest> {
+    val offender = offender!!
+    val checkinRequest = CreateCheckinRequest(
+      "alice",
+      offender = offender.uuid,
+      "Is everything ok?",
+      dueDate = LocalDate.now().plusDays(2),
+    )
+    return Pair(offender, checkinRequest)
+  }
+
+  private fun submitCheckinRequest(
+    checkin: OffenderCheckinDto,
+    submission: OffenderCheckinSubmission,
+  ): WebTestClient.RequestHeadersSpec<*> = webTestClient.post()
+    .uri("/offender_checkins/${checkin.uuid}/submit")
+    .contentType(MediaType.APPLICATION_JSON)
+    .headers(practitionerRoleAuthHeaders)
+    .bodyValue(submission)
+
+  private fun createCheckinRequest(checkinRequest: CreateCheckinRequest): WebTestClient.RequestHeadersSpec<*> = webTestClient.post()
+    .uri("/offender_checkins")
+    .contentType(MediaType.APPLICATION_JSON)
+    .headers(practitionerRoleAuthHeaders)
+    .bodyValue(checkinRequest)
 
   /**
    * What should the return value of  the mocked `is*Uploaded` method be
