@@ -69,8 +69,7 @@ class OffenderCheckinService(
       submittedAt = null,
       reviewedBy = null,
       status = CheckinStatus.CREATED,
-      questions = createCheckin.questions,
-      answers = null,
+      surveyResponse = null,
       dueDate = reqDueDate,
       autoIdCheck = null,
       manualIdCheck = null,
@@ -123,7 +122,7 @@ class OffenderCheckinService(
     }
 
     checkin.submittedAt = now
-    checkin.answers = checkinInput.answers
+    checkin.surveyResponse = checkinInput.survey
     checkin.status = CheckinStatus.SUBMITTED
 
     checkinRepository.save(checkin)

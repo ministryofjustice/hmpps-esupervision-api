@@ -7,6 +7,8 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
@@ -45,9 +47,9 @@ open class OffenderCheckin(
   @Enumerated(EnumType.STRING)
   open var status: CheckinStatus,
 
-  open var questions: String,
-
-  open var answers: String?,
+  @Column("survey_response", nullable = true)
+  @JdbcTypeCode(SqlTypes.JSON)
+  open var surveyResponse: Map<String, Object>?,
 
   @Column("due_date")
   open var dueDate: Instant,
@@ -66,8 +68,7 @@ open class OffenderCheckin(
     dueDate = dueDate,
     offender = offender.dto(resourceLocator), // TODO: don't return whole dto, just the uuid
     submittedOn = submittedAt,
-    questions = questions,
-    answers = answers,
+    surveyResponse = surveyResponse,
     reviewedBy = reviewedBy?.uuid,
     createdBy = createdBy.uuid,
     createdAt = createdAt,

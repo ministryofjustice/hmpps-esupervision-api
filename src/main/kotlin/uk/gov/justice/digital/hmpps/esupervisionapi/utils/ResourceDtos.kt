@@ -40,7 +40,6 @@ data class CollectionDto<ElemDto>(
 data class CreateCheckinRequest(
   val practitioner: String,
   val offender: UUID,
-  val questions: String,
   @JsonDeserialize(using = LocalDateDeserializer::class) val dueDate: LocalDate,
 )
 
