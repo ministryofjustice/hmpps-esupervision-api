@@ -52,7 +52,7 @@ data class CheckinVideoKey(
 
 data class CheckinPhotoKey(
   val checkin: UUID,
-  val index: Long,
+  val index: Int,
 ) : S3Keyable()
 
 @Service
@@ -79,7 +79,7 @@ class S3UploadService(
   /**
    * We can have multiple checkin photo objects, hence the index param
    */
-  private fun putObjectRequest(checkin: OffenderCheckin, contentType: String, index: Long): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinPhotoKey(checkin.uuid, index).toKey(), contentType)
+  private fun putObjectRequest(checkin: OffenderCheckin, contentType: String, index: Int): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinPhotoKey(checkin.uuid, index).toKey(), contentType)
 
   /**
    * Generates a pre-signed URL for uploading a file to S3.
@@ -126,7 +126,7 @@ class S3UploadService(
   fun generatePresignedUploadUrl(
     checkin: OffenderCheckin,
     contentType: String = "application/octet-stream",
-    index: Long,
+    index: Int,
     duration: Duration,
   ): URL {
     val putRequest = putObjectRequest(checkin, contentType, index)
@@ -205,7 +205,7 @@ class S3UploadService(
   }
 
   override fun getCheckinVideo(checkin: OffenderCheckin): URL? {
-    if (checkin.status == CheckinStatus.SUBMITTED) {
+    if (checkin.status == CheckinStatus.SUBMITTED || checkin.status == CheckinStatus.REVIEWED) {
       val videoKey = CheckinVideoKey(checkin.uuid)
       return presignedGetUrlFor(videoKey)
     } else {

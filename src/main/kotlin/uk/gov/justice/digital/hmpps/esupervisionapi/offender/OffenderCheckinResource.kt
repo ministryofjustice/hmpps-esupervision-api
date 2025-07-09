@@ -2,12 +2,17 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.validation.BindingResult
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -15,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.s3.S3Client
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
@@ -26,6 +32,7 @@ import java.util.UUID
 
 @RestController
 @RequestMapping(path = ["/offender_checkins"])
+@Validated
 class OffenderCheckinResource(
   val offenderCheckinService: OffenderCheckinService,
   @Qualifier("rekognitionS3Client") val rekognitionS3: S3Client,
@@ -56,7 +63,10 @@ class OffenderCheckinResource(
   @PostMapping
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun createCheckin(@RequestBody @Valid createCheckin: CreateCheckinRequest): ResponseEntity<OffenderCheckinDto> {
+  fun createCheckin(@RequestBody @Valid createCheckin: CreateCheckinRequest, bindingResult: BindingResult): ResponseEntity<OffenderCheckinDto> {
+    if (bindingResult.hasErrors()) {
+      throw intoResponseStatusException(bindingResult)
+    }
     val checkin = offenderCheckinService.createCheckin(createCheckin)
     return ResponseEntity.ok(checkin)
   }
@@ -66,8 +76,8 @@ class OffenderCheckinResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   fun uploadLocation(
     @PathVariable uuid: UUID,
-    @RequestParam(name = "content-type", required = true) contentType: String,
-    @RequestParam(name = "num-snapshots", required = false) numSnapshots: Long? = null,
+    @RequestParam(name = "content-type", required = true) @NotBlank contentType: String,
+    @RequestParam(name = "num-snapshots", required = false) @Min(1) numSnapshots: Int? = null,
   ): ResponseEntity<UploadLocationResponse> {
     val duration = Duration.ofMinutes(10) // TODO: get that from config
     var response: UploadLocationResponse? = null
@@ -92,7 +102,14 @@ class OffenderCheckinResource(
   @PostMapping("/{uuid}/review")
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun reviewCheckin(@PathVariable uuid: UUID, reviewRequest: CheckinReviewRequest): ResponseEntity<OffenderCheckinDto> {
+  fun reviewCheckin(
+    @PathVariable uuid: UUID,
+    @RequestBody @Valid reviewRequest: CheckinReviewRequest,
+    bindingResult: BindingResult,
+  ): ResponseEntity<OffenderCheckinDto> {
+    if (bindingResult.hasErrors()) {
+      throw intoResponseStatusException(bindingResult)
+    }
     val checkin = offenderCheckinService.reviewCheckin(uuid, reviewRequest)
     return ResponseEntity.ok(checkin)
   }
@@ -103,5 +120,10 @@ class OffenderCheckinResource(
   fun automatedIdentityCheck(@PathVariable uuid: UUID, @RequestParam result: AutomatedIdVerificationResult): ResponseEntity<OffenderCheckinDto> {
     val checkin = offenderCheckinService.setAutomatedIdCheckStatus(uuid, result)
     return ResponseEntity.ok(checkin)
+  }
+
+  private fun intoResponseStatusException(bindingResult: BindingResult): ResponseStatusException {
+    val errors = bindingResult.fieldErrors.associateBy({ it.field }, { it.defaultMessage })
+    return ResponseStatusException(HttpStatus.BAD_REQUEST, errors.toString())
   }
 }

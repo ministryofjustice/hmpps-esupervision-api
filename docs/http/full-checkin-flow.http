@@ -29,7 +29,6 @@ Content-Type: application/json
 {
     "practitioner": "{{practitioner_uuid}}",
     "offender": "{{offender_uuid}}",
-    "questions": "What is your favourite colour?",
     "dueDate": "2025-07-14"
 }
 
@@ -67,7 +66,7 @@ Content-Type: application/json
 
 {
   "offender": "{{offender_uuid}}",
-  "answers": "yellow"
+  "survey": {"mood":  "OK"}
 }
 
 ### Review the checkin
