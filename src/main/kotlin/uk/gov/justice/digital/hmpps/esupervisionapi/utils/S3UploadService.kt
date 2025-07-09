@@ -205,7 +205,7 @@ class S3UploadService(
   }
 
   override fun getCheckinVideo(checkin: OffenderCheckin): URL? {
-    if (checkin.status == CheckinStatus.SUBMITTED) {
+    if (checkin.status == CheckinStatus.SUBMITTED || checkin.status == CheckinStatus.REVIEWED) {
       val videoKey = CheckinVideoKey(checkin.uuid)
       return presignedGetUrlFor(videoKey)
     } else {
