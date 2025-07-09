@@ -1,7 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import org.springframework.beans.factory.annotation.Qualifier
@@ -42,8 +44,13 @@ class OffenderCheckinResource(
   @GetMapping(produces = [APPLICATION_JSON_VALUE])
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun getCheckins(@RequestParam("practitionerUuid") practitionerUuid: String): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
-    val pageRequest = PageRequest.of(0, 20)
+  fun getCheckins(
+    @RequestParam("practitionerUuid") practitionerUuid: String,
+    @Parameter(description = "Zero-based page index")
+    @RequestParam(defaultValue = "0") page: Int,
+    @RequestParam(defaultValue = "20") @Max(100) size: Int,
+  ): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
+    val pageRequest = PageRequest.of(page, size)
     val checkins = offenderCheckinService.getCheckins(practitionerUuid, pageRequest)
     return ResponseEntity.ok(checkins)
   }
