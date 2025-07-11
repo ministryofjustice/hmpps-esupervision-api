@@ -12,6 +12,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.EntityExchangeResult
 import org.springframework.test.web.reactive.server.WebTestClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
@@ -173,6 +174,8 @@ fun createOffenderInfo() = OffenderInfo(
   "Offerman",
   LocalDate.of(1970, 1, 1),
   "bob@example.com",
+  nextCheckinDate = LocalDate.now().plusDays(1),
+  checkinInterval = CheckinInterval.WEEKLY,
 )
 
 /**
