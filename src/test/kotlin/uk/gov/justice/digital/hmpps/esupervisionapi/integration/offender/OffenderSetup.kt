@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDO
 import org.springframework.test.context.ActiveProfiles
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import java.time.LocalDate
@@ -49,6 +50,8 @@ class OffenderSetup : IntegrationTestBase() {
         lastName = "Smith",
         dateOfBirth = LocalDate.of(1980, 1, 1),
         phoneNumber = "7701023399",
+        nextCheckinDate = LocalDate.now().plusDays(1),
+        checkinInterval = CheckinInterval.WEEKLY,
       ),
     )
 
