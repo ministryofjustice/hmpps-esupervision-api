@@ -35,6 +35,8 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
         hbm2ddl:
           auto: update
+        type:
+          preferred_duration_jdbc_type: INTERVAL_SECOND
   h2:
     console:
       enabled: true
