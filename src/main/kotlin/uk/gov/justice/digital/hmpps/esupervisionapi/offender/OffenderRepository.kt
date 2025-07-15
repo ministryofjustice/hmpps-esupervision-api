@@ -9,6 +9,8 @@ import jakarta.persistence.FetchType
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
@@ -95,6 +97,7 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
   fun findByEmail(email: String): Optional<Offender>
   fun findByPhoneNumber(phoneNumber: String): Optional<Offender>
   fun findByUuid(uuid: UUID): Optional<Offender>
+  fun findAllByPractitioner(practitioner: Practitioner, pageable: Pageable): Page<Offender>
 }
 
 /**

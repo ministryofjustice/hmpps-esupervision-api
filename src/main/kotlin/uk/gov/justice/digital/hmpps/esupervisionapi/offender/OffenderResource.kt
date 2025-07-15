@@ -25,12 +25,13 @@ class OffenderResource(
   @Operation(summary = "Returns a collection of offender records")
   @GetMapping
   fun getOffenders(
+    @RequestParam(required = true) practitionerUuid: String,
     @Parameter(description = "Zero-based page index")
     @RequestParam(defaultValue = "0") page: Int,
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
   ): ResponseEntity<CollectionDto<OffenderDto>> {
     val pageRequest = PageRequest.of(page, size)
-    val offenders = offenderService.getOffenders(pageable = pageRequest)
+    val offenders = offenderService.getOffenders(practitionerUuid, pageable = pageRequest)
     return ResponseEntity.ok(
       CollectionDto(
         pagination = pageRequest.toPagination(),
