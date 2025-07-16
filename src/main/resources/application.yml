@@ -4,6 +4,8 @@ info.app:
 
 app:
   hostedAt: ${HOSTED_AT}
+  # how long should the presigned S3 URLs be valid for?
+  upload-ttl-minutes: 10
 
 spring:
   application:

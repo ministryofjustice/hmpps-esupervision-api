@@ -30,6 +30,12 @@ data class UploadLocationResponse(
   val errorMessage: String? = null,
 )
 
+data class CheckinUploadLocationResponse(
+  val references: List<LocationInfo>? = null,
+  val snapshots: List<LocationInfo>? = null,
+  val video: LocationInfo? = null,
+)
+
 data class CollectionDto<ElemDto>(
   val pagination: Pagination,
   val content: List<ElemDto>,

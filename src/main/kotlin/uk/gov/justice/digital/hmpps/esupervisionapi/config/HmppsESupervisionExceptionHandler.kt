@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus.NOT_FOUND
 import org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
+import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.server.ResponseStatusException
@@ -21,6 +22,17 @@ import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 
 @RestControllerAdvice
 class HmppsESupervisionExceptionHandler {
+
+  @ExceptionHandler(MissingServletRequestParameterException::class)
+  fun missingServletRequestParameterException(e: MissingServletRequestParameterException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(BAD_REQUEST)
+    .body(
+      ErrorResponse(
+        status = BAD_REQUEST,
+        userMessage = e.message,
+        developerMessage = e.message,
+      ),
+    )
 
   @ExceptionHandler(MissingVideoException::class)
   fun handleMissingVideoException(e: MissingVideoException): ResponseEntity<ErrorResponse> = ResponseEntity
