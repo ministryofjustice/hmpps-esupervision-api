@@ -19,6 +19,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -67,6 +68,12 @@ open class Offender(
   @Column(name = "phone_number", nullable = true, unique = true)
   open var phoneNumber: String? = null,
 
+  @Column("next_checkin", nullable = false)
+  open val nextCheckin: LocalDate,
+
+  @Column("checkin_interval", nullable = false, columnDefinition = "interval")
+  open val checkinInterval: Duration,
+
   @ManyToOne(cascade = [CascadeType.DETACH], fetch = FetchType.LAZY)
   @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
   open var practitioner: Practitioner,
@@ -82,6 +89,8 @@ open class Offender(
     phoneNumber = phoneNumber,
     createdAt = createdAt,
     photoUrl = resourceLocator.getOffenderPhoto(this),
+    nextCheckinDate = nextCheckin,
+    checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   )
 
   override fun contactMethods(): Iterable<NotificationMethod> {
