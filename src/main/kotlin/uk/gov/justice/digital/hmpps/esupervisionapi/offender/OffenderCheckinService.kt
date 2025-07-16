@@ -4,7 +4,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpMethod
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
@@ -12,8 +14,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.net.URL
@@ -27,6 +31,12 @@ import kotlin.jvm.optionals.getOrElse
 class MissingVideoException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
 class InvalidStateTransitionException(message: String, val checkin: OffenderCheckin) : RuntimeException(message)
 class InvalidOffenderSetupState(message: String, setup: OffenderSetup) : RuntimeException(message)
+
+data class UploadLocationTypes(
+  val reference: String,
+  val video: String,
+  val snapshots: List<String>,
+)
 
 @Service
 class OffenderCheckinService(
@@ -132,29 +142,49 @@ class OffenderCheckinService(
     return checkin.dto(this.s3UploadService)
   }
 
-  fun generateVideoUploadLocation(checkinUuid: UUID, contentType: String, duration: Duration): URL {
-    val checkin = checkinRepository.findByUuid(checkinUuid)
-    if (checkin.isPresent) {
-      validateCheckinUpdatable(checkin.get())
-      return s3UploadService.generatePresignedUploadUrl(checkin.get(), contentType, duration)
-    }
-
-    throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid")
+  fun generateVideoUploadLocation(checkin: OffenderCheckin, contentType: String, duration: Duration): URL {
+    validateCheckinUpdatable(checkin)
+    return s3UploadService.generatePresignedUploadUrl(checkin, contentType, duration)
   }
 
-  fun generatePhotoSnapshotLocations(checkinUuid: UUID, contentType: String, number: Int, duration: Duration): List<URL> {
-    val checkin = checkinRepository.findByUuid(checkinUuid)
-    if (checkin.isPresent) {
-      validateCheckinUpdatable(checkin.get())
-      val urls = mutableListOf<URL>()
-      for (index in 0..<number) {
-        val rekogUrl = rekogS3UploadService.generatePresignedUploadUrl(checkin.get(), contentType, index, duration)
-        urls.add(rekogUrl)
+  fun generateUploadLocations(checkin: UUID, types: UploadLocationTypes, duration: Duration): CheckinUploadLocationResponse {
+    val checkin = checkinRepository.findByUuid(checkin).getOrElse {
+      throw BadArgumentException("Checkin $checkin not found")
+    }
+    return generateUploadLocations(checkin, types, duration)
+  }
+
+  fun generateUploadLocations(checkin: OffenderCheckin, types: UploadLocationTypes, duration: Duration): CheckinUploadLocationResponse {
+    if (!types.reference.startsWith("image")) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reference content type: ${types.reference}")
+    }
+    val referenceUrl = generatePhotoSnapshotLocations(checkin, types.reference, 0..0, duration)
+    val videoUrl = generateVideoUploadLocation(checkin, types.video, duration)
+    val snapshotUrls = types.snapshots.flatMapIndexed snapshot@{ index, contentType ->
+      if (contentType.startsWith("image")) {
+        // offsetting by 1; index = 0 is reserved for the reference image
+        return@snapshot generatePhotoSnapshotLocations(checkin, contentType, index + 1..index + 1, duration)
       }
-      return urls
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid snapshot contentType: $contentType")
     }
 
-    throw NoResourceFoundException(HttpMethod.POST, "/offender_checkins/$checkinUuid")
+    val durationStr = duration.toString()
+    val body = CheckinUploadLocationResponse(
+      references = listOf(LocationInfo(referenceUrl[0], types.reference, durationStr)),
+      snapshots = if (types.snapshots.isNotEmpty()) snapshotUrls.mapIndexed { index, url -> LocationInfo(url, types.snapshots[index], durationStr) } else null,
+      video = LocationInfo(videoUrl, types.video, durationStr),
+    )
+    return body
+  }
+
+  private fun generatePhotoSnapshotLocations(checkin: OffenderCheckin, contentType: String, indices: IntRange, duration: Duration): List<URL> {
+    validateCheckinUpdatable(checkin)
+    val urls = mutableListOf<URL>()
+    for (index in indices) {
+      val rekogUrl = rekogS3UploadService.generatePresignedUploadUrl(checkin, contentType, index, duration)
+      urls.add(rekogUrl)
+    }
+    return urls
   }
 
   fun getCheckins(practitionerUuid: String, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {

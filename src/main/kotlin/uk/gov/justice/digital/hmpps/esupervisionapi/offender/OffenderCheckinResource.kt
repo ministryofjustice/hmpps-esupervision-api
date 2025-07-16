@@ -4,8 +4,6 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
-import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotBlank
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
@@ -25,10 +23,9 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.s3.S3Client
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.UploadLocationResponse
 import java.time.Duration
 import java.util.UUID
 
@@ -39,7 +36,10 @@ class OffenderCheckinResource(
   val offenderCheckinService: OffenderCheckinService,
   @Qualifier("rekognitionS3Client") val rekognitionS3: S3Client,
   @Value("\${rekognition.s3_bucket_name}") val rekogBucketName: String,
+  @Value("\${app.upload-ttl-minutes}") val uploadTTlMinutes: Long,
 ) {
+
+  val uploadTTl: Duration = Duration.ofMinutes(uploadTTlMinutes)
 
   @GetMapping(produces = [APPLICATION_JSON_VALUE])
   @Tag(name = "practitioner")
@@ -83,20 +83,20 @@ class OffenderCheckinResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   fun uploadLocation(
     @PathVariable uuid: UUID,
-    @RequestParam(name = "content-type", required = true) @NotBlank contentType: String,
-    @RequestParam(name = "num-snapshots", required = false) @Min(1) numSnapshots: Int? = null,
-  ): ResponseEntity<UploadLocationResponse> {
-    val duration = Duration.ofMinutes(10) // TODO: get that from config
-    var response: UploadLocationResponse? = null
-    if (numSnapshots != null) {
-      val urls = offenderCheckinService.generatePhotoSnapshotLocations(uuid, contentType, numSnapshots, duration)
-      response = UploadLocationResponse(locationInfo = null, locations = urls.map { LocationInfo(it, contentType, duration.toString()) })
-    } else {
-      val url = offenderCheckinService.generateVideoUploadLocation(uuid, contentType, duration)
-      response = UploadLocationResponse(LocationInfo(url, contentType, duration.toString()))
-    }
-    return ResponseEntity.ok(response)
-  }
+    @RequestParam(name = "snapshots", required = false) snapshotContentTypes: List<String> = listOf(),
+    @RequestParam(name = "video", required = true) videoContentType: String,
+    @RequestParam("reference", required = true) referenceContentType: String,
+  ): ResponseEntity<CheckinUploadLocationResponse> = ResponseEntity.ok(
+    offenderCheckinService.generateUploadLocations(
+      uuid,
+      UploadLocationTypes(
+        reference = referenceContentType,
+        video = videoContentType,
+        snapshots = snapshotContentTypes,
+      ),
+      uploadTTl,
+    ),
+  )
 
   @PostMapping("/{uuid}/submit")
   @Tag(name = "offender")

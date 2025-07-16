@@ -1,7 +1,7 @@
 @practitioner_uuid = 1ba848cf-0fb8-4d24-868c-390a8c0bdb00
 
-## Get offender info
-GET {{HOST}}/offenders
+### Get offender info
+GET {{HOST}}/offenders?practitionerUuid={{practitioner_uuid}}
 Authorization: Bearer {{hmpps_auth.token}}
 
 > {%
@@ -29,7 +29,7 @@ Content-Type: application/json
 {
     "practitioner": "{{practitioner_uuid}}",
     "offender": "{{offender_uuid}}",
-    "dueDate": "2025-07-14"
+    "dueDate": "2025-07-20"
 }
 
 > {%
@@ -41,7 +41,10 @@ Content-Type: application/json
 %}
 
 ### Request upload location for the offender
-POST {{HOST}}/offender_checkins/{{checkin_uuid}}/upload_location?content-type=image/png
+POST {{HOST}}/offender_checkins/{{checkin_uuid}}/upload_location
+    ?video=video/mp4
+    &snapshots=image/png
+    &reference=image/png
 Authorization: Bearer {{hmpps_auth.token}}
 
 > {%

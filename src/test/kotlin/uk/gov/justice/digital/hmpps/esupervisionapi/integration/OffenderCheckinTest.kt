@@ -14,6 +14,8 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
+import org.springframework.test.web.reactive.server.expectBody
+import org.springframework.test.web.reactive.server.returnResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
@@ -27,9 +29,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.UploadLocationResponse
 import java.net.URI
 import java.time.Duration
 import java.time.LocalDate
@@ -103,26 +105,20 @@ class OffenderCheckinTest : IntegrationTestBase() {
     val numSnapshots = 2
     mockCheckinSnapshotUrls(createCheckin, numSnapshots)
 
-    // request video URL upload
-    webTestClient.post()
-      .uri("/offender_checkins/${createCheckin.uuid}/upload_location?content-type=video/mpg4")
-      .headers(practitionerRoleAuthHeaders)
-      .accept(MediaType.APPLICATION_JSON)
-      .exchange()
-      .expectStatus().isOk
-
-    // request rekognition reference & snapshot upload locations
+    // request video, rekognition reference & snapshot upload locations
     val imageUploadLocations = webTestClient.post()
-      .uri("/offender_checkins/${createCheckin.uuid}/upload_location?content-type=image/jpeg&num-snapshots=$numSnapshots")
+      .uri("/offender_checkins/${createCheckin.uuid}/upload_location?video=video/mpg4&reference=image/jpeg&snapshots=image/jpeg")
       .headers(practitionerRoleAuthHeaders)
       .accept(MediaType.APPLICATION_JSON)
       .exchange()
       .expectStatus().isOk
-      .expectBody(UploadLocationResponse::class.java)
+      .expectBody(CheckinUploadLocationResponse::class.java)
+      // .expectBody(ErrorResponse::class.java)
       .returnResult().responseBody!!
 
-    Assertions.assertNotNull(imageUploadLocations.locations)
-    Assertions.assertEquals(2, imageUploadLocations.locations?.size, "1 Reference upload URL + 1 snapshot upload URL")
+    Assertions.assertEquals(1, imageUploadLocations.snapshots?.size)
+    Assertions.assertEquals(1, imageUploadLocations.references?.size)
+    Assertions.assertNotNull(imageUploadLocations.video)
 
     mockCheckinVideoUpload(createCheckin, UploadStatus.UPLOADED)
 
