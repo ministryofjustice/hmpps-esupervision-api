@@ -104,7 +104,7 @@ notify:
     POP_REGISTRATION_CONFIRMATION: e33c74e6-467c-41f4-993f-697c65405622
 
 rekognition:
-  region: eu-west-2
+  region: ${REKOG_AWS_REGION}
   access_key_id: ${REKOG_AWS_ACCESS_KEY_ID}
   secret_access_key: ${REKOG_AWS_SECRET_ACCESS_KEY}
-  s3_bucket_name: user-ids-rekognition-d-2
+  s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
