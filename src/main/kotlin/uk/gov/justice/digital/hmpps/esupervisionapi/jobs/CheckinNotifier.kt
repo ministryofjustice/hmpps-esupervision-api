@@ -4,7 +4,9 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
@@ -50,13 +52,14 @@ class CheckinNotifier(
    * abort the transaction because a single error. We want the notification ID
    * saved in the OffenderCheckin record.
    */
-  @Scheduled(cron = "0 0 3,5 * * *")
-  // @Scheduled(cron = "*/30 * * * * *")
+  //@Scheduled(cron = "0 0 3,5 * * *")
+  @Scheduled(cron = "*/30 * * * * *")
   @SchedulerLock(
     name = "CheckinNotifier - send notifications",
     lockAtLeastFor = "PT5S",
     lockAtMostFor = "PT30S",
   )
+  @Transactional
   fun process() {
     LOG.info("processing starts")
 
@@ -74,10 +77,13 @@ class CheckinNotifier(
     )
     var numProcessed = 0
     var numErrors = 0
+    var numNotifAttempts = 0
+
     for (offender in offenders) {
       try {
-        processOffender(offender, context)
+        val checkin = processOffender(offender, context)
         numProcessed += 1
+        numNotifAttempts += if ((checkin?.notifications?.results?.size ?: 0) > 0) 1 else 0
       } catch (e: Exception) {
         LOG.warn("Error processing offender=${offender.uuid}", e)
         numErrors += 1
@@ -85,27 +91,31 @@ class CheckinNotifier(
     }
 
     LOG.info(
-      "processing ends. processed={}, errors={}, took={} ms",
+      "processing ends. total processed={}, failed={}, notifications={}, took={}",
       numProcessed,
       numErrors,
+      numNotifAttempts,
       Duration.between(now, clock.instant()),
     )
   }
 
-  internal fun processOffender(offender: Offender, context: NotificationContext) {
+  internal fun processOffender(offender: Offender, context: NotificationContext): OffenderCheckinDto? {
     // assumptions:
     // - no `OffenderCheckin` records with due date between `context.today`, context.potentialCheckin
     val isCheckinDay = context.isCheckinDay(offender)
     LOG.debug("is offender={} due for a checkin? {}", offender.uuid, if (isCheckinDay) "yes" else "no")
     if (isCheckinDay) {
-      offenderCheckinService.createCheckin(
+      val checkin = offenderCheckinService.createCheckin(
         CreateCheckinRequest(
           offender.practitioner.uuid,
           offender.uuid,
           context.checkinDate.toLocalDate(),
         ),
       )
+      return checkin
     }
+
+    return null
   }
 
   private fun startOfDay(now: Instant, offset: ZoneOffset): ZonedDateTime = now.atZone(offset)
