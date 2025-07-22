@@ -30,8 +30,6 @@ data class OffenderCheckinInviteMessage(
     fun fromCheckin(checkin: OffenderCheckin): OffenderCheckinInviteMessage = OffenderCheckinInviteMessage(
       firstName = checkin.offender.firstName,
       lastName = checkin.offender.lastName,
-      // checkinDueDate = ZonedDateTime.of(checkin.dueDate, LocalTime.of(0, 0, 0), LONDON_ZONE),
-      // checkinDueDate = ZonedDateTime.ofInstant(checkin.dueDate,LONDON_ZONE).toLocalDate(),
       checkinDueDate = checkin.dueDate.withZoneSameLocal(LONDON_ZONE).toLocalDate(),
       checkinUuid = checkin.uuid,
     )
