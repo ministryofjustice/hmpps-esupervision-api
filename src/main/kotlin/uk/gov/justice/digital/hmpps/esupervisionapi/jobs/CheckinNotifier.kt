@@ -52,9 +52,7 @@ class CheckinNotifier(
    * abort the transaction because a single error. We want the notification ID
    * saved in the OffenderCheckin record.
    */
-  // @Scheduled(cron = "0 0 3,5 * * *") // PROD
-  @Scheduled(cron = "0 */15 * * * *")
-  // @Scheduled(cron = "*/30 * * * * *") // LOCAL
+  @Scheduled(cron = "#{@appConfig.checkinNotificationCron}")
   @SchedulerLock(
     name = "CheckinNotifier - send notifications",
     lockAtLeastFor = "PT5S",

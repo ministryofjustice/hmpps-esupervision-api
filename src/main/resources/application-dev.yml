@@ -1,5 +1,9 @@
 app:
   hostedAt: http://localhost:3000
+  scheduling:
+    checkin-notification:
+      cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
+      # cron: "*/30 * * * * *"  # Local development schedule (every 30 seconds)
 
 hmpps-auth:
   url: "http://localhost:8090/auth"

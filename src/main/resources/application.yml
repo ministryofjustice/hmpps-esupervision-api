@@ -6,6 +6,10 @@ app:
   hostedAt: ${HOSTED_AT}
   # how long should the presigned S3 URLs be valid for?
   upload-ttl-minutes: 10
+  scheduling:
+    checkin-notification:
+      #cron: "0 0 3,5 * * *"  # Production schedule (3 AM and 5 AM daily)
+      cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
 
 spring:
   application:
