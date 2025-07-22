@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
@@ -22,8 +23,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.util.Optional
 import java.util.UUID
+import java.util.stream.Stream
 
 enum class OffenderStatus {
   // record has been created
@@ -68,10 +71,10 @@ open class Offender(
   @Column(name = "phone_number", nullable = true, unique = true)
   open var phoneNumber: String? = null,
 
-  @Column("next_checkin", nullable = false)
-  open val nextCheckin: LocalDate,
+  @Column("first_checkin", nullable = true)
+  open val firstCheckin: LocalDate? = null,
 
-  @Column("checkin_interval", nullable = false, columnDefinition = "interval")
+  @Column("checkin_interval", nullable = false)
   open val checkinInterval: Duration,
 
   @ManyToOne(cascade = [CascadeType.DETACH], fetch = FetchType.LAZY)
@@ -89,7 +92,7 @@ open class Offender(
     phoneNumber = phoneNumber,
     createdAt = createdAt,
     photoUrl = resourceLocator.getOffenderPhoto(this),
-    nextCheckinDate = nextCheckin,
+    firstCheckin = firstCheckin,
     checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   )
 
@@ -99,6 +102,8 @@ open class Offender(
     this.phoneNumber?.let { methods.add(PhoneNumber(it)) }
     return methods
   }
+
+  companion object {}
 }
 
 @Repository
@@ -107,6 +112,34 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
   fun findByPhoneNumber(phoneNumber: String): Optional<Offender>
   fun findByUuid(uuid: UUID): Optional<Offender>
   fun findAllByPractitioner(practitioner: Practitioner, pageable: Pageable): Page<Offender>
+
+  // NOTE(rosado): the below doesn't work on H2
+//  @Query("""
+//    select o from Offender o
+//    where
+//        o.status = :status
+//        and  o.firstCheckin is not null
+//        and o.checkinInterval is not null
+//        and function('MOD',
+//            function('AGE_IN_DAYS', :timestamp, o.firstCheckin),
+//            function('EXTRACT_DAYS', o.checkinInterval)) = 0
+//        and not exists (select 1 from OffenderCheckin c where c.dueDate = :timestamp)
+//        """)
+
+  @Query(
+    """
+    select o from Offender o
+    where 
+        o.status = 'VERIFIED'
+        and  o.firstCheckin is not null
+        and o.checkinInterval is not null
+        and not exists (select 1 from OffenderCheckin c
+                        where c.offender = o 
+                        and :lowerBoundInclusive <= c.dueDate and c.dueDate < :upperBoundExclusive
+                        and c.status = 'CREATED')
+        """,
+  )
+  fun findAllCheckinNotificationCandidates(lowerBoundInclusive: ZonedDateTime, upperBoundExclusive: ZonedDateTime): Stream<Offender>
 }
 
 /**

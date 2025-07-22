@@ -22,7 +22,7 @@ data class OffenderDto(
   // not every context requires the photo URL, so we only include when needed
   @Schema(description = "A presigned S3 URL")
   val photoUrl: URL?,
-  @JsonDeserialize(using = LocalDateDeserializer::class) val nextCheckinDate: LocalDate,
+  @JsonDeserialize(using = LocalDateDeserializer::class) val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval,
 )
 

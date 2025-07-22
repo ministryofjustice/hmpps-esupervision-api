@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Instant
+import java.time.ZonedDateTime
 import java.util.Optional
 import java.util.UUID
 
@@ -52,8 +53,15 @@ open class OffenderCheckin(
   @JdbcTypeCode(SqlTypes.JSON)
   open var surveyResponse: Map<String, Object>?,
 
+  /**
+   * Will hold the latest status and/or error of any sent notifications.
+   */
+  @Column("notifications", nullable = true)
+  @JdbcTypeCode(SqlTypes.JSON)
+  open var notifications: NotificationResults?,
+
   @Column("due_date")
-  open var dueDate: Instant,
+  open var dueDate: ZonedDateTime,
 
   @Column("id_check_auto", nullable = true)
   @Enumerated(EnumType.STRING)
@@ -76,7 +84,10 @@ open class OffenderCheckin(
     videoUrl = resourceLocator.getCheckinVideo(this),
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
+    notifications = notifications,
   )
+
+  companion object {}
 }
 
 @Repository

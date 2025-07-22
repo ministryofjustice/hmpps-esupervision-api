@@ -9,17 +9,11 @@ import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
-enum class CheckinInterval {
-  WEEKLY,
-  TWO_WEEKS,
-  FOUR_WEEKS,
+enum class CheckinInterval(val duration: Duration) {
+  WEEKLY(Duration.ofDays(7)),
+  TWO_WEEKS(Duration.ofDays(14)),
+  FOUR_WEEKS(Duration.ofDays(28)),
   ;
-
-  fun toDuration(): Duration = when (this) {
-    WEEKLY -> Duration.ofDays(7)
-    TWO_WEEKS -> Duration.ofDays(14)
-    FOUR_WEEKS -> Duration.ofDays(28)
-  }
 
   companion object {
     fun fromDuration(duration: Duration): CheckinInterval = when (duration.toDays()) {
@@ -53,7 +47,7 @@ data class OffenderInfo(
   val phoneNumber: String? = null,
 
   @JsonDeserialize(using = LocalDateDeserializer::class)
-  val nextCheckinDate: LocalDate,
+  val firstCheckinDate: LocalDate,
 
   val checkinInterval: CheckinInterval,
 )

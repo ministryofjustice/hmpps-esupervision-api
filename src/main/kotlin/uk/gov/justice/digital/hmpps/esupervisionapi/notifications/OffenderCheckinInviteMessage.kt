@@ -4,7 +4,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -31,7 +30,9 @@ data class OffenderCheckinInviteMessage(
     fun fromCheckin(checkin: OffenderCheckin): OffenderCheckinInviteMessage = OffenderCheckinInviteMessage(
       firstName = checkin.offender.firstName,
       lastName = checkin.offender.lastName,
-      checkinDueDate = ZonedDateTime.ofInstant(checkin.dueDate, LONDON_ZONE).toLocalDate(),
+      // checkinDueDate = ZonedDateTime.of(checkin.dueDate, LocalTime.of(0, 0, 0), LONDON_ZONE),
+      // checkinDueDate = ZonedDateTime.ofInstant(checkin.dueDate,LONDON_ZONE).toLocalDate(),
+      checkinDueDate = checkin.dueDate.withZoneSameLocal(LONDON_ZONE).toLocalDate(),
       checkinUuid = checkin.uuid,
     )
   }

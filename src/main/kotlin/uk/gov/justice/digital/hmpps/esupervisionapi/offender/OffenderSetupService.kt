@@ -11,12 +11,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationCo
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
-import java.time.Instant
+import java.time.Clock
 import java.util.Optional
 import java.util.UUID
 
 @Service
 class OffenderSetupService(
+  private val clock: Clock,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
@@ -36,7 +37,7 @@ class OffenderSetupService(
     val practitioner = practitionerRepository.findByUuid(offenderInfo.practitionerId)
       .orElseThrow { BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found") }
 
-    val now = Instant.now()
+    val now = clock.instant()
     val offender = Offender(
       uuid = UUID.randomUUID(),
       firstName = offenderInfo.firstName,
@@ -48,8 +49,8 @@ class OffenderSetupService(
       createdAt = now,
       updatedAt = now,
       status = OffenderStatus.INITIAL,
-      nextCheckin = offenderInfo.nextCheckinDate,
-      checkinInterval = offenderInfo.checkinInterval.toDuration(),
+      firstCheckin = offenderInfo.firstCheckinDate,
+      checkinInterval = offenderInfo.checkinInterval.duration,
     )
 
     raiseOnConstraintViolation("contact information already in use") {
@@ -79,7 +80,7 @@ class OffenderSetupService(
       throw InvalidOffenderSetupState("No uploaded photo offender for given setup uuid=$uuid", setup.get())
     }
 
-    val now = Instant.now()
+    val now = clock.instant()
     val offender = setup.get().offender
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = now
@@ -104,7 +105,7 @@ class OffenderSetupService(
       throw BadArgumentException("setup already completed or terminated")
     }
 
-    val now = Instant.now()
+    val now = clock.instant()
     val offender = setup.get().offender
     offender.status = OffenderStatus.INACTIVE
     offender.phoneNumber = null

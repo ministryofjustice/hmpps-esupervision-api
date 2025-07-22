@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
 import java.net.URL
 import java.time.Instant
+import java.time.ZonedDateTime
 import java.util.UUID
 
 enum class CheckinStatus {
@@ -31,7 +32,7 @@ typealias SurveyContents = Map<String, Object>
 data class OffenderCheckinDto(
   val uuid: UUID,
   val status: CheckinStatus,
-  val dueDate: Instant,
+  val dueDate: ZonedDateTime,
   val offender: OffenderDto,
   val submittedOn: Instant?,
   val surveyResponse: SurveyContents?,
@@ -44,6 +45,7 @@ data class OffenderCheckinDto(
   val videoUrl: URL?,
   val autoIdCheck: AutomatedIdVerificationResult?,
   val manualIdCheck: ManualIdVerificationResult?,
+  val notifications: NotificationResults?,
 ) {
 
   @get:JsonProperty("flaggedResponses")
@@ -102,3 +104,17 @@ fun flaggedFor20250710pilot(survey: SurveyContents): List<String> {
 
   return result.toList()
 }
+
+data class NotificationResultSummary(
+  val notificationId: UUID,
+  val timestamp: ZonedDateTime,
+  val status: String?,
+  val error: String?,
+)
+
+/**
+ * NOTE: stored in as JSON in the DB
+ */
+data class NotificationResults(
+  val results: List<NotificationResultSummary>,
+)

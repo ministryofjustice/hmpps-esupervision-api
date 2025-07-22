@@ -1,6 +1,17 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 
-sealed class NotificationMethod
+enum class NotificationMethodKey {
+  PHONE,
+  EMAIL,
+}
 
-class PhoneNumber(val phoneNumber: String) : NotificationMethod()
-class Email(val email: String) : NotificationMethod()
+sealed class NotificationMethod {
+  abstract val method: NotificationMethodKey
+}
+
+data class PhoneNumber(val phoneNumber: String) : NotificationMethod() {
+  override val method = NotificationMethodKey.PHONE
+}
+data class Email(val email: String) : NotificationMethod() {
+  override val method = NotificationMethodKey.EMAIL
+}

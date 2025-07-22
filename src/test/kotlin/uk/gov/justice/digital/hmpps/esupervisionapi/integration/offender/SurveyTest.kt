@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration.offender
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
@@ -10,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SurveyContents
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 class SurveyTest {
@@ -23,12 +25,14 @@ class SurveyTest {
     createdAt = Instant.now(),
     "bob@example.com",
     photoUrl = null,
+    firstCheckin = LocalDate.now(ZoneId.of("UTC")).plusDays(10),
+    checkinInterval = CheckinInterval.FOUR_WEEKS,
   )
 
   val checkinTemplate = OffenderCheckinDto(
     UUID.randomUUID(),
     status = CheckinStatus.SUBMITTED,
-    dueDate = Instant.now(),
+    dueDate = LocalDate.now().atStartOfDay(ZoneId.of("UTC")),
     offender = offender,
     submittedOn = Instant.now(),
     surveyResponse = mapOf(),
@@ -38,6 +42,7 @@ class SurveyTest {
     videoUrl = null,
     autoIdCheck = AutomatedIdVerificationResult.MATCH,
     manualIdCheck = null,
+    notifications = null,
   )
 
   @Test

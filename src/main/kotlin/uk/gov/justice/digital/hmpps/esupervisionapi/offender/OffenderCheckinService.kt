@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.net.URL
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -40,6 +41,7 @@ data class UploadLocationTypes(
 
 @Service
 class OffenderCheckinService(
+  private val clock: Clock,
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
@@ -54,8 +56,9 @@ class OffenderCheckinService(
   }
 
   fun createCheckin(createCheckin: CreateCheckinRequest): OffenderCheckinDto {
-    val now = Instant.now()
-    val reqDueDate = Instant.from(createCheckin.dueDate.atStartOfDay(ZoneId.of("UTC")))
+    val now = clock.instant()
+    val dueDateUTC = createCheckin.dueDate.atStartOfDay(ZoneId.of("UTC"))
+    val reqDueDate = Instant.from(dueDateUTC)
     if (reqDueDate < now) {
       throw BadArgumentException("Due date is in the past: ${createCheckin.dueDate}")
     }
@@ -80,18 +83,22 @@ class OffenderCheckinService(
       reviewedBy = null,
       status = CheckinStatus.CREATED,
       surveyResponse = null,
-      dueDate = reqDueDate,
+      dueDate = dueDateUTC,
       autoIdCheck = null,
       manualIdCheck = null,
+      notifications = null,
     )
 
     val saved = checkinRepository.save(checkin)
 
     // notify PoP of checkin invite
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(inviteMessage, checkin.offender)
+    val currentResults = this.notificationService.sendMessage(inviteMessage, checkin.offender)
+    mergeNotificationResults(saved, currentResults)
 
-    return saved.dto(this.s3UploadService)
+    val savedWithNotificationRefs = checkinRepository.save(saved)
+
+    return savedWithNotificationRefs.dto(this.s3UploadService)
   }
 
   /**
@@ -113,9 +120,9 @@ class OffenderCheckinService(
       throw BadArgumentException("Offender with uuid=${checkin.uuid} has status ${offender.status}")
     }
 
-    val now = Instant.now()
+    val now = clock.instant()
 
-    if (checkin.dueDate < now) {
+    if (checkin.dueDate.toInstant() < now) {
       throw InvalidStateTransitionException("Checkin past due date", checkin)
     }
     validateCheckinUpdatable(checkin)
@@ -222,11 +229,58 @@ class OffenderCheckinService(
     return checkinRepository.save(checkin).dto(this.s3UploadService)
   }
 
+  /**
+   * This would be called to trigger a checkin notification (for the offender) outside
+   * the periodically executing job. For example an offender was just added
+   * and first checkin is supposed to happen today (likely after the job already finished).
+   *
+   * We require the checkin record as that's what the notification is about and
+   * that's where we store notification references which will allow us to
+   * retrieve the notification status from the provider (e.g. GOV.UK Notify)
+   */
+  fun unscheduledNotification(checkinUuid: UUID): OffenderCheckinDto {
+    val checkin = checkinRepository.findByUuid(checkinUuid).getOrElse {
+      throw BadArgumentException("Checkin=$checkinUuid not found")
+    }
+    if (checkin.offender.status == OffenderStatus.VERIFIED) {
+      throw BadArgumentException("Unscheduled notification for offender of status ${checkin.offender.status}")
+    }
+    validateCheckinUpdatable(checkin)
+    validateUnscheduledNotification(clock.instant(), checkin)
+
+    val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
+    val currentResults = this.notificationService.sendMessage(inviteMessage, checkin.offender)
+    mergeNotificationResults(checkin, currentResults)
+
+    val saved = checkinRepository.save(checkin)
+    return saved.dto(this.s3UploadService)
+  }
+
   companion object {
     // checkin has been SUBMITTED so we no longer allow to overwrite the associated files
     private fun validateCheckinUpdatable(checkin: OffenderCheckin) {
       if (checkin.status != CheckinStatus.CREATED) {
         throw BadArgumentException("You can no longer update or add photos/videos to checkin with uuid=${checkin.uuid}")
+      }
+    }
+
+    private fun validateUnscheduledNotification(now: Instant, checkin: OffenderCheckin) {
+      val notifications = checkin.notifications
+      if (notifications != null && notifications.results.isNotEmpty()) {
+        val latest = notifications.results.maxBy { it.timestamp }.timestamp
+        val now = now.atZone(ZoneId.of("UTC"))
+        val minDelta = Duration.ofMinutes(2)
+        if (Duration.between(latest, now) < minDelta) {
+          throw BadArgumentException("Only one unscheduled notification per $minDelta allowed")
+        }
+      }
+    }
+
+    private fun mergeNotificationResults(checkin: OffenderCheckin, results: NotificationResults) {
+      checkin.notifications = if (checkin.notifications != null) {
+        checkin.notifications!!.copy(results = checkin.notifications!!.results + results.results)
+      } else {
+        results
       }
     }
 
