@@ -57,9 +57,9 @@ class OffenderCheckinService(
 
   fun createCheckin(createCheckin: CreateCheckinRequest): OffenderCheckinDto {
     val now = clock.instant()
-    val dueDateUTC = createCheckin.dueDate.atStartOfDay(ZoneId.of("UTC"))
-    val reqDueDate = Instant.from(dueDateUTC)
-    if (reqDueDate < now) {
+    val utcZone = ZoneId.of("UTC")
+    val dueDateUTC = createCheckin.dueDate.atStartOfDay(utcZone)
+    if (dueDateUTC.toLocalDate() < now.atZone(utcZone).toLocalDate()) {
       throw BadArgumentException("Due date is in the past: ${createCheckin.dueDate}")
     }
 
