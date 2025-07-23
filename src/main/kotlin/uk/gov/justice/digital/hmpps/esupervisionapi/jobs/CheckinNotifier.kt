@@ -7,7 +7,6 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
@@ -35,7 +34,6 @@ data class NotificationContext(
 @Component
 class CheckinNotifier(
   private val offenderRepository: OffenderRepository,
-  private val offenderCheckinRepository: OffenderCheckinRepository,
   private val offenderCheckinService: OffenderCheckinService,
   private val clock: Clock,
 ) {
@@ -49,7 +47,7 @@ class CheckinNotifier(
    * sent and attempts to send it.
    *
    * We process a stream of Offenders but catch individual errors - we don't want to
-   * abort the transaction because a single error. We want the notification ID
+   * abort the transaction because of a single error. We want the notification ID
    * saved in the OffenderCheckin record.
    */
   @Scheduled(cron = "#{@appConfig.checkinNotificationCron}")
