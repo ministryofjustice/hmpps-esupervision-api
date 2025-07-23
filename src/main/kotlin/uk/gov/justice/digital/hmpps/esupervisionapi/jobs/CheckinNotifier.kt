@@ -13,17 +13,18 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
-data class NotificationContext(
+internal data class NotificationContext(
   val today: ZonedDateTime,
   val notificationLeadTime: Duration,
   val checkinDate: ZonedDateTime = today.plus(notificationLeadTime),
 ) {
   fun isCheckinDay(offender: Offender): Boolean {
-    if (offender.firstCheckin != null) {
-      val firstCheckin = offender.firstCheckin!!.atStartOfDay(ZoneOffset.UTC)
+    val firstCheckin = offender.firstCheckin?.withZoneSameInstant(ZoneId.of("UTC"))
+    if (firstCheckin != null) {
       val delta = Duration.between(firstCheckin, checkinDate)
       return delta.toDays() / offender.checkinInterval.toDays() == 0L
     }

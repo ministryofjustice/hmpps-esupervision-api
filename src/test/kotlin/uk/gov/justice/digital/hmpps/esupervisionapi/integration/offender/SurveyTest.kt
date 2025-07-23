@@ -27,6 +27,7 @@ class SurveyTest {
     photoUrl = null,
     firstCheckin = LocalDate.now(ZoneId.of("UTC")).plusDays(10),
     checkinInterval = CheckinInterval.FOUR_WEEKS,
+    zoneId = ZoneId.of("Europe/London"),
   )
 
   val checkinTemplate = OffenderCheckinDto(

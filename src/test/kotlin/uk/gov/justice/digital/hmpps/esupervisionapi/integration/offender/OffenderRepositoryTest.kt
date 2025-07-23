@@ -30,7 +30,7 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     fun newOffender(name: String, status: OffenderStatus, firstCheckinDat: ZonedDateTime, practitioner: Practitioner = practitionerAlice): Offender = Offender.create(
       name = name,
       status = status,
-      firstCheckinDate = today.toLocalDate(),
+      firstCheckinDate = today,
       createdAt = now.minus(Duration.ofDays(20)),
       updatedAt = now.minus(Duration.ofDays(10)),
       practitioner = practitioner,

@@ -7,6 +7,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 data class OffenderDto(
@@ -24,6 +25,7 @@ data class OffenderDto(
   val photoUrl: URL?,
   @JsonDeserialize(using = LocalDateDeserializer::class) val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval,
+  val zoneId: ZoneId,
 )
 
 data class OffenderSetupDto(

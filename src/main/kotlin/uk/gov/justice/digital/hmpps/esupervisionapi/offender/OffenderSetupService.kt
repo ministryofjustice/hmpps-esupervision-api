@@ -49,8 +49,9 @@ class OffenderSetupService(
       createdAt = now,
       updatedAt = now,
       status = OffenderStatus.INITIAL,
-      firstCheckin = offenderInfo.firstCheckinDate,
+      firstCheckin = offenderInfo.firstCheckinDate.atStartOfDay(offenderInfo.zoneId),
       checkinInterval = offenderInfo.checkinInterval.duration,
+      zoneId = offenderInfo.zoneId,
     )
 
     raiseOnConstraintViolation("contact information already in use") {

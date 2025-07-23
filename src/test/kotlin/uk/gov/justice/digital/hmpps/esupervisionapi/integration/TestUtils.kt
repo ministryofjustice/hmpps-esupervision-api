@@ -47,8 +47,9 @@ fun Practitioner.Companion.create(name: String): Practitioner = Practitioner(
 fun Offender.Companion.create(
   name: String,
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
-  firstCheckinDate: LocalDate,
+  firstCheckinDate: ZonedDateTime,
   checkinInterval: CheckinInterval = CheckinInterval.WEEKLY,
+  zoneId: ZoneId = ZoneId.of("Europe/London"),
   status: OffenderStatus = OffenderStatus.INITIAL,
   email: String? = null,
   phoneNumber: String? = null,
@@ -71,6 +72,7 @@ fun Offender.Companion.create(
     phoneNumber = phoneNumber,
     firstCheckin = firstCheckinDate,
     checkinInterval = checkinInterval.duration,
+    zoneId = zoneId,
     practitioner = practitioner,
   )
 }
