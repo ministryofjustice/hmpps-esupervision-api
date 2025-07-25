@@ -121,7 +121,7 @@ class OffenderCheckinService(
     val now = clock.instant()
     val submissionDate = now.atZone(clock.zone).toLocalDate()
     val cutoff = checkin.dueDate.withZoneSameLocal(clock.zone).plus(checkinWindow)
-    if (submissionDate < cutoff.toLocalDate()) {
+    if (cutoff.toLocalDate() <= submissionDate) {
       throw InvalidStateTransitionException("Checkin submission past due date", checkin)
     }
     validateCheckinUpdatable(checkin)
