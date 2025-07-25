@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
@@ -49,6 +50,7 @@ class OffenderCheckinService(
   private val s3UploadService: S3UploadService,
   private val notificationService: NotificationService,
   @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
+  @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
   fun getCheckin(uuid: UUID): Optional<OffenderCheckinDto> {
@@ -120,7 +122,7 @@ class OffenderCheckinService(
 
     val now = clock.instant()
     val submissionDate = now.atZone(clock.zone).toLocalDate()
-    val cutoff = checkin.dueDate.withZoneSameLocal(clock.zone).plus(checkinNotifierConfig.checkinWindow)
+    val cutoff = checkin.dueDate.withZoneSameLocal(clock.zone).plus(checkinWindow)
     if (submissionDate < cutoff.toLocalDate()) {
       throw InvalidStateTransitionException("Checkin submission past due date", checkin)
     }
