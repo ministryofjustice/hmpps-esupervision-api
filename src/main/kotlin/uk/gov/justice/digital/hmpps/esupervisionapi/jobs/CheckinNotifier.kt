@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
@@ -16,11 +18,13 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.util.UUID
 
-internal data class NotificationContext(
+internal data class NotifierContext(
   val today: ZonedDateTime,
   val notificationLeadTime: Duration,
   val checkinDate: ZonedDateTime = today.plus(notificationLeadTime),
+  val notificationContext: NotificationContext,
 ) {
   fun isCheckinDay(offender: Offender): Boolean {
     val firstCheckin = offender.firstCheckin?.withZoneSameInstant(ZoneId.of("UTC"))
@@ -64,9 +68,12 @@ class CheckinNotifier(
     val now = clock.instant()
     val startOfDayUtc: ZonedDateTime = startOfDay(now, ZoneOffset.UTC)
 
-    val context = NotificationContext(
+    val notificationContext = BulkNotificationContext(UUID.randomUUID())
+
+    val context = NotifierContext(
       startOfDayUtc,
       notificationLeadTime,
+      notificationContext = notificationContext,
     )
 
     val offenders = offenderRepository.findAllCheckinNotificationCandidates(
@@ -97,7 +104,7 @@ class CheckinNotifier(
     )
   }
 
-  internal fun processOffender(offender: Offender, context: NotificationContext): OffenderCheckinDto? {
+  internal fun processOffender(offender: Offender, context: NotifierContext): OffenderCheckinDto? {
     // assumptions:
     // - no `OffenderCheckin` records with due date between `context.today`, context.potentialCheckin
     val isCheckinDay = context.isCheckinDay(offender)
@@ -109,6 +116,7 @@ class CheckinNotifier(
           offender.uuid,
           context.checkinDate.toLocalDate(),
         ),
+        context.notificationContext,
       )
       return checkin
     }

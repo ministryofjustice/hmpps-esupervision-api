@@ -91,7 +91,7 @@ class OffenderSetupService(
 
     // send registration confirmation message to PoP
     val confirmationMessage = RegistrationConfirmationMessage.fromSetup(setup.get())
-    this.notificationService.sendMessage(confirmationMessage, offender)
+    this.notificationService.sendMessage(confirmationMessage, offender, SingleNotificationContext(UUID.randomUUID()))
 
     return saved.dto(this.s3UploadService)
   }

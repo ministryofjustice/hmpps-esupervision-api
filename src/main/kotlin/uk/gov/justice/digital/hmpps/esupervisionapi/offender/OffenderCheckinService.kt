@@ -55,7 +55,7 @@ class OffenderCheckinService(
     return checkin.map { it.dto(this.s3UploadService) }
   }
 
-  fun createCheckin(createCheckin: CreateCheckinRequest): OffenderCheckinDto {
+  fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): OffenderCheckinDto {
     val now = clock.instant()
     val utcZone = ZoneId.of("UTC")
     val dueDateUTC = createCheckin.dueDate.atStartOfDay(utcZone)
@@ -93,7 +93,7 @@ class OffenderCheckinService(
 
     // notify PoP of checkin invite
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
-    val currentResults = this.notificationService.sendMessage(inviteMessage, checkin.offender)
+    val currentResults = this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
     mergeNotificationResults(saved, currentResults)
 
     val savedWithNotificationRefs = checkinRepository.save(saved)
@@ -144,7 +144,7 @@ class OffenderCheckinService(
 
     // notify practitioner that checkin was submitted
     val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(submissionMessage, checkin.createdBy)
+    this.notificationService.sendMessage(submissionMessage, checkin.createdBy, SingleNotificationContext(UUID.randomUUID()))
 
     return checkin.dto(this.s3UploadService)
   }
@@ -249,7 +249,11 @@ class OffenderCheckinService(
     validateUnscheduledNotification(clock.instant(), checkin)
 
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
-    val currentResults = this.notificationService.sendMessage(inviteMessage, checkin.offender)
+    val currentResults = this.notificationService.sendMessage(
+      inviteMessage,
+      checkin.offender,
+      SingleNotificationContext(UUID.randomUUID()),
+    )
     mergeNotificationResults(checkin, currentResults)
 
     val saved = checkinRepository.save(checkin)

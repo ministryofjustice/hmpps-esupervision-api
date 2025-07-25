@@ -100,7 +100,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     val notifInOrder = inOrder(notificationService)
     // verify offender checking invite was sent
-    notifInOrder.verify(notificationService).sendMessage(any(), any())
+    notifInOrder.verify(notificationService).sendMessage(any(), any(), any())
 
     Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
 
@@ -136,7 +136,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .returnResult()
 
     // verify a notification to the practitioner was sent
-    notifInOrder.verify(notificationService).sendMessage(any(), any())
+    notifInOrder.verify(notificationService).sendMessage(any(), any(), any())
     notifInOrder.verifyNoMoreInteractions()
 
     val submittedCheckin = offenderCheckinRepository.findByUuid(submitCheckin.responseBody!!.uuid).get()
