@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Size
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.time.Duration
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.UUID
 
 enum class CheckinInterval(val duration: Duration) {
@@ -51,6 +50,4 @@ data class OffenderInfo(
   val firstCheckinDate: LocalDate,
 
   val checkinInterval: CheckinInterval,
-
-  val zoneId: ZoneId = ZoneId.of(System.getenv("TZ") ?: "Europe/London"),
 )

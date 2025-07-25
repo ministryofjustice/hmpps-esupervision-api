@@ -12,8 +12,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRep
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Clock
+import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+
+private val defaultTimeZone = ZoneId.of(System.getenv("TZ") ?: "Europe/London")
 
 @Service
 class OffenderSetupService(
@@ -49,9 +52,8 @@ class OffenderSetupService(
       createdAt = now,
       updatedAt = now,
       status = OffenderStatus.INITIAL,
-      firstCheckin = offenderInfo.firstCheckinDate.atStartOfDay(offenderInfo.zoneId),
+      firstCheckin = offenderInfo.firstCheckinDate.atStartOfDay(defaultTimeZone),
       checkinInterval = offenderInfo.checkinInterval.duration,
-      zoneId = offenderInfo.zoneId,
     )
 
     raiseOnConstraintViolation("contact information already in use") {

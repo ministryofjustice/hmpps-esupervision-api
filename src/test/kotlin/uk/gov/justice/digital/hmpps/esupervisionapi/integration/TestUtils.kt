@@ -72,7 +72,6 @@ fun Offender.Companion.create(
     phoneNumber = phoneNumber,
     firstCheckin = firstCheckinDate,
     checkinInterval = checkinInterval.duration,
-    zoneId = zoneId,
     practitioner = practitioner,
   )
 }

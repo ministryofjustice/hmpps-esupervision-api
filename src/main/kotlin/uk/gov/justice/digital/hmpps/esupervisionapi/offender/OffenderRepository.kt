@@ -23,7 +23,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Optional
 import java.util.UUID
@@ -83,12 +82,6 @@ open class Offender(
   @Column("first_checkin", nullable = true)
   open val firstCheckin: ZonedDateTime? = null,
 
-  /**
-   * Used for scheduling
-   */
-  @Column("zone_id", nullable = false)
-  open val zoneId: ZoneId,
-
   @Column("checkin_interval", nullable = false)
   open val checkinInterval: Duration,
 
@@ -109,7 +102,6 @@ open class Offender(
     photoUrl = resourceLocator.getOffenderPhoto(this),
     firstCheckin = firstCheckin?.toLocalDate(),
     checkinInterval = CheckinInterval.fromDuration(checkinInterval),
-    zoneId = zoneId,
   )
 
   override fun contactMethods(): Iterable<NotificationMethod> {
