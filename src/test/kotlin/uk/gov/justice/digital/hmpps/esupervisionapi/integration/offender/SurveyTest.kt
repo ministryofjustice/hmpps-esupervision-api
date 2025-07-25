@@ -43,7 +43,6 @@ class SurveyTest {
     videoUrl = null,
     autoIdCheck = AutomatedIdVerificationResult.MATCH,
     manualIdCheck = null,
-    notifications = null,
   )
 
   @Test

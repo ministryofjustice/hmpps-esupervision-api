@@ -45,7 +45,6 @@ data class OffenderCheckinDto(
   val videoUrl: URL?,
   val autoIdCheck: AutomatedIdVerificationResult?,
   val manualIdCheck: ManualIdVerificationResult?,
-  val notifications: NotificationResults?,
 ) {
 
   @get:JsonProperty("flaggedResponses")

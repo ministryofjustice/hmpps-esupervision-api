@@ -53,13 +53,6 @@ open class OffenderCheckin(
   @JdbcTypeCode(SqlTypes.JSON)
   open var surveyResponse: Map<String, Object>?,
 
-  /**
-   * Will hold the latest status and/or error of any sent notifications.
-   */
-  @Column("notifications", nullable = true)
-  @JdbcTypeCode(SqlTypes.JSON)
-  open var notifications: NotificationResults?,
-
   @Column("due_date")
   open var dueDate: ZonedDateTime,
 
@@ -84,7 +77,6 @@ open class OffenderCheckin(
     videoUrl = resourceLocator.getCheckinVideo(this),
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
-    notifications = notifications,
   )
 
   companion object {}

@@ -86,15 +86,13 @@ class OffenderCheckinService(
       dueDate = dueDateUTC,
       autoIdCheck = null,
       manualIdCheck = null,
-      notifications = null,
     )
 
     val saved = checkinRepository.save(checkin)
 
     // notify PoP of checkin invite
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
-    val currentResults = this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
-    mergeNotificationResults(saved, currentResults)
+    this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
 
     val savedWithNotificationRefs = checkinRepository.save(saved)
 
@@ -249,12 +247,11 @@ class OffenderCheckinService(
     validateUnscheduledNotification(clock.instant(), checkin)
 
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
-    val currentResults = this.notificationService.sendMessage(
+    this.notificationService.sendMessage(
       inviteMessage,
       checkin.offender,
       SingleNotificationContext(UUID.randomUUID()),
     )
-    mergeNotificationResults(checkin, currentResults)
 
     val saved = checkinRepository.save(checkin)
     return saved.dto(this.s3UploadService)
@@ -269,23 +266,7 @@ class OffenderCheckinService(
     }
 
     private fun validateUnscheduledNotification(now: Instant, checkin: OffenderCheckin) {
-      val notifications = checkin.notifications
-      if (notifications != null && notifications.results.isNotEmpty()) {
-        val latest = notifications.results.maxBy { it.timestamp }.timestamp
-        val now = now.atZone(ZoneId.of("UTC"))
-        val minDelta = Duration.ofMinutes(2)
-        if (Duration.between(latest, now) < minDelta) {
-          throw BadArgumentException("Only one unscheduled notification per $minDelta allowed")
-        }
-      }
-    }
-
-    private fun mergeNotificationResults(checkin: OffenderCheckin, results: NotificationResults) {
-      checkin.notifications = if (checkin.notifications != null) {
-        checkin.notifications!!.copy(results = checkin.notifications!!.results + results.results)
-      } else {
-        results
-      }
+      TODO("not implemented yet")
     }
 
     private val LOG = LoggerFactory.getLogger(this::class.java)

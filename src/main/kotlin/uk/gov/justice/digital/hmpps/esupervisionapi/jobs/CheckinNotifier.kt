@@ -86,9 +86,9 @@ class CheckinNotifier(
 
     for (offender in offenders) {
       try {
-        val checkin = processOffender(offender, context)
+        processOffender(offender, context)
         numProcessed += 1
-        numNotifAttempts += if ((checkin?.notifications?.results?.size ?: 0) > 0) 1 else 0
+        numNotifAttempts += 1
       } catch (e: Exception) {
         LOG.warn("Error processing offender=${offender.uuid}", e)
         numErrors += 1

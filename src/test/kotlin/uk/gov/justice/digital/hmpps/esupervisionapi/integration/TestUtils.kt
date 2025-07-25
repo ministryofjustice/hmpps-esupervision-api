@@ -99,7 +99,6 @@ fun OffenderCheckin.Companion.create(
   createdBy = createdBy,
   status = status,
   surveyResponse = surveyResponse,
-  notifications = notifications,
   dueDate = dueDate,
   autoIdCheck = autoIdCheck,
   manualIdCheck = manualIdCheck,
