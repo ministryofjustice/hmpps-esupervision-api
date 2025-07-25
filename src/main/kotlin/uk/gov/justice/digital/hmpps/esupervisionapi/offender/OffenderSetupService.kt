@@ -15,6 +15,7 @@ import java.time.Clock
 import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import kotlin.jvm.optionals.getOrElse
 
 private val defaultTimeZone = ZoneId.of(System.getenv("TZ") ?: "Europe/London")
 
@@ -100,23 +101,23 @@ class OffenderSetupService(
 
   @Transactional
   fun terminateOffenderSetup(uuid: UUID): OffenderDto {
-    val setup = offenderSetupRepository.findByUuid(uuid)
-    if (setup.isEmpty) {
+    val setup = offenderSetupRepository.findByUuid(uuid).getOrElse {
       throw BadArgumentException("No setup for given uuid=$uuid")
     }
-    if (setup.get().offender.status != OffenderStatus.INITIAL) {
+    if (setup.offender.status != OffenderStatus.INITIAL) {
       throw BadArgumentException("setup already completed or terminated")
     }
 
     val now = clock.instant()
-    val offender = setup.get().offender
+    val offender = setup.offender
     offender.status = OffenderStatus.INACTIVE
     offender.phoneNumber = null
     offender.email = null
     offender.updatedAt = now
 
     val deleted = offenderRepository.save(offender)
-    offenderSetupRepository.delete(setup.get())
+    offenderSetupRepository.delete(setup)
+    LOG.info("terminated setup={}", setup.uuid)
 
     return deleted.dto(this.s3UploadService)
   }

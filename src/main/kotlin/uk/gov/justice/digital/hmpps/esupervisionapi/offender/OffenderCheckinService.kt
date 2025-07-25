@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.CheckinNotifierConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
@@ -24,7 +25,6 @@ import java.net.URL
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
@@ -42,6 +42,7 @@ data class UploadLocationTypes(
 @Service
 class OffenderCheckinService(
   private val clock: Clock,
+  private val checkinNotifierConfig: CheckinNotifierConfiguration,
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
@@ -57,9 +58,8 @@ class OffenderCheckinService(
 
   fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): OffenderCheckinDto {
     val now = clock.instant()
-    val utcZone = ZoneId.of("UTC")
-    val dueDateUTC = createCheckin.dueDate.atStartOfDay(utcZone)
-    if (dueDateUTC.toLocalDate() < now.atZone(utcZone).toLocalDate()) {
+    // we want to allow the due date of 'today'
+    if (createCheckin.dueDate < now.atZone(clock.zone).toLocalDate()) {
       throw BadArgumentException("Due date is in the past: ${createCheckin.dueDate}")
     }
 
@@ -83,7 +83,7 @@ class OffenderCheckinService(
       reviewedBy = null,
       status = CheckinStatus.CREATED,
       surveyResponse = null,
-      dueDate = dueDateUTC,
+      dueDate = createCheckin.dueDate.atStartOfDay(clock.zone),
       autoIdCheck = null,
       manualIdCheck = null,
     )
@@ -119,9 +119,10 @@ class OffenderCheckinService(
     }
 
     val now = clock.instant()
-
-    if (checkin.dueDate.toInstant() < now) {
-      throw InvalidStateTransitionException("Checkin past due date", checkin)
+    val submissionDate = now.atZone(clock.zone).toLocalDate()
+    val cutoff = checkin.dueDate.withZoneSameLocal(clock.zone).plus(checkinNotifierConfig.checkinWindow)
+    if (submissionDate < cutoff.toLocalDate()) {
+      throw InvalidStateTransitionException("Checkin submission past due date", checkin)
     }
     validateCheckinUpdatable(checkin)
 

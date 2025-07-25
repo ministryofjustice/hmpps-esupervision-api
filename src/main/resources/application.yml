@@ -8,6 +8,9 @@ app:
   upload-ttl-minutes: 10
   scheduling:
     checkin-notification:
+      # How long, starting from dueDate, do we accept checkin submissions.
+      # Afterward the checkin's status is updated to EXPIRED.
+      window: 72h
       #cron: "0 0 3,5 * * *"  # Production schedule (3 AM and 5 AM daily)
       cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
 
