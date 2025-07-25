@@ -72,6 +72,14 @@ open class Offender(
   @Column(name = "phone_number", nullable = true, unique = true)
   open var phoneNumber: String? = null,
 
+  /**
+   * Marks the current schedule's date of first checkin. The following checkin
+   * due dates will be calculated based on this property and `checkinInterval`
+   *
+   * When the schedule needs to change, this date will be updated, effectively
+   * marking the start of the new schedule. No checkins for the "old" schedule
+   * will be created.
+   */
   @Column("first_checkin", nullable = true)
   open val firstCheckin: ZonedDateTime? = null,
 
