@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.CheckinNotifierConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
@@ -43,7 +42,6 @@ data class UploadLocationTypes(
 @Service
 class OffenderCheckinService(
   private val clock: Clock,
-  private val checkinNotifierConfig: CheckinNotifierConfiguration,
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
