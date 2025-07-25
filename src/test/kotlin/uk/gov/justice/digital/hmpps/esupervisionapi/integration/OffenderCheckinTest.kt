@@ -18,6 +18,7 @@ import org.springframework.test.web.reactive.server.expectBody
 import org.springframework.test.web.reactive.server.returnResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
@@ -61,6 +62,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
     dateOfBirth = LocalDate.of(1980, 1, 1),
     email = "jim@example.com",
     practitionerId = "alice",
+    firstCheckinDate = LocalDate.now().plusDays(1),
+    checkinInterval = CheckinInterval.WEEKLY,
   )
   var offender: OffenderDto? = null
 
@@ -97,7 +100,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     val notifInOrder = inOrder(notificationService)
     // verify offender checking invite was sent
-    notifInOrder.verify(notificationService).sendMessage(any(), any())
+    notifInOrder.verify(notificationService).sendMessage(any(), any(), any())
 
     Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
 
@@ -133,7 +136,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .returnResult()
 
     // verify a notification to the practitioner was sent
-    notifInOrder.verify(notificationService).sendMessage(any(), any())
+    notifInOrder.verify(notificationService).sendMessage(any(), any(), any())
     notifInOrder.verifyNoMoreInteractions()
 
     val submittedCheckin = offenderCheckinRepository.findByUuid(submitCheckin.responseBody!!.uuid).get()

@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
 import org.springframework.http.HttpStatus.NOT_FOUND
 import org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -33,6 +34,17 @@ class HmppsESupervisionExceptionHandler {
         developerMessage = e.message,
       ),
     )
+
+  @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException::class)
+  fun handleHttpMessageNotReadableException(e: org.springframework.http.converter.HttpMessageNotReadableException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(BAD_REQUEST)
+    .body(
+      ErrorResponse(
+        status = BAD_REQUEST,
+        userMessage = "Invalid request format or content",
+        developerMessage = e.message,
+      ),
+    ).also { log.info("Message not readable: {}", e.message) }
 
   @ExceptionHandler(MissingVideoException::class)
   fun handleMissingVideoException(e: MissingVideoException): ResponseEntity<ErrorResponse> = ResponseEntity

@@ -13,6 +13,8 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-webflux")
   implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8")
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+  implementation("net.javacrumbs.shedlock:shedlock-spring:6.9.2")
+  implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.9.2")
 
   api("software.amazon.awssdk:s3")
   implementation("software.amazon.awssdk:s3:2.31.63")

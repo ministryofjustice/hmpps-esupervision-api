@@ -18,6 +18,9 @@ fun Pageable.toPagination(): Pagination = Pagination(pageNumber, pageSize)
 data class LocationInfo(
   val url: URL,
   val contentType: String,
+  /**
+   * How long the `url` will be valid for.
+   */
   val duration: String,
 )
 
