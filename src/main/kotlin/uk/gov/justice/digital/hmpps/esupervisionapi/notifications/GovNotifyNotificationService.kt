@@ -13,11 +13,6 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 
-enum class NotificationMethodKey {
-  PHONE,
-  EMAIL,
-}
-
 @Service
 class GovNotifyNotificationService(
   private val clock: Clock,
