@@ -12,7 +12,7 @@ import javax.sql.DataSource
 @Profile("!test")
 @EnableSchedulerLock(
   defaultLockAtLeastFor = "PT1M",
-  defaultLockAtMostFor = "PT5M",
+  defaultLockAtMostFor = "PT10M",
 )
 class CheckinNotifierConfiguration {
   @Bean

@@ -55,7 +55,7 @@ class CheckinNotifier(
   @SchedulerLock(
     name = "CheckinNotifier - send notifications",
     lockAtLeastFor = "PT5S",
-    lockAtMostFor = "PT30S",
+    lockAtMostFor = "PT10M",
   )
   @Transactional
   fun process() {
