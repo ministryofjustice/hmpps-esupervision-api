@@ -83,7 +83,7 @@ class OffenderCheckinService(
       reviewedBy = null,
       status = CheckinStatus.CREATED,
       surveyResponse = null,
-      dueDate = createCheckin.dueDate.atStartOfDay(clock.zone),
+      dueDate = createCheckin.dueDate,
       autoIdCheck = null,
       manualIdCheck = null,
     )
@@ -120,8 +120,8 @@ class OffenderCheckinService(
 
     val now = clock.instant()
     val submissionDate = now.atZone(clock.zone).toLocalDate()
-    val cutoff = checkin.dueDate.withZoneSameLocal(clock.zone).plus(checkinWindow)
-    if (cutoff.toLocalDate() <= submissionDate) {
+    val cutoff = checkin.dueDate.plus(checkinWindow)
+    if (cutoff <= submissionDate) {
       throw InvalidStateTransitionException("Checkin submission past due date", checkin)
     }
     validateCheckinUpdatable(checkin)

@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.jobs
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -14,21 +15,19 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
+import java.time.LocalDate
 import java.util.UUID
 
 internal data class NotifierContext(
-  val today: ZonedDateTime,
+  val clock: Clock,
+  val today: LocalDate,
   val notificationLeadTime: Duration,
-  val checkinDate: ZonedDateTime = today.plus(notificationLeadTime),
+  val checkinDate: LocalDate = today.plus(notificationLeadTime),
   val notificationContext: NotificationContext,
 ) {
   fun isCheckinDay(offender: Offender): Boolean {
-    val firstCheckin = offender.firstCheckin?.withZoneSameInstant(ZoneId.of("UTC"))
-    if (firstCheckin != null) {
+    val firstCheckin = offender.firstCheckin
+    if (firstCheckin != null && offender.checkinInterval.toDays() > 0) {
       val delta = Duration.between(firstCheckin, checkinDate)
       return delta.toDays() / offender.checkinInterval.toDays() == 0L
     }
@@ -41,6 +40,7 @@ class CheckinNotifier(
   private val offenderRepository: OffenderRepository,
   private val offenderCheckinService: OffenderCheckinService,
   private val clock: Clock,
+  @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
   val notificationLeadTime: Duration = Duration.ofDays(0)
@@ -66,19 +66,20 @@ class CheckinNotifier(
     LOG.info("processing starts")
 
     val now = clock.instant()
-    val startOfDayUtc: ZonedDateTime = startOfDay(now, ZoneOffset.UTC)
+    val lowerBound = now.atZone(clock.zone).toLocalDate()
 
     val notificationContext = BulkNotificationContext(UUID.randomUUID())
 
     val context = NotifierContext(
-      startOfDayUtc,
+      clock,
+      lowerBound,
       notificationLeadTime,
       notificationContext = notificationContext,
     )
 
     val offenders = offenderRepository.findAllCheckinNotificationCandidates(
-      startOfDayUtc,
-      startOfDayUtc.plusDays(1),
+      lowerBound,
+      lowerBound.plusDays(1),
     )
     var numProcessed = 0
     var numErrors = 0
@@ -114,7 +115,7 @@ class CheckinNotifier(
         CreateCheckinRequest(
           offender.practitioner.uuid,
           offender.uuid,
-          context.checkinDate.toLocalDate(),
+          context.checkinDate,
         ),
         context.notificationContext,
       )
@@ -123,12 +124,6 @@ class CheckinNotifier(
 
     return null
   }
-
-  private fun startOfDay(now: Instant, offset: ZoneOffset): ZonedDateTime = now.atZone(offset)
-    .withHour(0)
-    .withMinute(0)
-    .withSecond(0)
-    .withNano(0)
 
   companion object {
     private val LOG = LoggerFactory.getLogger(CheckinNotifier::class.java)

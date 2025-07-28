@@ -23,7 +23,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZonedDateTime
 import java.util.Optional
 import java.util.UUID
 import java.util.stream.Stream
@@ -80,7 +79,7 @@ open class Offender(
    * will be created.
    */
   @Column("first_checkin", nullable = true)
-  open val firstCheckin: ZonedDateTime? = null,
+  open val firstCheckin: LocalDate? = null,
 
   @Column("checkin_interval", nullable = false)
   open val checkinInterval: Duration,
@@ -100,7 +99,7 @@ open class Offender(
     phoneNumber = phoneNumber,
     createdAt = createdAt,
     photoUrl = resourceLocator.getOffenderPhoto(this),
-    firstCheckin = firstCheckin?.toLocalDate(),
+    firstCheckin = firstCheckin,
     checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   )
 
@@ -147,12 +146,12 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
                         and c.status = 'CREATED')
         """,
   )
-  fun findAllCheckinNotificationCandidates(lowerBoundInclusive: ZonedDateTime, upperBoundExclusive: ZonedDateTime): Stream<Offender>
+  fun findAllCheckinNotificationCandidates(lowerBoundInclusive: LocalDate, upperBoundExclusive: LocalDate): Stream<Offender>
 }
 
 /**
  * When a practitioner adds an offender, a record for the setup process is created.
- * This give us an UUID to use until the actual offender record can be created.
+ * This gives us a UUID to use until the actual offender record can be created.
  */
 @Entity
 @Table(name = "offender_setup")

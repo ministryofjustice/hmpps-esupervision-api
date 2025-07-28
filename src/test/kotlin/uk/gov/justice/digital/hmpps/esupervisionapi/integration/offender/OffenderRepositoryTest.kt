@@ -14,7 +14,6 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZonedDateTime
 
 class OffenderRepositoryTest : IntegrationTestBase() {
 
@@ -25,12 +24,12 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     practitionerRepository.saveAll(listOf(practitionerAlice, practitionerBob))
 
     val now = Instant.now()
-    val today = LocalDate.now().atStartOfDay(ZoneId.of("UTC"))
+    val today = LocalDate.now()
 
-    fun newOffender(name: String, status: OffenderStatus, firstCheckinDat: ZonedDateTime, practitioner: Practitioner = practitionerAlice): Offender = Offender.create(
+    fun newOffender(name: String, status: OffenderStatus, firstCheckinDate: LocalDate, practitioner: Practitioner = practitionerAlice): Offender = Offender.create(
       name = name,
       status = status,
-      firstCheckinDate = today,
+      firstCheckinDate = firstCheckinDate,
       createdAt = now.minus(Duration.ofDays(20)),
       updatedAt = now.minus(Duration.ofDays(10)),
       practitioner = practitioner,
@@ -54,7 +53,7 @@ class OffenderRepositoryTest : IntegrationTestBase() {
   @Test
   @Transactional
   fun `get offenders due for an invite`() {
-    val now = LocalDate.now().atStartOfDay(ZoneId.of("UTC"))
+    val now = LocalDate.now()
     var offenders = offenderRepository.findAllCheckinNotificationCandidates(
       now,
       now.plusDays(1),

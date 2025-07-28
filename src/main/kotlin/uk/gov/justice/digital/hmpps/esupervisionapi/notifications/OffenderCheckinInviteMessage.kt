@@ -3,7 +3,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -24,13 +23,12 @@ data class OffenderCheckinInviteMessage(
     get() = NotificationType.OffenderCheckinInvite
 
   companion object {
-    val LONDON_ZONE = ZoneId.of("Europe/London")
     val DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 
     fun fromCheckin(checkin: OffenderCheckin): OffenderCheckinInviteMessage = OffenderCheckinInviteMessage(
       firstName = checkin.offender.firstName,
       lastName = checkin.offender.lastName,
-      checkinDueDate = checkin.dueDate.withZoneSameLocal(LONDON_ZONE).toLocalDate(),
+      checkinDueDate = checkin.dueDate,
       checkinUuid = checkin.uuid,
     )
   }

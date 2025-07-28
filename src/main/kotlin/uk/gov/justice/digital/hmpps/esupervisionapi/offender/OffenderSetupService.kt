@@ -53,7 +53,7 @@ class OffenderSetupService(
       createdAt = now,
       updatedAt = now,
       status = OffenderStatus.INITIAL,
-      firstCheckin = offenderInfo.firstCheckinDate.atStartOfDay(defaultTimeZone),
+      firstCheckin = offenderInfo.firstCheckinDate,
       checkinInterval = offenderInfo.checkinInterval.duration,
     )
 

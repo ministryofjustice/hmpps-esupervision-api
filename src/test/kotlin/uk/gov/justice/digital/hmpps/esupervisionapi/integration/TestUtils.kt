@@ -13,7 +13,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZonedDateTime
 import java.util.UUID
 
 fun createOffenderInfo(
@@ -47,7 +46,7 @@ fun Practitioner.Companion.create(name: String): Practitioner = Practitioner(
 fun Offender.Companion.create(
   name: String,
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
-  firstCheckinDate: ZonedDateTime,
+  firstCheckinDate: LocalDate,
   checkinInterval: CheckinInterval = CheckinInterval.WEEKLY,
   zoneId: ZoneId = ZoneId.of("Europe/London"),
   status: OffenderStatus = OffenderStatus.INITIAL,
@@ -86,7 +85,7 @@ fun OffenderCheckin.Companion.create(
   status: CheckinStatus = CheckinStatus.CREATED,
   surveyResponse: Map<String, Object>? = null,
   notifications: NotificationResults? = null,
-  dueDate: ZonedDateTime = ZonedDateTime.now(ZoneId.of("UTC")),
+  dueDate: LocalDate = LocalDate.now(),
   autoIdCheck: AutomatedIdVerificationResult? = null,
   manualIdCheck: ManualIdVerificationResult? = null,
 ): OffenderCheckin = OffenderCheckin(

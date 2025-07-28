@@ -32,7 +32,7 @@ class SurveyTest {
   val checkinTemplate = OffenderCheckinDto(
     UUID.randomUUID(),
     status = CheckinStatus.SUBMITTED,
-    dueDate = LocalDate.now().atStartOfDay(ZoneId.of("UTC")),
+    dueDate = LocalDate.now(),
     offender = offender,
     submittedOn = Instant.now(),
     surveyResponse = mapOf(),

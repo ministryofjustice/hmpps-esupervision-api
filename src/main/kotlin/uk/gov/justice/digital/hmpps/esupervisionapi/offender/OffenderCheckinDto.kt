@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
 import java.net.URL
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.UUID
 
@@ -32,7 +33,7 @@ typealias SurveyContents = Map<String, Object>
 data class OffenderCheckinDto(
   val uuid: UUID,
   val status: CheckinStatus,
-  val dueDate: ZonedDateTime,
+  val dueDate: LocalDate,
   val offender: OffenderDto,
   val submittedOn: Instant?,
   val surveyResponse: SurveyContents?,
