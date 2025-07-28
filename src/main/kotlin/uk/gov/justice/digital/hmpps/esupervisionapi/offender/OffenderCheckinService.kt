@@ -25,6 +25,7 @@ import java.net.URL
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.Period
 import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
@@ -120,7 +121,7 @@ class OffenderCheckinService(
 
     val now = clock.instant()
     val submissionDate = now.atZone(clock.zone).toLocalDate()
-    val cutoff = checkin.dueDate.plus(checkinWindow)
+    val cutoff = checkin.dueDate.plus(Period.ofDays(checkinWindow.toDays().toInt()))
     if (cutoff <= submissionDate) {
       throw InvalidStateTransitionException("Checkin submission past due date", checkin)
     }
