@@ -11,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
@@ -148,6 +149,10 @@ class OffenderCheckinService(
     // notify practitioner that checkin was submitted
     val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin)
     this.notificationService.sendMessage(submissionMessage, checkin.createdBy, SingleNotificationContext(UUID.randomUUID()))
+
+    // notify PoP that checkin was received
+    val popConfirmationMessage = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
+    this.notificationService.sendMessage(popConfirmationMessage, checkin.offender, SingleNotificationContext(UUID.randomUUID()))
 
     return checkin.dto(this.s3UploadService)
   }
