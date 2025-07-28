@@ -74,7 +74,7 @@ class OffenderCheckinResource(
     if (bindingResult.hasErrors()) {
       throw intoResponseStatusException(bindingResult)
     }
-    val checkin = offenderCheckinService.createCheckin(createCheckin)
+    val checkin = offenderCheckinService.createCheckin(createCheckin, SingleNotificationContext(UUID.randomUUID()))
     return ResponseEntity.ok(checkin)
   }
 

@@ -8,16 +8,20 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
-import java.time.Instant
+import java.time.Clock
+import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import kotlin.jvm.optionals.getOrElse
+
+private val defaultTimeZone = ZoneId.of(System.getenv("TZ") ?: "Europe/London")
 
 @Service
 class OffenderSetupService(
+  private val clock: Clock,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
@@ -37,7 +41,7 @@ class OffenderSetupService(
     val practitioner = practitionerRepository.findByUuid(offenderInfo.practitionerId)
       .orElseThrow { BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found") }
 
-    val now = Instant.now()
+    val now = clock.instant()
     val offender = Offender(
       uuid = UUID.randomUUID(),
       firstName = offenderInfo.firstName,
@@ -49,6 +53,8 @@ class OffenderSetupService(
       createdAt = now,
       updatedAt = now,
       status = OffenderStatus.INITIAL,
+      firstCheckin = offenderInfo.firstCheckinDate,
+      checkinInterval = offenderInfo.checkinInterval.duration,
     )
 
     raiseOnConstraintViolation("contact information already in use") {
@@ -78,7 +84,7 @@ class OffenderSetupService(
       throw InvalidOffenderSetupState("No uploaded photo offender for given setup uuid=$uuid", setup.get())
     }
 
-    val now = Instant.now()
+    val now = clock.instant()
     val offender = setup.get().offender
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = now
@@ -88,30 +94,30 @@ class OffenderSetupService(
 
     // send registration confirmation message to PoP
     val confirmationMessage = RegistrationConfirmationMessage.fromSetup(setup.get())
-    this.notificationService.sendMessage(confirmationMessage, offender)
+    this.notificationService.sendMessage(confirmationMessage, offender, SingleNotificationContext(UUID.randomUUID()))
 
     return saved.dto(this.s3UploadService)
   }
 
   @Transactional
   fun terminateOffenderSetup(uuid: UUID): OffenderDto {
-    val setup = offenderSetupRepository.findByUuid(uuid)
-    if (setup.isEmpty) {
+    val setup = offenderSetupRepository.findByUuid(uuid).getOrElse {
       throw BadArgumentException("No setup for given uuid=$uuid")
     }
-    if (setup.get().offender.status != OffenderStatus.INITIAL) {
+    if (setup.offender.status != OffenderStatus.INITIAL) {
       throw BadArgumentException("setup already completed or terminated")
     }
 
-    val now = Instant.now()
-    val offender = setup.get().offender
+    val now = clock.instant()
+    val offender = setup.offender
     offender.status = OffenderStatus.INACTIVE
     offender.phoneNumber = null
     offender.email = null
     offender.updatedAt = now
 
     val deleted = offenderRepository.save(offender)
-    offenderSetupRepository.delete(setup.get())
+    offenderSetupRepository.delete(setup)
+    LOG.info("terminated setup={}", setup.uuid)
 
     return deleted.dto(this.s3UploadService)
   }

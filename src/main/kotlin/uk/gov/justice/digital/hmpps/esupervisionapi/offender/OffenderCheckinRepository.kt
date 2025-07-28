@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Instant
+import java.time.LocalDate
 import java.util.Optional
 import java.util.UUID
 
@@ -53,7 +54,7 @@ open class OffenderCheckin(
   open var surveyResponse: Map<String, Object>?,
 
   @Column("due_date")
-  open var dueDate: Instant,
+  open var dueDate: LocalDate,
 
   @Column("id_check_auto", nullable = true)
   @Enumerated(EnumType.STRING)
@@ -77,6 +78,8 @@ open class OffenderCheckin(
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
   )
+
+  companion object {}
 }
 
 @Repository

@@ -12,6 +12,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.EntityExchangeResult
 import org.springframework.test.web.reactive.server.WebTestClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
@@ -51,7 +52,10 @@ class OffenderSetupTest : IntegrationTestBase() {
    */
   @Test
   fun `successfully add an offender to the system`() {
-    val offenderInfo = createOffenderInfo()
+    val offenderInfo = createOffenderInfo(
+      firstCheckinDate = LocalDate.now(),
+      checkinInterval = CheckinInterval.WEEKLY,
+    )
     val setup = setupStartRequest(offenderInfo)
       .exchange()
       .expectStatus().isOk
@@ -74,7 +78,10 @@ class OffenderSetupTest : IntegrationTestBase() {
 
   @Test
   fun `adding an offender fails in various ways`() {
-    val offenderInfo = createOffenderInfo()
+    val offenderInfo = createOffenderInfo(
+      firstCheckinDate = LocalDate.now(),
+      checkinInterval = CheckinInterval.WEEKLY,
+    )
     val setupOK = setupStartRequest(offenderInfo)
       .exchange()
       .expectStatus().isOk
@@ -122,7 +129,10 @@ class OffenderSetupTest : IntegrationTestBase() {
    */
   @Test
   fun `terminating an offender setup`() {
-    val offenderInfo = createOffenderInfo()
+    val offenderInfo = createOffenderInfo(
+      firstCheckinDate = LocalDate.now(),
+      checkinInterval = CheckinInterval.WEEKLY,
+    )
     val setupOK = setupStartRequest(offenderInfo)
       .exchange()
       .expectStatus().isOk
@@ -165,23 +175,3 @@ class OffenderSetupTest : IntegrationTestBase() {
       .thenReturn(URI("https://the-bucket/offender-1").toURL())
   }
 }
-
-fun createOffenderInfo() = OffenderInfo(
-  UUID.randomUUID(),
-  "alice",
-  "Bob",
-  "Offerman",
-  LocalDate.of(1970, 1, 1),
-  "bob@example.com",
-)
-
-/**
- * Creates an example practitioner instance. `name` should be unique.
- */
-fun Practitioner.Companion.create(name: String): Practitioner = Practitioner(
-  name.lowercase(),
-  name,
-  "Practitioner",
-  "${name.lowercase()}@example.com",
-  roles = listOf(),
-)

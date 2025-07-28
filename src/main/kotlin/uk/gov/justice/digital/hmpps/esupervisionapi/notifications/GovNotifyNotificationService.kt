@@ -5,43 +5,88 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTemplateConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResultSummary
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
 import uk.gov.service.notify.NotificationClientApi
-import java.util.UUID
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
 
 @Service
 class GovNotifyNotificationService(
+  private val clock: Clock,
   private val notifyClient: NotificationClientApi,
   private val appConfig: AppConfig,
   private val notificationsConfig: MessageTemplateConfig,
 ) : NotificationService {
-  override fun sendMessage(message: Message, recipient: Contactable) {
-    val reference = UUID.randomUUID().toString()
 
-    recipient.contactMethods().forEach {
-      dispatchNotification(it, reference, message)
+  override fun sendMessage(message: Message, recipient: Contactable, context: NotificationContext): NotificationResults {
+    val now = clock.instant()
+    val notificationRefs = recipient.contactMethods().mapNotNull {
+      dispatchNotification(it, context, message, now)
     }
+    return NotificationResults(notificationRefs)
   }
 
-  fun dispatchNotification(method: NotificationMethod, reference: String, message: Message) {
+  fun dispatchNotification(method: NotificationMethod, context: NotificationContext, message: Message, now: Instant): NotificationResultSummary? {
     val templateId = this.notificationsConfig.templatesFor(method).getTemplate(message.messageType)
     val personalisation = message.personalisationData(this.appConfig)
-
     try {
-      when (method) {
-        is PhoneNumber -> {
-          val smsResponse = this.notifyClient.sendSms(templateId, method.phoneNumber, personalisation, reference)
-        }
-        is Email -> {
-          val emailResponse = this.notifyClient.sendEmail(templateId, method.email, personalisation, reference)
-        }
-      }
+      return method.notify(this.notifyClient, context, now, templateId, personalisation)
     } catch (ex: Exception) {
       // log failure and continue
-      LOGGER.error("Failed to send notification message", ex)
+      LOGGER.warn("Failed to send notification message", ex)
     }
+    return null
   }
 
   companion object {
     val LOGGER: Logger = LoggerFactory.getLogger(this::class.java)
   }
+}
+
+private fun NotificationMethod.notify(
+  client: NotificationClientApi,
+  context: NotificationContext,
+  now: Instant,
+  templateId: String,
+  personalisation: Map<String, Any?>,
+): NotificationResultSummary = when (this) {
+  is PhoneNumber -> this.notify(client, context, now, templateId, personalisation)
+  is Email -> this.notify(client, context, now, templateId, personalisation)
+}
+
+private fun PhoneNumber.notify(
+  client: NotificationClientApi,
+  context: NotificationContext,
+  now: Instant,
+  templateId: String,
+  personalisation: Map<String, Any?>,
+): NotificationResultSummary {
+  val response = client.sendSms(templateId, phoneNumber, personalisation, context.reference)
+  return NotificationResultSummary(
+    response.notificationId,
+    context,
+    now.atZone(ZoneId.of("UTC")),
+    null,
+    null,
+  )
+}
+
+private fun Email.notify(
+  client: NotificationClientApi,
+  context: NotificationContext,
+  now: Instant,
+  templateId: String,
+  personalisation: Map<String, Any?>,
+): NotificationResultSummary {
+  val response = client.sendEmail(templateId, email, personalisation, context.reference)
+  return NotificationResultSummary(
+    response.notificationId,
+    context,
+    now.atZone(ZoneId.of("UTC")),
+    null,
+    null,
+  )
 }

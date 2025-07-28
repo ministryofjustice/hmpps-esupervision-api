@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
@@ -21,9 +22,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.net.URL
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
+import java.time.Period
 import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
@@ -40,12 +42,14 @@ data class UploadLocationTypes(
 
 @Service
 class OffenderCheckinService(
+  private val clock: Clock,
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
   private val notificationService: NotificationService,
   @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
+  @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
   fun getCheckin(uuid: UUID): Optional<OffenderCheckinDto> {
@@ -53,10 +57,10 @@ class OffenderCheckinService(
     return checkin.map { it.dto(this.s3UploadService) }
   }
 
-  fun createCheckin(createCheckin: CreateCheckinRequest): OffenderCheckinDto {
-    val now = Instant.now()
-    val reqDueDate = Instant.from(createCheckin.dueDate.atStartOfDay(ZoneId.of("UTC")))
-    if (reqDueDate < now) {
+  fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): OffenderCheckinDto {
+    val now = clock.instant()
+    // we want to allow the due date of 'today'
+    if (createCheckin.dueDate < now.atZone(clock.zone).toLocalDate()) {
       throw BadArgumentException("Due date is in the past: ${createCheckin.dueDate}")
     }
 
@@ -80,7 +84,7 @@ class OffenderCheckinService(
       reviewedBy = null,
       status = CheckinStatus.CREATED,
       surveyResponse = null,
-      dueDate = reqDueDate,
+      dueDate = createCheckin.dueDate,
       autoIdCheck = null,
       manualIdCheck = null,
     )
@@ -89,9 +93,11 @@ class OffenderCheckinService(
 
     // notify PoP of checkin invite
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(inviteMessage, checkin.offender)
+    this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
 
-    return saved.dto(this.s3UploadService)
+    val savedWithNotificationRefs = checkinRepository.save(saved)
+
+    return savedWithNotificationRefs.dto(this.s3UploadService)
   }
 
   /**
@@ -113,10 +119,11 @@ class OffenderCheckinService(
       throw BadArgumentException("Offender with uuid=${checkin.uuid} has status ${offender.status}")
     }
 
-    val now = Instant.now()
-
-    if (checkin.dueDate < now) {
-      throw InvalidStateTransitionException("Checkin past due date", checkin)
+    val now = clock.instant()
+    val submissionDate = now.atZone(clock.zone).toLocalDate()
+    val cutoff = checkin.dueDate.plus(Period.ofDays(checkinWindow.toDays().toInt()))
+    if (cutoff <= submissionDate) {
+      throw InvalidStateTransitionException("Checkin submission past due date", checkin)
     }
     validateCheckinUpdatable(checkin)
 
@@ -137,7 +144,7 @@ class OffenderCheckinService(
 
     // notify practitioner that checkin was submitted
     val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(submissionMessage, checkin.createdBy)
+    this.notificationService.sendMessage(submissionMessage, checkin.createdBy, SingleNotificationContext(UUID.randomUUID()))
 
     return checkin.dto(this.s3UploadService)
   }
@@ -222,12 +229,46 @@ class OffenderCheckinService(
     return checkinRepository.save(checkin).dto(this.s3UploadService)
   }
 
+  /**
+   * This would be called to trigger a checkin notification (for the offender) outside
+   * the periodically executing job. For example an offender was just added
+   * and first checkin is supposed to happen today (likely after the job already finished).
+   *
+   * We require the checkin record as that's what the notification is about and
+   * that's where we store notification references which will allow us to
+   * retrieve the notification status from the provider (e.g. GOV.UK Notify)
+   */
+  fun unscheduledNotification(checkinUuid: UUID): OffenderCheckinDto {
+    val checkin = checkinRepository.findByUuid(checkinUuid).getOrElse {
+      throw BadArgumentException("Checkin=$checkinUuid not found")
+    }
+    if (checkin.offender.status == OffenderStatus.VERIFIED) {
+      throw BadArgumentException("Unscheduled notification for offender of status ${checkin.offender.status}")
+    }
+    validateCheckinUpdatable(checkin)
+    validateUnscheduledNotification(clock.instant(), checkin)
+
+    val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
+    this.notificationService.sendMessage(
+      inviteMessage,
+      checkin.offender,
+      SingleNotificationContext(UUID.randomUUID()),
+    )
+
+    val saved = checkinRepository.save(checkin)
+    return saved.dto(this.s3UploadService)
+  }
+
   companion object {
     // checkin has been SUBMITTED so we no longer allow to overwrite the associated files
     private fun validateCheckinUpdatable(checkin: OffenderCheckin) {
       if (checkin.status != CheckinStatus.CREATED) {
         throw BadArgumentException("You can no longer update or add photos/videos to checkin with uuid=${checkin.uuid}")
       }
+    }
+
+    private fun validateUnscheduledNotification(now: Instant, checkin: OffenderCheckin) {
+      TODO("not implemented yet")
     }
 
     private val LOG = LoggerFactory.getLogger(this::class.java)

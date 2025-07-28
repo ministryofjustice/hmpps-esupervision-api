@@ -19,6 +19,9 @@ Authorization: Bearer {{hmpps_auth.token}}
   "lastName": "Bronson",
   "dateOfBirth": "1990-01-30",
   "email": "barry@example.com"
+  "firstCheckinDate": "2025-07-25",
+  "checkinInterval": "WEEKLY",
+  "zoneId": "Europe/London"
 }
 
 
@@ -61,7 +64,7 @@ Authorization: Bearer {{hmpps_auth.token}}
 
 
 ### Let's verify we created an offender record
-GET {{HOST}}/offenders
+GET {{HOST}}/offenders?page=0&size=100&practitionerUuid={{practitioner_uuid}}
 Authorization: Bearer {{hmpps_auth.token}}
 Content-Type: application/json
 

@@ -49,7 +49,7 @@ Authorization: Bearer {{hmpps_auth.token}}
 
 > {%
     if (response.status === 200) {
-        const uploadUrl = response.body["locationInfo"]["url"]
+        const uploadUrl = response.body["video"]["url"]
         client.log("upload url: ", uploadUrl)
         client.global.set("checkinVideoUploadUrl", uploadUrl)
     }
