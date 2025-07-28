@@ -13,7 +13,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 
 class OffenderRepositoryTest : IntegrationTestBase() {
 
