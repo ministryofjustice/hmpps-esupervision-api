@@ -16,20 +16,22 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
 
 internal data class NotifierContext(
   val clock: Clock,
   val today: LocalDate,
-  val notificationLeadTime: Duration,
+  val notificationLeadTime: Period = Period.ofDays(0),
   val checkinDate: LocalDate = today.plus(notificationLeadTime),
   val notificationContext: NotificationContext,
 ) {
   fun isCheckinDay(offender: Offender): Boolean {
     val firstCheckin = offender.firstCheckin
     if (firstCheckin != null && offender.checkinInterval.toDays() > 0) {
-      val delta = Duration.between(firstCheckin, checkinDate)
-      return delta.toDays() / offender.checkinInterval.toDays() == 0L
+      val delta = Period.between(firstCheckin, checkinDate)
+      val interval = offender.checkinInterval.toDays()
+      return delta.days % interval == 0L
     }
     return false
   }
@@ -43,7 +45,7 @@ class CheckinNotifier(
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
-  val notificationLeadTime: Duration = Duration.ofDays(0)
+  val notificationLeadTime: Period = Period.ofDays(0)
 
   /**
    * This method is meant to be called via a scheduling mechanism and not directly.
