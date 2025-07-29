@@ -13,12 +13,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
+import java.time.Clock
 import java.time.Duration
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
 
 @Service
 class OffenderService(
+  private val clock: Clock,
   private val offenderRepository: OffenderRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
@@ -63,15 +65,7 @@ class OffenderService(
     val offender = offenderRepository.findByUuid(uuid).getOrElse {
       throw ResourceNotFoundException("Offender not found for uuid: $uuid")
     }
-    if (offender.status == OffenderStatus.INACTIVE) {
-      throw BadArgumentException("Offender is inactive, cannot update details")
-    }
-    if (details.email.isNullOrEmpty() && details.phoneNumber.isNullOrEmpty()) {
-      throw BadArgumentException("email and phone number cannot both be null or empty")
-    }
-    if (offender.status == OffenderStatus.VERIFIED && details.firstCheckin == null) {
-      throw BadArgumentException("first checkin date required when offender status is VERIFIED")
-    }
+    details.validate(offender, clock)
 
     LOG.info("Updating offender={} details with {}", uuid, details)
     offender.applyUpdate(details)
@@ -104,4 +98,24 @@ enum class DeleteResult {
   DELETED,
   NO_RECORD,
   RECORD_IN_USE,
+}
+
+internal fun OffenderDetailsUpdate.validate(
+  offender: Offender,
+  clock: Clock,
+) {
+  if (offender.status == OffenderStatus.INACTIVE) {
+    throw BadArgumentException("Offender is inactive, cannot update details")
+  }
+  if (this.email.isNullOrEmpty() && this.phoneNumber.isNullOrEmpty()) {
+    throw BadArgumentException("email and phone number cannot both be null or empty")
+  }
+  if (offender.status == OffenderStatus.VERIFIED && this.firstCheckin == null) {
+    throw BadArgumentException("first checkin date required when offender status is VERIFIED")
+  }
+  val now = clock.instant()
+  // we want to allow the due date of 'today'
+  if (this.firstCheckin != null && this.firstCheckin < now.atZone(clock.zone).toLocalDate()) {
+    throw BadArgumentException("First checkin date is in the past: ${this.firstCheckin}")
+  }
 }

@@ -67,5 +67,5 @@ class OffenderResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @GetMapping("/{uuid}/upload_location")
-  fun getPhotoUploadLocation(@PathVariable uuid: UUID, @RequestParam contentType: String): ResponseEntity<LocationInfo> = ResponseEntity.ok(offenderService.photoUploadLocation(uuid, contentType))
+  fun getPhotoUploadLocation(@PathVariable uuid: UUID, @RequestParam(name = "content-type") contentType: String): ResponseEntity<LocationInfo> = ResponseEntity.ok(offenderService.photoUploadLocation(uuid, contentType))
 }
