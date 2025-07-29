@@ -6,15 +6,17 @@ import java.util.UUID
 
 data class PractitionerCheckinSubmittedMessage(
   val practitionerFirstName: String,
+  val practitionerLastName: String,
   val offenderFirstName: String,
   val offenderLastName: String,
+  val numFlags: Int,
   val checkinUuid: UUID,
 ) : Message {
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
-    "practitionerFirstName" to practitionerFirstName,
-    "offenderFirstName" to offenderFirstName,
-    "offenderLastName" to offenderLastName,
-    "checkinDashboardUrl" to appConfig.checkinDashboardUrl(checkinUuid).toString(),
+    "practitionerName" to "$practitionerFirstName $practitionerLastName",
+    "name" to "$offenderFirstName $offenderLastName",
+    "number" to numFlags.toString(),
+    "dashboardSubmissionUrl" to appConfig.checkinDashboardUrl(checkinUuid).toString(),
   )
 
   override val messageType: NotificationType
@@ -23,8 +25,10 @@ data class PractitionerCheckinSubmittedMessage(
   companion object {
     fun fromCheckin(checkin: OffenderCheckin) = PractitionerCheckinSubmittedMessage(
       practitionerFirstName = checkin.createdBy.firstName,
-      offenderFirstName = checkin.createdBy.firstName,
-      offenderLastName = checkin.createdBy.lastName,
+      practitionerLastName = checkin.createdBy.lastName,
+      offenderFirstName = checkin.offender.firstName,
+      offenderLastName = checkin.offender.lastName,
+      numFlags = 0, // TODO: get from checkin
       checkinUuid = checkin.uuid,
     )
   }
