@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.util.UUID
 
@@ -62,4 +63,9 @@ class OffenderResource(
     @PathVariable uuid: UUID,
     @RequestBody @Valid details: OffenderDetailsUpdate,
   ): ResponseEntity<OffenderDto> = ResponseEntity.ok(offenderService.updateDetails(uuid, details))
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @GetMapping("/{uuid}/upload_location")
+  fun getPhotoUploadLocation(@PathVariable uuid: UUID, @RequestParam contentType: String): ResponseEntity<LocationInfo> = ResponseEntity.ok(offenderService.photoUploadLocation(uuid, contentType))
 }

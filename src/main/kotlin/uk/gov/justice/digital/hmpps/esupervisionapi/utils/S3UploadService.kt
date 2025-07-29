@@ -137,6 +137,26 @@ class S3UploadService(
     return s3Presigner.presignPutObject(presignRequest).url()
   }
 
+  fun generatePresignedUploadUrl(
+    offender: Offender,
+    contentType: String = "application/octet-stream",
+    duration: Duration,
+  ): URL = // we use the `SetupPhotoKey` as that places the image under the 'reference photo' key
+    generatePresignedUploadUrl(SetupPhotoKey(offender.uuid), contentType, duration)
+
+  private fun generatePresignedUploadUrl(
+    keyable: S3Keyable,
+    contentType: String = "application/octet-stream",
+    duration: Duration,
+  ): URL {
+    val putRequest = putObjectRequest(bucketFor(keyable), keyable.toKey(), contentType)
+    val presignRequest = PutObjectPresignRequest.builder()
+      .putObjectRequest(putRequest)
+      .signatureDuration(duration)
+      .build()
+    return s3Presigner.presignPutObject(presignRequest).url()
+  }
+
   private fun bucketFor(key: S3Keyable): String {
     when (key) {
       is SetupPhotoKey -> {
