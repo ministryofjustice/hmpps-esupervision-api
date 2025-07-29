@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import jakarta.transaction.Transactional
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
@@ -7,6 +8,7 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.util.UUID
@@ -41,6 +43,35 @@ class OffenderService(
       result = DeleteResult.DELETED
     }
     return result
+  }
+
+  fun getOffender(uuid: UUID): OffenderDto {
+    val offenderFound = offenderRepository.findByUuid(uuid)
+    return offenderFound.map { it.dto(this.s3UploadService) }.getOrElse {
+      throw ResourceNotFoundException("Offender not found for uuid: $uuid")
+    }
+  }
+
+  @Transactional
+  fun updateDetails(uuid: UUID, details: OffenderDetailsUpdate): OffenderDto {
+    val offender = offenderRepository.findByUuid(uuid).getOrElse {
+      throw ResourceNotFoundException("Offender not found for uuid: $uuid")
+    }
+    if (offender.status == OffenderStatus.INACTIVE) {
+      throw BadArgumentException("Offender is inactive, cannot update details")
+    }
+    if (details.email.isNullOrEmpty() && details.phoneNumber.isNullOrEmpty()) {
+      throw BadArgumentException("email and phone number cannot both be null or empty")
+    }
+    if (offender.status == OffenderStatus.VERIFIED && details.firstCheckin == null) {
+      throw BadArgumentException( "first checkin date required when offender status is VERIFIED")
+    }
+
+    LOG.info("Updating offender={} details with {}", uuid, details)
+    offender.applyUpdate(details)
+    return offenderRepository.save(offender).dto(
+      this.s3UploadService,
+    )
   }
 
   companion object {
