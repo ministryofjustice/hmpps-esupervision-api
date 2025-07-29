@@ -3,16 +3,22 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
+import java.util.UUID
 
 @RestController
 @RequestMapping("/offenders", produces = ["application/json"])
@@ -39,4 +45,27 @@ class OffenderResource(
       ),
     )
   }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @Operation(summary = "Returns an offender record")
+  @GetMapping("/{uuid}")
+  fun getOffender(@PathVariable uuid: UUID): ResponseEntity<OffenderDto> = ResponseEntity.ok(offenderService.getOffender(uuid))
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @Operation(
+    summary = "Updates offender details",
+    description = """The request body represents the new offender details. All fields need to be set to their desired value.""",
+  )
+  @PostMapping("/{uuid}/details")
+  fun updateDetails(
+    @PathVariable uuid: UUID,
+    @RequestBody @Valid details: OffenderDetailsUpdate,
+  ): ResponseEntity<OffenderDto> = ResponseEntity.ok(offenderService.updateDetails(uuid, details))
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @GetMapping("/{uuid}/upload_location")
+  fun getPhotoUploadLocation(@PathVariable uuid: UUID, @RequestParam(name = "content-type") contentType: String): ResponseEntity<LocationInfo> = ResponseEntity.ok(offenderService.photoUploadLocation(uuid, contentType))
 }

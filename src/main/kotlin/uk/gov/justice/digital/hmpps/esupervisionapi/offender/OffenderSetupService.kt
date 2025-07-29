@@ -12,12 +12,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRep
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Clock
-import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
-
-private val defaultTimeZone = ZoneId.of(System.getenv("TZ") ?: "Europe/London")
 
 @Service
 class OffenderSetupService(
@@ -130,7 +127,7 @@ class OffenderSetupService(
 /**
  * We attempt to perform an update (save) operation and want
  * to surface constraint violations as 4xx errors in to the client.
- * Ideally with useful error message, but we'd need to parser
+ * Ideally with a useful error message, but we'd need to parser
  * the constraint name from the exception message, which
  * can look different in different databases.
  */

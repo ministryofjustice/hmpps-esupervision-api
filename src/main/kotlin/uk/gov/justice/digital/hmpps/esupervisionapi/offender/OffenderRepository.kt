@@ -110,6 +110,14 @@ open class Offender(
     return methods
   }
 
+  fun applyUpdate(update: OffenderDetailsUpdate) {
+    this.firstName = update.firstName
+    this.lastName = update.lastName
+    this.email = update.email
+    this.phoneNumber = update.phoneNumber
+    this.updatedAt = Instant.now()
+  }
+
   companion object {}
 }
 

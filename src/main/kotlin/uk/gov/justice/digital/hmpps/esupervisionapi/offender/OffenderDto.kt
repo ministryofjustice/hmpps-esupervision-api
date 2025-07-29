@@ -35,3 +35,17 @@ data class OffenderSetupDto(
   val offender: UUID,
   val createdAt: Instant,
 )
+
+/**
+ * Represents properties updatable by the practitioner.
+ */
+data class OffenderDetailsUpdate(
+  @Schema(description = "Id of the user requesting the change", required = true)
+  val requestedBy: String,
+  val firstName: String,
+  val lastName: String,
+  val email: String? = null,
+  val phoneNumber: String? = null,
+  @JsonDeserialize(using = LocalDateDeserializer::class) val firstCheckin: LocalDate?,
+  val checkinInterval: CheckinInterval,
+)
