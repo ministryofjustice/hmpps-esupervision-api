@@ -38,7 +38,7 @@ class PractitionerSetupTest : IntegrationTestBase() {
     Assertions.assertThat(location).isNotNull
 
     val fetchResult = webTestClient.get()
-      .uri(location)
+      .uri(location!!)
       .headers(practitionerCreatorRoleAuthHeaders)
       .exchange()
       .expectStatus().isOk

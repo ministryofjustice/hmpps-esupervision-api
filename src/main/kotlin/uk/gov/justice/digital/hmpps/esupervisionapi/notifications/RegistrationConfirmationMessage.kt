@@ -15,7 +15,7 @@ data class RegistrationConfirmationMessage(
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
     "name" to "$firstName $lastName",
     "date" to DATE_FORMATTER.format(firstCheckinDate),
-    "frequency" to formatCheckinFrequency(checkinInterval)
+    "frequency" to formatCheckinFrequency(checkinInterval),
   )
 
   override val messageType: NotificationType
