@@ -11,7 +11,6 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
@@ -225,7 +224,7 @@ class S3UploadService(
   }
 
   override fun getCheckinVideo(checkin: OffenderCheckin): URL? {
-    if (checkin.status == CheckinStatus.SUBMITTED || checkin.status == CheckinStatus.REVIEWED) {
+    if (checkin.submittedAt != null) {
       val videoKey = CheckinVideoKey(checkin.uuid)
       return presignedGetUrlFor(videoKey)
     } else {
