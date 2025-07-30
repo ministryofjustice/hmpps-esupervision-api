@@ -79,10 +79,10 @@ open class Offender(
    * will be created.
    */
   @Column("first_checkin", nullable = true)
-  open val firstCheckin: LocalDate? = null,
+  open var firstCheckin: LocalDate? = null,
 
   @Column("checkin_interval", nullable = false)
-  open val checkinInterval: Duration,
+  open var checkinInterval: Duration,
 
   @ManyToOne(cascade = [CascadeType.DETACH], fetch = FetchType.LAZY)
   @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
@@ -101,6 +101,7 @@ open class Offender(
     photoUrl = resourceLocator.getOffenderPhoto(this),
     firstCheckin = firstCheckin,
     checkinInterval = CheckinInterval.fromDuration(checkinInterval),
+    practitioner = practitioner.uuid,
   )
 
   override fun contactMethods(): Iterable<NotificationMethod> {
@@ -118,7 +119,15 @@ open class Offender(
     this.updatedAt = Instant.now()
   }
 
+  fun canTransitionTo(newStatus: OffenderStatus): Boolean = offenderStatusTransition(status, newStatus)
+
   companion object {}
+}
+
+fun offenderStatusTransition(current: OffenderStatus, new: OffenderStatus): Boolean = when (current) {
+  OffenderStatus.INITIAL -> true
+  OffenderStatus.VERIFIED -> new != OffenderStatus.INITIAL
+  OffenderStatus.INACTIVE -> false
 }
 
 @Repository

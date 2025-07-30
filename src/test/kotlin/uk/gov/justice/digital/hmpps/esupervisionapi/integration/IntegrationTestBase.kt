@@ -10,6 +10,7 @@ import org.springframework.test.web.reactive.server.WebTestClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
@@ -36,6 +37,8 @@ abstract class IntegrationTestBase {
   @Autowired protected lateinit var offenderRepository: OffenderRepository
 
   @Autowired protected lateinit var checkinRepository: OffenderCheckinRepository
+
+  @Autowired protected lateinit var offenderEventLogRepository: OffenderEventLogRepository
 
   internal fun setAuthorisation(
     username: String? = "AUTH_ADM",

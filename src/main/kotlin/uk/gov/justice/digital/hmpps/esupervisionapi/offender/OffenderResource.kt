@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Max
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -17,11 +18,13 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.util.UUID
 
 @RestController
 @RequestMapping("/offenders", produces = ["application/json"])
+@Validated
 class OffenderResource(
   private val offenderService: OffenderService,
 ) {
@@ -68,4 +71,21 @@ class OffenderResource(
   @Tag(name = "practitioner")
   @GetMapping("/{uuid}/upload_location")
   fun getPhotoUploadLocation(@PathVariable uuid: UUID, @RequestParam(name = "content-type") contentType: String): ResponseEntity<LocationInfo> = ResponseEntity.ok(offenderService.photoUploadLocation(uuid, contentType))
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @Operation(
+    summary = "Stops ",
+  )
+  @PostMapping("/{uuid}/deactivate")
+  fun terminateCheckins(
+    @PathVariable uuid: UUID,
+    @RequestBody body: DeactivateOffenderCheckinRequest,
+    bindingResult: org.springframework.validation.BindingResult,
+  ): ResponseEntity<OffenderDto> {
+    if (bindingResult.hasErrors()) {
+      throw intoResponseStatusException(bindingResult)
+    }
+    return ResponseEntity.ok(offenderService.cancelCheckins(uuid, body))
+  }
 }

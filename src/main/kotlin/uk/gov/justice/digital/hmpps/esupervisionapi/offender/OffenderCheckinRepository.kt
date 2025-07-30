@@ -12,6 +12,8 @@ import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
@@ -85,8 +87,19 @@ open class OffenderCheckin(
 @Repository
 interface OffenderCheckinRepository : org.springframework.data.jpa.repository.JpaRepository<OffenderCheckin, Long> {
   fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
-  fun findByOffender(offender: Offender): Optional<OffenderCheckin>
 
   // returns checkins created by a practitioner with the given uuid
   fun findAllByCreatedByUuid(practitionerUuid: String, pageable: Pageable): Page<OffenderCheckin>
+
+  /**
+   * To be used when we want to cancel all outstanding checkins for an offender
+   */
+  @Query(
+    """
+    UPDATE OffenderCheckin c SET c.status = 'CANCELLED'
+    WHERE c.offender = :offender AND c.status IN ('CREATED', 'SUBMITTED')
+  """,
+  )
+  @Modifying
+  fun updateStatusToCancelled(offender: Offender): Int
 }

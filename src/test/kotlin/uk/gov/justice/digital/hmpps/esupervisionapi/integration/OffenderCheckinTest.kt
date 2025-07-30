@@ -12,23 +12,27 @@ import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Import
+import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
-import org.springframework.test.web.reactive.server.expectBody
-import org.springframework.test.web.reactive.server.returnResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.DeactivateOffenderCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinSubmission
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLogService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -42,6 +46,12 @@ import java.util.UUID
 @Import(MockS3Config::class)
 class OffenderCheckinTest : IntegrationTestBase() {
 
+  @Autowired
+  private lateinit var offenderCheckinService: OffenderCheckinService
+
+  @Autowired
+  private lateinit var offenderService: OffenderService
+
   @Qualifier("mockNotificationService")
   @Autowired
   private lateinit var notificationService: NotificationService
@@ -52,6 +62,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
   @Autowired lateinit var s3UploadService: S3UploadService
 
   @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
+
+  @Autowired lateinit var offenderEventLogService: OffenderEventLogService
 
   /**
    * Used to setup an offender for tests
@@ -84,6 +96,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
   @AfterEach
   fun tearDown() {
+    offenderEventLogRepository.deleteAll()
     offenderSetupRepository.deleteAll()
     offenderCheckinRepository.deleteAll()
     offenderRepository.deleteAll()
@@ -202,6 +215,50 @@ class OffenderCheckinTest : IntegrationTestBase() {
     submitCheckinRequest(checkinDto, submission)
       .exchange()
       .expectStatus().is4xxClientError
+  }
+
+  @Test
+  fun `terminating checkins for an offender removes any outstanding checkin records`() {
+    val (offender, checkinRequest) = checkinRequestDto()
+    val createCheckin = createCheckinRequest(checkinRequest)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(OffenderCheckinDto::class.java)
+      .returnResult().responseBody!!
+
+    Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
+
+    webTestClient.post()
+      .uri("/offenders/${offender.uuid}/deactivate")
+      .contentType(MediaType.APPLICATION_JSON)
+      .headers(practitionerRoleAuthHeaders)
+      .bodyValue(
+        DeactivateOffenderCheckinRequest(
+          offender.practitioner,
+          reason = "probation ended",
+        ),
+      )
+      .exchange()
+      .expectStatus().isOk
+
+    val page = offenderCheckinService.getCheckins(offender.practitioner, PageRequest.of(0, 10))
+    val checkins = page.content
+
+    Assertions.assertEquals(1, checkins.size)
+    Assertions.assertEquals(CheckinStatus.CANCELLED, checkins[0].status)
+
+    val updatedOffender = offenderRepository.findByUuid(offender.uuid).get()
+    Assertions.assertNull(updatedOffender.firstCheckin)
+    Assertions.assertNull(updatedOffender.email)
+    Assertions.assertNull(updatedOffender.phoneNumber)
+    Assertions.assertEquals(OffenderStatus.INACTIVE, updatedOffender.status)
+
+    val entries = offenderEventLogService.eventsForOffender(offender.uuid, PageRequest.of(0, 10))
+
+    Assertions.assertEquals(1, entries.content.size)
+    val entry = entries.content[0]
+    Assertions.assertEquals("probation ended", entry.comment)
+    Assertions.assertEquals("alice", entry.practitioner)
   }
 
   private fun checkinRequestDto(): Pair<OffenderDto, CreateCheckinRequest> {

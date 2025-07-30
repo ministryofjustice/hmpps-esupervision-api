@@ -267,6 +267,14 @@ class OffenderCheckinService(
     return saved.dto(this.s3UploadService)
   }
 
+  fun cancelCheckins(offenderUuid: UUID, logEntry: OffenderEventLog) {
+    val offender = offenderRepository.findByUuid(offenderUuid).getOrElse {
+      throw BadArgumentException("Offender $offenderUuid not found")
+    }
+    val result = checkinRepository.updateStatusToCancelled(offender)
+    LOG.info("Cancelling checkins for offender={}, result={}, logEntry={}", offenderUuid, result, logEntry.uuid)
+  }
+
   companion object {
     // checkin has been SUBMITTED so we no longer allow to overwrite the associated files
     private fun validateCheckinUpdatable(checkin: OffenderCheckin) {

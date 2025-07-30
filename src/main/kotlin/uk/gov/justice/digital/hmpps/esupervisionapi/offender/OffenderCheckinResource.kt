@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Max
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
-import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -20,12 +19,12 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.s3.S3Client
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import java.time.Duration
 import java.util.UUID
 
@@ -127,10 +126,5 @@ class OffenderCheckinResource(
   fun automatedIdentityCheck(@PathVariable uuid: UUID, @RequestParam result: AutomatedIdVerificationResult): ResponseEntity<OffenderCheckinDto> {
     val checkin = offenderCheckinService.setAutomatedIdCheckStatus(uuid, result)
     return ResponseEntity.ok(checkin)
-  }
-
-  private fun intoResponseStatusException(bindingResult: BindingResult): ResponseStatusException {
-    val errors = bindingResult.fieldErrors.associateBy({ it.field }, { it.defaultMessage })
-    return ResponseStatusException(HttpStatus.BAD_REQUEST, errors.toString())
   }
 }
