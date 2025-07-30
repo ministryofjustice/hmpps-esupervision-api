@@ -19,4 +19,9 @@ class AppConfig(
   fun checkinDashboardUrl(checkinUuid: UUID): URI = URI(
     "$hostedAt/practitioners/checkin/$checkinUuid",
   )
+
+  // WARNING: this depends on the routes in the UI!
+  fun dashboardUrl(): URI = URI(
+    "$hostedAt/practitioners",
+  )
 }
