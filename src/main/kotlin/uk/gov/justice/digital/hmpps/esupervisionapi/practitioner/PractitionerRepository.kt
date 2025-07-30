@@ -11,11 +11,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.util.Optional
 
+typealias PractitionerUuid = String
+
 @Entity
 @Table(name = "practitioner")
 open class Practitioner(
   @Column(unique = true, nullable = false)
-  open var uuid: String,
+  open var uuid: PractitionerUuid,
   @Column("first_name")
   open var firstName: String,
   @Column("last_name")

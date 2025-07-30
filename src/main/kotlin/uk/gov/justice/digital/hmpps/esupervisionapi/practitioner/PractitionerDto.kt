@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotBlank
 data class PractitionerDto(
   @Schema(description = "Practitioner's unique ID (this can be NDelius ID)", required = true)
   @field:NotBlank
-  val uuid: String,
+  val uuid: PractitionerUuid,
   val firstName: String,
   val lastName: String,
   val email: String,

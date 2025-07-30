@@ -23,10 +23,11 @@ class SurveyTest {
     LocalDate.of(1990, 1, 1),
     OffenderStatus.VERIFIED,
     createdAt = Instant.now(),
-    "bob@example.com",
+    email = "bob@example.com",
     photoUrl = null,
     firstCheckin = LocalDate.now(ZoneId.of("UTC")).plusDays(10),
     checkinInterval = CheckinInterval.FOUR_WEEKS,
+    practitioner = "alice",
   )
 
   val checkinTemplate = OffenderCheckinDto(

@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
 
@@ -22,6 +23,8 @@ import kotlin.jvm.optionals.getOrElse
 class OffenderService(
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
+  private val checkinService: OffenderCheckinService,
+  private val offenderEventLogRepository: OffenderEventLogRepository,
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
   @Value("\${app.upload-ttl-minutes}") val uploadTTlMinutes: Long,
@@ -89,9 +92,53 @@ class OffenderService(
     )
   }
 
+  /**
+   * Call when the offender will no longer need to use the platform (e.g., probation ended,
+   * or the practitioner decided it's not working out).
+   *
+   * The method will attempt to update the offender's record and clean up any related data.
+   */
+  @Transactional
+  fun terminateCheckins(uuid: UUID, body: TerminateOffenderCheckinRequest): OffenderDto {
+    val offender = offenderRepository.findByUuid(uuid).getOrElse {
+      throw ResourceNotFoundException("Offender not found for uuid: $uuid")
+    }
+    val practitioner = practitionerRepository.findByUuid(body.requestedBy).getOrElse {
+      throw BadArgumentException("Practitioner not found for practitioner.uuid: ${body.requestedBy}")
+    }
+    if (!offender.canTransitionTo(OffenderStatus.INACTIVE)) {
+      throw BadArgumentException("Offender is inactive, cannot update details")
+    }
+
+    offender.terminate(clock.instant())
+    offenderRepository.save(offender)
+    LOG.info("practitioner={} terminated checkins for offender={}", body.requestedBy, offender.uuid)
+
+    val logEntry = OffenderEventLog(
+      UUID.randomUUID(),
+      LogEntryType.CHECKINS_TERMINATED,
+      body.reason,
+      practitioner,
+      offender,
+    )
+    offenderEventLogRepository.saveAndFlush(logEntry)
+
+    checkinService.cancelCheckins(uuid, logEntry)
+
+    return offender.dto(s3UploadService)
+  }
+
   companion object {
     val LOG: Logger = LoggerFactory.getLogger(this::class.java)
   }
+}
+
+private fun Offender.terminate(terminationTime: Instant) {
+  this.status = OffenderStatus.INACTIVE
+  this.phoneNumber = null
+  this.email = null
+  this.firstCheckin = null
+  this.updatedAt = terminationTime
 }
 
 enum class DeleteResult {
