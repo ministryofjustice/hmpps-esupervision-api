@@ -118,6 +118,9 @@ class OffenderCheckinService(
     if (offender.status != OffenderStatus.VERIFIED) {
       throw BadArgumentException("Offender with uuid=${checkin.uuid} has status ${offender.status}")
     }
+    if (!checkin.status.canTransitionTo(CheckinStatus.SUBMITTED)) {
+      throw InvalidStateTransitionException("Cannot submit checkin with status=${checkin.status}", checkin)
+    }
 
     val now = clock.instant()
     val submissionDate = now.atZone(clock.zone).toLocalDate()
@@ -218,7 +221,7 @@ class OffenderCheckinService(
       .getOrElse { throw BadArgumentException("practitioner not found") }
     val checkin = checkinRepository.findByUuid(checkinUuid)
       .getOrElse { throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid") }
-    if (checkin.status != CheckinStatus.SUBMITTED) {
+    if (!checkin.status.canTransitionTo(CheckinStatus.REVIEWED)) {
       throw BadArgumentException("Can't review checkin with status=${checkin.status}")
     }
 

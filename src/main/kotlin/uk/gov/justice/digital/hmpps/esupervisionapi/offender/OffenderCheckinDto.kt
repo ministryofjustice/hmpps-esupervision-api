@@ -13,6 +13,16 @@ enum class CheckinStatus {
   SUBMITTED,
   REVIEWED,
   CANCELLED,
+  EXPIRED,
+  ;
+
+  fun canTransitionTo(newStatus: CheckinStatus): Boolean = when (this) {
+    CREATED -> newStatus == SUBMITTED || newStatus == CANCELLED || newStatus == EXPIRED
+    SUBMITTED -> newStatus == REVIEWED || newStatus == CANCELLED
+    REVIEWED -> false
+    CANCELLED -> false
+    EXPIRED -> false
+  }
 }
 
 /**
