@@ -6,6 +6,7 @@ class MessageTypeTemplateConfig(
   private val popCheckinInvite: String,
   private val practitionerCheckinSubmitted: String,
   private val practitionerCheckinMissed: String,
+  private val practitionerInviteIssueGeneric: String,
   private val popRegistrationConfirmation: String,
   private val popSubmissionConfirmation: String,
   private val popCheckinsStopped: String,
@@ -16,6 +17,7 @@ class MessageTypeTemplateConfig(
     NotificationType.OffenderCheckinsStopped -> this.popCheckinsStopped
     NotificationType.PractitionerCheckinSubmitted -> this.practitionerCheckinSubmitted
     NotificationType.PractitionerCheckinMissed -> this.practitionerCheckinMissed
+    NotificationType.PractitionerInviteIssueGeneric -> this.practitionerInviteIssueGeneric
     NotificationType.RegistrationConfirmation -> this.popRegistrationConfirmation
   }
 }

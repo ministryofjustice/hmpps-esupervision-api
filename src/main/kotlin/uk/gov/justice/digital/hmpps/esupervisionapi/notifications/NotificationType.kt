@@ -6,5 +6,6 @@ enum class NotificationType {
   OffenderCheckinsStopped,
   PractitionerCheckinSubmitted,
   PractitionerCheckinMissed,
+  PractitionerInviteIssueGeneric,
   RegistrationConfirmation,
 }
