@@ -229,9 +229,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .returnResult().responseBody!!
 
     Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
-
-    // offenderService.terminateCheckins(offender.uuid, )
-
+    
     webTestClient.post()
       .uri("/offenders/${offender.uuid}/terminate")
       .contentType(MediaType.APPLICATION_JSON)
