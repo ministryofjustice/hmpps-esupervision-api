@@ -14,7 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.util.UUID
 
 enum class LogEntryType {
-  CHECKINS_TERMINATED,
+  OFFENDER_DEACTIVATED,
 }
 
 /**

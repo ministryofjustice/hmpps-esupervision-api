@@ -15,7 +15,7 @@ data class OffenderEventLogDto(
   val createdAt: Instant,
 )
 
-data class TerminateOffenderCheckinRequest(
+data class DeactivateOffenderCheckinRequest(
   @Schema()
   @field:NotBlank
   val requestedBy: PractitionerUuid,

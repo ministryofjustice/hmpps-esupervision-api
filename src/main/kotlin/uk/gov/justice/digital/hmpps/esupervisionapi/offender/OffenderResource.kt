@@ -74,15 +74,18 @@ class OffenderResource(
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
-  @PostMapping("/{uuid}/terminate")
+  @Operation(
+    summary = "Stops ",
+  )
+  @PostMapping("/{uuid}/deactivate")
   fun terminateCheckins(
     @PathVariable uuid: UUID,
-    @RequestBody body: TerminateOffenderCheckinRequest,
+    @RequestBody body: DeactivateOffenderCheckinRequest,
     bindingResult: org.springframework.validation.BindingResult,
   ): ResponseEntity<OffenderDto> {
     if (bindingResult.hasErrors()) {
       throw intoResponseStatusException(bindingResult)
     }
-    return ResponseEntity.ok(offenderService.terminateCheckins(uuid, body))
+    return ResponseEntity.ok(offenderService.cancelCheckins(uuid, body))
   }
 }

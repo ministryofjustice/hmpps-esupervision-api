@@ -16,12 +16,11 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
-import org.springframework.test.web.reactive.server.expectBody
-import org.springframework.test.web.reactive.server.returnResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.DeactivateOffenderCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
@@ -34,7 +33,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.TerminateOffenderCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -229,13 +227,13 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .returnResult().responseBody!!
 
     Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
-    
+
     webTestClient.post()
-      .uri("/offenders/${offender.uuid}/terminate")
+      .uri("/offenders/${offender.uuid}/deactivate")
       .contentType(MediaType.APPLICATION_JSON)
       .headers(practitionerRoleAuthHeaders)
       .bodyValue(
-        TerminateOffenderCheckinRequest(
+        DeactivateOffenderCheckinRequest(
           offender.practitioner,
           reason = "probation ended",
         ),

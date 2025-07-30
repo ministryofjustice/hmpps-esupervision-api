@@ -99,7 +99,7 @@ class OffenderService(
    * The method will attempt to update the offender's record and clean up any related data.
    */
   @Transactional
-  fun terminateCheckins(uuid: UUID, body: TerminateOffenderCheckinRequest): OffenderDto {
+  fun cancelCheckins(uuid: UUID, body: DeactivateOffenderCheckinRequest): OffenderDto {
     val offender = offenderRepository.findByUuid(uuid).getOrElse {
       throw ResourceNotFoundException("Offender not found for uuid: $uuid")
     }
@@ -110,13 +110,13 @@ class OffenderService(
       throw BadArgumentException("Offender is inactive, cannot update details")
     }
 
-    offender.terminate(clock.instant())
+    offender.deactivate(clock.instant())
     offenderRepository.save(offender)
-    LOG.info("practitioner={} terminated checkins for offender={}", body.requestedBy, offender.uuid)
+    LOG.info("practitioner={} deactivated offender={}", body.requestedBy, offender.uuid)
 
     val logEntry = OffenderEventLog(
       UUID.randomUUID(),
-      LogEntryType.CHECKINS_TERMINATED,
+      LogEntryType.OFFENDER_DEACTIVATED,
       body.reason,
       practitioner,
       offender,
@@ -133,7 +133,7 @@ class OffenderService(
   }
 }
 
-private fun Offender.terminate(terminationTime: Instant) {
+private fun Offender.deactivate(terminationTime: Instant) {
   this.status = OffenderStatus.INACTIVE
   this.phoneNumber = null
   this.email = null
