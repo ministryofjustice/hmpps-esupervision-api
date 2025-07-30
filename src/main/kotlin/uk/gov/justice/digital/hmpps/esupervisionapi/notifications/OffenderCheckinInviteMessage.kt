@@ -15,8 +15,8 @@ data class OffenderCheckinInviteMessage(
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
     "firstName" to firstName,
     "lastName" to lastName,
-    "checkinDueDate" to DATE_FORMAT.format(checkinDueDate),
-    "checkinURL" to appConfig.checkinSubmitUrl(checkinUuid).toString(),
+    "date" to DATE_FORMAT.format(checkinDueDate),
+    "url" to appConfig.checkinSubmitUrl(checkinUuid).toString(),
   )
 
   override val messageType: NotificationType

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.times
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.reset
@@ -135,8 +136,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .expectBody(OffenderCheckinDto::class.java)
       .returnResult()
 
-    // verify a notification to the practitioner was sent
-    notifInOrder.verify(notificationService).sendMessage(any(), any(), any())
+    // verify notifications to the PoP and practitioner were sent
+    notifInOrder.verify(notificationService, times(2)).sendMessage(any(), any(), any())
     notifInOrder.verifyNoMoreInteractions()
 
     val submittedCheckin = offenderCheckinRepository.findByUuid(submitCheckin.responseBody!!.uuid).get()
