@@ -94,10 +94,12 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   /**
    * To be used when we want to cancel all outstanding checkins for an offender
    */
-  @Query("""
+  @Query(
+    """
     UPDATE OffenderCheckin c SET c.status = 'CANCELLED'
     WHERE c.offender = :offender AND c.status IN ('CREATED', 'SUBMITTED')
-  """)
+  """,
+  )
   @Modifying
   fun updateStatusToCancelled(offender: Offender): Int
 }
