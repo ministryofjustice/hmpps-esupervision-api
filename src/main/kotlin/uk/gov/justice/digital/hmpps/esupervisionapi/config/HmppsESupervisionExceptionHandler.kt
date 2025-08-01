@@ -19,10 +19,22 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.InvalidOffenderSetu
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.InvalidStateTransitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.MissingVideoException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 
 @RestControllerAdvice
 class HmppsESupervisionExceptionHandler {
+
+  @ExceptionHandler(ResourceNotFoundException::class)
+  fun resourceNotFoundException(e: ResourceNotFoundException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(NOT_FOUND)
+    .body(
+      ErrorResponse(
+        status = NOT_FOUND,
+        userMessage = e.message,
+        developerMessage = e.message,
+      ),
+    )
 
   @ExceptionHandler(MissingServletRequestParameterException::class)
   fun missingServletRequestParameterException(e: MissingServletRequestParameterException): ResponseEntity<ErrorResponse> = ResponseEntity
