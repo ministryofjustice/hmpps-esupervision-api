@@ -41,6 +41,7 @@ internal data class NotifierContext(
 class CheckinNotifier(
   private val offenderRepository: OffenderRepository,
   private val offenderCheckinService: OffenderCheckinService,
+  private val jobLogRepository: JobLogRepository,
   private val clock: Clock,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
@@ -71,6 +72,8 @@ class CheckinNotifier(
     val lowerBound = now.atZone(clock.zone).toLocalDate()
 
     val notificationContext = BulkNotificationContext(UUID.randomUUID())
+    val logEntry = JobLog(notificationContext.value, JobType.CHECKIN_NOTIFICATIONS_JOB, now)
+    jobLogRepository.saveAndFlush(logEntry)
 
     val context = NotifierContext(
       clock,
@@ -89,14 +92,17 @@ class CheckinNotifier(
 
     for (offender in offenders) {
       try {
-        processOffender(offender, context)
+        val checkin = processOffender(offender, context)
         numProcessed += 1
-        numNotifAttempts += 1
+        numNotifAttempts += if (checkin != null) 1 else 0
       } catch (e: Exception) {
         LOG.warn("Error processing offender=${offender.uuid}", e)
         numErrors += 1
       }
     }
+
+    logEntry.endedAt = clock.instant()
+    jobLogRepository.saveAndFlush(logEntry)
 
     LOG.info(
       "processing ends. total processed={}, failed={}, notifications={}, took={}",
