@@ -120,33 +120,28 @@ enum class NotificationContextType {
   SINGLE,
 }
 
-sealed class NotificationContext(val value: UUID) {
+sealed class NotificationContext(
+  val reference: String,
   /**
    * Answers *why* are we sending the notification
    */
-  abstract val type: NotificationContextType
-
-  /**
-   * Allows us to link it to other information
-   */
-  abstract val reference: String
-}
+  val type: NotificationContextType,
+)
 
 /**
  * To be used for bulk notifications (e.g., in a scheduled job, so that we can link
  * are notifications to that job).
  */
-data class BulkNotificationContext(val uuid: UUID) : NotificationContext(value = uuid) {
-  override val type: NotificationContextType = NotificationContextType.SCHEDULED_JOB
-  override val reference: String = value.toString()
-}
+data class BulkNotificationContext(val ref: String) : NotificationContext(ref, NotificationContextType.SCHEDULED_JOB)
 
 /**
  * To be used for one-off notification.
  */
-data class SingleNotificationContext(val uuid: UUID) : NotificationContext(uuid) {
-  override val type: NotificationContextType = NotificationContextType.SINGLE
-  override val reference: String = value.toString()
+data class SingleNotificationContext(val ref: String) : NotificationContext(ref, NotificationContextType.SINGLE) {
+
+  companion object {
+    fun from(notificationId: UUID) = SingleNotificationContext("SNGL-$notificationId")
+  }
 }
 
 data class NotificationResultSummary(

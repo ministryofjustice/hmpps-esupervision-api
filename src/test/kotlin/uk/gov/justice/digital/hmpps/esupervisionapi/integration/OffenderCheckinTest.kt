@@ -345,7 +345,7 @@ fun notifResults() = NotificationResults(
   listOf(
     NotificationResultSummary(
       java.util.UUID.randomUUID(),
-      SingleNotificationContext(UUID.randomUUID()),
+      SingleNotificationContext.from(UUID.randomUUID()),
       timestamp = ZonedDateTime.now(),
       null,
       null,

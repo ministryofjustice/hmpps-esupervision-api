@@ -3,13 +3,18 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Index
+import jakarta.persistence.JoinColumn
+import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
 import java.util.UUID
+
+typealias CheckiNotificationReference = String
 
 @Entity
 @Table(
@@ -25,9 +30,25 @@ open class CheckinNotification(
   @Column(nullable = false)
   open var checkin: UUID,
 
+  /**
+   * Should be used for single-shot notifications (e.g., notification not sent
+   * via a scheduled job). For notification sent from a job, see `job` property.
+   */
   @Column(nullable = false)
-  open var reference: UUID,
+  open var reference: CheckiNotificationReference,
 
+  /**
+   * If the notification was sent as a part of scheduled job,
+   * this column will reference that job's log entry.
+   */
+  @ManyToOne()
+  @JoinColumn(name = "job_log", nullable = true)
+  open var job: JobLog? = null,
+
+  /**
+   * Set to one of the relevant statuses obtained from
+   * from GOV.UK Notify
+   */
   @Column
   open var status: String? = null,
 

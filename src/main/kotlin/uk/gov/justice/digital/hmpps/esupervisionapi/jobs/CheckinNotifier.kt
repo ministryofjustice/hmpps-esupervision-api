@@ -19,7 +19,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.time.Period
-import java.util.UUID
 import kotlin.streams.asSequence
 
 internal data class NotifierContext(
@@ -77,9 +76,9 @@ class CheckinNotifier(
     val now = clock.instant()
     val lowerBound = now.atZone(clock.zone).toLocalDate()
 
-    val notificationContext = BulkNotificationContext(UUID.randomUUID())
-    val logEntry = JobLog(notificationContext.value, JobType.CHECKIN_NOTIFICATIONS_JOB, now)
+    val logEntry = JobLog(JobType.CHECKIN_NOTIFICATIONS_JOB, now)
     jobLogRepository.saveAndFlush(logEntry)
+    val notificationContext = BulkNotificationContext(logEntry.reference())
 
     val context = NotifierContext(
       clock,
@@ -114,7 +113,8 @@ class CheckinNotifier(
                 notificationStatuses.add(
                   CheckinNotification(
                     notificationId = result.notificationId,
-                    reference = result.context.value,
+                    reference = result.context.reference,
+                    job = logEntry,
                     checkin = checkinInfo.checkin.uuid,
                     status = null,
                   ),

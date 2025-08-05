@@ -154,11 +154,11 @@ class OffenderCheckinService(
 
     // notify practitioner that checkin was submitted
     val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(submissionMessage, checkin.createdBy, SingleNotificationContext(UUID.randomUUID()))
+    this.notificationService.sendMessage(submissionMessage, offender.practitioner, SingleNotificationContext.from(UUID.randomUUID()))
 
     // notify PoP that checkin was received
     val popConfirmationMessage = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(popConfirmationMessage, checkin.offender, SingleNotificationContext(UUID.randomUUID()))
+    this.notificationService.sendMessage(popConfirmationMessage, checkin.offender, SingleNotificationContext.from(UUID.randomUUID()))
 
     return checkin.dto(this.s3UploadService)
   }
@@ -266,7 +266,7 @@ class OffenderCheckinService(
     this.notificationService.sendMessage(
       inviteMessage,
       checkin.offender,
-      SingleNotificationContext(UUID.randomUUID()),
+      SingleNotificationContext.from(UUID.randomUUID()),
     )
 
     val saved = checkinRepository.save(checkin)
