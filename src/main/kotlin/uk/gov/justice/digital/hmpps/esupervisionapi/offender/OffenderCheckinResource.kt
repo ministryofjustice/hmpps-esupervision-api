@@ -73,8 +73,8 @@ class OffenderCheckinResource(
     if (bindingResult.hasErrors()) {
       throw intoResponseStatusException(bindingResult)
     }
-    val checkin = offenderCheckinService.createCheckin(createCheckin, SingleNotificationContext(UUID.randomUUID()))
-    return ResponseEntity.ok(checkin)
+    val created = offenderCheckinService.createCheckin(createCheckin, SingleNotificationContext(UUID.randomUUID()))
+    return ResponseEntity.ok(created.checkin)
   }
 
   @PostMapping("/{uuid}/upload_location")

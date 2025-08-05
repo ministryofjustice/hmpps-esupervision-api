@@ -41,6 +41,11 @@ data class UploadLocationTypes(
   val snapshots: List<String>,
 )
 
+data class CheckinCreationInfo(
+  val checkin: OffenderCheckinDto,
+  val notifications: NotificationResults,
+)
+
 @Service
 class OffenderCheckinService(
   private val clock: Clock,
@@ -58,7 +63,7 @@ class OffenderCheckinService(
     return checkin.map { it.dto(this.s3UploadService) }
   }
 
-  fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): OffenderCheckinDto {
+  fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): CheckinCreationInfo {
     val now = clock.instant()
     // we want to allow the due date of 'today'
     if (createCheckin.dueDate < now.atZone(clock.zone).toLocalDate()) {
@@ -94,11 +99,12 @@ class OffenderCheckinService(
 
     // notify PoP of checkin invite
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
+    val inviteResults = this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
 
-    val savedWithNotificationRefs = checkinRepository.save(saved)
-
-    return savedWithNotificationRefs.dto(this.s3UploadService)
+    return CheckinCreationInfo(
+      saved.dto(this.s3UploadService),
+      inviteResults,
+    )
   }
 
   /**

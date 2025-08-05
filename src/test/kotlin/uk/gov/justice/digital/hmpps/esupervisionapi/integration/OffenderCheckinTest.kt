@@ -22,6 +22,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.DeactivateOffenderCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResultSummary
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
@@ -33,6 +35,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -41,6 +44,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
 import java.time.Duration
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.util.UUID
 
 @Import(MockS3Config::class)
@@ -91,6 +95,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
     offender = offenderSetupService.completeOffenderSetup(setup.uuid)
 
     reset(notificationService)
+    whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
+
     reset(s3UploadService)
   }
 
@@ -334,3 +340,15 @@ class OffenderCheckinTest : IntegrationTestBase() {
     }
   }
 }
+
+fun notifResults() = NotificationResults(
+  listOf(
+    NotificationResultSummary(
+      java.util.UUID.randomUUID(),
+      SingleNotificationContext(UUID.randomUUID()),
+      timestamp = ZonedDateTime.now(),
+      null,
+      null,
+    ),
+  ),
+)
