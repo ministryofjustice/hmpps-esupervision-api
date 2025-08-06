@@ -167,8 +167,4 @@ internal fun OffenderDetailsUpdate.validate(
   if (this.dateOfBirth != null && this.dateOfBirth.isAfter(today.minusYears(14))) {
     throw BadArgumentException("Invalid date of birth: ${this.dateOfBirth}")
   }
-  // we want to allow the due date of 'today'
-  if (this.firstCheckin != null && this.firstCheckin < today) {
-    throw BadArgumentException("First checkin date is in the past: ${this.firstCheckin}")
-  }
 }
