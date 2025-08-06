@@ -5,6 +5,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
@@ -24,7 +25,14 @@ import java.util.Optional
 import java.util.UUID
 
 @Entity
-@Table(name = "offender_checkin")
+@Table(
+  name = "offender_checkin",
+  indexes = [
+    Index(columnList = "due_date", name = "checkin_due_date_idx", unique = false),
+    Index(columnList = "created_at", name = "checkin_created_at_idx", unique = false),
+    Index(columnList = "status", name = "checkin_status_idx", unique = false),
+  ],
+)
 open class OffenderCheckin(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,
@@ -92,6 +100,21 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   fun findAllByCreatedByUuid(practitionerUuid: String, pageable: Pageable): Page<OffenderCheckin>
 
   /**
+   * @param cutoff day on which submitting a checkin is no longer allowed
+   * @param lowerBound only consider checkins created on lowerBound or after
+   */
+  @Query(
+    """
+    UPDATE OffenderCheckin c 
+    SET c.status = 'EXPIRED' 
+    WHERE c.dueDate < :cutoff
+    AND c.createdAt >= :lowerBound
+    AND c.status NOT IN ('SUBMITTED', 'REVIEWED', 'EXPIRED', 'CANCELLED')
+  """,
+  )
+  @Modifying
+  fun updateStatusToExpired(cutoff: LocalDate, lowerBound: Instant): Int
+
    * To be used when we want to cancel all outstanding checkins for an offender
    */
   @Query(
