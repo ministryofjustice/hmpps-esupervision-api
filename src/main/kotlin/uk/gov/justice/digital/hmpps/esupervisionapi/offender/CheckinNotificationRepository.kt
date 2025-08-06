@@ -16,11 +16,15 @@ import java.util.UUID
 
 typealias CheckiNotificationReference = String
 
+/**
+ * Used to track status of notifications sent to the `Offender`.
+ */
 @Entity
 @Table(
   name = "offender_checkin_notification",
   indexes = [
     Index(name = "idx_checkin_notification_reference", columnList = "reference"),
+    Index(name = "idx_chckin_notification_created_at", columnList = "created_at"),
   ],
 )
 open class CheckinNotification(
@@ -52,11 +56,11 @@ open class CheckinNotification(
   @Column
   open var status: String? = null,
 
-  @Column
+  @Column(name = "created_at")
   @CreationTimestamp
   open var createdAt: Instant? = null,
 
-  @Column
+  @Column(name = "updated_at")
   @UpdateTimestamp
   open var updatedAt: Instant? = null,
 ) : AEntity()
