@@ -154,12 +154,12 @@ internal fun OffenderDetailsUpdate.validate(
   if (offender.status == OffenderStatus.INACTIVE) {
     throw BadArgumentException("Offender is inactive, cannot update details")
   }
-  if (this.email.isNullOrEmpty() && this.phoneNumber.isNullOrEmpty()) {
-    throw BadArgumentException("email and phone number cannot both be null or empty")
-  }
-  if (offender.status == OffenderStatus.VERIFIED && this.firstCheckin == null) {
-    throw BadArgumentException("first checkin date required when offender status is VERIFIED")
-  }
+//  if (this.email.isNullOrEmpty() && this.phoneNumber.isNullOrEmpty()) {
+//    throw BadArgumentException("email and phone number cannot both be null or empty")
+//  }
+//  if (offender.status == OffenderStatus.VERIFIED && this.firstCheckin == null) {
+//    throw BadArgumentException("first checkin date required when offender status is VERIFIED")
+//  }
   val now = clock.instant()
   val today = now.atZone(clock.zone).toLocalDate()
   if (this.dateOfBirth != null && this.dateOfBirth.isAfter(today.minusYears(14))) {

@@ -112,11 +112,12 @@ open class Offender(
   }
 
   fun applyUpdate(update: OffenderDetailsUpdate) {
-    this.firstName = update.firstName
-    this.lastName = update.lastName
-    this.dateOfBirth = update.dateOfBirth
-    this.email = update.email
-    this.phoneNumber = update.phoneNumber
+    update.firstName?.let { this.firstName = it }
+    update.lastName?.let { this.lastName = it }
+    update.dateOfBirth?.let { this.dateOfBirth = it }
+    update.email?.let { this.email = it }
+    update.phoneNumber?.let { this.phoneNumber = it }
+
     this.updatedAt = Instant.now()
   }
 

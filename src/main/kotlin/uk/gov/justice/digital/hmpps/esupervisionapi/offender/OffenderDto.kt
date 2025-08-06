@@ -44,11 +44,11 @@ data class OffenderSetupDto(
 data class OffenderDetailsUpdate(
   @Schema(description = "Id of the user requesting the change", required = true)
   val requestedBy: String,
-  val firstName: String,
-  val lastName: String,
+  val firstName: String?,
+  val lastName: String?,
   val dateOfBirth: LocalDate?,
-  val email: String? = null,
-  val phoneNumber: String? = null,
+  val email: String?,
+  val phoneNumber: String?,
   @JsonDeserialize(using = LocalDateDeserializer::class) val firstCheckin: LocalDate?,
-  val checkinInterval: CheckinInterval,
+  val checkinInterval: CheckinInterval?,
 )
