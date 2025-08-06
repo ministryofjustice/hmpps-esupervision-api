@@ -115,6 +115,7 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   @Modifying
   fun updateStatusToExpired(cutoff: LocalDate, lowerBound: Instant): Int
 
+  /**
    * To be used when we want to cancel all outstanding checkins for an offender
    */
   @Query(
