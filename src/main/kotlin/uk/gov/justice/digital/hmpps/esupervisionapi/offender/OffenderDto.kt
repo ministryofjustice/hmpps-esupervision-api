@@ -46,6 +46,7 @@ data class OffenderDetailsUpdate(
   val requestedBy: String,
   val firstName: String,
   val lastName: String,
+  val dateOfBirth: LocalDate?,
   val email: String? = null,
   val phoneNumber: String? = null,
   @JsonDeserialize(using = LocalDateDeserializer::class) val firstCheckin: LocalDate?,

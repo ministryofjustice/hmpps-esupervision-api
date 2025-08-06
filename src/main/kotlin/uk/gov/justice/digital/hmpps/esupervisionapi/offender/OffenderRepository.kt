@@ -114,6 +114,7 @@ open class Offender(
   fun applyUpdate(update: OffenderDetailsUpdate) {
     this.firstName = update.firstName
     this.lastName = update.lastName
+    this.dateOfBirth = update.dateOfBirth
     this.email = update.email
     this.phoneNumber = update.phoneNumber
     this.updatedAt = Instant.now()
