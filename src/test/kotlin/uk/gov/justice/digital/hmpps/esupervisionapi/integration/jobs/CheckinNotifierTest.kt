@@ -22,28 +22,28 @@ class CheckinNotifierTest {
 
   @Test
   fun `is checkin works`() {
-    val notificationContext = SingleNotificationContext(java.util.UUID.randomUUID())
+    val notificationContext = SingleNotificationContext.from(java.util.UUID.randomUUID())
     var context = NotifierContext(clock, today = today, notificationContext = notificationContext)
     Assertions.assertTrue(context.isCheckinDay(offender))
 
     context = NotifierContext(
       clock,
       today = today.plusDays(1),
-      notificationContext = SingleNotificationContext(java.util.UUID.randomUUID()),
+      notificationContext = SingleNotificationContext.from(java.util.UUID.randomUUID()),
     )
     Assertions.assertFalse(context.isCheckinDay(offender))
 
     context = NotifierContext(
       clock,
       today = today.plusDays(6),
-      notificationContext = SingleNotificationContext(java.util.UUID.randomUUID()),
+      notificationContext = SingleNotificationContext.from(java.util.UUID.randomUUID()),
     )
     Assertions.assertFalse(context.isCheckinDay(offender))
 
     context = NotifierContext(
       clock,
       today = today.plusDays(7),
-      notificationContext = SingleNotificationContext(java.util.UUID.randomUUID()),
+      notificationContext = SingleNotificationContext.from(java.util.UUID.randomUUID()),
     )
     Assertions.assertTrue(context.isCheckinDay(offender))
   }

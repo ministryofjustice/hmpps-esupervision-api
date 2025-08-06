@@ -7,9 +7,11 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinCreationInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
@@ -17,7 +19,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.time.Period
-import java.util.UUID
+import kotlin.streams.asSequence
 
 internal data class NotifierContext(
   val clock: Clock,
@@ -42,11 +44,14 @@ class CheckinNotifier(
   private val offenderRepository: OffenderRepository,
   private val offenderCheckinService: OffenderCheckinService,
   private val jobLogRepository: JobLogRepository,
+  private val notificationRepository: CheckinNotificationRepository,
   private val clock: Clock,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
   val notificationLeadTime: Period = Period.ofDays(0)
+
+  val batchSize: Int = 100
 
   /**
    * This method is meant to be called via a scheduling mechanism and not directly.
@@ -71,9 +76,9 @@ class CheckinNotifier(
     val now = clock.instant()
     val lowerBound = now.atZone(clock.zone).toLocalDate()
 
-    val notificationContext = BulkNotificationContext(UUID.randomUUID())
-    val logEntry = JobLog(notificationContext.value, JobType.CHECKIN_NOTIFICATIONS_JOB, now)
+    val logEntry = JobLog(JobType.CHECKIN_NOTIFICATIONS_JOB, now)
     jobLogRepository.saveAndFlush(logEntry)
+    val notificationContext = BulkNotificationContext(logEntry.reference())
 
     val context = NotifierContext(
       clock,
@@ -89,37 +94,64 @@ class CheckinNotifier(
     var numProcessed = 0
     var numErrors = 0
     var numNotifAttempts = 0
+    var numChunks = 0
 
-    for (offender in offenders) {
-      try {
-        val checkin = processOffender(offender, context)
-        numProcessed += 1
-        numNotifAttempts += if (checkin != null) 1 else 0
-      } catch (e: Exception) {
-        LOG.warn("Error processing offender=${offender.uuid}", e)
-        numErrors += 1
+    val chunkSize = 100
+    offenders.asSequence()
+      .chunked(chunkSize)
+      .forEach { offenderChunk ->
+        numChunks += 1
+        LOG.info("processing chunk $numChunks}")
+        val notificationStatuses = ArrayList<CheckinNotification>(offenderChunk.size)
+        for (offender in offenderChunk) {
+          try {
+            numProcessed += 1
+            val checkinInfo = processOffender(offender, context)
+            if (checkinInfo != null) {
+              numNotifAttempts += 1
+              for (result in checkinInfo.notifications.results) {
+                notificationStatuses.add(
+                  CheckinNotification(
+                    notificationId = result.notificationId,
+                    reference = result.context.reference,
+                    job = logEntry,
+                    checkin = checkinInfo.checkin.uuid,
+                    status = null,
+                  ),
+                )
+              }
+            }
+          } catch (e: Exception) {
+            LOG.warn("Error processing offender=${offender.uuid}", e)
+            numErrors += 1
+            null
+          }
+        }
+        if (notificationStatuses.isNotEmpty()) {
+          notificationRepository.saveAll(notificationStatuses)
+        }
       }
-    }
 
     logEntry.endedAt = clock.instant()
     jobLogRepository.saveAndFlush(logEntry)
 
     LOG.info(
-      "processing ends. total processed={}, failed={}, notifications={}, took={}",
+      "processing ends. total processed={} in {} batches, failed={}, notifications={}, took={}",
       numProcessed,
+      numChunks,
       numErrors,
       numNotifAttempts,
       Duration.between(now, clock.instant()),
     )
   }
 
-  internal fun processOffender(offender: Offender, context: NotifierContext): OffenderCheckinDto? {
+  internal fun processOffender(offender: Offender, context: NotifierContext): CheckinCreationInfo? {
     // assumptions:
     // - no `OffenderCheckin` records with due date between `context.today`, context.potentialCheckin
     val isCheckinDay = context.isCheckinDay(offender)
     LOG.debug("is offender={} due for a checkin? {}", offender.uuid, if (isCheckinDay) "yes" else "no")
     if (isCheckinDay) {
-      val checkin = offenderCheckinService.createCheckin(
+      val checkinCreated = offenderCheckinService.createCheckin(
         CreateCheckinRequest(
           offender.practitioner.uuid,
           offender.uuid,
@@ -127,7 +159,7 @@ class CheckinNotifier(
         ),
         context.notificationContext,
       )
-      return checkin
+      return checkinCreated
     }
 
     return null

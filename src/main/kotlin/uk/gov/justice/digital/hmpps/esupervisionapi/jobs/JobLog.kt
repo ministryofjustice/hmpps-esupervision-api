@@ -7,7 +7,6 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Table
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
-import java.util.UUID
 
 enum class JobType {
   /**
@@ -27,9 +26,6 @@ enum class JobType {
 @Entity
 @Table(name = "job_log")
 open class JobLog(
-  @Column(name = "reference", nullable = false, unique = true)
-  open var reference: UUID,
-
   @Enumerated(EnumType.STRING)
   @Column(name = "job_type", nullable = false)
   open var jobType: JobType,
@@ -40,5 +36,12 @@ open class JobLog(
   @Column(name = "ended_at", nullable = true)
   open var endedAt: Instant? = null,
 ) : AEntity() {
-  fun dto() = JobLogDto(reference = reference, jobType = jobType, createdAt = createdAt, endedAt = endedAt)
+  fun dto() = JobLogDto(reference = reference(), jobType = jobType, createdAt = createdAt, endedAt = endedAt)
+
+  /**
+   * An identifier that can be used with external systems.
+   *
+   * Note: Should be treated as an opaque value.
+   */
+  fun reference() = "BLK-${String.format("%05d", id)}"
 }
