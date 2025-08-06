@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.anyFloat
 import org.mockito.Mockito.times
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
@@ -37,6 +38,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupServic
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
@@ -68,6 +70,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
   @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
 
   @Autowired lateinit var offenderEventLogService: OffenderEventLogService
+
+  @Autowired lateinit var rekognitionCompareFacesService: RekognitionCompareFacesService
 
   /**
    * Used to setup an offender for tests
@@ -145,6 +149,15 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     mockCheckinVideoUpload(createCheckin, UploadStatus.UPLOADED)
 
+    // verify checkin identity
+    mockCheckinVerification(createCheckin, AutomatedIdVerificationResult.MATCH)
+
+    val autoIdCheck = webTestClient.post()
+      .uri("/offender_checkins/${createCheckin.uuid}/auto_id_verify?numSnapshots=1")
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+
     val submission = OffenderCheckinSubmission(
       offender = offender.uuid,
       survey = mapOf("mood" to "Good" as Object),
@@ -162,13 +175,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     val submittedCheckin = offenderCheckinRepository.findByUuid(submitCheckin.responseBody!!.uuid).get()
     Assertions.assertNotNull(submittedCheckin.status == submitCheckin.responseBody!!.status)
     Assertions.assertEquals(CheckinStatus.SUBMITTED, submitCheckin.responseBody!!.status)
-    Assertions.assertNull(submitCheckin.responseBody!!.autoIdCheck)
-
-    val autoIdCheck = webTestClient.post()
-      .uri("/offender_checkins/${createCheckin.uuid}/auto_id_check?result=MATCH")
-      .headers(practitionerRoleAuthHeaders)
-      .exchange()
-      .expectStatus().isOk
+    Assertions.assertEquals(AutomatedIdVerificationResult.MATCH, submitCheckin.responseBody!!.autoIdCheck)
 
     val reviewCheckin = webTestClient.post()
       .uri("/offender_checkins/${createCheckin.uuid}/review")
@@ -190,6 +197,11 @@ class OffenderCheckinTest : IntegrationTestBase() {
     Assertions.assertEquals(CheckinStatus.REVIEWED, reviewedCheckin.status)
     Assertions.assertEquals(AutomatedIdVerificationResult.MATCH, reviewedCheckin.autoIdCheck)
     Assertions.assertEquals(ManualIdVerificationResult.MATCH, reviewedCheckin.manualIdCheck)
+  }
+
+  fun mockCheckinVerification(checkin: OffenderCheckinDto, result: AutomatedIdVerificationResult) {
+    whenever(rekognitionCompareFacesService.verifyCheckinImages(any(), anyFloat()))
+      .thenReturn(result)
   }
 
   @Test
