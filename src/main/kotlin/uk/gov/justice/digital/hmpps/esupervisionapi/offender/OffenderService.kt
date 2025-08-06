@@ -97,6 +97,8 @@ class OffenderService(
    * or the practitioner decided it's not working out).
    *
    * The method will attempt to update the offender's record and clean up any related data.
+   *
+   * @param uuid the offender's UUID
    */
   @Transactional
   fun cancelCheckins(uuid: UUID, body: DeactivateOffenderCheckinRequest): OffenderDto {

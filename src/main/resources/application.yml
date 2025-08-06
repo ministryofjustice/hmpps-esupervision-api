@@ -11,8 +11,10 @@ app:
       # How long, starting from dueDate, do we accept checkin submissions.
       # Afterward the checkin's status is updated to EXPIRED.
       window: 72h
-      #cron: "0 0 3,5 * * *"  # Production schedule (3 AM and 5 AM daily)
-      cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
+      cron: "0 0 3,5 * * *"  # Production schedule (3 AM and 5 AM daily)
+      # cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
+    offender-checkin-expiry:
+      cron: "0 0 1,10 * * *"  # Production schedule (1 AM and 10 AM daily)
 
 spring:
   application:

@@ -4,6 +4,9 @@ app:
     checkin-notification:
       cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
       # cron: "*/30 * * * * *"  # Local development schedule (every 30 seconds)
+    offender-checkin-expiry:
+      cron: "0 */17 * * * *"  # Development schedule (every 17 minutes)
+      # cron: "*/40 * * * * *"  # Local development schedule (every 40 seconds)
 
 hmpps-auth:
   url: "http://localhost:8090/auth"
