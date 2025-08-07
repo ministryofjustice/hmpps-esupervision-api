@@ -13,6 +13,7 @@ import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
@@ -23,6 +24,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
 import java.util.UUID
+import java.util.stream.Stream
 
 @Entity
 @Table(
@@ -99,6 +101,17 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   // returns checkins created by a practitioner with the given uuid
   fun findAllByCreatedByUuid(practitionerUuid: String, pageable: Pageable): Page<OffenderCheckin>
 
+  @EntityGraph(attributePaths = ["offender.practitioner"])
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c  
+    WHERE c.dueDate < :cutoff
+    AND c.createdAt >= :lowerBound
+    AND c.status = 'CREATED'
+ """,
+  )
+  fun findAllAboutToExpire(cutoff: LocalDate, lowerBound: Instant): Stream<OffenderCheckin>
+
   /**
    * @param cutoff day on which submitting a checkin is no longer allowed
    * @param lowerBound only consider checkins created on lowerBound or after
@@ -109,7 +122,7 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
     SET c.status = 'EXPIRED' 
     WHERE c.dueDate < :cutoff
     AND c.createdAt >= :lowerBound
-    AND c.status NOT IN ('SUBMITTED', 'REVIEWED', 'EXPIRED', 'CANCELLED')
+    AND c.status = 'CREATED'
   """,
   )
   @Modifying
