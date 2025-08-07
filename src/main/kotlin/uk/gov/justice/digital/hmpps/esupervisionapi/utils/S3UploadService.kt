@@ -231,4 +231,13 @@ class S3UploadService(
       return null
     }
   }
+
+  override fun getCheckinSnapshot(checkin: OffenderCheckin): URL? {
+    if (checkin.submittedAt != null) {
+      val photoKey = CheckinPhotoKey(checkin.uuid, 1)
+      return presignedGetUrlFor(photoKey)
+    } else {
+      return null
+    }
+  }
 }

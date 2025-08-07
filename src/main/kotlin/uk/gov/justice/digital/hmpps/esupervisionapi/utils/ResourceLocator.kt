@@ -7,4 +7,5 @@ import java.net.URL
 interface ResourceLocator {
   fun getOffenderPhoto(offender: Offender): URL?
   fun getCheckinVideo(checkin: OffenderCheckin): URL?
+  fun getCheckinSnapshot(checkin: OffenderCheckin): URL?
 }

@@ -54,6 +54,7 @@ data class OffenderCheckinDto(
    * Will be set to pre-signed S3 URL
    */
   val videoUrl: URL?,
+  val snapshotUrl: URL?,
   val autoIdCheck: AutomatedIdVerificationResult?,
   val manualIdCheck: ManualIdVerificationResult?,
 ) {
