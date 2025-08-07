@@ -118,6 +118,8 @@ open class Offender(
     this.email = update.email
     this.phoneNumber = update.phoneNumber
     this.updatedAt = Instant.now()
+    this.firstCheckin = update.firstCheckin
+    this.checkinInterval = update.checkinInterval.duration
   }
 
   fun canTransitionTo(newStatus: OffenderStatus): Boolean = offenderStatusTransition(status, newStatus)
