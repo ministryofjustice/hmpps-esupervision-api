@@ -57,14 +57,10 @@ class OffenderCheckinResource(
   @GetMapping("/{uuid}")
   @Tag(name = "offender")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun getCheckin(@PathVariable uuid: UUID): ResponseEntity<OffenderCheckinDto> {
-    val checkin = offenderCheckinService.getCheckin(uuid)
-    if (checkin.isPresent) {
-      return ResponseEntity.ok(checkin.get())
-    }
-
-    return ResponseEntity.notFound().build()
-  }
+  fun getCheckin(
+    @PathVariable uuid: UUID,
+    @RequestParam(name = "include-uploads", required = false, defaultValue = "false") includeUploads: Boolean,
+  ): ResponseEntity<OffenderCheckinDto> = ResponseEntity.ok(offenderCheckinService.getCheckin(uuid, includeUploads))
 
   @PostMapping
   @Tag(name = "practitioner")
