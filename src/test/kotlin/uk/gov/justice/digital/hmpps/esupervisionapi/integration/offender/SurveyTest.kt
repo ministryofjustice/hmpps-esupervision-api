@@ -41,6 +41,7 @@ class SurveyTest {
     createdAt = Instant.now(),
     reviewedBy = null,
     videoUrl = null,
+    snapshotUrl = null,
     autoIdCheck = AutomatedIdVerificationResult.MATCH,
     manualIdCheck = null,
   )

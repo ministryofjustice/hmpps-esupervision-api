@@ -10,4 +10,5 @@ import java.net.URL
 class NullResourceLocator : ResourceLocator {
   override fun getOffenderPhoto(offender: Offender): URL? = null
   override fun getCheckinVideo(checkin: OffenderCheckin): URL? = null
+  override fun getCheckinSnapshot(checkin: OffenderCheckin): URL? = null
 }

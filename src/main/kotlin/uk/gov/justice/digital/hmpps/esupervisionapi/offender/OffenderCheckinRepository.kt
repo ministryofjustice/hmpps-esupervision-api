@@ -85,6 +85,7 @@ open class OffenderCheckin(
     createdBy = createdBy.uuid,
     createdAt = createdAt,
     videoUrl = resourceLocator.getCheckinVideo(this),
+    snapshotUrl = resourceLocator.getCheckinSnapshot(this),
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
   )
