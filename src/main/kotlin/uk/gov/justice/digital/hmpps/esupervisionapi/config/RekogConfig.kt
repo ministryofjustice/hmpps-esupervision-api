@@ -9,9 +9,11 @@ import org.springframework.core.env.Environment
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.rekognition.RekognitionClient
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
 
@@ -72,5 +74,17 @@ class RekogConfig(
   ): S3UploadService {
     val service = S3UploadService(s3Client, s3Presigner, bucketName, bucketName)
     return service
+  }
+
+  @Bean
+  fun rekognitionCompareFacesService(): RekognitionCompareFacesService {
+    val credentials = AwsBasicCredentials.create(accessKeyId, accessKeySecret)
+
+    val client = RekognitionClient.builder()
+      .region(Region.of(region))
+      .credentialsProvider(StaticCredentialsProvider.create(credentials))
+      .build()
+
+    return RekognitionCompareFacesService(client)
   }
 }

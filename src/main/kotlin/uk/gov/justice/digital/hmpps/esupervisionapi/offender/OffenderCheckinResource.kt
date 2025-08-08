@@ -116,11 +116,15 @@ class OffenderCheckinResource(
     return ResponseEntity.ok(checkin)
   }
 
-  @PostMapping("/{uuid}/auto_id_check")
+  @PostMapping("/{uuid}/auto_id_verify")
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun automatedIdentityCheck(@PathVariable uuid: UUID, @RequestParam result: AutomatedIdVerificationResult): ResponseEntity<OffenderCheckinDto> {
-    val checkin = offenderCheckinService.setAutomatedIdCheckStatus(uuid, result)
-    return ResponseEntity.ok(checkin)
+  fun autoVerifyCheckin(
+    @PathVariable uuid: UUID,
+    @RequestParam numSnapshots: Int,
+  ): ResponseEntity<AutomatedVerificationResult> {
+    val passed = offenderCheckinService.verifyCheckinIdentity(uuid, numSnapshots)
+    val dto = AutomatedVerificationResult(passed)
+    return ResponseEntity.ok(dto)
   }
 }

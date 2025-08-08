@@ -58,9 +58,12 @@ sequenceDiagram
     Offender->>S3: Upload video with presigned URL
     Offender->>S3: Upload snapshot photo(s) with presigned URL
     Offender->>Frontend: Signal data has been uploaded
-    Note over Offender,Frontend: We can now call rekognition
-    Frontend->>Rekognition: Compare faces
-    Note over Frontend,Rekognition: Rekognition will use the reference and snapshot photo
+    Note over Offender,Frontend: We can verify PoP identity
+    Frontend->>Backend: Verify identity
+    Backend->>Rekognition: Compare faces
+    Note over Backend,Rekognition: Rekognition will use the reference and snapshot photo
+    Rekognition-->>Backend: Face comparison result
+    Backend-->>Frontend: Verification result
     Offender->>Frontend: Submit
     Frontend->>Backend: POST /offender_checkins/:uuid/submit
     Backend-->>Frontend: Success
