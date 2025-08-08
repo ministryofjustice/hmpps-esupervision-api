@@ -27,7 +27,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.Period
-import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
 
@@ -58,9 +57,30 @@ class OffenderCheckinService(
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
-  fun getCheckin(uuid: UUID): Optional<OffenderCheckinDto> {
-    val checkin = checkinRepository.findByUuid(uuid)
-    return checkin.map { it.dto(this.s3UploadService) }
+  /**
+   * @param uuid UUID of the checkin
+   * @param includeUploads set to true to ensure vide/snapshot URLs are returned
+   */
+  fun getCheckin(
+    uuid: UUID,
+    includeUploads: Boolean = false,
+  ): OffenderCheckinDto {
+    val checkin = checkinRepository.findByUuid(uuid).getOrElse {
+      throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$uuid")
+    }
+
+    var dto = checkin.dto(this.s3UploadService)
+    if (includeUploads) {
+      dto = if (dto.videoUrl != null) {
+        dto
+      } else {
+        dto.copy(
+          videoUrl = s3UploadService.getCheckinVideo(checkin, true),
+          snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, true),
+        )
+      }
+    }
+    return dto
   }
 
   fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): CheckinCreationInfo {

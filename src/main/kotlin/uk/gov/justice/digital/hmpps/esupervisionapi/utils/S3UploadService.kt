@@ -223,8 +223,8 @@ class S3UploadService(
     }
   }
 
-  override fun getCheckinVideo(checkin: OffenderCheckin): URL? {
-    if (checkin.submittedAt != null) {
+  override fun getCheckinVideo(checkin: OffenderCheckin, force: Boolean): URL? {
+    if (checkin.submittedAt != null || force) {
       val videoKey = CheckinVideoKey(checkin.uuid)
       return presignedGetUrlFor(videoKey)
     } else {
@@ -232,8 +232,8 @@ class S3UploadService(
     }
   }
 
-  override fun getCheckinSnapshot(checkin: OffenderCheckin): URL? {
-    if (checkin.submittedAt != null) {
+  override fun getCheckinSnapshot(checkin: OffenderCheckin, force: Boolean): URL? {
+    if (checkin.submittedAt != null || force) {
       val photoKey = CheckinPhotoKey(checkin.uuid, 1)
       return presignedGetUrlFor(photoKey)
     } else {
