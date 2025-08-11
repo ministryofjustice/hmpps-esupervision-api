@@ -214,7 +214,7 @@ class S3UploadService(
         return this.videoUploadBucket
       }
       is CheckinPhotoKey -> {
-        return this.imageUploadBucket
+        return this.videoUploadBucket
       }
     }
   }
