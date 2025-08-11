@@ -318,11 +318,10 @@ class OffenderCheckinService(
       faceSimilarityThreshold,
     )
 
-    copySnapshotsOutOfRekognition(checkin)
-
     LOG.info("updating checking with automated id check result: {}, checkin={}", verificationResult, checkinUuid)
     checkin.autoIdCheck = verificationResult
-    checkinRepository.save(checkin)
+    val saved = checkinRepository.saveAndFlush(checkin)
+    copySnapshotsOutOfRekognition(saved)
 
     return verificationResult
   }
