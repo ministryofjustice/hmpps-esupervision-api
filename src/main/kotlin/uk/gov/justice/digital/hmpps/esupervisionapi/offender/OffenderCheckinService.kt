@@ -318,18 +318,34 @@ class OffenderCheckinService(
       faceSimilarityThreshold,
     )
 
-    try {
-      checkinImages.snapshots.map(s3UploadService::copyPreservingKeyToImageBucket)
-    } catch (e: Exception) {
-      // the images are used only for presentation, we can proceed if copy fails
-      LOG.warn("Failed to copy checkin snapshots to image bucket, checkin={}", checkin.uuid, e)
-    }
+    copySnapshotsOutOfRekognition(checkin)
 
     LOG.info("updating checking with automated id check result: {}, checkin={}", verificationResult, checkinUuid)
     checkin.autoIdCheck = verificationResult
     checkinRepository.save(checkin)
 
     return verificationResult
+  }
+
+  /**
+   * As of 11 Aug 2025, the Rekognition service and related S3 data are accessed through
+   * a different set of credentials than the MOJ S3 bucket. For ID verification,
+   * the client uploaded the data straight to Rekog bucket (using presigned URLs).
+   * We now want to copy the video frames used for verification back to MOJ bucket
+   * where it will be accessed by practitioners via the checkin details page.
+   */
+  private fun copySnapshotsOutOfRekognition(checkin: OffenderCheckin) {
+    try {
+      val url = rekogS3UploadService.getCheckinSnapshot(checkin)
+      if (url != null) {
+        s3UploadService.copyFromPresignedGet(url, s3UploadService.checkinObjectCoordinate(checkin, 1))
+      } else {
+        LOG.info("no video snapshot URL for checkin={}", checkin.uuid)
+      }
+    } catch (e: Exception) {
+      // the images are used only for presentation, we can proceed if copy fails
+      LOG.warn("Failed to copy checkin snapshots to image bucket, checkin={}", checkin.uuid, e)
+    }
   }
 
   companion object {

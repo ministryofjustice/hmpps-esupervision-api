@@ -3,8 +3,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.model.CopyObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
@@ -18,6 +18,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.S3ObjectCoordinate
 import java.net.URL
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.UUID
 
@@ -166,25 +169,40 @@ class S3UploadService(
     return s3Presigner.presignPutObject(presignRequest).url()
   }
 
-  /**
-   * Copies the given S3 object into this service's image bucket, preserving the original key.
-   * @return the destination coordinate.
-   */
-  fun copyPreservingKeyToImageBucket(source: S3ObjectCoordinate): S3ObjectCoordinate {
-    val target = S3ObjectCoordinate(
-      bucket = this.imageUploadBucket,
-      key = source.key,
-    )
+  fun copyFromPresignedGet(
+    sourceUrl: URL,
+    destination: S3ObjectCoordinate,
+    contentType: String? = null,
+  ): S3ObjectCoordinate {
+    val http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+    val getReq = HttpRequest.newBuilder(sourceUrl.toURI()).GET().build()
+    val getRes = http.send(getReq, HttpResponse.BodyHandlers.ofInputStream())
+    if (getRes.statusCode() != 200) {
+      throw IllegalStateException("Failed to download from presigned source: HTTP ${getRes.statusCode()}")
+    }
 
-    val request = CopyObjectRequest.builder()
-      .sourceBucket(source.bucket)
-      .sourceKey(source.key)
-      .destinationBucket(target.bucket)
-      .destinationKey(target.key)
+    val lenHeader = getRes.headers().firstValue("content-length")
+    val contentLen = if (lenHeader.isPresent) lenHeader.get().toLong() else -1L
+    val resolvedContentType = contentType
+      ?: getRes.headers().firstValue("content-type").orElse("application/octet-stream")
+
+    val putReq = PutObjectRequest.builder()
+      .bucket(destination.bucket)
+      .key(destination.key)
+      .contentType(resolvedContentType)
       .build()
 
-    s3uploadClient.copyObject(request)
-    return target
+    getRes.body().use { inStream ->
+      if (contentLen >= 0) {
+        s3uploadClient.putObject(putReq, RequestBody.fromInputStream(inStream, contentLen))
+      } else {
+        // Fallback when Content-Length is absent (should be rare for S3 GET)
+        val bytes = inStream.readAllBytes()
+        s3uploadClient.putObject(putReq, RequestBody.fromBytes(bytes))
+      }
+    }
+
+    return destination
   }
 
   private fun bucketFor(key: S3Keyable): String {
