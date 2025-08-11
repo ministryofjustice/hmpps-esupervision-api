@@ -123,6 +123,9 @@ notify:
     POP_CHECKINS_STOPPED: 5ea87cee-4772-4496-87d3-099327bd7dee
 
 rekognition:
+  face-similarity:
+    # minimum accepted value that qualifies a "match"
+    threshold: 90.0
   region: ${REKOG_AWS_REGION}
   access_key_id: ${REKOG_AWS_ACCESS_KEY_ID}
   secret_access_key: ${REKOG_AWS_SECRET_ACCESS_KEY}

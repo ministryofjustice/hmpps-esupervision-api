@@ -58,6 +58,7 @@ class OffenderCheckinService(
   @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
   private val compareFacesService: RekognitionCompareFacesService,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
+  @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
 ) {
 
   /**
@@ -314,7 +315,7 @@ class OffenderCheckinService(
 
     val verificationResult = compareFacesService.verifyCheckinImages(
       checkinImages,
-      CHECKIN_SNAPSHOT_SIMILARITY_THRESHOLD,
+      faceSimilarityThreshold,
     )
 
     LOG.info("updating checking with automated id check result: {}, checkin={}", verificationResult, checkinUuid)
@@ -337,6 +338,5 @@ class OffenderCheckinService(
     }
 
     private val LOG = LoggerFactory.getLogger(this::class.java)
-    private const val CHECKIN_SNAPSHOT_SIMILARITY_THRESHOLD = 90f
   }
 }
