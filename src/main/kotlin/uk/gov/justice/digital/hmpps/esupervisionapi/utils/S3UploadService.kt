@@ -186,6 +186,9 @@ class S3UploadService(
     val resolvedContentType = contentType
       ?: getRes.headers().firstValue("content-type").orElse("application/octet-stream")
 
+    LOG.info("content-length={}, content-type={}, resolved content-type={}", lenHeader.orElse("unknown"), contentType, resolvedContentType)
+    LOG.debug("sourceUrl={}", sourceUrl)
+
     val putReq = PutObjectRequest.builder()
       .bucket(destination.bucket)
       .key(destination.key)
@@ -288,5 +291,9 @@ class S3UploadService(
     } else {
       return null
     }
+  }
+
+  companion object {
+    val LOG = org.slf4j.LoggerFactory.getLogger(S3UploadService::class.java)!!
   }
 }
