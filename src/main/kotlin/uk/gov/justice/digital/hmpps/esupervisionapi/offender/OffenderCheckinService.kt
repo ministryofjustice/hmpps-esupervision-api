@@ -215,12 +215,12 @@ class OffenderCheckinService(
     if (!types.reference.startsWith("image")) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reference content type: ${types.reference}")
     }
-    val referenceUrl = generatePhotoSnapshotLocations(checkin, types.reference, 0..0, duration)
+    val referenceUrl = generatePhotoSnapshotUploadLocations(checkin, types.reference, 0..0, duration)
     val videoUrl = generateVideoUploadLocation(checkin, types.video, duration)
     val snapshotUrls = types.snapshots.flatMapIndexed snapshot@{ index, contentType ->
       if (contentType.startsWith("image")) {
         // offsetting by 1; index = 0 is reserved for the reference image
-        return@snapshot generatePhotoSnapshotLocations(checkin, contentType, index + 1..index + 1, duration)
+        return@snapshot generatePhotoSnapshotUploadLocations(checkin, contentType, index + 1..index + 1, duration)
       }
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid snapshot contentType: $contentType")
     }
@@ -234,7 +234,7 @@ class OffenderCheckinService(
     return body
   }
 
-  private fun generatePhotoSnapshotLocations(checkin: OffenderCheckin, contentType: String, indices: IntRange, duration: Duration): List<URL> {
+  private fun generatePhotoSnapshotUploadLocations(checkin: OffenderCheckin, contentType: String, indices: IntRange, duration: Duration): List<URL> {
     validateCheckinUpdatable(checkin)
     val urls = mutableListOf<URL>()
     for (index in indices) {
