@@ -318,6 +318,13 @@ class OffenderCheckinService(
       faceSimilarityThreshold,
     )
 
+    try {
+      checkinImages.snapshots.map(s3UploadService::copyPreservingKeyToImageBucket)
+    } catch (e: Exception) {
+      // the images are used only for presentation, we can proceed if copy fails
+      LOG.warn("Failed to copy checkin snapshots to image bucket, checkin={}", checkin.uuid, e)
+    }
+
     LOG.info("updating checking with automated id check result: {}, checkin={}", verificationResult, checkinUuid)
     checkin.autoIdCheck = verificationResult
     checkinRepository.save(checkin)
