@@ -171,37 +171,21 @@ class S3UploadService(
    * @return the destination coordinate.
    */
   fun copyPreservingKeyToImageBucket(source: S3ObjectCoordinate): S3ObjectCoordinate {
-    // Uses the same key under the primary image bucket controlled by this service
     val target = S3ObjectCoordinate(
-      bucket = this.imageUploadBucket, // same bucket resolved by this service for images
+      bucket = this.imageUploadBucket,
       key = source.key,
     )
 
-    // Perform server-side copy in S3 (no download/upload roundtrip)
     val request = CopyObjectRequest.builder()
-      .sourceBucket("${source.bucket}/${source.key}")
+      .sourceBucket(source.bucket)
+      .sourceKey(source.key)
       .destinationBucket(target.bucket)
       .destinationKey(target.key)
-      // .metadataDirective("COPY") // default is to copy metadata; uncomment to be explicit
       .build()
 
     s3uploadClient.copyObject(request)
     return target
   }
-
-//  /**
-//   * Copies from a source coordinate to an explicit target coordinate.
-//   */
-//  fun copyObject(source: S3ObjectCoordinate, target: S3ObjectCoordinate): S3ObjectCoordinate {
-//    val request = CopyObjectRequest.builder()
-//      .sourceBucket("${source.bucket}/${source.key}")
-//      .destinationBucket(target.bucket)
-//      .destinationKey(target.key)
-//      .build()
-//
-//    s3uploadClient.copyObject(request)
-//    return target
-//  }
 
   private fun bucketFor(key: S3Keyable): String {
     when (key) {
