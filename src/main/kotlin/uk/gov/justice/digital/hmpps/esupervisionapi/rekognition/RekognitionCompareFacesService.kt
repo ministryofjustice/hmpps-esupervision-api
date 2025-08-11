@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import software.amazon.awssdk.services.rekognition.RekognitionClient
 import software.amazon.awssdk.services.rekognition.model.CompareFacesRequest
 import software.amazon.awssdk.services.rekognition.model.Image
+import software.amazon.awssdk.services.rekognition.model.InvalidParameterException
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 
@@ -40,9 +41,12 @@ class RekognitionCompareFacesService(
       LOGGER.info("Match result: $isMatch")
 
       return isMatch
-    } catch (ex: RekognitionException) {
-      LOGGER.error("Facial comparison failed", ex)
+    } catch (ex: InvalidParameterException) {
+      // Rekognition service could not find any faces in photo
       return false
+    } catch (ex: RekognitionException) {
+      LOGGER.warn("Rekognition service error: {}", ex.message)
+      throw ex
     }
   }
 
