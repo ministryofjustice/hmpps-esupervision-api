@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.S3ObjectCoordinate
 import java.net.URL
 import java.time.Duration
 import java.util.UUID
@@ -79,6 +80,14 @@ class S3UploadService(
    * We can have multiple checkin photo objects, hence the index param
    */
   private fun putObjectRequest(checkin: OffenderCheckin, contentType: String, index: Int): PutObjectRequest = putObjectRequest(videoUploadBucket, CheckinPhotoKey(checkin.uuid, index).toKey(), contentType)
+
+  fun checkinObjectCoordinate(checkin: OffenderCheckin, index: Int): S3ObjectCoordinate {
+    val key = CheckinPhotoKey(checkin.uuid, index)
+    return S3ObjectCoordinate(
+      bucket = videoUploadBucket,
+      key = key.toKey(),
+    )
+  }
 
   /**
    * Generates a pre-signed URL for uploading a file to S3.

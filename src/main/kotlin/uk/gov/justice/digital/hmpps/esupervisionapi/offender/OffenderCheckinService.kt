@@ -14,6 +14,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderChecki
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.CheckinVerificationImages
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -54,6 +56,7 @@ class OffenderCheckinService(
   private val s3UploadService: S3UploadService,
   private val notificationService: NotificationService,
   @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
+  private val compareFacesService: RekognitionCompareFacesService,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
@@ -195,6 +198,18 @@ class OffenderCheckinService(
     return generateUploadLocations(checkin, types, duration)
   }
 
+  fun getCheckinVerificationImages(checkin: OffenderCheckin, numSnapshots: Int): CheckinVerificationImages {
+    // reference image is at index 0
+    val reference = rekogS3UploadService.checkinObjectCoordinate(checkin, 0)
+
+    // snapshot locations are at index 1 to numSnapshots+1
+    val snapshots = (1..numSnapshots).map {
+      rekogS3UploadService.checkinObjectCoordinate(checkin, it)
+    }
+
+    return CheckinVerificationImages(reference, snapshots)
+  }
+
   fun generateUploadLocations(checkin: OffenderCheckin, types: UploadLocationTypes, duration: Duration): CheckinUploadLocationResponse {
     if (!types.reference.startsWith("image")) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reference content type: ${types.reference}")
@@ -232,19 +247,6 @@ class OffenderCheckinService(
     val page = checkinRepository.findAllByCreatedByUuid(practitionerUuid, pageRequest)
     val checkins = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), checkins)
-  }
-
-  fun setAutomatedIdCheckStatus(checkinUuid: UUID, result: AutomatedIdVerificationResult): OffenderCheckinDto {
-    val checkin = checkinRepository.findByUuid(checkinUuid)
-    if (checkin.isPresent) {
-      LOG.info("updating checking with automated id check result: {}, checkin={}", result, checkinUuid)
-      val checkin = checkin.get()
-      checkin.autoIdCheck = result
-      val saved = checkinRepository.save(checkin)
-      return saved.dto(this.s3UploadService)
-    }
-
-    throw NoResourceFoundException(HttpMethod.POST, "/offender_checkins/$checkinUuid")
   }
 
   fun reviewCheckin(checkinUuid: UUID, reviewRequest: CheckinReviewRequest): OffenderCheckinDto {
@@ -301,6 +303,27 @@ class OffenderCheckinService(
     LOG.info("Cancelling checkins for offender={}, result={}, logEntry={}", offenderUuid, result, logEntry.uuid)
   }
 
+  fun verifyCheckinIdentity(checkinUuid: UUID, numSnapshots: Int): AutomatedIdVerificationResult {
+    val checkin = checkinRepository.findByUuid(checkinUuid).getOrElse {
+      throw BadArgumentException("Checkin=$checkinUuid not found")
+    }
+
+    validateCheckinUpdatable(checkin)
+
+    val checkinImages = getCheckinVerificationImages(checkin, numSnapshots)
+
+    val verificationResult = compareFacesService.verifyCheckinImages(
+      checkinImages,
+      CHECKIN_SNAPSHOT_SIMILARITY_THRESHOLD,
+    )
+
+    LOG.info("updating checking with automated id check result: {}, checkin={}", verificationResult, checkinUuid)
+    checkin.autoIdCheck = verificationResult
+    checkinRepository.save(checkin)
+
+    return verificationResult
+  }
+
   companion object {
     // checkin has been SUBMITTED so we no longer allow to overwrite the associated files
     private fun validateCheckinUpdatable(checkin: OffenderCheckin) {
@@ -314,5 +337,6 @@ class OffenderCheckinService(
     }
 
     private val LOG = LoggerFactory.getLogger(this::class.java)
+    private const val CHECKIN_SNAPSHOT_SIMILARITY_THRESHOLD = 90f
   }
 }

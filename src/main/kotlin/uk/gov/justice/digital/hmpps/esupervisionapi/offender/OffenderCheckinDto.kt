@@ -87,6 +87,10 @@ data class OffenderCheckinSubmission(
   val survey: SurveyContents,
 )
 
+data class AutomatedVerificationResult(
+  val result: AutomatedIdVerificationResult,
+)
+
 /**
  * Maps survey versions to flagging functions.
  */
