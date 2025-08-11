@@ -335,7 +335,7 @@ class OffenderCheckinService(
    */
   private fun copySnapshotsOutOfRekognition(checkin: OffenderCheckin) {
     try {
-      val url = rekogS3UploadService.getCheckinSnapshot(checkin)
+      val url = rekogS3UploadService.getCheckinSnapshot(checkin, true)
       if (url != null) {
         s3UploadService.copyFromPresignedGet(url, s3UploadService.checkinObjectCoordinate(checkin, 1))
       } else {
