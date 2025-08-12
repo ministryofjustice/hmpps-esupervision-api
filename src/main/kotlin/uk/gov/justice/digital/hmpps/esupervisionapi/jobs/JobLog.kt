@@ -21,6 +21,12 @@ enum class JobType {
    * by fetching the appropriate status from GOV.UK Notify
    */
   CHECKIN_NOTIFICATION_STATUS_UPDATE_JOB,
+
+  /**
+   * Runs daily, sends notification to the practitioner about checkins that
+   * expired (e.g., the offender failed to submit a checkin in the agreed time window).
+   */
+  CHECKIN_EXIPIRED_NOTIFICATIONS_JOB,
 }
 
 @Entity
