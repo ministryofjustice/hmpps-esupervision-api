@@ -37,11 +37,12 @@ class CheckinNotificationStatusUpdater(
 
     val now = clock.instant()
     val newerThan = now.atZone(clock.zone).toLocalDate().atStartOfDay().minusDays(5)
+    val newerThanInstant = newerThan.toInstant(clock.zone.rules.getOffset(now))
     val jobs = jobLogRepository.findByCreatedAtGreaterThanAndJobType(
-      newerThan.toInstant(clock.zone.rules.getOffset(now)),
+      newerThanInstant,
       JobType.CHECKIN_NOTIFICATIONS_JOB,
     )
-    LOG.info("Processing {} jobs", jobs.size)
+    LOG.info("Processing {} jobs, newer than {}", jobs.size, newerThanInstant.toString())
 
     try {
       for (job in jobs) {
