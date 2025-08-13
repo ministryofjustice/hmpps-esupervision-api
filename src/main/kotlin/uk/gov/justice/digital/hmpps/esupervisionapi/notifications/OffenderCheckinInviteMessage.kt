@@ -28,7 +28,7 @@ data class OffenderCheckinInviteMessage(
     get() = NotificationType.OffenderCheckinInvite
 
   companion object {
-    val DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+    val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")
 
     fun fromCheckin(checkin: OffenderCheckin, checkinWindow: Period): OffenderCheckinInviteMessage = OffenderCheckinInviteMessage(
       firstName = checkin.offender.firstName,
