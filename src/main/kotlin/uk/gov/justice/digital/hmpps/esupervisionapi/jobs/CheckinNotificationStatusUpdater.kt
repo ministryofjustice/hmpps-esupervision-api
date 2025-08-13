@@ -49,8 +49,9 @@ class CheckinNotificationStatusUpdater(
         // GOV.UK Notify returns up to 250 results per call, so we fetch till there are no more results
         val batches = mutableListOf<NotificationStatusCollection>()
         do {
-          val batch = notificationService.notificationStatus(job, batches.lastOrNull()?.previousPageParam)
-          LOG.info("job reference={}, got batch with {} notifications", job.reference(), batch.notifications.size)
+          val olderThan = batches.lastOrNull()?.previousPageParam
+          val batch = notificationService.notificationStatus(job, olderThan)
+          LOG.info("job reference={}, got batch with {} notifications, older than {}", job.reference(), batch.notifications.size, olderThan)
           batches.add(batch)
         } while (batches.isNotEmpty() && batch.hasNextPage)
 
