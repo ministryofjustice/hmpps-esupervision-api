@@ -8,6 +8,8 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
@@ -23,6 +25,7 @@ typealias CheckiNotificationReference = String
 @Table(
   name = "offender_checkin_notification",
   indexes = [
+    Index(name = "idx_checkin_notification_notification_id", columnList = "notification_id"),
     Index(name = "idx_checkin_notification_reference", columnList = "reference"),
     Index(name = "idx_chckin_notification_created_at", columnList = "created_at"),
   ],
@@ -50,8 +53,7 @@ open class CheckinNotification(
   open var job: JobLog? = null,
 
   /**
-   * Set to one of the relevant statuses obtained from
-   * from GOV.UK Notify
+   * Set to one of the relevant statuses obtained from GOV.UK Notify
    */
   @Column
   open var status: String? = null,
@@ -66,4 +68,25 @@ open class CheckinNotification(
 ) : AEntity()
 
 @Repository
-interface CheckinNotificationRepository : org.springframework.data.jpa.repository.JpaRepository<CheckinNotification, Long>
+interface CheckinNotificationRepository : org.springframework.data.jpa.repository.JpaRepository<CheckinNotification, Long> {
+
+  @Query(
+    """
+    SELECT cn FROM CheckinNotification cn WHERE cn.reference = :reference
+    AND cn.status IN (:statuses)
+    AND cn.job = :job
+    AND cn.createdAt >= :lowerBound
+    """,
+  )
+  fun findByJobAndStatus(job: JobLog, statuses: List<String>, lowerBound: Instant): List<CheckinNotification>
+
+  @Query(
+    """
+    UPDATE CheckinNotification cn 
+    SET cn.status = :status 
+    WHERE cn.notificationId IN :notificationIds
+    """,
+  )
+  @Modifying
+  fun updateNotificationStatuses(notificationIds: Collection<UUID>, status: String)
+}
