@@ -61,6 +61,8 @@ class OffenderCheckinService(
   @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
 ) {
 
+  private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
+
   /**
    * @param uuid UUID of the checkin
    * @param includeUploads set to true to ensure vide/snapshot URLs are returned
@@ -122,7 +124,7 @@ class OffenderCheckinService(
     val saved = checkinRepository.save(checkin)
 
     // notify PoP of checkin invite
-    val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
+    val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
     val inviteResults = this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
 
     return CheckinCreationInfo(
@@ -155,8 +157,10 @@ class OffenderCheckinService(
 
     val now = clock.instant()
     val submissionDate = now.atZone(clock.zone).toLocalDate()
-    val cutoff = checkin.dueDate.plus(Period.ofDays(checkinWindow.toDays().toInt()))
-    if (cutoff <= submissionDate) {
+    // dueDate + window -- last day when checkin can be submitted (till midnight),
+    // the next day is when checkin submissions are no longer accepted
+    val finalCheckinDate = checkin.dueDate.plus(checkinWindowPeriod)
+    if (finalCheckinDate < submissionDate) {
       throw InvalidStateTransitionException("Checkin submission past due date", checkin)
     }
     validateCheckinUpdatable(checkin)
@@ -285,7 +289,7 @@ class OffenderCheckinService(
     validateCheckinUpdatable(checkin)
     validateUnscheduledNotification(clock.instant(), checkin)
 
-    val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin)
+    val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
     this.notificationService.sendMessage(
       inviteMessage,
       checkin.offender,
