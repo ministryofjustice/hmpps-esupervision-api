@@ -20,7 +20,7 @@ data class OffenderCheckinInviteMessage(
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
     "firstName" to firstName,
     "lastName" to lastName,
-    "date" to DATE_FORMAT.format(checkinDueDate),
+    "date" to DATE_FORMAT.format(finalCheckinDate),
     "url" to appConfig.checkinSubmitUrl(checkinUuid).toString(),
   )
 
