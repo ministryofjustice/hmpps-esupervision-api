@@ -72,7 +72,7 @@ interface CheckinNotificationRepository : org.springframework.data.jpa.repositor
 
   @Query(
     """
-    SELECT cn FROM CheckinNotification cn WHERE cn.reference = :reference
+    SELECT cn FROM CheckinNotification cn WHERE cn.reference = :#{#job.reference()}
     AND cn.status IN (:statuses)
     AND cn.job = :job
     AND cn.createdAt >= :lowerBound
