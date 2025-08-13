@@ -16,6 +16,8 @@ app:
     offender-checkin-expiry:
       cron: "0 0 * * * *"  # Production schedule (1 AM and 10 AM daily)
       #cron: "0 0 1,10 * * *"  # Production schedule (1 AM and 10 AM daily)
+    offender-checkin-notification-status:
+      cron: "0 0 * * * *"
 
 spring:
   application:

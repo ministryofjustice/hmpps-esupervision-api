@@ -3,12 +3,15 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.web.util.UriComponentsBuilder
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTemplateConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResultSummary
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
 import uk.gov.service.notify.NotificationClientApi
+import uk.gov.service.notify.NotificationList
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -34,11 +37,20 @@ class GovNotifyNotificationService(
     val personalisation = message.personalisationData(this.appConfig)
     try {
       return method.notify(this.notifyClient, context, now, templateId, personalisation)
+    } catch (ex: uk.gov.service.notify.NotificationClientException) {
+      LOGGER.warn("Failed to send notification message, reference={}, templateId={}, response status={}: {}", context.reference, templateId, ex.httpResult, ex.message)
     } catch (ex: Exception) {
       // log failure and continue
-      LOGGER.warn("Failed to send notification message", ex)
+      LOGGER.warn("Failed to send notification message, reference={}, templateId={}", context.reference, templateId, ex)
     }
     return null
+  }
+
+  override fun notificationStatus(job: JobLog, olderThan: String?): NotificationStatusCollection {
+    val list = notifyClient.getNotifications(null, null, job.reference(), olderThan)
+    LOGGER.info("Got {} notifications, reference={}, jobType={}", list.notifications.size, job.reference(), job.jobType)
+    val notifications = list.notifications.map { NotificationInfo(it.id, it.status) }
+    return StatusCollection(notifications, list.nextPageOlderThan())
   }
 
   companion object {
@@ -89,4 +101,24 @@ private fun Email.notify(
     null,
     null,
   )
+}
+
+private fun NotificationList.nextPageOlderThan(): String? {
+  if (this.nextPageLink.isPresent) {
+    val nextPage = UriComponentsBuilder.fromUriString(this.nextPageLink.get()).build()
+    return nextPage.queryParams.getFirst("older_than")
+  }
+  return null
+}
+
+data class StatusCollection(
+  val results: List<NotificationInfo>,
+  val nextPageNotificationId: String?,
+) : NotificationStatusCollection {
+  override val notifications: List<NotificationInfo>
+    get() = results
+  override val hasNextPage: Boolean
+    get() = nextPageNotificationId != null
+  override val previousPageParam: String?
+    get() = nextPageNotificationId
 }

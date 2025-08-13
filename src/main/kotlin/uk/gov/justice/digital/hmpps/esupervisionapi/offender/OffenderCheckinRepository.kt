@@ -100,6 +100,7 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
 
   // returns checkins created by a practitioner with the given uuid
+  @EntityGraph(attributePaths = ["offender", "createdBy", "reviewedBy"], type = EntityGraph.EntityGraphType.LOAD)
   fun findAllByCreatedByUuid(practitionerUuid: String, pageable: Pageable): Page<OffenderCheckin>
 
   @EntityGraph(attributePaths = ["offender.practitioner"])
@@ -135,8 +136,7 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   @Query(
     """
     UPDATE OffenderCheckin c SET c.status = 'CANCELLED'
-    WHERE c.offender = :offender AND c.status IN ('CREATED', 'SUBMITTED')
-  """,
+    WHERE c.offender = :offender AND c.status IN ('CREATED', 'SUBMITTED')""",
   )
   @Modifying
   fun updateStatusToCancelled(offender: Offender): Int
