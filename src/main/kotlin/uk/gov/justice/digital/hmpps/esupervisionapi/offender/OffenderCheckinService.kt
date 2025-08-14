@@ -154,26 +154,17 @@ class OffenderCheckinService(
     if (!checkin.status.canTransitionTo(CheckinStatus.SUBMITTED)) {
       throw InvalidStateTransitionException("Cannot submit checkin with status=${checkin.status}", checkin)
     }
-
-    val now = clock.instant()
-    val submissionDate = now.atZone(clock.zone).toLocalDate()
-    // dueDate + window -- last day when checkin can be submitted (till midnight),
-    // the next day is when checkin submissions are no longer accepted
-    val finalCheckinDate = checkin.dueDate.plus(checkinWindowPeriod)
-    if (finalCheckinDate < submissionDate) {
-      throw InvalidStateTransitionException("Checkin submission past due date", checkin)
+    if (checkin.isPastSubmissionDate(clock, checkinWindowPeriod)) {
+      throw BadArgumentException("Checkin submission past due date")
     }
     validateCheckinUpdatable(checkin)
 
-    // NOTE(rosado): there's no automated id verification at the moment, so we only check
-    // if a video was uploaded. Once automated checkin is in, we can replace this
-    // with a check of the `autoIdCheck` property (where null means no check was performed
-    // due to missing video)
     val videoUploaded = s3UploadService.isCheckinVideoUploaded(checkin)
     if (!videoUploaded) {
       throw MissingVideoException("Cannot submit a checkin without a video, checkin ${checkin.uuid}", checkin)
     }
 
+    val now = clock.instant()
     checkin.submittedAt = now
     checkin.surveyResponse = checkinInput.survey
     checkin.status = CheckinStatus.SUBMITTED
@@ -216,9 +207,14 @@ class OffenderCheckinService(
   }
 
   fun generateUploadLocations(checkin: OffenderCheckin, types: UploadLocationTypes, duration: Duration): CheckinUploadLocationResponse {
+    validateCheckinUpdatable(checkin)
     if (!types.reference.startsWith("image")) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reference content type: ${types.reference}")
     }
+    if (checkin.isPastSubmissionDate(clock, checkinWindowPeriod)) {
+      throw BadArgumentException("Checkin submission past due date")
+    }
+
     val referenceUrl = generatePhotoSnapshotUploadLocations(checkin, types.reference, 0..0, duration)
     val videoUrl = generateVideoUploadLocation(checkin, types.video, duration)
     val snapshotUrls = types.snapshots.flatMapIndexed snapshot@{ index, contentType ->
@@ -365,4 +361,12 @@ class OffenderCheckinService(
 
     private val LOG = LoggerFactory.getLogger(this::class.java)
   }
+}
+
+fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
+  val submissionDate = clock.instant().atZone(clock.zone).toLocalDate()
+  // dueDate + window -- last day when checkin can be submitted (till midnight),
+  // the next day is when checkin submissions are no longer accepted
+  val finalCheckinDate = this.dueDate.plus(checkinWindow)
+  return finalCheckinDate < submissionDate
 }
