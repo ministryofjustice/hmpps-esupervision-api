@@ -52,6 +52,7 @@ data class OffenderCheckinDto(
   val createdBy: String,
   val createdAt: Instant,
   val reviewedBy: String?,
+  val reviewedAt: Instant?,
   /**
    * Will be set to pre-signed S3 URL
    */

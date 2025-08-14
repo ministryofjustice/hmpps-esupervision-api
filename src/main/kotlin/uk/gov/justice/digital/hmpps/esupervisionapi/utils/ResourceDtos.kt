@@ -60,4 +60,8 @@ data class CheckinReviewRequest(
   @field:NotBlank
   val practitioner: String,
   val manualIdCheck: ManualIdVerificationResult,
+  /**
+   * Required when offender did not submit a checkin within the submission time window.
+   */
+  val missedCheckinComment: String? = null,
 )

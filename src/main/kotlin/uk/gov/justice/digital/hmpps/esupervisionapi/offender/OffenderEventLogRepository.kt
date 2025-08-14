@@ -4,17 +4,20 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.Query
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.util.UUID
 
 enum class LogEntryType {
   OFFENDER_DEACTIVATED,
+  OFFENDER_CHECKIN_NOT_SUBMITTED,
 }
 
 /**
@@ -41,11 +44,20 @@ open class OffenderEventLog(
   @ManyToOne(fetch = jakarta.persistence.FetchType.EAGER)
   open var offender: Offender,
 
+  /**
+   * Note: this is set only for certain type of events, so we don't
+   * want to expose it in every DTO. Caller needs to explicitly
+   * ask for it.
+   */
+  @ManyToOne(fetch = jakarta.persistence.FetchType.LAZY, optional = true)
+  @JoinColumn(name = "checkin", referencedColumnName = "id", updatable = false)
+  open var checkin: OffenderCheckin? = null,
+
   @Column("created_at", updatable = false)
   @CreationTimestamp
   open var createdAt: java.time.Instant? = null,
 ) : AEntity() {
-  fun dto(): OffenderEventLogDto {
+  fun dto(): IOffenderEventLogDto {
     assert(createdAt != null, { "You should not be creating DTOs without creation timestamp" })
     return OffenderEventLogDto(
       uuid = uuid,
@@ -59,5 +71,42 @@ open class OffenderEventLog(
 }
 
 interface OffenderEventLogRepository : org.springframework.data.jpa.repository.JpaRepository<OffenderEventLog, Long> {
-  fun findAllByOffenderUuid(offenderUuid: UUID, pageable: Pageable): Page<OffenderEventLog>
+
+  @Query(
+    """
+    select
+     e.uuid as uuid,
+     e.logEntryType as logEntryType,
+     e.comment as comment,
+     e.createdAt as createdAt,
+     o.uuid as offender,
+     p.uuid as practitioner
+    from OffenderEventLog e
+    join e.offender o 
+    join o.practitioner p
+    where o = :offender
+    order by e.createdAt desc
+  """,
+  )
+  fun findAllByOffender(offender: Offender, pageable: Pageable): Page<IOffenderEventLogDto>
+
+  @Query(
+    """
+    select
+     e.uuid as uuid,
+     e.logEntryType as logEntryType,
+     e.comment as comment,
+     e.createdAt as createdAt,
+     c.uuid as checkin,
+     o.uuid as offender,
+     p.uuid as practitioner
+    from OffenderEventLog e
+    join e.offender o 
+    join o.practitioner p
+    left join e.checkin c
+    where e.logEntryType in ('OFFENDER_CHECKIN_NOT_SUBMITTED')
+    order by e.createdAt desc
+  """,
+  )
+  fun findAllCheckinEntries(pageable: Pageable): Page<OffenderCheckinEventLogDto>
 }
