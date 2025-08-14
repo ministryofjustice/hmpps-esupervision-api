@@ -3,9 +3,11 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
 import java.net.URL
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 enum class CheckinStatus {
@@ -146,6 +148,10 @@ data class SingleNotificationContext(val ref: String) : NotificationContext(ref,
 
   companion object {
     fun from(notificationId: UUID) = SingleNotificationContext("SNGL-$notificationId")
+
+    fun forCheckin(now: LocalDate) = SingleNotificationContext("CHK-${now.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+
+    fun forCheckin(clock: Clock) = forCheckin(clock.instant().atZone(clock.zone).toLocalDate())
   }
 }
 

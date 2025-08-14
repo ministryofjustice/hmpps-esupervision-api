@@ -289,7 +289,7 @@ class OffenderCheckinService(
     this.notificationService.sendMessage(
       inviteMessage,
       checkin.offender,
-      SingleNotificationContext.from(UUID.randomUUID()),
+      SingleNotificationContext.forCheckin(clock),
     )
 
     val saved = checkinRepository.save(checkin)

@@ -25,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationR
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
+import java.time.Clock
 import java.time.Duration
 import java.util.UUID
 
@@ -32,6 +33,7 @@ import java.util.UUID
 @RequestMapping(path = ["/offender_checkins"])
 @Validated
 class OffenderCheckinResource(
+  val clock: Clock,
   val offenderCheckinService: OffenderCheckinService,
   @Qualifier("rekognitionS3Client") val rekognitionS3: S3Client,
   @Value("\${rekognition.s3_bucket_name}") val rekogBucketName: String,
@@ -69,7 +71,7 @@ class OffenderCheckinResource(
     if (bindingResult.hasErrors()) {
       throw intoResponseStatusException(bindingResult)
     }
-    val created = offenderCheckinService.createCheckin(createCheckin, SingleNotificationContext.from(UUID.randomUUID()))
+    val created = offenderCheckinService.createCheckin(createCheckin, SingleNotificationContext.forCheckin(clock))
     return ResponseEntity.ok(created.checkin)
   }
 
