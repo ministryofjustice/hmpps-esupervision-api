@@ -52,6 +52,7 @@ data class OffenderCheckinDto(
   val createdBy: String,
   val createdAt: Instant,
   val reviewedBy: String?,
+  val reviewedAt: Instant?,
   /**
    * Will be set to pre-signed S3 URL
    */
@@ -80,6 +81,26 @@ data class OffenderCheckinDto(
       return emptyList()
     }
 }
+
+enum class OffenderCheckinLogsHint {
+  ALL,
+  SUBSET,
+  OMITTED,
+}
+
+data class OffenderCheckinLogs(
+  /**
+   * A hint to the client on whether the returned
+   * collection has all logs or
+   */
+  val hint: OffenderCheckinLogsHint,
+  val logs: List<OffenderCheckinEventLogDto>,
+)
+
+data class OffenderCheckinResponse(
+  val checkin: OffenderCheckinDto,
+  val checkinLogs: OffenderCheckinLogs,
+)
 
 /**
  * Holds data submitted as a checkin by the offender.

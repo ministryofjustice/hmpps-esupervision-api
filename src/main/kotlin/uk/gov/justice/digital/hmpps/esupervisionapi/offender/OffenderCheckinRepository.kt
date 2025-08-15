@@ -46,6 +46,9 @@ open class OffenderCheckin(
   @Column("submitted_at", nullable = true)
   open var submittedAt: Instant?,
 
+  @Column("reviewed_at", nullable = true)
+  open var reviewedAt: Instant?,
+
   @Column("created_at", nullable = false)
   open var createdAt: Instant,
 
@@ -84,6 +87,7 @@ open class OffenderCheckin(
     submittedOn = submittedAt,
     surveyResponse = surveyResponse,
     reviewedBy = reviewedBy?.uuid,
+    reviewedAt = reviewedAt,
     createdBy = createdBy.uuid,
     createdAt = createdAt,
     videoUrl = resourceLocator.getCheckinVideo(this),

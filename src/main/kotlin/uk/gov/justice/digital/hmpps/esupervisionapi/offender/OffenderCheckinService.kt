@@ -7,6 +7,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
@@ -59,6 +60,7 @@ class OffenderCheckinService(
   private val compareFacesService: RekognitionCompareFacesService,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
   @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
+  private val offenderEventLogRepository: OffenderEventLogRepository,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -70,10 +72,15 @@ class OffenderCheckinService(
   fun getCheckin(
     uuid: UUID,
     includeUploads: Boolean = false,
-  ): OffenderCheckinDto {
+  ): OffenderCheckinResponse {
     val checkin = checkinRepository.findByUuid(uuid).getOrElse {
       throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$uuid")
     }
+    val logs = offenderEventLogRepository.findAllCheckinEntries(
+      checkin,
+      setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED),
+      PageRequest.of(0, 1),
+    )
 
     var dto = checkin.dto(this.s3UploadService)
     if (includeUploads) {
@@ -86,7 +93,13 @@ class OffenderCheckinService(
         )
       }
     }
-    return dto
+    return OffenderCheckinResponse(
+      dto,
+      OffenderCheckinLogs(
+        OffenderCheckinLogsHint.SUBSET,
+        logs.content,
+      ),
+    )
   }
 
   fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): CheckinCreationInfo {
@@ -114,6 +127,7 @@ class OffenderCheckinService(
       offender = offender,
       submittedAt = null,
       reviewedBy = null,
+      reviewedAt = null,
       status = CheckinStatus.CREATED,
       surveyResponse = null,
       dueDate = createCheckin.dueDate,
@@ -250,18 +264,39 @@ class OffenderCheckinService(
     return CollectionDto(page.pageable.toPagination(), checkins)
   }
 
+  @Transactional
   fun reviewCheckin(checkinUuid: UUID, reviewRequest: CheckinReviewRequest): OffenderCheckinDto {
     val practitioner = practitionerRepository.findByUuid(reviewRequest.practitioner)
       .getOrElse { throw BadArgumentException("practitioner not found") }
     val checkin = checkinRepository.findByUuid(checkinUuid)
       .getOrElse { throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid") }
-    if (!checkin.status.canTransitionTo(CheckinStatus.REVIEWED)) {
-      throw BadArgumentException("Can't review checkin with status=${checkin.status}")
+
+    if (checkin.status == CheckinStatus.EXPIRED) {
+      val missedCheckinComment = reviewRequest.missedCheckinComment?.trim()
+      if (checkin.status == CheckinStatus.EXPIRED && missedCheckinComment.isNullOrBlank()) {
+        throw BadArgumentException("Reason for missed checkin not given")
+      }
+
+      if (missedCheckinComment != null) {
+        offenderEventLogRepository.save(
+          OffenderEventLog(
+            UUID.randomUUID(),
+            LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+            comment = missedCheckinComment,
+            practitioner = checkin.createdBy,
+            offender = checkin.offender,
+          ),
+        )
+      }
+    } else if (!checkin.status.canTransitionTo(CheckinStatus.REVIEWED)) {
+      throw InvalidStateTransitionException("Cannot review checkin with status=${checkin.status}", checkin)
+    } else {
+      checkin.status = CheckinStatus.REVIEWED
     }
 
     checkin.reviewedBy = practitioner
     checkin.manualIdCheck = reviewRequest.manualIdCheck
-    checkin.status = CheckinStatus.REVIEWED
+    checkin.reviewedAt = clock.instant()
 
     return checkinRepository.save(checkin).dto(this.s3UploadService)
   }

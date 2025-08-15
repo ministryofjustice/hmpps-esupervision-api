@@ -271,7 +271,10 @@ class OffenderCheckinTest : IntegrationTestBase() {
     Assertions.assertNull(updatedOffender.phoneNumber)
     Assertions.assertEquals(OffenderStatus.INACTIVE, updatedOffender.status)
 
-    val entries = offenderEventLogService.eventsForOffender(offender.uuid, PageRequest.of(0, 10))
+    val entries = offenderEventLogRepository.findAllByOffender(
+      offenderRepository.findByUuid(offender.uuid).get(),
+      PageRequest.of(0, 100),
+    )
 
     Assertions.assertEquals(1, entries.content.size)
     val entry = entries.content[0]

@@ -40,6 +40,7 @@ class SurveyTest {
     createdBy = "alice",
     createdAt = Instant.now(),
     reviewedBy = null,
+    reviewedAt = null,
     videoUrl = null,
     snapshotUrl = null,
     autoIdCheck = AutomatedIdVerificationResult.MATCH,
