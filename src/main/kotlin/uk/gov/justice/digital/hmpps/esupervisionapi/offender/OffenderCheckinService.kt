@@ -72,10 +72,15 @@ class OffenderCheckinService(
   fun getCheckin(
     uuid: UUID,
     includeUploads: Boolean = false,
-  ): OffenderCheckinDto {
+  ): OffenderCheckinResponse {
     val checkin = checkinRepository.findByUuid(uuid).getOrElse {
       throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$uuid")
     }
+    val logs = offenderEventLogRepository.findAllCheckinEntries(
+      checkin,
+      setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED),
+      PageRequest.of(0, 1),
+    )
 
     var dto = checkin.dto(this.s3UploadService)
     if (includeUploads) {
@@ -88,7 +93,13 @@ class OffenderCheckinService(
         )
       }
     }
-    return dto
+    return OffenderCheckinResponse(
+      dto,
+      OffenderCheckinLogs(
+        OffenderCheckinLogsHint.SUBSET,
+        logs.content,
+      ),
+    )
   }
 
   fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): CheckinCreationInfo {

@@ -104,9 +104,11 @@ interface OffenderEventLogRepository : org.springframework.data.jpa.repository.J
     join e.offender o 
     join o.practitioner p
     left join e.checkin c
-    where e.logEntryType in ('OFFENDER_CHECKIN_NOT_SUBMITTED')
+    where
+        e.checkin is NOT NULL
+        AND e.logEntryType in :entryTypes and e.checkin = :checkin  
     order by e.createdAt desc
   """,
   )
-  fun findAllCheckinEntries(pageable: Pageable): Page<OffenderCheckinEventLogDto>
+  fun findAllCheckinEntries(checkin: OffenderCheckin, entryTypes: Set<LogEntryType>, pageable: Pageable): Page<OffenderCheckinEventLogDto>
 }

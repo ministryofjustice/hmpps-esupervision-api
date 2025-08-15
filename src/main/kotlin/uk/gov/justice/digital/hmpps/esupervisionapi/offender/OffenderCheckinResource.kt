@@ -62,7 +62,7 @@ class OffenderCheckinResource(
   fun getCheckin(
     @PathVariable uuid: UUID,
     @RequestParam(name = "include-uploads", required = false, defaultValue = "false") includeUploads: Boolean,
-  ): ResponseEntity<OffenderCheckinDto> = ResponseEntity.ok(offenderCheckinService.getCheckin(uuid, includeUploads))
+  ): ResponseEntity<OffenderCheckinResponse> = ResponseEntity.ok(offenderCheckinService.getCheckin(uuid, includeUploads))
 
   @PostMapping
   @Tag(name = "practitioner")
