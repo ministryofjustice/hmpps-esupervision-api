@@ -84,7 +84,7 @@ open class OffenderCheckin(
     status = status,
     dueDate = dueDate,
     offender = offender.dto(resourceLocator), // TODO: don't return whole dto, just the uuid
-    submittedOn = submittedAt,
+    submittedAt = submittedAt,
     surveyResponse = surveyResponse,
     reviewedBy = reviewedBy?.uuid,
     reviewedAt = reviewedAt,

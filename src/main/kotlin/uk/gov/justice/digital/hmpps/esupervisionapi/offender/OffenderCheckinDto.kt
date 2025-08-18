@@ -47,7 +47,7 @@ data class OffenderCheckinDto(
   val status: CheckinStatus,
   val dueDate: LocalDate,
   val offender: OffenderDto,
-  val submittedOn: Instant?,
+  val submittedAt: Instant?,
   val surveyResponse: SurveyContents?,
   val createdBy: String,
   val createdAt: Instant,
