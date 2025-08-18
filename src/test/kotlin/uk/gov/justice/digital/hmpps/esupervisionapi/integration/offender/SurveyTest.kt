@@ -35,7 +35,7 @@ class SurveyTest {
     status = CheckinStatus.SUBMITTED,
     dueDate = LocalDate.now(),
     offender = offender,
-    submittedOn = Instant.now(),
+    submittedAt = Instant.now(),
     surveyResponse = mapOf(),
     createdBy = "alice",
     createdAt = Instant.now(),
