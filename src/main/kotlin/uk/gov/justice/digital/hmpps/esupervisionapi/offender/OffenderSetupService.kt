@@ -85,13 +85,12 @@ class OffenderSetupService(
     val offender = setup.get().offender
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = now
-    offenderRepository.save(offender)
-
     val saved = offenderRepository.save(offender)
 
     // send registration confirmation message to PoP
     val confirmationMessage = RegistrationConfirmationMessage.fromSetup(setup.get())
-    this.notificationService.sendMessage(confirmationMessage, offender, SingleNotificationContext.from(UUID.randomUUID()))
+    val notifResult = this.notificationService.sendMessage(confirmationMessage, saved, SingleNotificationContext.from(UUID.randomUUID()))
+    LOG.info("Completing offender setup for offender uuid={}, notification-ids={}", saved.uuid, notifResult.results.map { it.notificationId })
 
     return saved.dto(this.s3UploadService)
   }
