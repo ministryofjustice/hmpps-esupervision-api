@@ -94,6 +94,9 @@ class OffenderCheckinTest : IntegrationTestBase() {
     practitionerService.createPractitioner(Practitioner.create("Alice"))
     practitionerService.createPractitioner(Practitioner.create("Bob"))
 
+    reset(notificationService)
+    whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
+
     val setup = offenderSetupService.startOffenderSetup(offenderInfo)
     mockSetupPhotoUpload(setup)
     offender = offenderSetupService.completeOffenderSetup(setup.uuid)
