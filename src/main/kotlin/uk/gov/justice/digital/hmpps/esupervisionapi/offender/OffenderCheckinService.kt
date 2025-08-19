@@ -285,6 +285,7 @@ class OffenderCheckinService(
             comment = missedCheckinComment,
             practitioner = checkin.createdBy,
             offender = checkin.offender,
+            checkin = checkin,
           ),
         )
       }

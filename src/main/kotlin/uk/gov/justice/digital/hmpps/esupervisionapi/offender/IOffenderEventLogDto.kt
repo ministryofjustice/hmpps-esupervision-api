@@ -22,6 +22,10 @@ interface IOffenderEventLogDto {
   val createdAt: Instant
 }
 
+interface IOffenderCheckinEventLogDto :
+  IOffenderEventLogDto,
+  CheckinReference
+
 data class OffenderEventLogDto(
   override val uuid: UUID,
   override val logEntryType: LogEntryType,

@@ -59,7 +59,7 @@ data class CreateCheckinRequest(
 data class CheckinReviewRequest(
   @field:NotBlank
   val practitioner: String,
-  val manualIdCheck: ManualIdVerificationResult,
+  val manualIdCheck: ManualIdVerificationResult? = null,
   /**
    * Required when offender did not submit a checkin within the submission time window.
    */

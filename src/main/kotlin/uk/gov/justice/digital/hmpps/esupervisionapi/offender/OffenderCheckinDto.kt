@@ -94,7 +94,7 @@ data class OffenderCheckinLogs(
    * collection has all logs or
    */
   val hint: OffenderCheckinLogsHint,
-  val logs: List<OffenderCheckinEventLogDto>,
+  val logs: List<IOffenderCheckinEventLogDto>,
 )
 
 data class OffenderCheckinResponse(

@@ -110,5 +110,5 @@ interface OffenderEventLogRepository : org.springframework.data.jpa.repository.J
     order by e.createdAt desc
   """,
   )
-  fun findAllCheckinEntries(checkin: OffenderCheckin, entryTypes: Set<LogEntryType>, pageable: Pageable): Page<OffenderCheckinEventLogDto>
+  fun findAllCheckinEntries(checkin: OffenderCheckin, entryTypes: Set<LogEntryType>, pageable: Pageable): Page<IOffenderCheckinEventLogDto>
 }
