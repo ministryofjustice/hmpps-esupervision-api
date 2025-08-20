@@ -45,7 +45,6 @@ enum class OffenderStatus {
   indexes = [
     Index(name = "offender_status_idx", columnList = "status", unique = false),
     Index(name = "offender_created_at_idx", columnList = "created_at", unique = false),
-    Index(name = "offender_uuid_idx", columnList = "uuid", unique = true),
     Index(name = "offender_practitioner", columnList = "practitioner_id", unique = false),
   ],
 )
@@ -186,9 +185,8 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
 @Table(
   name = "offender_setup",
   indexes = [
-    Index(columnList = "uuid", name = "offender_setup_uuid_idx", unique = true),
     Index(columnList = "created_at", name = "offender_setup_created_at_idx", unique = false),
-    Index(columnList = "practitioner_id", name = "offender_setup_practitioner_idx", unique = true),
+    Index(columnList = "practitioner_id", name = "offender_setup_practitioner_idx", unique = false),
   ],
 )
 open class OffenderSetup(
