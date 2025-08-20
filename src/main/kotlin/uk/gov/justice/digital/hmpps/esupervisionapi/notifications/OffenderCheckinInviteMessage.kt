@@ -30,12 +30,15 @@ data class OffenderCheckinInviteMessage(
   companion object {
     val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")
 
-    fun fromCheckin(checkin: OffenderCheckin, checkinWindow: Period): OffenderCheckinInviteMessage = OffenderCheckinInviteMessage(
-      firstName = checkin.offender.firstName,
-      lastName = checkin.offender.lastName,
-      checkinDueDate = checkin.dueDate,
-      finalCheckinDate = checkin.dueDate.plus(checkinWindow),
-      checkinUuid = checkin.uuid,
-    )
+    fun fromCheckin(checkin: OffenderCheckin, checkinWindow: Period): OffenderCheckinInviteMessage {
+      assert(checkinWindow.days >= 1)
+      return OffenderCheckinInviteMessage(
+        firstName = checkin.offender.firstName,
+        lastName = checkin.offender.lastName,
+        checkinDueDate = checkin.dueDate,
+        finalCheckinDate = checkin.dueDate.plus(checkinWindow).minusDays(1),
+        checkinUuid = checkin.uuid,
+      )
+    }
   }
 }
