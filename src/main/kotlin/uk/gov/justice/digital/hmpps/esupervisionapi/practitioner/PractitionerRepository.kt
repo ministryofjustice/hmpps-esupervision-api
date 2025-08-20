@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.Index
 import jakarta.persistence.Table
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
@@ -14,7 +15,12 @@ import java.util.Optional
 typealias PractitionerUuid = String
 
 @Entity
-@Table(name = "practitioner")
+@Table(
+  name = "practitioner",
+  indexes = [
+    Index(columnList = "uuid", name = "practitioner_uuid_idx", unique = true),
+  ],
+)
 open class Practitioner(
   @Column(unique = true, nullable = false)
   open var uuid: PractitionerUuid,

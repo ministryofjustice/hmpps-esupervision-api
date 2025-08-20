@@ -4,6 +4,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.Index
 import jakarta.persistence.Table
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
@@ -30,7 +31,13 @@ enum class JobType {
 }
 
 @Entity
-@Table(name = "job_log")
+@Table(
+  name = "job_log",
+  indexes = [
+    Index(name = "idx_job_log_job_type", columnList = "job_type"),
+    Index(name = "idx_job_log_created_at", columnList = "created_at"),
+  ],
+)
 open class JobLog(
   @Enumerated(EnumType.STRING)
   @Column(name = "job_type", nullable = false)

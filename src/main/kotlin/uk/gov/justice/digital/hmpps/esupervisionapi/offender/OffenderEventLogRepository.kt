@@ -4,6 +4,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
@@ -26,7 +27,13 @@ enum class LogEntryType {
  * certain events (e.g., terminating an offender account).
  */
 @Entity
-@Table(name = "offender_event_log")
+@Table(
+  name = "offender_event_log",
+  indexes = [
+    Index(name = "offender_event_log_uuid_idx", columnList = "uuid", unique = true),
+    Index(name = "offender_event_log_log_entry_type_idx", columnList = "log_entry_type", unique = false),
+  ],
+)
 open class OffenderEventLog(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,
