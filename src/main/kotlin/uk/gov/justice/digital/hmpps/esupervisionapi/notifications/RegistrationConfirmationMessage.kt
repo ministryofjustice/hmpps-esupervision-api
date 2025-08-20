@@ -22,7 +22,7 @@ data class RegistrationConfirmationMessage(
     get() = NotificationType.RegistrationConfirmation
 
   companion object {
-    val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+    val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")
 
     fun formatCheckinFrequency(checkinFrequency: CheckinInterval): String = when (checkinFrequency) {
       CheckinInterval.WEEKLY -> "week"
