@@ -4,6 +4,7 @@ import jakarta.transaction.Transactional
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
@@ -72,9 +73,15 @@ class OffenderService(
 
     LOG.info("Updating offender={} details with {}", uuid, details)
     offender.applyUpdate(details)
-    return offenderRepository.save(offender).dto(
-      this.s3UploadService,
-    )
+    try {
+      val dto = offenderRepository.saveAndFlush(offender).dto(
+        this.s3UploadService,
+      )
+      return dto
+    } catch (e: DataIntegrityViolationException) {
+      LOG.info("Offender update failed, offender uuid={}, error details: {}", offender.uuid, e.message)
+      throw BadArgumentException("Update failed, invalid details provided")
+    }
   }
 
   fun photoUploadLocation(uuid: UUID, contentType: String): LocationInfo {

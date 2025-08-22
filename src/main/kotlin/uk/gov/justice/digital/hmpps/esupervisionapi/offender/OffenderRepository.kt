@@ -120,11 +120,11 @@ open class Offender(
   }
 
   fun applyUpdate(update: OffenderDetailsUpdate) {
-    this.firstName = update.firstName
-    this.lastName = update.lastName
+    this.firstName = update.firstName.trim()
+    this.lastName = update.lastName.trim()
     this.dateOfBirth = update.dateOfBirth
-    this.email = update.email
-    this.phoneNumber = update.phoneNumber
+    this.email = update.email?.trim()
+    this.phoneNumber = update.phoneNumber?.trim()
     this.updatedAt = Instant.now()
     this.firstCheckin = update.firstCheckin
     this.checkinInterval = update.checkinInterval.duration
