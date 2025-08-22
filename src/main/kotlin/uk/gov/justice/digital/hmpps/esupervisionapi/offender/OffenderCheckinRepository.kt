@@ -33,6 +33,8 @@ import java.util.stream.Stream
     Index(columnList = "due_date", name = "checkin_due_date_idx", unique = false),
     Index(columnList = "created_at", name = "checkin_created_at_idx", unique = false),
     Index(columnList = "status", name = "checkin_status_idx", unique = false),
+    Index(columnList = "offender_id", name = "offender_checkin_offender_idx", unique = false),
+    Index(columnList = "created_by", name = "offender_checkin_created_by_idx", unique = false),
   ],
 )
 open class OffenderCheckin(

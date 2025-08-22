@@ -25,7 +25,7 @@ typealias CheckiNotificationReference = String
 @Table(
   name = "offender_checkin_notification",
   indexes = [
-    Index(name = "idx_checkin_notification_notification_id", columnList = "notification_id"),
+    Index(name = "idx_checkin_notification_notification_id", columnList = "notification_id", unique = true),
     Index(name = "idx_checkin_notification_reference", columnList = "reference"),
     Index(name = "idx_chckin_notification_created_at", columnList = "created_at"),
   ],
