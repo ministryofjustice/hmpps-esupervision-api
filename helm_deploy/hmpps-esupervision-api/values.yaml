@@ -30,6 +30,10 @@ generic-service:
     hmpps-esupervision-api-application-insights:
       APPLICATIONINSIGHTS_CONNECTION_STRING: "APPLICATIONINSIGHTS_CONNECTION_STRING"
 
+    hmpps-esupervision-api-client-creds:
+      API_CLIENT_ID: "API_CLIENT_ID"
+      API_CLIENT_SECRET: "API_CLIENT_SECRET"
+
     # postgres connection settings
     hmpps-esupervision-rds-settings:
       POSTGRES_ENDPOINT: "rds_instance_endpoint"
