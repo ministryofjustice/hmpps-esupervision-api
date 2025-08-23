@@ -62,7 +62,6 @@ interface AuthUser {
 
 data class NewPractitioner(
   val username: String,
-  val userId: String,
   val email: String,
 ) : Contactable, AuthUser {
   override fun contactMethods(): Iterable<NotificationMethod> = listOf(Email(this.email))

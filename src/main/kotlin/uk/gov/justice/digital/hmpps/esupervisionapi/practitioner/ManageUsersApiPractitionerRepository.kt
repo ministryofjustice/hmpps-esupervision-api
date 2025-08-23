@@ -17,7 +17,6 @@ class ManageUsersApiPractitionerRepository(
 
     return NewPractitioner(
       username = userInfo.username,
-      userId = userInfo.userId,
       email = email,
     )
   }
