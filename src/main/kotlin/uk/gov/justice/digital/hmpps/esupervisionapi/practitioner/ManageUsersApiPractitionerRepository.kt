@@ -2,21 +2,20 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
 import org.springframework.stereotype.Service
 
-data class NewPractitionerInfo(
-  val username: String,
-  val userId: String,
-  val email: String,
-)
-
 @Service
 class ManageUsersApiPractitionerRepository(
   val manageUsersClient: RestManageUsersApiClient,
-) {
-  fun getByUsername(username: String): NewPractitionerInfo {
-    val userInfo = manageUsersClient.getUserByUsername(username)!!;
-    val email = manageUsersClient.getUserEmail(username);
+) : NewPractitionerRepository {
+  override fun findById(id: ExternalUserId): NewPractitioner? {
+    // TODO: handle missing
+    val userInfo = manageUsersClient.getUserByUsername(id);
+    if (userInfo == null) {
+      return null
+    }
 
-    return NewPractitionerInfo(
+    val email = manageUsersClient.getUserEmail(id);
+
+    return NewPractitioner(
       username = userInfo.username,
       userId = userInfo.userId,
       email = email,

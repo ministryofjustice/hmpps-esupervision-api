@@ -13,6 +13,9 @@ import java.util.Optional
 
 typealias PractitionerUuid = String
 
+// Type of identifiers for users within the authentication system
+typealias ExternalUserId = String
+
 @Entity
 @Table(name = "practitioner")
 open class Practitioner(
@@ -51,4 +54,23 @@ open class Practitioner(
 interface PractitionerRepository : org.springframework.data.jpa.repository.JpaRepository<Practitioner, Long> {
   fun findByEmail(email: String): Optional<Practitioner>
   fun findByUuid(uuid: String): Optional<Practitioner>
+}
+
+interface AuthUser {
+  fun externalUserId() : ExternalUserId
+}
+
+data class NewPractitioner(
+  val username: String,
+  val userId: String,
+  val email: String,
+) : Contactable, AuthUser {
+  override fun contactMethods(): Iterable<NotificationMethod> = listOf(Email(this.email))
+
+  override fun externalUserId(): ExternalUserId = username
+
+}
+
+interface NewPractitionerRepository {
+  fun findById(id: ExternalUserId): NewPractitioner?
 }
