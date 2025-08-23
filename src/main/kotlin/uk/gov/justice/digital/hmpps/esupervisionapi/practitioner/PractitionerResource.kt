@@ -17,7 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 
 @RestController
 @RequestMapping("/practitioners", produces = [APPLICATION_JSON_VALUE])
-class PractitionerResource(private val practitionerService: PractitionerService) {
+class PractitionerResource(private val practitionerService: PractitionerService, val roRepository: NewPractitionerRepository) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
@@ -55,5 +55,15 @@ class PractitionerResource(private val practitionerService: PractitionerService)
     }
 
     return ResponseEntity.notFound().build()
+  }
+
+  @GetMapping("/username/{username}")
+  fun getPractitionerByUsername(@PathVariable username: ExternalUserId): ResponseEntity<NewPractitioner> {
+    val practitioner = roRepository.findById(username);
+    if (practitioner == null) {
+      return ResponseEntity.notFound().build()
+    } else {
+      return ResponseEntity.ok(practitioner)
+    }
   }
 }
