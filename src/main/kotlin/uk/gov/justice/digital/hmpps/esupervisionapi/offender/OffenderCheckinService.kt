@@ -114,10 +114,7 @@ class OffenderCheckinService(
       throw BadArgumentException("Offender ${createCheckin.offender} not found")
     }
 
-    val practitioner = newPractitionerRepository.findById(createCheckin.practitioner)
-    if (practitioner == null) {
-      throw BadArgumentException("Practitioner ${createCheckin.practitioner} not found")
-    }
+    val practitioner = newPractitionerRepository.expectById(createCheckin.practitioner)
 
     if (offender.status != OffenderStatus.VERIFIED) {
       throw BadArgumentException("Offender with uuid=${createCheckin.offender} has status ${offender.status}")
