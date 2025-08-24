@@ -3,14 +3,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
-import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
-import java.util.Optional
 
 typealias PractitionerUuid = String
 
@@ -49,12 +47,6 @@ open class Practitioner(
   }
 
   companion object {}
-}
-
-@Repository
-interface PractitionerRepository : org.springframework.data.jpa.repository.JpaRepository<Practitioner, Long> {
-  fun findByEmail(email: String): Optional<Practitioner>
-  fun findByUuid(uuid: String): Optional<Practitioner>
 }
 
 interface AuthUser {

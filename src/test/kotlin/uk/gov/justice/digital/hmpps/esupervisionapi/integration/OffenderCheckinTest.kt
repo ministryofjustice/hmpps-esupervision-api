@@ -37,7 +37,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -91,8 +90,6 @@ class OffenderCheckinTest : IntegrationTestBase() {
   @BeforeEach
   fun setup() {
     practitionerRoleAuthHeaders = setAuthorisation(roles = listOf("ESUPERVISION__ESUPERVISION_UI"))
-    practitionerService.createPractitioner(Practitioner.create("Alice"))
-    practitionerService.createPractitioner(Practitioner.create("Bob"))
 
     reset(notificationService)
     whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
