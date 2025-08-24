@@ -12,7 +12,7 @@ interface AuthUser {
   fun externalUserId(): ExternalUserId
 }
 
-data class NewPractitioner(
+data class Practitioner(
   val username: String,
   val name: String,
   val email: String,
@@ -22,10 +22,10 @@ data class NewPractitioner(
   override fun externalUserId(): ExternalUserId = username
 }
 
-interface NewPractitionerRepository {
-  fun findById(id: ExternalUserId): NewPractitioner?
+interface PractitionerRepository {
+  fun findById(id: ExternalUserId): Practitioner?
 
-  fun expectById(id: ExternalUserId): NewPractitioner {
+  fun expectById(id: ExternalUserId): Practitioner {
     val p = findById(id)
     if (p == null) {
       throw BadArgumentException("Practitioner with external id $id not found")

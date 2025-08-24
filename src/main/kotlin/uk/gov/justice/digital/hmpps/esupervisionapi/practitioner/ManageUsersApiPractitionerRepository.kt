@@ -2,8 +2,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
 class ManageUsersApiPractitionerRepository(
   val manageUsersClient: RestManageUsersApiClient,
-) : NewPractitionerRepository {
-  override fun findById(id: ExternalUserId): NewPractitioner? {
+) : PractitionerRepository {
+  override fun findById(id: ExternalUserId): Practitioner? {
     // TODO: handle missing
     val userInfo = manageUsersClient.getUserByUsername(id)
     if (userInfo == null) {
@@ -12,7 +12,7 @@ class ManageUsersApiPractitionerRepository(
 
     val email = manageUsersClient.getUserEmail(id)
 
-    return NewPractitioner(
+    return Practitioner(
       username = userInfo.username,
       name = userInfo.name,
       email = email,

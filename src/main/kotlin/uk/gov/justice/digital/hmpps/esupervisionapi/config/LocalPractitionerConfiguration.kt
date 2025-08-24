@@ -6,16 +6,16 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.context.annotation.Profile
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.InMemoryPractitionerRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitioner
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 
 @Configuration
 @Profile("local")
 @ConfigurationProperties(prefix = "local")
 class LocalPractitionerConfiguration {
-  lateinit var practitioners: List<NewPractitioner>
+  lateinit var practitioners: List<Practitioner>
 
   @Bean
   @Primary
-  fun practitionerRepository(): NewPractitionerRepository = InMemoryPractitionerRepository(practitioners)
+  fun practitionerRepository(): PractitionerRepository = InMemoryPractitionerRepository(practitioners)
 }

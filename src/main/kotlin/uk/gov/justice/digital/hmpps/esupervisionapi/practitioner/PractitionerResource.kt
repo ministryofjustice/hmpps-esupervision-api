@@ -11,12 +11,12 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/practitioners", produces = [APPLICATION_JSON_VALUE])
-class PractitionerResource(private val roRepository: NewPractitionerRepository) {
+class PractitionerResource(private val roRepository: PractitionerRepository) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @GetMapping("/username/{username}")
-  fun getPractitionerByUsername(@PathVariable username: ExternalUserId): ResponseEntity<NewPractitioner> {
+  fun getPractitionerByUsername(@PathVariable username: ExternalUserId): ResponseEntity<Practitioner> {
     val practitioner = roRepository.findById(username)
     if (practitioner == null) {
       return ResponseEntity.notFound().build()

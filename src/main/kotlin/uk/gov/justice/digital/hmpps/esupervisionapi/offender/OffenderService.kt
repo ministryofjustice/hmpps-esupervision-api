@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
@@ -28,7 +28,7 @@ class OffenderService(
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val s3UploadService: S3UploadService,
   @Value("\${app.upload-ttl-minutes}") val uploadTTlMinutes: Long,
-  private val newPractitionerRepository: NewPractitionerRepository,
+  private val practitionerRepository: PractitionerRepository,
 ) {
 
   val uploadTTl = Duration.ofMinutes(uploadTTlMinutes)
@@ -106,7 +106,7 @@ class OffenderService(
     }
 
     // check practitioner exists
-    newPractitionerRepository.expectById(body.requestedBy)
+    practitionerRepository.expectById(body.requestedBy)
 
     if (!offender.canTransitionTo(OffenderStatus.INACTIVE)) {
       throw BadArgumentException("Offender is inactive, cannot update details")

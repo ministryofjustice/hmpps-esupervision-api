@@ -10,7 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -22,7 +22,7 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     val now = Instant.now()
     val today = LocalDate.now()
 
-    fun newOffender(name: String, status: OffenderStatus, firstCheckinDate: LocalDate, practitioner: NewPractitioner = PRACTITIONER_ALICE): Offender = Offender.create(
+    fun newOffender(name: String, status: OffenderStatus, firstCheckinDate: LocalDate, practitioner: Practitioner = PRACTITIONER_ALICE): Offender = Offender.create(
       name = name,
       status = status,
       firstCheckinDate = firstCheckinDate,

@@ -10,7 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -35,9 +35,9 @@ fun createOffenderInfo(
 /**
  * Creates an example practitioner instance. `username` should be unique.
  */
-fun createNewPractitioner(username: ExternalUserId): NewPractitioner {
+fun createNewPractitioner(username: ExternalUserId): Practitioner {
   val name = username.split(".").joinToString(" ")
-  return NewPractitioner(
+  return Practitioner(
     username = username,
     name = name,
     email = "${username.lowercase()}@example.com",
@@ -57,7 +57,7 @@ fun Offender.Companion.create(
   phoneNumber: String? = null,
   createdAt: Instant = Instant.now(),
   updatedAt: Instant = Instant.now(),
-  practitioner: NewPractitioner,
+  practitioner: Practitioner,
 ): Offender {
   val firstName = name.split(" ").first()
   val lastName = name.split(" ").last()

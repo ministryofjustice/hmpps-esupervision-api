@@ -15,7 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderChecki
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
@@ -61,7 +61,7 @@ class OffenderCheckinService(
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
   @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
   private val offenderEventLogRepository: OffenderEventLogRepository,
-  private val newPractitionerRepository: NewPractitionerRepository,
+  private val practitionerRepository: PractitionerRepository,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -114,7 +114,7 @@ class OffenderCheckinService(
       throw BadArgumentException("Offender ${createCheckin.offender} not found")
     }
 
-    val practitioner = newPractitionerRepository.expectById(createCheckin.practitioner)
+    val practitioner = practitionerRepository.expectById(createCheckin.practitioner)
 
     if (offender.status != OffenderStatus.VERIFIED) {
       throw BadArgumentException("Offender with uuid=${createCheckin.offender} has status ${offender.status}")
@@ -186,7 +186,7 @@ class OffenderCheckinService(
     checkinRepository.save(checkin)
 
     // notify practitioner that checkin was submitted
-    val practitioner = newPractitionerRepository.expectById(checkin.createdBy)
+    val practitioner = practitionerRepository.expectById(checkin.createdBy)
 
     val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin, practitioner)
     this.notificationService.sendMessage(submissionMessage, practitioner, SingleNotificationContext.from(UUID.randomUUID()))
@@ -269,7 +269,7 @@ class OffenderCheckinService(
   @Transactional
   fun reviewCheckin(checkinUuid: UUID, reviewRequest: CheckinReviewRequest): OffenderCheckinDto {
     // check practitioner exists
-    newPractitionerRepository.expectById(reviewRequest.practitioner)
+    practitionerRepository.expectById(reviewRequest.practitioner)
 
     val checkin = checkinRepository.findByUuid(checkinUuid)
       .getOrElse { throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$checkinUuid") }

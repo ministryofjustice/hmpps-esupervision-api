@@ -2,7 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 
 data class PractitionerCheckinMissedMessage(
   val practitionerName: String,
@@ -19,7 +19,7 @@ data class PractitionerCheckinMissedMessage(
     get() = NotificationType.PractitionerCheckinMissed
 
   companion object {
-    fun fromCheckin(checkin: OffenderCheckin, practitioner: NewPractitioner): PractitionerCheckinMissedMessage = PractitionerCheckinMissedMessage(
+    fun fromCheckin(checkin: OffenderCheckin, practitioner: Practitioner): PractitionerCheckinMissedMessage = PractitionerCheckinMissedMessage(
       practitionerName = practitioner.name,
       offenderFirstName = checkin.offender.firstName,
       offenderLastName = checkin.offender.lastName,

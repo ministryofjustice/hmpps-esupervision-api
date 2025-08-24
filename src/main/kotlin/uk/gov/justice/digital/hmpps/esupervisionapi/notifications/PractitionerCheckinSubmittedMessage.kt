@@ -2,7 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.NullResourceLocator
 import java.util.UUID
 
@@ -24,7 +24,7 @@ data class PractitionerCheckinSubmittedMessage(
     get() = NotificationType.PractitionerCheckinSubmitted
 
   companion object {
-    fun fromCheckin(checkin: OffenderCheckin, practitioner: NewPractitioner): PractitionerCheckinSubmittedMessage {
+    fun fromCheckin(checkin: OffenderCheckin, practitioner: Practitioner): PractitionerCheckinSubmittedMessage {
       val flags = checkin.dto(NullResourceLocator()).flaggedResponses
 
       return PractitionerCheckinSubmittedMessage(

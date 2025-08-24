@@ -13,7 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.hmpps.test.kotlin.auth.JwtAuthorisationHelper
 
 @ExtendWith(HmppsAuthApiExtension::class)
@@ -35,7 +35,7 @@ abstract class IntegrationTestBase {
 
   @Autowired protected lateinit var offenderEventLogRepository: OffenderEventLogRepository
 
-  @Autowired protected lateinit var practitionerRepository: NewPractitionerRepository
+  @Autowired protected lateinit var practitionerRepository: PractitionerRepository
 
   internal fun setAuthorisation(
     username: String? = "AUTH_ADM",
