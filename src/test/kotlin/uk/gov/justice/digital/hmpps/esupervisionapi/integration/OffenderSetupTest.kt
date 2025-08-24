@@ -56,7 +56,6 @@ class OffenderSetupTest : IntegrationTestBase() {
   internal fun tearDown() {
     offenderSetupRepository.deleteAll()
     offenderRepository.deleteAll()
-    practitionerRepository.deleteAll()
   }
 
   /**

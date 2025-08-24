@@ -113,7 +113,6 @@ class OffenderCheckinTest : IntegrationTestBase() {
     offenderSetupRepository.deleteAll()
     offenderCheckinRepository.deleteAll()
     offenderRepository.deleteAll()
-    practitionerRepository.deleteAll()
   }
 
   @Test

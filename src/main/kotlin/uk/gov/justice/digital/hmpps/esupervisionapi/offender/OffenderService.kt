@@ -9,7 +9,6 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitionerRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
@@ -28,10 +27,9 @@ class OffenderService(
   private val offenderRepository: OffenderRepository,
   private val checkinService: OffenderCheckinService,
   private val offenderEventLogRepository: OffenderEventLogRepository,
-  private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
   @Value("\${app.upload-ttl-minutes}") val uploadTTlMinutes: Long,
-  @Qualifier("practitionerUsersRepository") private val newPractitionerRepository: NewPractitionerRepository,
+  private val newPractitionerRepository: NewPractitionerRepository,
 ) {
 
   val uploadTTl = Duration.ofMinutes(uploadTTlMinutes)

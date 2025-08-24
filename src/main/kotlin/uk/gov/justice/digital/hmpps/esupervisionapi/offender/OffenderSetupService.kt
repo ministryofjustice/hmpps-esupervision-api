@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Clock
@@ -20,7 +19,6 @@ import kotlin.jvm.optionals.getOrElse
 class OffenderSetupService(
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
-  private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
   private val offenderSetupRepository: OffenderSetupRepository,
   private val notificationService: NotificationService,
