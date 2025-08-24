@@ -76,3 +76,5 @@ sonar-project.properties
 # local environment settings
 .env
 
+# local application profile
+src/main/resources/application-local.yml

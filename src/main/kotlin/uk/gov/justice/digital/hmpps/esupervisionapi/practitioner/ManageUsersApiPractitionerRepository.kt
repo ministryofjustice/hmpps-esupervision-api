@@ -1,8 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.practitioner
 
-import org.springframework.stereotype.Service
-
-@Service
 class ManageUsersApiPractitionerRepository(
   val manageUsersClient: RestManageUsersApiClient,
 ) : NewPractitionerRepository {

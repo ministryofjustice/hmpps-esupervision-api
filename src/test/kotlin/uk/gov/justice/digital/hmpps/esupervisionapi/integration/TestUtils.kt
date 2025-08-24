@@ -44,6 +44,9 @@ fun createNewPractitioner(username: ExternalUserId): NewPractitioner {
   )
 }
 
+val PRACTITIONER_ALICE = createNewPractitioner("Alice.Smith")
+val PRACTITIONER_BOB = createNewPractitioner("Bob.Jones")
+
 fun Offender.Companion.create(
   name: String,
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
