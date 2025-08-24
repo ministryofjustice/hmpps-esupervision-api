@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import java.net.URL
 import java.time.Clock
 import java.time.Instant
@@ -49,9 +50,9 @@ data class OffenderCheckinDto(
   val offender: OffenderDto,
   val submittedAt: Instant?,
   val surveyResponse: SurveyContents?,
-  val createdBy: String,
+  val createdBy: ExternalUserId,
   val createdAt: Instant,
-  val reviewedBy: String?,
+  val reviewedBy: ExternalUserId?,
   val reviewedAt: Instant?,
   /**
    * Will be set to pre-signed S3 URL

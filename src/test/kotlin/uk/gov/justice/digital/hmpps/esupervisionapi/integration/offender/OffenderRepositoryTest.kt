@@ -6,10 +6,11 @@ import org.junit.jupiter.api.Test
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.createNewPractitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitioner
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -18,14 +19,13 @@ class OffenderRepositoryTest : IntegrationTestBase() {
 
   @BeforeEach
   fun setupOffenders() {
-    val practitionerAlice = Practitioner.create("alice")
-    val practitionerBob = Practitioner.create("dave")
-    practitionerRepository.saveAll(listOf(practitionerAlice, practitionerBob))
+    val practitionerAlice = createNewPractitioner("Alice.Jones")
+    val practitionerBob = createNewPractitioner("Dave.Smith")
 
     val now = Instant.now()
     val today = LocalDate.now()
 
-    fun newOffender(name: String, status: OffenderStatus, firstCheckinDate: LocalDate, practitioner: Practitioner = practitionerAlice): Offender = Offender.create(
+    fun newOffender(name: String, status: OffenderStatus, firstCheckinDate: LocalDate, practitioner: NewPractitioner = practitionerAlice): Offender = Offender.create(
       name = name,
       status = status,
       firstCheckinDate = firstCheckinDate,
@@ -43,7 +43,7 @@ class OffenderRepositoryTest : IntegrationTestBase() {
 
     val checkinForOffender2 = OffenderCheckin.create(
       offender = offender2,
-      createdBy = practitionerAlice,
+      createdBy = practitionerAlice.externalUserId(),
       dueDate = today.plusDays(1),
     )
     checkinRepository.saveAll(listOf(checkinForOffender2))

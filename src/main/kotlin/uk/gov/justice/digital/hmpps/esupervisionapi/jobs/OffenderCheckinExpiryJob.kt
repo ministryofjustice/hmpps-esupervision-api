@@ -10,6 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitionerRepository
 import java.time.Clock
 import java.time.Duration
 import java.time.Period
@@ -21,6 +22,7 @@ class OffenderCheckinExpiryJob(
   private val checkinRepository: OffenderCheckinRepository,
   private val jobLogRepository: JobLogRepository,
   private val notificationService: NotificationService,
+  private val practitionerRepository: NewPractitionerRepository,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
@@ -70,8 +72,9 @@ class OffenderCheckinExpiryJob(
   ) {
     try {
       for (checkin in checkins) {
-        val message = PractitionerCheckinMissedMessage.fromCheckin(checkin)
-        notificationService.sendMessage(message, checkin.offender.practitioner, context)
+        val practitioner = practitionerRepository.expectById(checkin.offender.practitioner)
+        val message = PractitionerCheckinMissedMessage.fromCheckin(checkin, practitioner)
+        notificationService.sendMessage(message, practitioner, context)
       }
     } catch (e: Exception) {
       LOG.warn("Failed to send practitioner notifications, {}: {}", context, e.message)

@@ -11,7 +11,7 @@ import org.hibernate.annotations.CreationTimestamp
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.Query
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.util.UUID
 
@@ -38,8 +38,8 @@ open class OffenderEventLog(
   @Column
   open var comment: String,
 
-  @ManyToOne(fetch = jakarta.persistence.FetchType.EAGER)
-  open var practitioner: Practitioner,
+  @Column(name = "practitioner")
+  open var practitioner: ExternalUserId,
 
   @ManyToOne(fetch = jakarta.persistence.FetchType.EAGER)
   open var offender: Offender,
@@ -63,7 +63,7 @@ open class OffenderEventLog(
       uuid = uuid,
       logEntryType = logEntryType,
       comment = comment,
-      practitioner = practitioner.uuid,
+      practitioner = practitioner,
       offender = offender.uuid,
       createdAt = createdAt!!,
     )
@@ -80,7 +80,7 @@ interface OffenderEventLogRepository : org.springframework.data.jpa.repository.J
      e.comment as comment,
      e.createdAt as createdAt,
      o.uuid as offender,
-     p.uuid as practitioner
+     e.practitioner as practitioner
     from OffenderEventLog e
     join e.offender o 
     join o.practitioner p
@@ -99,7 +99,7 @@ interface OffenderEventLogRepository : org.springframework.data.jpa.repository.J
      e.createdAt as createdAt,
      c.uuid as checkin,
      o.uuid as offender,
-     p.uuid as practitioner
+     e.practitioner as practitioner
     from OffenderEventLog e
     join e.offender o 
     join o.practitioner p

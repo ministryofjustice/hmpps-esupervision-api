@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.time.Duration
 import java.time.LocalDate
@@ -32,7 +33,7 @@ data class OffenderInfo(
   val setupUuid: UUID,
 
   @field:NotBlank
-  val practitionerId: String,
+  val practitionerId: ExternalUserId,
 
   @field:Size(min = 2)
   val firstName: String,

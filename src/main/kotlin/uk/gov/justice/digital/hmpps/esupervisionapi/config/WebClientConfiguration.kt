@@ -24,16 +24,17 @@ class WebClientConfiguration(
   @Value("\${practitioner.users:}") val practitionerUsersConfig: String,
 ) {
   @Bean
-  fun manageUsersApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient {
-    return builder
-      .filters {
-        it.add(ExchangeFilterFunction.ofRequestProcessor { req ->
-          log.info("Requesting URL: {}", req.url());
+  fun manageUsersApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
+    .filters {
+      it.add(
+        ExchangeFilterFunction.ofRequestProcessor { req ->
+          log.info("Requesting URL: {}", req.url())
           Mono.just(req)
-        })
-      }
-      .authorisedWebClient(authorizedClientManager, registrationId = "manage-users-api", url = manageUsersApiBaseUri, timeout = timeout)
-  }
+        },
+      )
+    }
+    .authorisedWebClient(authorizedClientManager, registrationId = "manage-users-api", url = manageUsersApiBaseUri, timeout = timeout)
+
   // HMPPS Auth health ping is required if your service calls HMPPS Auth to get a token to call other services
   @Bean
   fun hmppsAuthHealthWebClient(builder: WebClient.Builder): WebClient = builder.healthWebClient(hmppsAuthBaseUri, healthTimeout)
@@ -41,15 +42,16 @@ class WebClientConfiguration(
   // TODO: only load this if test practitioner are configured!
   @Bean
   @Primary
-  fun practitionerUsersRepository() : InMemoryPractitionerRepository {
+  fun practitionerUsersRepository(): InMemoryPractitionerRepository {
     val practitioners = mutableListOf<NewPractitioner>()
 
     practitionerUsersConfig.split("|").forEach { record ->
       val fields = record.split(",")
-      if (fields.size == 2) {
+      if (fields.size == 3) {
         val username = fields[0].trim()
-        val email = fields[1].trim()
-        practitioners.add(NewPractitioner(username, email))
+        val name = fields[1].trim()
+        val email = fields[2].trim()
+        practitioners.add(NewPractitioner(username, name, email))
       } else {
         log.warn("Invalid practitioner record: {}", record)
       }

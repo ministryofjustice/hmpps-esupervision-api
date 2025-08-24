@@ -9,6 +9,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import java.time.Instant
 import java.time.LocalDate
@@ -42,6 +44,15 @@ fun Practitioner.Companion.create(name: String): Practitioner = Practitioner(
   roles = listOf(),
 )
 
+fun createNewPractitioner(username: ExternalUserId): NewPractitioner {
+  val name = username.split(".").joinToString(" ")
+  return NewPractitioner(
+    username = username,
+    name = name,
+    email = "${username.lowercase()}@example.com",
+  )
+}
+
 fun Offender.Companion.create(
   name: String,
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
@@ -52,7 +63,7 @@ fun Offender.Companion.create(
   phoneNumber: String? = null,
   createdAt: Instant = Instant.now(),
   updatedAt: Instant = Instant.now(),
-  practitioner: Practitioner,
+  practitioner: NewPractitioner,
 ): Offender {
   val firstName = name.split(" ").first()
   val lastName = name.split(" ").last()
@@ -69,7 +80,7 @@ fun Offender.Companion.create(
     phoneNumber = phoneNumber,
     firstCheckin = firstCheckinDate,
     checkinInterval = checkinInterval.duration,
-    practitioner = practitioner,
+    practitioner = practitioner.externalUserId(),
   )
 }
 
@@ -78,8 +89,8 @@ fun OffenderCheckin.Companion.create(
   offender: Offender,
   submittedAt: Instant? = null,
   createdAt: Instant = Instant.now(),
-  reviewedBy: Practitioner? = null,
-  createdBy: Practitioner,
+  reviewedBy: ExternalUserId? = null,
+  createdBy: ExternalUserId,
   status: CheckinStatus = CheckinStatus.CREATED,
   surveyResponse: Map<String, Object>? = null,
   notifications: NotificationResults? = null,

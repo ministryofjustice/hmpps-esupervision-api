@@ -59,7 +59,7 @@ class PractitionerResource(private val practitionerService: PractitionerService,
 
   @GetMapping("/username/{username}")
   fun getPractitionerByUsername(@PathVariable username: ExternalUserId): ResponseEntity<NewPractitioner> {
-    val practitioner = roRepository.findById(username);
+    val practitioner = roRepository.findById(username)
     if (practitioner == null) {
       return ResponseEntity.notFound().build()
     } else {

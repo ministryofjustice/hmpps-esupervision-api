@@ -24,30 +24,29 @@ data class EmailResponse(
 @Service
 class RestManageUsersApiClient(
   val manageUsersApiWebClient: WebClient,
-)
-{
+) {
   fun getUserByUsername(username: String): User? {
-    LOGGER.info("Searching for username {}", username);
+    LOGGER.info("Searching for username {}", username)
 
     return manageUsersApiWebClient.get()
       .uri("/users/{username}", username)
       .retrieve()
       .bodyToMono(User::class.java)
       .onErrorResume(WebClientResponseException.NotFound::class.java) {
-        LOGGER.error("Unable to find user {}", username);
+        LOGGER.error("Unable to find user {}", username)
         Mono.empty()
       }
       .block()
   }
 
   fun getUserEmail(username: String): String {
-    LOGGER.info("Searching for email for {}", username);
+    LOGGER.info("Searching for email for {}", username)
 
     val emailInfo = manageUsersApiWebClient.get()
       .uri("/users/{username}/email", username)
       .retrieve()
       .bodyToMono(EmailResponse::class.java)
-      .block();
+      .block()
 
     return emailInfo!!.email
   }

@@ -3,9 +3,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import jakarta.transaction.Transactional
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.NewPractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
@@ -28,15 +31,14 @@ class OffenderService(
   private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
   @Value("\${app.upload-ttl-minutes}") val uploadTTlMinutes: Long,
+  @Qualifier("practitionerUsersRepository") private val newPractitionerRepository: NewPractitionerRepository,
 ) {
 
   val uploadTTl = Duration.ofMinutes(uploadTTlMinutes)
 
-  fun getOffenders(practitionerUuid: String, pageable: Pageable): CollectionDto<OffenderDto> {
-    val practitioner = practitionerRepository.findByUuid(practitionerUuid).getOrElse {
-      throw BadArgumentException("Practitioner not found for practitioner.uuid: $practitionerUuid")
-    }
-    val page = offenderRepository.findAllByPractitioner(practitioner, pageable)
+  fun getOffenders(practitionerId: ExternalUserId, pageable: Pageable): CollectionDto<OffenderDto> {
+    // TODO: check practitioner exists?
+    val page = offenderRepository.findAllByPractitioner(practitionerId, pageable)
     val offenders = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), offenders)
   }
@@ -105,9 +107,10 @@ class OffenderService(
     val offender = offenderRepository.findByUuid(uuid).getOrElse {
       throw ResourceNotFoundException("Offender not found for uuid: $uuid")
     }
-    val practitioner = practitionerRepository.findByUuid(body.requestedBy).getOrElse {
-      throw BadArgumentException("Practitioner not found for practitioner.uuid: ${body.requestedBy}")
-    }
+
+    // check practitioner exists
+    newPractitionerRepository.expectById(body.requestedBy)
+
     if (!offender.canTransitionTo(OffenderStatus.INACTIVE)) {
       throw BadArgumentException("Offender is inactive, cannot update details")
     }
@@ -120,7 +123,7 @@ class OffenderService(
       UUID.randomUUID(),
       LogEntryType.OFFENDER_DEACTIVATED,
       body.reason,
-      practitioner,
+      body.requestedBy,
       offender,
     )
     offenderEventLogRepository.saveAndFlush(logEntry)

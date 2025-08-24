@@ -8,15 +8,16 @@ class ManageUsersApiPractitionerRepository(
 ) : NewPractitionerRepository {
   override fun findById(id: ExternalUserId): NewPractitioner? {
     // TODO: handle missing
-    val userInfo = manageUsersClient.getUserByUsername(id);
+    val userInfo = manageUsersClient.getUserByUsername(id)
     if (userInfo == null) {
       return null
     }
 
-    val email = manageUsersClient.getUserEmail(id);
+    val email = manageUsersClient.getUserEmail(id)
 
     return NewPractitioner(
       username = userInfo.username,
+      name = userInfo.name,
       email = email,
     )
   }

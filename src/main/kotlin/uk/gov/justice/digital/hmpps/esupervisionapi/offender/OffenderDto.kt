@@ -3,7 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerUuid
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.net.URL
 import java.time.Instant
@@ -16,7 +16,7 @@ data class OffenderDto(
   val lastName: String,
   @JsonDeserialize(using = LocalDateDeserializer::class) val dateOfBirth: LocalDate?,
   val status: OffenderStatus = OffenderStatus.INITIAL,
-  val practitioner: PractitionerUuid,
+  val practitioner: ExternalUserId,
   val createdAt: Instant,
   // val updatedAt: Instant,
   val email: String? = null,
@@ -32,7 +32,7 @@ data class OffenderSetupDto(
   val uuid: UUID,
   @Schema(description = "Practitioner's unique ID (this can be NDelius ID)", required = true)
   @field:NotBlank
-  val practitioner: PractitionerUuid,
+  val practitioner: ExternalUserId,
   @Schema(description = "Offender's unique ID", required = true)
   val offender: UUID,
   val createdAt: Instant,

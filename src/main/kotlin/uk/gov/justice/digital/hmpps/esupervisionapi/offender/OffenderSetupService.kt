@@ -35,8 +35,9 @@ class OffenderSetupService(
       throw BadArgumentException("Setup with UUID ${offenderInfo.setupUuid} already exists")
     }
 
-    val practitioner = practitionerRepository.findByUuid(offenderInfo.practitionerId)
-      .orElseThrow { BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found") }
+    // TODO: check practitioner exists!
+//    val practitioner = practitionerRepository.findByUuid(offenderInfo.practitionerId)
+//      .orElseThrow { BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found") }
 
     val now = clock.instant()
     val offender = Offender(
@@ -46,7 +47,7 @@ class OffenderSetupService(
       dateOfBirth = offenderInfo.dateOfBirth,
       email = offenderInfo.email?.lowercase(),
       phoneNumber = offenderInfo.phoneNumber,
-      practitioner = practitioner,
+      practitioner = offenderInfo.practitionerId,
       createdAt = now,
       updatedAt = now,
       status = OffenderStatus.INITIAL,
@@ -61,7 +62,7 @@ class OffenderSetupService(
     val setup = OffenderSetup(
       uuid = offenderInfo.setupUuid,
       offender = offender,
-      practitioner = practitioner,
+      practitioner = offender.practitioner,
       createdAt = now,
     )
 
