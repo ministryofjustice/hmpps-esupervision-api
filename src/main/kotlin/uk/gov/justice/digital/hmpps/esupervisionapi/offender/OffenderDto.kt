@@ -43,7 +43,7 @@ data class OffenderSetupDto(
  */
 data class OffenderDetailsUpdate(
   @Schema(description = "Id of the user requesting the change", required = true)
-  val requestedBy: String,
+  val requestedBy: ExternalUserId,
   val firstName: String,
   val lastName: String,
   @JsonDeserialize(using = LocalDateDeserializer::class) val dateOfBirth: LocalDate?,

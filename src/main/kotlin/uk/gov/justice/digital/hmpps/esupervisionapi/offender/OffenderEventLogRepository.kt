@@ -82,8 +82,7 @@ interface OffenderEventLogRepository : org.springframework.data.jpa.repository.J
      o.uuid as offender,
      e.practitioner as practitioner
     from OffenderEventLog e
-    join e.offender o 
-    join o.practitioner p
+    join e.offender o
     where o = :offender
     order by e.createdAt desc
   """,
@@ -101,8 +100,7 @@ interface OffenderEventLogRepository : org.springframework.data.jpa.repository.J
      o.uuid as offender,
      e.practitioner as practitioner
     from OffenderEventLog e
-    join e.offender o 
-    join o.practitioner p
+    join e.offender o
     left join e.checkin c
     where
         e.checkin is NOT NULL
