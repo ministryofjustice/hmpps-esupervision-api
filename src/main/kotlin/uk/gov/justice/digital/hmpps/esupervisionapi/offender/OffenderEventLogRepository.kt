@@ -32,7 +32,7 @@ enum class LogEntryType {
   indexes = [
     Index(name = "offender_event_log_log_entry_type_idx", columnList = "log_entry_type", unique = false),
     Index(name = "offender_event_log_offender_idx", columnList = "offender_id", unique = false),
-    Index(name = "offender_event_log_practitioner_idx", columnList = "practitioner_id", unique = false),
+    Index(name = "offender_event_log_practitioner_idx", columnList = "practitioner", unique = false),
   ],
 )
 open class OffenderEventLog(
