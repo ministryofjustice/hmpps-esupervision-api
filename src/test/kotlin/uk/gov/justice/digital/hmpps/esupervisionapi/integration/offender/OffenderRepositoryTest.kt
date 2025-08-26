@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
@@ -18,14 +19,10 @@ class OffenderRepositoryTest : IntegrationTestBase() {
 
   @BeforeEach
   fun setupOffenders() {
-    val practitionerAlice = Practitioner.create("alice")
-    val practitionerBob = Practitioner.create("dave")
-    practitionerRepository.saveAll(listOf(practitionerAlice, practitionerBob))
-
     val now = Instant.now()
     val today = LocalDate.now()
 
-    fun newOffender(name: String, status: OffenderStatus, firstCheckinDate: LocalDate, practitioner: Practitioner = practitionerAlice): Offender = Offender.create(
+    fun newOffender(name: String, status: OffenderStatus, firstCheckinDate: LocalDate, practitioner: Practitioner = PRACTITIONER_ALICE): Offender = Offender.create(
       name = name,
       status = status,
       firstCheckinDate = firstCheckinDate,
@@ -43,7 +40,7 @@ class OffenderRepositoryTest : IntegrationTestBase() {
 
     val checkinForOffender2 = OffenderCheckin.create(
       offender = offender2,
-      createdBy = practitionerAlice,
+      createdBy = PRACTITIONER_ALICE.externalUserId(),
       dueDate = today.plusDays(1),
     )
     checkinRepository.saveAll(listOf(checkinForOffender2))

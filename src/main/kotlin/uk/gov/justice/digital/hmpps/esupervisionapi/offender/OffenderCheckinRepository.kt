@@ -17,7 +17,7 @@ import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Instant
@@ -54,13 +54,11 @@ open class OffenderCheckin(
   @Column("created_at", nullable = false)
   open var createdAt: Instant,
 
-  @ManyToOne
-  @JoinColumn("reviewed_by", referencedColumnName = "id", nullable = true)
-  open var reviewedBy: Practitioner?,
+  @Column("reviewed_by", nullable = true)
+  open var reviewedBy: ExternalUserId?,
 
-  @ManyToOne
-  @JoinColumn("created_by", referencedColumnName = "id", nullable = false)
-  open var createdBy: Practitioner,
+  @Column("created_by", nullable = false)
+  open var createdBy: ExternalUserId,
 
   @Column(nullable = false)
   @Enumerated(EnumType.STRING)
@@ -88,9 +86,9 @@ open class OffenderCheckin(
     offender = offender.dto(resourceLocator), // TODO: don't return whole dto, just the uuid
     submittedAt = submittedAt,
     surveyResponse = surveyResponse,
-    reviewedBy = reviewedBy?.uuid,
+    reviewedBy = reviewedBy,
     reviewedAt = reviewedAt,
-    createdBy = createdBy.uuid,
+    createdBy = createdBy,
     createdAt = createdAt,
     videoUrl = resourceLocator.getCheckinVideo(this),
     snapshotUrl = resourceLocator.getCheckinSnapshot(this),
@@ -107,7 +105,7 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
 
   // returns checkins created by a practitioner with the given uuid
   @EntityGraph(attributePaths = ["offender", "createdBy", "reviewedBy"], type = EntityGraph.EntityGraphType.LOAD)
-  fun findAllByCreatedByUuid(practitionerUuid: String, pageable: Pageable): Page<OffenderCheckin>
+  fun findAllByCreatedBy(practitionerId: ExternalUserId, pageable: Pageable): Page<OffenderCheckin>
 
   @EntityGraph(attributePaths = ["offender.practitioner"])
   @Query(

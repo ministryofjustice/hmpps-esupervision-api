@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
-import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -18,7 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceLocator
 import java.time.Duration
@@ -45,7 +44,7 @@ enum class OffenderStatus {
   indexes = [
     Index(name = "offender_status_idx", columnList = "status", unique = false),
     Index(name = "offender_created_at_idx", columnList = "created_at", unique = false),
-    Index(name = "offender_practitioner", columnList = "practitioner_id", unique = false),
+    Index(name = "offender_practitioner", columnList = "practitioner", unique = false),
   ],
 )
 open class Offender(
@@ -92,9 +91,8 @@ open class Offender(
   @Column("checkin_interval", nullable = false)
   open var checkinInterval: Duration,
 
-  @ManyToOne(cascade = [CascadeType.DETACH], fetch = FetchType.LAZY)
-  @JoinColumn(name = "practitioner_id", referencedColumnName = "id", nullable = false)
-  open var practitioner: Practitioner,
+  @Column(nullable = false)
+  open var practitioner: ExternalUserId,
 ) : AEntity(),
   Contactable {
   fun dto(resourceLocator: ResourceLocator): OffenderDto = OffenderDto(
@@ -109,7 +107,7 @@ open class Offender(
     photoUrl = resourceLocator.getOffenderPhoto(this),
     firstCheckin = firstCheckin,
     checkinInterval = CheckinInterval.fromDuration(checkinInterval),
-    practitioner = practitioner.uuid,
+    practitioner = practitioner,
   )
 
   override fun contactMethods(): Iterable<NotificationMethod> {
@@ -146,7 +144,7 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
   fun findByEmail(email: String): Optional<Offender>
   fun findByPhoneNumber(phoneNumber: String): Optional<Offender>
   fun findByUuid(uuid: UUID): Optional<Offender>
-  fun findAllByPractitioner(practitioner: Practitioner, pageable: Pageable): Page<Offender>
+  fun findAllByPractitioner(practitioner: ExternalUserId, pageable: Pageable): Page<Offender>
 
   // NOTE(rosado): the below doesn't work on H2
 //  @Query("""
@@ -186,7 +184,7 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
   name = "offender_setup",
   indexes = [
     Index(columnList = "created_at", name = "offender_setup_created_at_idx", unique = false),
-    Index(columnList = "practitioner_id", name = "offender_setup_practitioner_idx", unique = false),
+    Index(columnList = "practitioner", name = "offender_setup_practitioner_idx", unique = false),
   ],
 )
 open class OffenderSetup(
@@ -197,16 +195,15 @@ open class OffenderSetup(
   @JoinColumn("offender_id", "id")
   open var offender: Offender,
 
-  @ManyToOne
-  @JoinColumn(name = "practitioner_id", referencedColumnName = "id")
-  open var practitioner: Practitioner,
+  @Column(nullable = false)
+  open var practitioner: ExternalUserId,
 
   @Column("created_at")
   open var createdAt: Instant,
 ) : AEntity() {
   fun dto(): OffenderSetupDto = OffenderSetupDto(
     uuid = uuid,
-    practitioner = practitioner.uuid,
+    practitioner = practitioner,
     offender = offender.uuid,
     createdAt = createdAt,
   )

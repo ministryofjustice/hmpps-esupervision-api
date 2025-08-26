@@ -22,7 +22,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
 import java.time.LocalDate
@@ -43,8 +42,6 @@ class OffenderSetupTest : IntegrationTestBase() {
   @BeforeEach
   internal fun setUp() {
     practitionerRoleAuthHeaders = setAuthorisation(roles = listOf("ESUPERVISION__ESUPERVISION_UI"))
-    practitionerService.createPractitioner(Practitioner.create("Alice"))
-    practitionerService.createPractitioner(Practitioner.create("Bob"))
 
     reset(notificationService)
     whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
@@ -56,7 +53,6 @@ class OffenderSetupTest : IntegrationTestBase() {
   internal fun tearDown() {
     offenderSetupRepository.deleteAll()
     offenderRepository.deleteAll()
-    practitionerRepository.deleteAll()
   }
 
   /**

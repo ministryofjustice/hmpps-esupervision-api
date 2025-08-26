@@ -153,7 +153,7 @@ class CheckinNotifier(
     if (isCheckinDay) {
       val checkinCreated = offenderCheckinService.createCheckin(
         CreateCheckinRequest(
-          offender.practitioner.uuid,
+          offender.practitioner,
           offender.uuid,
           context.checkinDate,
         ),

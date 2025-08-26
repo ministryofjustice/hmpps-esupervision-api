@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
@@ -28,19 +29,18 @@ import java.util.UUID
 class OffenderResource(
   private val offenderService: OffenderService,
 ) {
-
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @Operation(summary = "Returns a collection of offender records")
   @GetMapping
   fun getOffenders(
-    @RequestParam(required = true) practitionerUuid: String,
+    @RequestParam("practitioner", required = true) practitionerId: ExternalUserId,
     @Parameter(description = "Zero-based page index")
     @RequestParam(defaultValue = "0") page: Int,
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
   ): ResponseEntity<CollectionDto<OffenderDto>> {
     val pageRequest = PageRequest.of(page, size)
-    val offenders = offenderService.getOffenders(practitionerUuid, pageable = pageRequest)
+    val offenders = offenderService.getOffenders(practitionerId, pageable = pageRequest)
     return ResponseEntity.ok(
       CollectionDto(
         pagination = pageRequest.toPagination(),

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import jakarta.validation.constraints.NotBlank
 import org.springframework.data.domain.Pageable
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import java.net.URL
 import java.time.LocalDate
 import java.util.UUID
@@ -48,7 +49,7 @@ data class CollectionDto<ElemDto>(
  * Everything we need to create a checkin
  */
 data class CreateCheckinRequest(
-  val practitioner: String,
+  val practitioner: ExternalUserId,
   val offender: UUID,
   @JsonDeserialize(using = LocalDateDeserializer::class) val dueDate: LocalDate,
 )
@@ -58,7 +59,7 @@ data class CreateCheckinRequest(
  */
 data class CheckinReviewRequest(
   @field:NotBlank
-  val practitioner: String,
+  val practitioner: ExternalUserId,
   val manualIdCheck: ManualIdVerificationResult? = null,
   /**
    * Required when offender did not submit a checkin within the submission time window.

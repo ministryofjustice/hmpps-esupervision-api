@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import java.time.Instant
 import java.time.LocalDate
@@ -32,15 +33,19 @@ fun createOffenderInfo(
 )
 
 /**
- * Creates an example practitioner instance. `name` should be unique.
+ * Creates an example practitioner instance. `username` should be unique.
  */
-fun Practitioner.Companion.create(name: String): Practitioner = Practitioner(
-  name.lowercase(),
-  name,
-  "Practitioner",
-  "${name.lowercase()}@example.com",
-  roles = listOf(),
-)
+fun createNewPractitioner(username: ExternalUserId): Practitioner {
+  val name = username.split(".").joinToString(" ")
+  return Practitioner(
+    username = username,
+    name = name,
+    email = "${username.lowercase()}@example.com",
+  )
+}
+
+val PRACTITIONER_ALICE = createNewPractitioner("Alice.Smith")
+val PRACTITIONER_BOB = createNewPractitioner("Bob.Jones")
 
 fun Offender.Companion.create(
   name: String,
@@ -69,7 +74,7 @@ fun Offender.Companion.create(
     phoneNumber = phoneNumber,
     firstCheckin = firstCheckinDate,
     checkinInterval = checkinInterval.duration,
-    practitioner = practitioner,
+    practitioner = practitioner.externalUserId(),
   )
 }
 
@@ -78,8 +83,8 @@ fun OffenderCheckin.Companion.create(
   offender: Offender,
   submittedAt: Instant? = null,
   createdAt: Instant = Instant.now(),
-  reviewedBy: Practitioner? = null,
-  createdBy: Practitioner,
+  reviewedBy: ExternalUserId? = null,
+  createdBy: ExternalUserId,
   status: CheckinStatus = CheckinStatus.CREATED,
   surveyResponse: Map<String, Object>? = null,
   notifications: NotificationResults? = null,

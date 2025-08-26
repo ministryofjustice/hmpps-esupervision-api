@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
-import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Clock
@@ -20,7 +19,6 @@ import kotlin.jvm.optionals.getOrElse
 class OffenderSetupService(
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
-  private val practitionerRepository: PractitionerRepository,
   private val s3UploadService: S3UploadService,
   private val offenderSetupRepository: OffenderSetupRepository,
   private val notificationService: NotificationService,
@@ -35,8 +33,9 @@ class OffenderSetupService(
       throw BadArgumentException("Setup with UUID ${offenderInfo.setupUuid} already exists")
     }
 
-    val practitioner = practitionerRepository.findByUuid(offenderInfo.practitionerId)
-      .orElseThrow { BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found") }
+    // TODO: check practitioner exists!
+//    val practitioner = practitionerRepository.findByUuid(offenderInfo.practitionerId)
+//      .orElseThrow { BadArgumentException("Practitioner with UUID ${offenderInfo.practitionerId} not found") }
 
     val now = clock.instant()
     val offender = Offender(
@@ -46,7 +45,7 @@ class OffenderSetupService(
       dateOfBirth = offenderInfo.dateOfBirth,
       email = offenderInfo.email?.lowercase()?.trim(),
       phoneNumber = offenderInfo.phoneNumber?.trim(),
-      practitioner = practitioner,
+      practitioner = offenderInfo.practitionerId,
       createdAt = now,
       updatedAt = now,
       status = OffenderStatus.INITIAL,
@@ -61,7 +60,7 @@ class OffenderSetupService(
     val setup = OffenderSetup(
       uuid = offenderInfo.setupUuid,
       offender = offender,
-      practitioner = practitioner,
+      practitioner = offender.practitioner,
       createdAt = now,
     )
 

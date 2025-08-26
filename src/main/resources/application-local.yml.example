@@ -1,0 +1,5 @@
+local:
+  practitioners:
+    - username: AUTH_USER
+      name: Local Practitioner
+      email: local.practitioner@example.com
