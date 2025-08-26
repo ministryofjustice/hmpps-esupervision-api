@@ -5,6 +5,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.FetchType
+import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
@@ -38,7 +39,14 @@ enum class OffenderStatus {
 }
 
 @Entity
-@Table(name = "offender")
+@Table(
+  name = "offender",
+  indexes = [
+    Index(name = "offender_status_idx", columnList = "status", unique = false),
+    Index(name = "offender_created_at_idx", columnList = "created_at", unique = false),
+    Index(name = "offender_practitioner", columnList = "practitioner", unique = false),
+  ],
+)
 open class Offender(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,
@@ -110,11 +118,11 @@ open class Offender(
   }
 
   fun applyUpdate(update: OffenderDetailsUpdate) {
-    this.firstName = update.firstName
-    this.lastName = update.lastName
+    this.firstName = update.firstName.trim()
+    this.lastName = update.lastName.trim()
     this.dateOfBirth = update.dateOfBirth
-    this.email = update.email
-    this.phoneNumber = update.phoneNumber
+    this.email = update.email?.trim()
+    this.phoneNumber = update.phoneNumber?.trim()
     this.updatedAt = Instant.now()
     this.firstCheckin = update.firstCheckin
     this.checkinInterval = update.checkinInterval.duration
@@ -172,7 +180,13 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
  * This gives us a UUID to use until the actual offender record can be created.
  */
 @Entity
-@Table(name = "offender_setup")
+@Table(
+  name = "offender_setup",
+  indexes = [
+    Index(columnList = "created_at", name = "offender_setup_created_at_idx", unique = false),
+    Index(columnList = "practitioner", name = "offender_setup_practitioner_idx", unique = false),
+  ],
+)
 open class OffenderSetup(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,

@@ -40,11 +40,11 @@ class OffenderSetupService(
     val now = clock.instant()
     val offender = Offender(
       uuid = UUID.randomUUID(),
-      firstName = offenderInfo.firstName,
-      lastName = offenderInfo.lastName,
+      firstName = offenderInfo.firstName.trim(),
+      lastName = offenderInfo.lastName.trim(),
       dateOfBirth = offenderInfo.dateOfBirth,
-      email = offenderInfo.email?.lowercase(),
-      phoneNumber = offenderInfo.phoneNumber,
+      email = offenderInfo.email?.lowercase()?.trim(),
+      phoneNumber = offenderInfo.phoneNumber?.trim(),
       practitioner = offenderInfo.practitionerId,
       createdAt = now,
       updatedAt = now,
