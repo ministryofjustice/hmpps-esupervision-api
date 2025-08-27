@@ -14,6 +14,7 @@ enum class CheckinInterval(val duration: Duration) {
   WEEKLY(Duration.ofDays(7)),
   TWO_WEEKS(Duration.ofDays(14)),
   FOUR_WEEKS(Duration.ofDays(28)),
+  EIGHT_WEEKS(Duration.ofDays(56)),
   ;
 
   companion object {
@@ -21,6 +22,7 @@ enum class CheckinInterval(val duration: Duration) {
       7L -> WEEKLY
       14L -> TWO_WEEKS
       28L -> FOUR_WEEKS
+      56L -> EIGHT_WEEKS
       else -> throw IllegalArgumentException("Invalid checkin interval duration: $duration")
     }
   }
