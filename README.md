@@ -162,8 +162,8 @@ files to the bucket (using a pre-signed URLs), we need to apply the following CO
 To apply it to your localstack instance, put the above into a file `cors-config.json` and run:
 
 ```sh
-awslocal s3api put-bucket-cors --bucket hmpss-esupervision-video-uploads --cors-configuration file://cors-config.json
-awslocal s3api put-bucket-cors --bucket hmpss-esupervision-image-uploads --cors-configuration file://cors-config.json
+awslocal s3api put-bucket-cors --bucket hmpps-esupervision-video-uploads --cors-configuration file://cors-config.json
+awslocal s3api put-bucket-cors --bucket hmpps-esupervision-image-uploads --cors-configuration file://cors-config.json
 ```
 
 
