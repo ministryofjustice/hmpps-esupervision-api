@@ -105,3 +105,18 @@ fun OffenderCheckin.Companion.create(
   autoIdCheck = autoIdCheck,
   manualIdCheck = manualIdCheck,
 )
+
+/**
+ * Returns a range of dates [startDate endDate]
+ */
+fun datesBetweenExclusive(startDate: LocalDate, endDate: LocalDate): List<LocalDate> {
+  var d = startDate.plusDays(1)
+  val dates = mutableListOf<LocalDate>()
+
+  while (d.isBefore(endDate)) {
+    dates.add(d)
+    d = d.plusDays(1)
+  }
+
+  return dates
+}

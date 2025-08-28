@@ -19,6 +19,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.time.Period
+import java.time.temporal.ChronoUnit
 import kotlin.streams.asSequence
 
 internal data class NotifierContext(
@@ -31,9 +32,16 @@ internal data class NotifierContext(
   fun isCheckinDay(offender: Offender): Boolean {
     val firstCheckin = offender.firstCheckin
     if (firstCheckin != null && offender.checkinInterval.toDays() > 0) {
-      val delta = Period.between(firstCheckin, checkinDate)
+      // not checkin day until first checkin
+      if (checkinDate < firstCheckin) {
+        return false
+      }
+
+      // get the number of days between first checkin and the candidate checkin date
+      // if this is a multiple of the checkin frequency it's a checkin day
+      val delta = firstCheckin.until(checkinDate, ChronoUnit.DAYS)
       val interval = offender.checkinInterval.toDays()
-      return delta.days % interval == 0L
+      return delta % interval == 0L
     }
     return false
   }
