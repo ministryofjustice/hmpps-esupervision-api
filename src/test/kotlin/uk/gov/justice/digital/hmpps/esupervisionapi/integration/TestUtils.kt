@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration
 
+import org.apache.commons.lang3.RandomStringUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
@@ -17,7 +18,7 @@ import java.util.UUID
 
 fun createOffenderInfo(
   name: String = "Bob Offerman",
-  crn: String = "B999654",
+  crn: String = UUID.randomUUID().toString().substring(0,7),
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
   practitionerId: String = "alice",
   firstCheckinDate: LocalDate,
