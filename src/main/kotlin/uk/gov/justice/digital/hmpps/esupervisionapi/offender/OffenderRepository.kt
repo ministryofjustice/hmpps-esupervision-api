@@ -47,7 +47,6 @@ enum class OffenderStatus {
     Index(name = "offender_practitioner", columnList = "practitioner", unique = false),
   ],
 )
-
 open class Offender(
   @Column(unique = true, nullable = false)
   open var uuid: UUID,

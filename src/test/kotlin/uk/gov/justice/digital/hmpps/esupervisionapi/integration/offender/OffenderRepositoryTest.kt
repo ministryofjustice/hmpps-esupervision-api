@@ -33,9 +33,9 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     )
 
     val offender1 = newOffender("Offender(active) First", "o111111", OffenderStatus.VERIFIED, today)
-    val offender2 = newOffender("Offender(active) Second", "o222222",OffenderStatus.VERIFIED, today.plusDays(1))
-    val offender3 = newOffender("Offender(inactive) Third", "o333333",OffenderStatus.INACTIVE, today)
-    val offender4 = newOffender("Offender(inactive) Fourth", "o444444",OffenderStatus.INITIAL, today)
+    val offender2 = newOffender("Offender(active) Second", "o222222", OffenderStatus.VERIFIED, today.plusDays(1))
+    val offender3 = newOffender("Offender(inactive) Third", "o333333", OffenderStatus.INACTIVE, today)
+    val offender4 = newOffender("Offender(inactive) Fourth", "o444444", OffenderStatus.INITIAL, today)
 
     offenderRepository.saveAll(listOf(offender1, offender2, offender3, offender4))
 
