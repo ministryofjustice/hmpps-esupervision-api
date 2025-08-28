@@ -18,7 +18,7 @@ class CheckinNotifierTest {
   val clock: Clock = Clock.fixed(Instant.now(), ZoneId.of("Europe/London"))
   val today: LocalDate = clock.instant().atZone(clock.zone).toLocalDate()
   val practitioner = createNewPractitioner("Bob.Smith")
-  val offender = Offender.create("Bob Smith", LocalDate.of(1980, 1, 1), today, CheckinInterval.WEEKLY, practitioner = practitioner)
+  val offender = Offender.create("Bob Smith", "B090909", LocalDate.of(1980, 1, 1), today, CheckinInterval.WEEKLY, practitioner = practitioner)
 
   @Test
   fun `is checkin works`() {

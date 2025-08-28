@@ -79,6 +79,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     setupUuid = UUID.randomUUID(),
     firstName = "Jim",
     lastName = "Smith",
+    crn = "A123456",
     dateOfBirth = LocalDate.of(1980, 1, 1),
     email = "jim@example.com",
     practitionerId = PRACTITIONER_ALICE.externalUserId(),

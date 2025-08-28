@@ -17,6 +17,7 @@ import java.util.UUID
 
 fun createOffenderInfo(
   name: String = "Bob Offerman",
+  crn: String = "B999654",
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
   practitionerId: String = "alice",
   firstCheckinDate: LocalDate,
@@ -26,6 +27,7 @@ fun createOffenderInfo(
   practitionerId,
   name.split(" ").first(),
   name.split(" ").last(),
+  crn,
   dateOfBirth,
   "${name.split(" ").first()}@example.com",
   firstCheckinDate = firstCheckinDate,
@@ -49,6 +51,7 @@ val PRACTITIONER_BOB = createNewPractitioner("Bob.Jones")
 
 fun Offender.Companion.create(
   name: String,
+  crn: String,
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
   firstCheckinDate: LocalDate,
   checkinInterval: CheckinInterval = CheckinInterval.WEEKLY,
@@ -66,6 +69,7 @@ fun Offender.Companion.create(
     uuid = UUID.randomUUID(),
     firstName = firstName,
     lastName = lastName,
+    crn = crn,
     dateOfBirth = dateOfBirth,
     status = status,
     createdAt = createdAt,

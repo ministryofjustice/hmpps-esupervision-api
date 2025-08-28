@@ -20,6 +20,7 @@ class SurveyTest {
     UUID.randomUUID(),
     "Bob",
     "Bronson",
+    "B896253",
     LocalDate.of(1990, 1, 1),
     OffenderStatus.VERIFIED,
     createdAt = Instant.now(),
