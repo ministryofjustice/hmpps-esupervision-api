@@ -28,6 +28,7 @@ data class RegistrationConfirmationMessage(
       CheckinInterval.WEEKLY -> "week"
       CheckinInterval.TWO_WEEKS -> "two weeks"
       CheckinInterval.FOUR_WEEKS -> "four weeks"
+      CheckinInterval.EIGHT_WEEKS -> "eight weeks"
     }
 
     fun fromSetup(offenderSetup: OffenderSetup): RegistrationConfirmationMessage = RegistrationConfirmationMessage(

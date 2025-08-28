@@ -10,17 +10,21 @@ import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
-enum class CheckinInterval(val duration: Duration) {
+enum class CheckinInterval(val duration: Duration) : Comparable<CheckinInterval> {
   WEEKLY(Duration.ofDays(7)),
   TWO_WEEKS(Duration.ofDays(14)),
   FOUR_WEEKS(Duration.ofDays(28)),
+  EIGHT_WEEKS(Duration.ofDays(56)),
   ;
+
+  val days: Long = duration.toDays()
 
   companion object {
     fun fromDuration(duration: Duration): CheckinInterval = when (duration.toDays()) {
       7L -> WEEKLY
       14L -> TWO_WEEKS
       28L -> FOUR_WEEKS
+      56L -> EIGHT_WEEKS
       else -> throw IllegalArgumentException("Invalid checkin interval duration: $duration")
     }
   }
