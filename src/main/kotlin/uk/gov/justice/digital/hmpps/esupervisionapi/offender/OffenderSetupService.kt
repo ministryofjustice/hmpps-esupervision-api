@@ -54,7 +54,7 @@ class OffenderSetupService(
       checkinInterval = offenderInfo.checkinInterval.duration,
     )
 
-    raiseOnConstraintViolation("contact information already in use") {
+    raiseOnConstraintViolation("contact information or crn already in use") {
       offenderRepository.save(offender)
     }
 

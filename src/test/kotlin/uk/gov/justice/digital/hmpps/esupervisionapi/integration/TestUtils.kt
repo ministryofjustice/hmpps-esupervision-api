@@ -17,7 +17,6 @@ import java.util.UUID
 
 fun createOffenderInfo(
   name: String = "Bob Offerman",
-  crn: String = UUID.randomUUID().toString().substring(0, 7),
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
   practitionerId: String = "alice",
   firstCheckinDate: LocalDate,
@@ -27,7 +26,7 @@ fun createOffenderInfo(
   practitionerId,
   name.split(" ").first(),
   name.split(" ").last(),
-  crn,
+  UUID.randomUUID().toString().substring(0, 7),
   dateOfBirth,
   "${name.split(" ").first()}@example.com",
   firstCheckinDate = firstCheckinDate,
