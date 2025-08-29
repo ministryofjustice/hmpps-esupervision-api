@@ -57,6 +57,9 @@ open class Offender(
   @Column("last_name", nullable = false)
   open var lastName: String,
 
+  @Column("crn", nullable = true, unique = true)
+  open var crn: String,
+
   @Column("date_of_birth")
   open var dateOfBirth: LocalDate?,
 
@@ -99,6 +102,7 @@ open class Offender(
     uuid = uuid,
     firstName = firstName,
     lastName = lastName,
+    crn = crn,
     dateOfBirth = dateOfBirth,
     status = status,
     email = email,
@@ -120,6 +124,7 @@ open class Offender(
   fun applyUpdate(update: OffenderDetailsUpdate) {
     this.firstName = update.firstName.trim()
     this.lastName = update.lastName.trim()
+    this.crn = update.crn.trim().trim()
     this.dateOfBirth = update.dateOfBirth
     this.email = update.email?.trim()
     this.phoneNumber = update.phoneNumber?.trim()

@@ -45,6 +45,9 @@ data class OffenderInfo(
   @field:Size(min = 2)
   val lastName: String,
 
+  @field:Size(min = 7, max = 7)
+  val crn: String,
+
   @JsonDeserialize(using = LocalDateDeserializer::class) val dateOfBirth: LocalDate,
   @field:Email
   val email: String? = null,
