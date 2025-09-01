@@ -67,6 +67,6 @@ notify:
 
 rekognition:
   region: eu-west-2
-  access_key_id: rekog-key-id
-  secret_access_key: rekog-secret-key
   s3_bucket_name: rekog-bucket
+  role_arn: rn:aws:iam::55555555555:role/rekognition-role
+  role_session_name: development

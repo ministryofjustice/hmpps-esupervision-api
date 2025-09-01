@@ -121,6 +121,27 @@ e.g. `values-dev.yaml`.
 There is also a `docker-compose.yml` that can be used to run a local instance of the template in docker and also an
 instance of HMPPS Auth (required if your service calls out to other services using a token).
 
+### Rekognition
+
+The API uses [AWS Rekognition](https://aws.amazon.com/rekognition/) to verify user identities. Access to Rekognition is
+granted to a role configured within the Modernisation Platform. To configure access to this role locally you will need
+the following:
+
+* The ARN of the Rekognition role within the development modernisation platform
+* Credentials for accessing AWS
+* The name of the S3 data bucket used to store Rekognition images
+
+Login to the AWS console using the instructions in [this guide](https://user-guide.modernisation-platform.service.justice.gov.uk/user-guide/getting-aws-credentials.html#getting-aws-credentials).
+The role can be found in the development console under IAM -> Roles -> rekognition-role. Configure the `REKOG_ARN_ROLE` setting in your local `.env` file with the ARN of the role (this should look like
+`arn:aws:iam::${ACCOUNT_ID}:role/rekogition-role`).
+
+From the same page you can obtain temporary credentials from AWS. Click `Access Keys` and copy the settings from `Option 1: Set AWS environment variables` into your local `.env` file (or configure them
+in your environment some other way). These should be the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` variables.
+
+Finally, the name of the S3 data bucket can be found in the AWS console, use this to configure the `REKOG_S3_DATA_BUCKET` setting in your `.env` file.
+
+### Postgres
+
 The docker-compose configuration defines a local postgres instance used for persistence. Before running services locally,
 define a `.env` file containing the password for the default `postgres` user:
 
@@ -132,6 +153,8 @@ POSTGRES_PASSWORD=your_local_dev_password
 note this file is also loaded within the Spring boot `application-dev.yml` file so the password does not need to be repeated
 there.
 
+### Gov.uk Notify
+
 You should also configure an API key for the Gov.UK [notify service](https://www.notifications.service.gov.uk/). There is a test
 key in the `hmpps-esupervision-notify-api-key-test` secret within the development namespace which you can use locally. Set the
 `NOTIFY_API_KEY` environment variable when running the service or in your local `.env` file:
@@ -141,6 +164,8 @@ NOTIFY_API_KEY=notifykey
 ```
 
 This key does not send real messages but will appear in the notify dashboard.
+
+### Localstack
 
 The application needs a number of S3 buckets to function. To allow clients (browsers) to upload 
 files to the bucket (using a pre-signed URLs), we need to apply the following CORS configuration.
