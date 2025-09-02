@@ -7,6 +7,9 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.createNewPractitioner
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
@@ -72,5 +75,43 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     // NOTE: this time we expect one record as a checkin  is already
     // in place for the specified time bounds
     Assertions.assertEquals(1, offenders.size)
+  }
+
+  @Test
+  @Transactional
+  fun `invite candidate query - ensure only one invite in a day`() {
+    val today = LocalDate.now()
+    val practitioner = createNewPractitioner("Bob.Smith")
+    val offender = Offender.create(
+      "Bob Smith",
+      LocalDate.of(1980, 1, 1),
+      today,
+      CheckinInterval.WEEKLY,
+      practitioner = practitioner,
+      status = OffenderStatus.VERIFIED,
+    )
+    offenderRepository.saveAndFlush(offender)
+
+    fun getCandidates() = offenderRepository.findAllCheckinNotificationCandidates(today, today.plusDays(1))
+      .filter { it.uuid == offender.uuid }
+      .toList()
+
+    var offenders = getCandidates()
+    Assertions.assertEquals(1, offenders.size, "No checkins yet, should be one candidate")
+
+    val checkin1 = OffenderCheckin.create(
+      offender = offender,
+      createdBy = practitioner.externalUserId(),
+      dueDate = today,
+      status = CheckinStatus.CREATED,
+    )
+    checkinRepository.save(checkin1)
+    offenders = getCandidates()
+    Assertions.assertEquals(0, offenders.size, "Checkin already created, should be no candidates")
+
+    checkin1.status = CheckinStatus.SUBMITTED
+    checkinRepository.save(checkin1)
+    offenders = getCandidates()
+    Assertions.assertEquals(0, offenders.size, "Checkin already submitted, should be no candidates")
   }
 }

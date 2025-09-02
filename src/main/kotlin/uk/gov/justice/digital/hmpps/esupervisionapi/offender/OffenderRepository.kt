@@ -167,9 +167,9 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
         and  o.firstCheckin is not null
         and o.checkinInterval is not null
         and not exists (select 1 from OffenderCheckin c
-                        where c.offender = o 
+                        where c.offender = o
                         and :lowerBoundInclusive <= c.dueDate and c.dueDate < :upperBoundExclusive
-                        and c.status = 'CREATED')
+                        and c.status in ('CREATED', 'SUBMITTED', 'REVIEWED', 'CANCELLED'))
         """,
   )
   fun findAllCheckinNotificationCandidates(lowerBoundInclusive: LocalDate, upperBoundExclusive: LocalDate): Stream<Offender>
