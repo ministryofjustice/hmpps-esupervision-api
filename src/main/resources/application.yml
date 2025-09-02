@@ -143,6 +143,6 @@ rekognition:
     # minimum accepted value that qualifies a "match"
     threshold: 90.0
   region: ${REKOG_AWS_REGION}
-  access_key_id: ${REKOG_AWS_ACCESS_KEY_ID}
-  secret_access_key: ${REKOG_AWS_SECRET_ACCESS_KEY}
+  role_arn: ${REKOG_ROLE_ARN}
+  role_session_name: ${REKOG_ROLE_SESSION_NAME}
   s3_bucket_name: ${REKOG_S3_DATA_BUCKET}

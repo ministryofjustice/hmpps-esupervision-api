@@ -48,8 +48,10 @@ generic-service:
     hmpps-esupervision-rekog-aws:
       REKOG_AWS_REGION: 'region'
       REKOG_S3_DATA_BUCKET: 'bucket_name'
-      REKOG_AWS_ACCESS_KEY_ID: "aws_access_key_id"
-      REKOG_AWS_SECRET_ACCESS_KEY: "aws_secret_access_key"
+
+    hmpps-esupervision-rekog-role:
+      REKOG_ROLE_ARN: 'role_arn'
+      REKOG_ROLE_SESSION_NAME: 'role_session_name'
 
     # gov.uk notify settings
     hmpps-esupervision-notify-api-key:

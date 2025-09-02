@@ -1,18 +1,22 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Profile
 import org.springframework.core.env.Environment
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.rekognition.RekognitionClient
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import software.amazon.awssdk.services.sts.StsClient
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
@@ -22,20 +26,36 @@ private const val LOCAL_AWS = "http://localhost:4566"
 @Configuration
 class RekogConfig(
   @Value("\${rekognition.region}") val region: String,
-  @Value("\${rekognition.access_key_id}") val accessKeyId: String,
-  @Value("\${rekognition.secret_access_key}") val accessKeySecret: String,
   @Value("\${rekognition.s3_bucket_name}") val bucketName: String,
+  @Value("\${rekognition.role_arn}") val roleArn: String,
+  @Value("\${rekognition.role_session_name}") val roleSessionName: String,
 ) {
 
   @Autowired
   lateinit var environment: Environment
 
+  @Bean
+  @Profile("!test")
+  fun rekognitionCredentialsProvider(): AwsCredentialsProvider {
+    val stsClient = StsClient.builder().region(Region.of(region))
+      .credentialsProvider(DefaultCredentialsProvider.builder().build())
+      .build()
+
+    return StsAssumeRoleCredentialsProvider.builder()
+      .stsClient(stsClient)
+      .refreshRequest { assumeRoleRequestBuilder ->
+        LOGGER.info("Assuming role {}", roleArn)
+        assumeRoleRequestBuilder
+          .roleArn(roleArn)
+          .roleSessionName(roleSessionName)
+      }.build()
+  }
+
   @Bean(name = ["rekognitionS3Client"])
-  fun s3Client(): S3Client {
-    val credentials = AwsBasicCredentials.create(accessKeyId, accessKeySecret)
+  fun s3Client(rekognitionCredentialsProvider: AwsCredentialsProvider): S3Client {
     val builder = S3Client.builder()
       .region(Region.of(region))
-      .credentialsProvider(StaticCredentialsProvider.create(credentials))
+      .credentialsProvider(rekognitionCredentialsProvider)
 
     val profiles = environment.activeProfiles
     if (profiles.contains("dev") && !profiles.contains("rekog")) {
@@ -47,11 +67,10 @@ class RekogConfig(
   }
 
   @Bean(name = ["rekognitionS3PreSigner"])
-  fun s3Presigner(): S3Presigner {
-    val credentials = AwsBasicCredentials.create(accessKeyId, accessKeySecret)
+  fun s3Presigner(rekognitionCredentialsProvider: AwsCredentialsProvider): S3Presigner {
     val builder = S3Presigner.builder()
       .region(Region.of(region))
-      .credentialsProvider(StaticCredentialsProvider.create(credentials))
+      .credentialsProvider(rekognitionCredentialsProvider)
 
     val profiles = environment.activeProfiles
     if (profiles.contains("dev") && !profiles.contains("rekog")) {
@@ -77,14 +96,16 @@ class RekogConfig(
   }
 
   @Bean
-  fun rekognitionCompareFacesService(): RekognitionCompareFacesService {
-    val credentials = AwsBasicCredentials.create(accessKeyId, accessKeySecret)
-
+  fun rekognitionCompareFacesService(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionCompareFacesService {
     val client = RekognitionClient.builder()
       .region(Region.of(region))
-      .credentialsProvider(StaticCredentialsProvider.create(credentials))
+      .credentialsProvider(rekognitionCredentialsProvider)
       .build()
 
     return RekognitionCompareFacesService(client)
+  }
+
+  companion object {
+    val LOGGER = LoggerFactory.getLogger(this::class.java)
   }
 }
