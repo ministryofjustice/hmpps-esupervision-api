@@ -85,7 +85,8 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     val practitioner = createNewPractitioner("Bob.Smith")
     val offender = Offender.create(
       "Bob Smith",
-      LocalDate.of(1980, 1, 1),
+      crn = "B090901",
+      dateOfBirth = LocalDate.of(1980, 1, 1),
       today,
       CheckinInterval.WEEKLY,
       practitioner = practitioner,

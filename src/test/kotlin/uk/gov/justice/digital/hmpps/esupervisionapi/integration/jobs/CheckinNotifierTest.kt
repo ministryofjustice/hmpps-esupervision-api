@@ -130,6 +130,7 @@ class CheckinNotifierTest {
 
     val offender = Offender.create(
       "Bob Smith",
+      crn = "B090909",
       dateOfBirth = LocalDate.of(1980, 6, 3),
       firstCheckinDate,
       checkinInterval = checkinInterval,
