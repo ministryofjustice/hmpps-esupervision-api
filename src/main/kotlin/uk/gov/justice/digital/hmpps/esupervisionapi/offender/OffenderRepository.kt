@@ -45,6 +45,7 @@ enum class OffenderStatus {
     Index(name = "offender_status_idx", columnList = "status", unique = false),
     Index(name = "offender_created_at_idx", columnList = "created_at", unique = false),
     Index(name = "offender_practitioner", columnList = "practitioner", unique = false),
+    Index(name = "offender_crn_idx", columnList = "crn", unique = false),
   ],
 )
 open class Offender(
@@ -56,6 +57,9 @@ open class Offender(
 
   @Column("last_name", nullable = false)
   open var lastName: String,
+
+  @Column("crn", nullable = true)
+  open var crn: String? = null,
 
   @Column("date_of_birth")
   open var dateOfBirth: LocalDate?,
@@ -99,6 +103,7 @@ open class Offender(
     uuid = uuid,
     firstName = firstName,
     lastName = lastName,
+    crn = crn,
     dateOfBirth = dateOfBirth,
     status = status,
     email = email,
@@ -120,6 +125,7 @@ open class Offender(
   fun applyUpdate(update: OffenderDetailsUpdate) {
     this.firstName = update.firstName.trim()
     this.lastName = update.lastName.trim()
+    this.crn = update.crn?.trim()
     this.dateOfBirth = update.dateOfBirth
     this.email = update.email?.trim()
     this.phoneNumber = update.phoneNumber?.trim()

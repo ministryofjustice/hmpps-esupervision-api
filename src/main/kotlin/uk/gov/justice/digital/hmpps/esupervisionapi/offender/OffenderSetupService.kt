@@ -42,6 +42,7 @@ class OffenderSetupService(
       uuid = UUID.randomUUID(),
       firstName = offenderInfo.firstName.trim(),
       lastName = offenderInfo.lastName.trim(),
+      crn = offenderInfo.crn.trim(),
       dateOfBirth = offenderInfo.dateOfBirth,
       email = offenderInfo.email?.lowercase()?.trim(),
       phoneNumber = offenderInfo.phoneNumber?.trim(),

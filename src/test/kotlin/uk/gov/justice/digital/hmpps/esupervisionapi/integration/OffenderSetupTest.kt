@@ -124,6 +124,7 @@ class OffenderSetupTest : IntegrationTestBase() {
       offenderInfo.copy(
         setupUuid = UUID.randomUUID(),
         email = "bob.x@example.com",
+        crn = UUID.randomUUID().toString().substring(0, 7),
       ),
     )
       .exchange()
@@ -154,7 +155,7 @@ class OffenderSetupTest : IntegrationTestBase() {
       .exchange()
       .expectStatus().isOk
 
-    val setupAgain = setupStartRequest(offenderInfo.copy(setupUuid = UUID.randomUUID()))
+    val setupAgain = setupStartRequest(offenderInfo.copy(setupUuid = UUID.randomUUID(), crn = UUID.randomUUID().toString().substring(0, 7)))
       .exchange()
       .expectStatus().isOk
       .expectBody(OffenderSetupDto::class.java)

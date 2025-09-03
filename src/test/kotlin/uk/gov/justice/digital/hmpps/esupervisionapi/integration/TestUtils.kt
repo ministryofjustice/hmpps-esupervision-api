@@ -26,6 +26,7 @@ fun createOffenderInfo(
   practitionerId,
   name.split(" ").first(),
   name.split(" ").last(),
+  UUID.randomUUID().toString().substring(0, 7),
   dateOfBirth,
   "${name.split(" ").first()}@example.com",
   firstCheckinDate = firstCheckinDate,
@@ -49,6 +50,7 @@ val PRACTITIONER_BOB = createNewPractitioner("Bob.Jones")
 
 fun Offender.Companion.create(
   name: String,
+  crn: String,
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
   firstCheckinDate: LocalDate,
   checkinInterval: CheckinInterval = CheckinInterval.WEEKLY,
@@ -66,6 +68,7 @@ fun Offender.Companion.create(
     uuid = UUID.randomUUID(),
     firstName = firstName,
     lastName = lastName,
+    crn = crn,
     dateOfBirth = dateOfBirth,
     status = status,
     createdAt = createdAt,
