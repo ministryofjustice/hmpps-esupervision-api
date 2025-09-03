@@ -13,7 +13,7 @@ data class PractitionerCheckinSubmittedMessage(
   val offenderLastName: String,
   val numFlags: Int,
   val checkinUuid: UUID,
-  val autoIdCheck: AutomatedIdVerificationResult?
+  val autoIdCheck: AutomatedIdVerificationResult?,
 ) : Message {
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
     "practitionerName" to practitionerName,
@@ -38,7 +38,7 @@ data class PractitionerCheckinSubmittedMessage(
         offenderLastName = checkin.offender.lastName,
         numFlags = flags.size,
         checkinUuid = checkin.uuid,
-        autoIdCheck = checkin.autoIdCheck
+        autoIdCheck = checkin.autoIdCheck,
       )
     }
   }
