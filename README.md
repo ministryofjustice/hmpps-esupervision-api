@@ -132,7 +132,7 @@ the following:
 * The name of the S3 data bucket used to store Rekognition images
 
 Login to the AWS console using the instructions in [this guide](https://user-guide.modernisation-platform.service.justice.gov.uk/user-guide/getting-aws-credentials.html#getting-aws-credentials).
-The role can be found in the development console under IAM -> Roles -> rekognition-role. Configure the `REKOG_ARN_ROLE` setting in your local `.env` file with the ARN of the role (this should look like
+The role can be found in the development console under IAM -> Roles -> rekognition-role. Configure the `REKOG_ROLE_ARN` setting in your local `.env` file with the ARN of the role (this should look like
 `arn:aws:iam::${ACCOUNT_ID}:role/rekogition-role`).
 
 From the same page you can obtain temporary credentials from AWS. Click `Access Keys` and copy the settings from `Option 1: Set AWS environment variables` into your local `.env` file (or configure them
