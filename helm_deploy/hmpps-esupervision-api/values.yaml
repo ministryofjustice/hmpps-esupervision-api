@@ -57,6 +57,9 @@ generic-service:
     hmpps-esupervision-notify-api-key:
       NOTIFY_API_KEY: "API_KEY"
 
+    hmpps-domain-events-topic:
+      HMPPS_SQS_TOPICS_HMPPSEVENTTOPIC_ARN: "topic_arn"
+
   allowlist:
     groups:
       - internal

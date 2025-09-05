@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
@@ -10,6 +11,10 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.CheckinAdditionalInformation
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.HmppsDomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
@@ -26,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
+import java.net.URI
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -62,6 +68,8 @@ class OffenderCheckinService(
   @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val practitionerRepository: PractitionerRepository,
+  private val eventPublisher: DomainEventPublisher,
+  private val objectMapper: ObjectMapper
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -188,13 +196,22 @@ class OffenderCheckinService(
     // notify practitioner that checkin was submitted
     val practitioner = practitionerRepository.expectById(checkin.createdBy)
 
-    val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin, practitioner)
-    this.notificationService.sendMessage(submissionMessage, practitioner, SingleNotificationContext.from(UUID.randomUUID()))
+    val practitionerConfirmation = PractitionerCheckinSubmittedMessage.fromCheckin(checkin, practitioner)
+    this.notificationService.sendMessage(practitionerConfirmation, practitioner, SingleNotificationContext.from(UUID.randomUUID()))
 
     // notify PoP that checkin was received
-    val popConfirmationMessage = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(popConfirmationMessage, checkin.offender, SingleNotificationContext.from(UUID.randomUUID()))
+    val offenderConfirmation = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
+    this.notificationService.sendMessage(offenderConfirmation, checkin.offender, SingleNotificationContext.from(UUID.randomUUID()))
 
+    val domainEvent = HmppsDomainEvent(
+      DomainEventType.CHECKIN_RECEIVED.type,
+      1,
+      null,
+      now.atZone(clock.zone),
+      DomainEventType.CHECKIN_RECEIVED.description,
+      CheckinAdditionalInformation(URI("https://example.com/event").toURL()),
+      null)
+    eventPublisher.publish(domainEvent)
     return checkin.dto(this.s3UploadService)
   }
 

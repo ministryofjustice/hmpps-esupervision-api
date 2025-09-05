@@ -15,6 +15,8 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
   implementation("net.javacrumbs.shedlock:shedlock-spring:6.9.2")
   implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.9.2")
+  implementation("uk.gov.justice.service.hmpps:hmpps-sqs-spring-boot-starter:5.4.9")
+  implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-autoconfigure:1.4.10")
 
   api("software.amazon.awssdk:s3")
   implementation("software.amazon.awssdk:s3:2.31.63")
