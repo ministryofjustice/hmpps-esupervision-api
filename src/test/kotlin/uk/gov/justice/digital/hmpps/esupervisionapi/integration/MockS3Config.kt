@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
+import uk.gov.justice.hmpps.sqs.HmppsQueueService
 
 @TestConfiguration
 class MockS3Config {
@@ -22,6 +23,10 @@ class MockS3Config {
   @Bean
   @Primary
   fun mockCompareFacesService(): RekognitionCompareFacesService = mock(RekognitionCompareFacesService::class.java)
+
+  @Bean
+  @Primary
+  fun mockHmppsQueueService(): HmppsQueueService = mock(HmppsQueueService::class.java)
 
   @Bean
   @Primary
