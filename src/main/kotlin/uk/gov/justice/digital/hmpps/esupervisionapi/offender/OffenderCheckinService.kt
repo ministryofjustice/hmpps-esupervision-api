@@ -69,7 +69,7 @@ class OffenderCheckinService(
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val practitionerRepository: PractitionerRepository,
   private val eventPublisher: DomainEventPublisher,
-  private val objectMapper: ObjectMapper
+  private val objectMapper: ObjectMapper,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -210,7 +210,8 @@ class OffenderCheckinService(
       now.atZone(clock.zone),
       DomainEventType.CHECKIN_RECEIVED.description,
       CheckinAdditionalInformation(URI("https://example.com/event").toURL()),
-      null)
+      null,
+    )
     eventPublisher.publish(domainEvent)
     return checkin.dto(this.s3UploadService)
   }

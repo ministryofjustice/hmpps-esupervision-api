@@ -22,8 +22,8 @@ data class PersonReference(val identifiers: List<PersonIdentifier>) {
 }
 
 data class CheckinAdditionalInformation(
-  override val checkinUrl: URL
-): AdditionalInformation
+  override val checkinUrl: URL,
+) : AdditionalInformation
 
 data class HmppsDomainEvent(
   override val eventType: String,
@@ -33,4 +33,4 @@ data class HmppsDomainEvent(
   override val description: String,
   override val additionalInformation: AdditionalInformation,
   override val personReference: PersonReference?,
-): DomainEvent
+) : DomainEvent
