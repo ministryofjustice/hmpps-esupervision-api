@@ -1,11 +1,13 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.events
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Service
 import uk.gov.justice.hmpps.sqs.HmppsQueueService
 import uk.gov.justice.hmpps.sqs.publish
 
 @Service
+@Profile("!test")
 class DomainEventPublisher(
   private val hmppsQueueService: HmppsQueueService,
   private val objectMapper: ObjectMapper,
