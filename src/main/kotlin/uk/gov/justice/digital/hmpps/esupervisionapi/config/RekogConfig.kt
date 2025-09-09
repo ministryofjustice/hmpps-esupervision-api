@@ -1,27 +1,21 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
-import org.springframework.core.env.Environment
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.rekognition.RekognitionClient
 import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.sts.StsClient
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
-import java.net.URI
-
-private const val LOCAL_AWS = "http://localhost:4566"
 
 @Configuration
 class RekogConfig(
@@ -30,9 +24,6 @@ class RekogConfig(
   @Value("\${rekognition.role_arn}") val roleArn: String,
   @Value("\${rekognition.role_session_name}") val roleSessionName: String,
 ) {
-
-  @Autowired
-  lateinit var environment: Environment
 
   @Bean
   @Profile("!test")
@@ -57,12 +48,6 @@ class RekogConfig(
       .region(Region.of(region))
       .credentialsProvider(rekognitionCredentialsProvider)
 
-    val profiles = environment.activeProfiles
-    if (profiles.contains("dev") && !profiles.contains("rekog")) {
-      builder.endpointOverride(URI.create(LOCAL_AWS))
-      builder.forcePathStyle(true)
-    }
-
     return builder.build()
   }
 
@@ -71,17 +56,6 @@ class RekogConfig(
     val builder = S3Presigner.builder()
       .region(Region.of(region))
       .credentialsProvider(rekognitionCredentialsProvider)
-
-    val profiles = environment.activeProfiles
-    if (profiles.contains("dev") && !profiles.contains("rekog")) {
-      builder
-        .serviceConfiguration(
-          S3Configuration.builder()
-            .pathStyleAccessEnabled(true).build(),
-        )
-        .endpointOverride(URI.create(LOCAL_AWS))
-        .region(Region.of(region))
-    }
 
     return builder.build()
   }
