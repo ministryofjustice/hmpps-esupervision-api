@@ -19,7 +19,10 @@ class DomainEventPublisher(
       domainEvent.eventType,
       objectMapper.writeValueAsString(domainEvent),
     )
-    LOG.info("Published event to outbound topic, messageId={}, response={}", response.messageId(), response)
+    LOG.info("Published event to outbound topic, eventType={}, messageId={}", domainEvent.eventType, response.messageId())
+    if (domainEvent is HmppsDomainEvent) {
+      LOG.debug("Event contains person reference, messageId={}, identifiers={}", response.messageId(), domainEvent.personReference?.identifiers)
+    }
   }
 
   companion object {
