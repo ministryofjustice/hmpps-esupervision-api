@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
@@ -11,10 +10,13 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.CheckinAdditionalInformation
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DOMAIN_EVENT_VERSION
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.HmppsDomainEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
@@ -31,7 +33,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
-import java.net.URI
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -69,7 +70,7 @@ class OffenderCheckinService(
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val practitionerRepository: PractitionerRepository,
   private val eventPublisher: DomainEventPublisher,
-  private val objectMapper: ObjectMapper,
+  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -203,17 +204,26 @@ class OffenderCheckinService(
     val offenderConfirmation = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
     this.notificationService.sendMessage(offenderConfirmation, checkin.offender, SingleNotificationContext.from(UUID.randomUUID()))
 
+    if (offender.crn != null) {
+      eventPublisher.publish(checkinReceivedEvent(offender, checkin, now))
+    } else {
+      LOG.warn("Missing a CRN for offender={}", offender.uuid)
+    }
+
+    return checkin.dto(this.s3UploadService)
+  }
+
+  private fun checkinReceivedEvent(offender: Offender, checkin: OffenderCheckin, now: Instant): HmppsDomainEvent {
     val domainEvent = HmppsDomainEvent(
       DomainEventType.CHECKIN_RECEIVED.type,
-      1,
+      version = DOMAIN_EVENT_VERSION,
       null,
       now.atZone(clock.zone),
       DomainEventType.CHECKIN_RECEIVED.description,
-      CheckinAdditionalInformation(URI("https://example.com/event").toURL()),
-      null,
+      CheckinAdditionalInformation(appConfig.checkinDashboardUrl(checkin.uuid).toURL()),
+      PersonReference(listOf(PersonReference.PersonIdentifier("CRN", offender.crn!!))),
     )
-    eventPublisher.publish(domainEvent)
-    return checkin.dto(this.s3UploadService)
+    return domainEvent
   }
 
   fun generateVideoUploadLocation(checkin: OffenderCheckin, contentType: String, duration: Duration): URL {

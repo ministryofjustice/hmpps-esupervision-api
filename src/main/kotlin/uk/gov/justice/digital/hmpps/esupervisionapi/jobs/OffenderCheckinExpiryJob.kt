@@ -5,6 +5,13 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.CheckinAdditionalInformation
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DOMAIN_EVENT_VERSION
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.HmppsDomainEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinMissedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationContext
@@ -23,6 +30,8 @@ class OffenderCheckinExpiryJob(
   private val jobLogRepository: JobLogRepository,
   private val notificationService: NotificationService,
   private val practitionerRepository: PractitionerRepository,
+  private val eventPublisher: DomainEventPublisher,
+  private val appConfig: AppConfig,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
@@ -75,10 +84,30 @@ class OffenderCheckinExpiryJob(
         val practitioner = practitionerRepository.expectById(checkin.offender.practitioner)
         val message = PractitionerCheckinMissedMessage.fromCheckin(checkin, practitioner)
         notificationService.sendMessage(message, practitioner, context)
+
+        if (checkin.offender.crn != null) {
+          eventPublisher.publish(checkinExpiredEvent(checkin))
+        } else {
+          LOG.warn("Missing CRN for offender={}", checkin.offender.uuid)
+        }
       }
     } catch (e: Exception) {
       LOG.warn("Failed to send practitioner notifications, {}: {}", context, e.message)
     }
+  }
+
+  private fun checkinExpiredEvent(checkin: OffenderCheckin): HmppsDomainEvent {
+    assert(checkin.offender.crn != null)
+    val event = HmppsDomainEvent(
+      DomainEventType.CHECKIN_EXPIRED.type,
+      version = DOMAIN_EVENT_VERSION,
+      detailUrl = null,
+      occurredAt = clock.instant().atZone(clock.zone),
+      description = DomainEventType.CHECKIN_EXPIRED.description,
+      additionalInformation = CheckinAdditionalInformation(appConfig.checkinDashboardUrl(checkin.uuid).toURL()),
+      PersonReference(listOf(PersonReference.PersonIdentifier("CRN", checkin.offender.crn!!))),
+    )
+    return event
   }
 
   companion object {

@@ -3,6 +3,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.events
 import java.net.URL
 import java.time.ZonedDateTime
 
+const val DOMAIN_EVENT_VERSION = 1
+
 interface AdditionalInformation {
   val checkinUrl: URL
 }
