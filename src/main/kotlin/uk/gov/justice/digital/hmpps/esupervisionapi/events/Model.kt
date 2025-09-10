@@ -6,7 +6,7 @@ import java.time.ZonedDateTime
 const val DOMAIN_EVENT_VERSION = 1
 
 interface AdditionalInformation {
-  val checkinUrl: URL
+  val checkInUrl: URL
 }
 
 interface DomainEvent {
@@ -24,7 +24,7 @@ data class PersonReference(val identifiers: List<PersonIdentifier>) {
 }
 
 data class CheckinAdditionalInformation(
-  override val checkinUrl: URL,
+  override val checkInUrl: URL,
 ) : AdditionalInformation
 
 data class HmppsDomainEvent(
