@@ -98,13 +98,14 @@ class OffenderCheckinExpiryJob(
 
   private fun checkinExpiredEvent(checkin: OffenderCheckin): HmppsDomainEvent {
     assert(checkin.offender.crn != null)
+    val checkinUrl = appConfig.checkinDashboardUrl(checkin.uuid).toURL()
     val event = HmppsDomainEvent(
       DomainEventType.CHECKIN_EXPIRED.type,
       version = DOMAIN_EVENT_VERSION,
-      detailUrl = null,
+      detailUrl = checkinUrl.toString(),
       occurredAt = clock.instant().atZone(clock.zone),
       description = DomainEventType.CHECKIN_EXPIRED.description,
-      additionalInformation = CheckinAdditionalInformation(appConfig.checkinDashboardUrl(checkin.uuid).toURL()),
+      additionalInformation = CheckinAdditionalInformation(checkinUrl),
       PersonReference(listOf(PersonReference.PersonIdentifier("CRN", checkin.offender.crn!!))),
     )
     return event

@@ -214,13 +214,14 @@ class OffenderCheckinService(
   }
 
   private fun checkinReceivedEvent(offender: Offender, checkin: OffenderCheckin, now: Instant): HmppsDomainEvent {
+    val checkinUrl = appConfig.checkinDashboardUrl(checkin.uuid)
     val domainEvent = HmppsDomainEvent(
       DomainEventType.CHECKIN_RECEIVED.type,
       version = DOMAIN_EVENT_VERSION,
-      null,
+      checkinUrl.toString(),
       now.atZone(clock.zone),
       DomainEventType.CHECKIN_RECEIVED.description,
-      CheckinAdditionalInformation(appConfig.checkinDashboardUrl(checkin.uuid).toURL()),
+      CheckinAdditionalInformation(checkinUrl.toURL()),
       PersonReference(listOf(PersonReference.PersonIdentifier("CRN", offender.crn!!))),
     )
     return domainEvent
