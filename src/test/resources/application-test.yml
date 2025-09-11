@@ -71,9 +71,3 @@ rekognition:
   role_arn: rn:aws:iam::55555555555:role/rekognition-role
   role_session_name: development
 
-hmpps.sqs:
-  provider: localstack
-  localstackUrl: http://localhost:4566
-  topics:
-    hmppseventtopic:
-      arn: arn:aws:sns:eu-west-2:000000000000:${random.uuid}
