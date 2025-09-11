@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinsStoppedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
@@ -369,6 +370,12 @@ class OffenderCheckinService(
       throw BadArgumentException("Offender $offenderUuid not found")
     }
     val result = checkinRepository.updateStatusToCancelled(offender)
+    val notificationResult = notificationService.sendMessage(
+      OffenderCheckinsStoppedMessage(offender.firstName, offender.lastName),
+      offender,
+      SingleNotificationContext.from(UUID.randomUUID()),
+    )
+
     LOG.info("Cancelling checkins for offender={}, result={}, logEntry={}", offenderUuid, result, logEntry.uuid)
   }
 
