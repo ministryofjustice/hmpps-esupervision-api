@@ -18,7 +18,7 @@ import java.util.UUID
 fun createOffenderInfo(
   name: String = "Bob Offerman",
   dateOfBirth: LocalDate = LocalDate.of(1970, 1, 1),
-  practitionerId: String = "alice",
+  practitionerId: String = PRACTITIONER_ALICE.externalUserId(),
   firstCheckinDate: LocalDate,
   checkinInterval: CheckinInterval = CheckinInterval.WEEKLY,
 ) = OffenderInfo(
