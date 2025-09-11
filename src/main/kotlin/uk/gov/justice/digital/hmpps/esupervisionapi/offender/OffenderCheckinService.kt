@@ -10,6 +10,13 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.CheckinAdditionalInformation
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DOMAIN_EVENT_VERSION
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
@@ -62,6 +69,8 @@ class OffenderCheckinService(
   @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val practitionerRepository: PractitionerRepository,
+  private val eventPublisher: DomainEventPublisher,
+  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -188,14 +197,34 @@ class OffenderCheckinService(
     // notify practitioner that checkin was submitted
     val practitioner = practitionerRepository.expectById(checkin.createdBy)
 
-    val submissionMessage = PractitionerCheckinSubmittedMessage.fromCheckin(checkin, practitioner)
-    this.notificationService.sendMessage(submissionMessage, practitioner, SingleNotificationContext.from(UUID.randomUUID()))
+    val practitionerConfirmation = PractitionerCheckinSubmittedMessage.fromCheckin(checkin, practitioner)
+    this.notificationService.sendMessage(practitionerConfirmation, practitioner, SingleNotificationContext.from(UUID.randomUUID()))
 
     // notify PoP that checkin was received
-    val popConfirmationMessage = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(popConfirmationMessage, checkin.offender, SingleNotificationContext.from(UUID.randomUUID()))
+    val offenderConfirmation = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
+    this.notificationService.sendMessage(offenderConfirmation, checkin.offender, SingleNotificationContext.from(UUID.randomUUID()))
+
+    if (offender.crn != null) {
+      eventPublisher.publish(checkinReceivedEvent(offender, checkin, now))
+    } else {
+      LOG.warn("Missing a CRN for offender={}", offender.uuid)
+    }
 
     return checkin.dto(this.s3UploadService)
+  }
+
+  private fun checkinReceivedEvent(offender: Offender, checkin: OffenderCheckin, now: Instant): DomainEvent {
+    val checkinUrl = appConfig.checkinDashboardUrl(checkin.uuid)
+    val domainEvent = DomainEvent(
+      DomainEventType.CHECKIN_RECEIVED.type,
+      version = DOMAIN_EVENT_VERSION,
+      null,
+      now.atZone(clock.zone),
+      DomainEventType.CHECKIN_RECEIVED.description,
+      CheckinAdditionalInformation(checkinUrl.toURL().toString()),
+      PersonReference(listOf(PersonReference.PersonIdentifier("CRN", offender.crn!!))),
+    )
+    return domainEvent
   }
 
   fun generateVideoUploadLocation(checkin: OffenderCheckin, contentType: String, duration: Duration): URL {

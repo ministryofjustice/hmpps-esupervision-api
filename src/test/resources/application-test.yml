@@ -70,3 +70,4 @@ rekognition:
   s3_bucket_name: rekog-bucket
   role_arn: rn:aws:iam::55555555555:role/rekognition-role
   role_session_name: development
+

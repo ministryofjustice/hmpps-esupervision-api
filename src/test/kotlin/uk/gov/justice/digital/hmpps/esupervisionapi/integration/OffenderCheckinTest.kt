@@ -9,6 +9,7 @@ import org.mockito.Mockito.times
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.reset
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
@@ -17,7 +18,11 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
@@ -72,6 +77,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
   @Autowired lateinit var rekognitionCompareFacesService: RekognitionCompareFacesService
 
+  @Autowired lateinit var domainEventPublisher: DomainEventPublisher
+
   /**
    * Used to setup an offender for tests
    */
@@ -103,6 +110,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
     whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
 
     reset(s3UploadService)
+
+    reset(domainEventPublisher)
   }
 
   @AfterEach
@@ -124,8 +133,6 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .returnResult().responseBody!!
 
     val notifInOrder = inOrder(notificationService)
-    // verify offender checkin invite was sent
-    // notifInOrder.verify(notificationService).sendMessage(any(), any(), any())
 
     Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
 
@@ -169,9 +176,14 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .expectBody(OffenderCheckinDto::class.java)
       .returnResult()
 
-    // verify notifications to the PoP and practitioner were sent
-    // notifInOrder.verify(notificationService, times(2)).sendMessage(any(), any(), any())
-    // notifInOrder.verifyNoMoreInteractions()
+    // verify notifications to the offender and practitioner were sent
+    notifInOrder.verify(notificationService, times(1))
+      .sendMessage(any<OffenderCheckinInviteMessage>(), any(), any())
+    notifInOrder.verify(notificationService, times(1))
+      .sendMessage(any<PractitionerCheckinSubmittedMessage>(), any(), any())
+    notifInOrder.verify(notificationService, times(1))
+      .sendMessage(any<OffenderCheckinSubmittedMessage>(), any(), any())
+    notifInOrder.verifyNoMoreInteractions()
 
     val submittedCheckin = offenderCheckinRepository.findByUuid(submitCheckin.responseBody!!.uuid).get()
     Assertions.assertNotNull(submittedCheckin.status == submitCheckin.responseBody!!.status)
@@ -198,6 +210,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
     Assertions.assertEquals(CheckinStatus.REVIEWED, reviewedCheckin.status)
     Assertions.assertEquals(AutomatedIdVerificationResult.MATCH, reviewedCheckin.autoIdCheck)
     Assertions.assertEquals(ManualIdVerificationResult.MATCH, reviewedCheckin.manualIdCheck)
+
+    verify(domainEventPublisher).publish(any())
   }
 
   fun mockCheckinVerification(checkin: OffenderCheckinDto, result: AutomatedIdVerificationResult) {
