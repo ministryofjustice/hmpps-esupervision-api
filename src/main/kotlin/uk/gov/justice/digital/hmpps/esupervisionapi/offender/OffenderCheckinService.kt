@@ -13,9 +13,9 @@ import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.CheckinAdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DOMAIN_EVENT_VERSION
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
-import uk.gov.justice.digital.hmpps.esupervisionapi.events.HmppsDomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
@@ -213,9 +213,9 @@ class OffenderCheckinService(
     return checkin.dto(this.s3UploadService)
   }
 
-  private fun checkinReceivedEvent(offender: Offender, checkin: OffenderCheckin, now: Instant): HmppsDomainEvent {
+  private fun checkinReceivedEvent(offender: Offender, checkin: OffenderCheckin, now: Instant): DomainEvent {
     val checkinUrl = appConfig.checkinDashboardUrl(checkin.uuid)
-    val domainEvent = HmppsDomainEvent(
+    val domainEvent = DomainEvent(
       DomainEventType.CHECKIN_RECEIVED.type,
       version = DOMAIN_EVENT_VERSION,
       null,

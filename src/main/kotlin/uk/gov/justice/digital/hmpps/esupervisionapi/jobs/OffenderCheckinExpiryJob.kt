@@ -8,9 +8,9 @@ import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.CheckinAdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DOMAIN_EVENT_VERSION
+import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
-import uk.gov.justice.digital.hmpps.esupervisionapi.events.HmppsDomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinMissedMessage
@@ -96,10 +96,10 @@ class OffenderCheckinExpiryJob(
     }
   }
 
-  private fun checkinExpiredEvent(checkin: OffenderCheckin): HmppsDomainEvent {
+  private fun checkinExpiredEvent(checkin: OffenderCheckin): DomainEvent {
     assert(checkin.offender.crn != null)
     val checkinUrl = appConfig.checkinDashboardUrl(checkin.uuid).toURL()
-    val event = HmppsDomainEvent(
+    val event = DomainEvent(
       DomainEventType.CHECKIN_EXPIRED.type,
       version = DOMAIN_EVENT_VERSION,
       detailUrl = null,
