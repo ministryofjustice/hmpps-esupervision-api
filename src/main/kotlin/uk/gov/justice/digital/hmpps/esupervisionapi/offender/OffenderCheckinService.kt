@@ -218,10 +218,10 @@ class OffenderCheckinService(
     val domainEvent = HmppsDomainEvent(
       DomainEventType.CHECKIN_RECEIVED.type,
       version = DOMAIN_EVENT_VERSION,
-      checkinUrl.toString(),
+      null,
       now.atZone(clock.zone),
       DomainEventType.CHECKIN_RECEIVED.description,
-      CheckinAdditionalInformation(checkinUrl.toURL()),
+      CheckinAdditionalInformation(checkinUrl.toURL().toString()),
       PersonReference(listOf(PersonReference.PersonIdentifier("CRN", offender.crn!!))),
     )
     return domainEvent
