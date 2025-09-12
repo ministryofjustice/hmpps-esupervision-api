@@ -15,12 +15,16 @@ class DomainEventPublisher(
     hmppsQueueService.findByTopicId("hmppseventtopic") ?: throw IllegalStateException("hmppseventtopic not found")
   }
   fun publish(domainEvent: DomainEvent) {
-    val response = domainEventsTopic.publish(
-      domainEvent.eventType,
-      objectMapper.writeValueAsString(domainEvent),
-    )
-    LOG.info("Published event to outbound topic, eventType={}, messageId={}", domainEvent.eventType, response.messageId())
-    LOG.debug("Event contains person reference, messageId={}, identifiers={}", response.messageId(), domainEvent.personReference?.identifiers)
+    try {
+      val response = domainEventsTopic.publish(
+        domainEvent.eventType,
+        objectMapper.writeValueAsString(domainEvent),
+      )
+      LOG.info("Published event to outbound topic, eventType={}, messageId={}", domainEvent.eventType, response.messageId())
+      LOG.debug("Event contains person reference, messageId={}, identifiers={}", response.messageId(), domainEvent.personReference?.identifiers)
+    } catch (ex: Exception) {
+      LOG.warn("Failed to publish event to outbound topic, eventType={}, message: {}", domainEvent.eventType, ex.message)
+    }
   }
 
   companion object {
