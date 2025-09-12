@@ -3,6 +3,10 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Contactable
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.net.URL
@@ -27,7 +31,14 @@ data class OffenderDto(
   val photoUrl: URL?,
   @JsonDeserialize(using = LocalDateDeserializer::class) val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval,
-)
+) : Contactable {
+  override fun contactMethods(): Iterable<NotificationMethod> {
+    val methods = mutableListOf<NotificationMethod>()
+    this.email?.let { methods.add(Email(it)) }
+    this.phoneNumber?.let { methods.add(PhoneNumber(it)) }
+    return methods
+  }
+}
 
 data class OffenderSetupDto(
   val uuid: UUID,
