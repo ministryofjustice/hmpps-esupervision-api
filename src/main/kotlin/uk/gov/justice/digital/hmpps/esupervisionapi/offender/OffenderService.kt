@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinsStoppedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
@@ -30,6 +32,7 @@ class OffenderService(
   private val s3UploadService: S3UploadService,
   @Value("\${app.upload-ttl-minutes}") val uploadTTlMinutes: Long,
   private val practitionerRepository: PractitionerRepository,
+  private val notificationService: NotificationService,
 ) {
 
   val uploadTTl = Duration.ofMinutes(uploadTTlMinutes)
@@ -119,6 +122,9 @@ class OffenderService(
       throw BadArgumentException("Offender is inactive, cannot update details")
     }
 
+    // we're going to blank out some fields on offender record, but we need some of them for notifications
+    val offenderDto = offender.dto(s3UploadService)
+
     offender.deactivate(clock.instant())
     offenderRepository.save(offender)
     LOG.info("practitioner={} deactivated offender={}", body.requestedBy, offender.uuid)
@@ -133,6 +139,12 @@ class OffenderService(
     offenderEventLogRepository.saveAndFlush(logEntry)
 
     checkinService.cancelCheckins(uuid, logEntry)
+
+    notificationService.sendMessage(
+      OffenderCheckinsStoppedMessage(offenderDto.firstName, offenderDto.lastName),
+      offenderDto,
+      SingleNotificationContext.from(UUID.randomUUID()),
+    )
 
     return offender.dto(s3UploadService)
   }

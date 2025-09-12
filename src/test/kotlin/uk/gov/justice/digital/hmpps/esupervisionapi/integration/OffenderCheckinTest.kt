@@ -22,6 +22,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinsStoppedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
@@ -295,6 +296,9 @@ class OffenderCheckinTest : IntegrationTestBase() {
     val entry = entries.content[0]
     Assertions.assertEquals("probation ended", entry.comment)
     Assertions.assertEquals(PRACTITIONER_ALICE.externalUserId(), entry.practitioner)
+
+    verify(notificationService, times(1))
+      .sendMessage(any<OffenderCheckinsStoppedMessage>(), any(), any())
   }
 
   private fun checkinRequestDto(): Pair<OffenderDto, CreateCheckinRequest> {

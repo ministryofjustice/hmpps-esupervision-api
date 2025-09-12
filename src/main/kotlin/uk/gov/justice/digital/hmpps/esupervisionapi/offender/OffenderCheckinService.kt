@@ -369,6 +369,7 @@ class OffenderCheckinService(
       throw BadArgumentException("Offender $offenderUuid not found")
     }
     val result = checkinRepository.updateStatusToCancelled(offender)
+
     LOG.info("Cancelling checkins for offender={}, result={}, logEntry={}", offenderUuid, result, logEntry.uuid)
   }
 
