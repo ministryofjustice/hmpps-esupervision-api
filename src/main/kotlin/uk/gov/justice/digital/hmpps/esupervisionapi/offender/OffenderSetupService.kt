@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Clock
 import java.util.Optional
@@ -21,6 +22,7 @@ class OffenderSetupService(
   private val offenderRepository: OffenderRepository,
   private val s3UploadService: S3UploadService,
   private val offenderSetupRepository: OffenderSetupRepository,
+  private val offenderCheckinService: OffenderCheckinService,
   private val notificationService: NotificationService,
 ) {
 
@@ -91,6 +93,19 @@ class OffenderSetupService(
     val confirmationMessage = RegistrationConfirmationMessage.fromSetup(setup.get())
     val notifResult = this.notificationService.sendMessage(confirmationMessage, saved, SingleNotificationContext.from(UUID.randomUUID()))
     LOG.info("Completing offender setup for offender uuid={}, notification-ids={}", saved.uuid, notifResult.results.map { it.notificationId })
+
+    val firstCheckinDate = offender.firstCheckin
+    if (firstCheckinDate == now.atZone(clock.zone).toLocalDate()) {
+      val creation = offenderCheckinService.createCheckin(
+        CreateCheckinRequest(
+          practitioner = offender.practitioner,
+          offender = saved.uuid,
+          dueDate = firstCheckinDate,
+        ),
+        SingleNotificationContext.forCheckin(firstCheckinDate),
+      )
+      LOG.info("Created a checkin for new offender={}, checkin={}", offender.uuid, creation.checkin.uuid)
+    }
 
     return saved.dto(this.s3UploadService)
   }

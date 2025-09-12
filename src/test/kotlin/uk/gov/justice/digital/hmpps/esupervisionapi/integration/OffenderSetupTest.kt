@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
-import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
@@ -17,6 +17,8 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.EntityExchangeResult
 import org.springframework.test.web.reactive.server.WebTestClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
@@ -51,6 +53,7 @@ class OffenderSetupTest : IntegrationTestBase() {
 
   @AfterEach
   internal fun tearDown() {
+    checkinRepository.deleteAll()
     offenderSetupRepository.deleteAll()
     offenderRepository.deleteAll()
   }
@@ -59,9 +62,32 @@ class OffenderSetupTest : IntegrationTestBase() {
    * We attempt to add an offender to the system without (the happy path).
    */
   @Test
-  fun `successfully add an offender to the system`() {
+  fun `successfully add an offender to the system, first checkin today`() {
+    val notifInOrder = inOrder(notificationService)
+
+    `successful offender setup`(0)
+
+    notifInOrder.verify(notificationService, times(1))
+      .sendMessage(any<RegistrationConfirmationMessage>(), any(), any())
+    notifInOrder.verify(notificationService, times(1))
+      .sendMessage(any<OffenderCheckinInviteMessage>(), any(), any())
+  }
+
+  @Test
+  fun `successfully add an offender to the system, first checkin in thet future`() {
+    val notifInOrder = inOrder(notificationService)
+
+    `successful offender setup`(1)
+
+    notifInOrder.verify(notificationService, times(1))
+      .sendMessage(any<RegistrationConfirmationMessage>(), any(), any())
+    notifInOrder.verify(notificationService, times(0))
+      .sendMessage(any<OffenderCheckinInviteMessage>(), any(), any())
+  }
+
+  fun `successful offender setup`(firstCheckinDaysOffset: Long = 0) {
     val offenderInfo = createOffenderInfo(
-      firstCheckinDate = LocalDate.now(),
+      firstCheckinDate = LocalDate.now().plusDays(firstCheckinDaysOffset),
       checkinInterval = CheckinInterval.WEEKLY,
     )
     val setup = setupStartRequest(offenderInfo)
@@ -82,9 +108,6 @@ class OffenderSetupTest : IntegrationTestBase() {
       URI("https://the-bucket/offender-1").toURL(),
       setupCompletion.responseBody!!.photoUrl,
     )
-
-    // Offender should get notified
-    verify(notificationService, times(1)).sendMessage(any(), any(), any())
   }
 
   @Test
