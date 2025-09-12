@@ -7,6 +7,8 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDO
 import org.springframework.context.annotation.Import
 import org.springframework.http.HttpHeaders
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
@@ -47,5 +49,17 @@ abstract class IntegrationTestBase {
 
   protected fun stubPingWithResponse(status: Int) {
     hmppsAuth.stubHealthPing(status)
+  }
+
+  companion object {
+    @DynamicPropertySource
+    @JvmStatic
+    fun configureProperties(registry: DynamicPropertyRegistry) {
+      val postgres = TestContainersSessionListener.postgres
+
+      registry.add("spring.datasource.url") { postgres.jdbcUrl }
+      registry.add("spring.datasource.username") { postgres.username }
+      registry.add("spring.datasource.password") { postgres.password }
+    }
   }
 }

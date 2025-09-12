@@ -36,7 +36,8 @@ dependencies {
   testImplementation("io.swagger.parser.v3:swagger-parser:2.1.29") {
     exclude(group = "io.swagger.core.v3")
   }
-  testRuntimeOnly("com.h2database:h2")
+  testImplementation("org.testcontainers:postgresql")
+  testImplementation("org.junit.platform:junit-platform-launcher:1.12.2")
 }
 
 kotlin {
