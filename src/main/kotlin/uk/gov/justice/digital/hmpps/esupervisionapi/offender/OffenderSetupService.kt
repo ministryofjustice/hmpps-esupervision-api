@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.time.Clock
+import java.time.LocalDate
 import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
@@ -95,7 +96,8 @@ class OffenderSetupService(
     LOG.info("Completing offender setup for offender uuid={}, notification-ids={}", saved.uuid, notifResult.results.map { it.notificationId })
 
     val firstCheckinDate = offender.firstCheckin
-    if (firstCheckinDate == now.atZone(clock.zone).toLocalDate()) {
+    LOG.debug("offender={}, firstCheckinDate={}", offender.uuid, firstCheckinDate)
+    if (firstCheckinDate !== null && firstCheckinDate <= LocalDate.now(clock)) {
       val creation = offenderCheckinService.createCheckin(
         CreateCheckinRequest(
           practitioner = offender.practitioner,
