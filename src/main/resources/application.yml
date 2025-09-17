@@ -67,7 +67,7 @@ spring:
       pool-name: HikariPool-esupervision
 
   liquibase:
-    change-log: classpath:/db/changelog/db.changelog-master.sql
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
