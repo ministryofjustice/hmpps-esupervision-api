@@ -74,7 +74,7 @@ class OffenderSetupTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `successfully add an offender to the system, first checkin in thet future`() {
+  fun `successfully add an offender to the system, first checkin in the future`() {
     val notifInOrder = inOrder(notificationService)
 
     `successful offender setup`(1)
