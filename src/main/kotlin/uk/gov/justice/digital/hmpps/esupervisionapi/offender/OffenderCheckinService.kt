@@ -1,8 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
@@ -144,7 +146,7 @@ class OffenderCheckinService(
       manualIdCheck = null,
     )
 
-    val saved = checkinRepository.save(checkin)
+    val saved = saveCheckin(checkin, offender, createCheckin)
 
     // notify PoP of checkin invite
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
@@ -154,6 +156,24 @@ class OffenderCheckinService(
       saved.dto(this.s3UploadService),
       inviteResults,
     )
+  }
+
+  /**
+   * @return the saved checkin
+   * @throws BadArgumentException when checkin already exists for offender on given date
+   */
+  private fun saveCheckin(
+    checkin: OffenderCheckin,
+    offender: Offender,
+    createCheckin: CreateCheckinRequest,
+  ): OffenderCheckin = try {
+    checkinRepository.save(checkin)
+  } catch (e: DataIntegrityViolationException) {
+    val violation = e.cause as? ConstraintViolationException
+    if (violation?.constraintName == "one_checkin_per_day") {
+      throw BadArgumentException("Cannot create another checkin for offender ${offender.uuid} on ${createCheckin.dueDate}")
+    }
+    throw e
   }
 
   /**
