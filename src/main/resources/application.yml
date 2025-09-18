@@ -66,18 +66,19 @@ spring:
       connection-timeout: 30000
       pool-name: HikariPool-esupervision
 
+  liquibase:
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
         use_sql_comments: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        hbm2ddl:
-          auto: update
         type:
           preferred_duration_jdbc_type: INTERVAL_SECOND
 
