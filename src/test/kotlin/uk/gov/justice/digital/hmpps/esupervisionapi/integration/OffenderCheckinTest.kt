@@ -252,6 +252,20 @@ class OffenderCheckinTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `only one checkin per day allowed`() {
+    val (offender, checkinRequest) = checkinRequestDto()
+    val checkinDto1 = createCheckinRequest(checkinRequest)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(OffenderCheckinDto::class.java)
+      .returnResult().responseBody!!
+
+    createCheckinRequest(checkinRequest)
+      .exchange()
+      .expectStatus().is4xxClientError
+  }
+
+  @Test
   fun `terminating checkins for an offender removes any outstanding checkin records`() {
     val (offender, checkinRequest) = checkinRequestDto()
     val createCheckin = createCheckinRequest(checkinRequest)
