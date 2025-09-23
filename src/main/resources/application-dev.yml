@@ -62,7 +62,7 @@ aws:
   endpoint-url: "http://localhost:4566"
   s3:
     image-uploads: hmpps-esupervision-image-uploads
-    video-uploads: hmpss-esupervision-video-uploads
+    video-uploads: hmpps-esupervision-video-uploads
 
 rekognition:
   s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
