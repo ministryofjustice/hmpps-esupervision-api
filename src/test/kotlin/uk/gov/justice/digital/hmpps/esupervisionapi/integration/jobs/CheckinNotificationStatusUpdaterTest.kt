@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.jobs
 
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -20,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import java.time.Clock
 import java.time.LocalDate
@@ -28,11 +30,21 @@ import java.util.UUID
 @Import(MockS3Config::class)
 class CheckinNotificationStatusUpdaterTest : IntegrationTestBase() {
 
+  @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
+
   @Autowired private lateinit var notificationService: NotificationService
 
   @Autowired private lateinit var statusUpdater: CheckinNotificationStatusUpdater
 
   private val clock: Clock = Clock.systemUTC()
+
+  @AfterEach
+  fun cleanUp() {
+    offenderEventLogRepository.deleteAll()
+    offenderSetupRepository.deleteAll()
+    offenderCheckinRepository.deleteAll()
+    offenderRepository.deleteAll()
+  }
 
   @Test
   fun `verify that one-off notifications are processed`() {

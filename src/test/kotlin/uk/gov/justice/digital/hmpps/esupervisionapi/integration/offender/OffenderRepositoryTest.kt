@@ -1,8 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.offender
 
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
@@ -12,6 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import java.time.Duration
@@ -19,6 +22,8 @@ import java.time.Instant
 import java.time.LocalDate
 
 class OffenderRepositoryTest : IntegrationTestBase() {
+
+  @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
 
   @BeforeEach
   fun setupOffenders() {
@@ -48,6 +53,14 @@ class OffenderRepositoryTest : IntegrationTestBase() {
       dueDate = today.plusDays(1),
     )
     checkinRepository.saveAll(listOf(checkinForOffender2))
+  }
+
+  @AfterEach
+  fun cleanUp() {
+    offenderEventLogRepository.deleteAll()
+    offenderSetupRepository.deleteAll()
+    offenderCheckinRepository.deleteAll()
+    offenderRepository.deleteAll()
   }
 
   @Test
