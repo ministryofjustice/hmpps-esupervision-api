@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 
-import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
 import java.util.UUID
@@ -17,8 +16,8 @@ interface NotificationService {
   fun sendMessage(message: Message, recipient: Contactable, context: NotificationContext): NotificationResults
 
   /**
-   * @param job job which sent the notification
+   * @param ref job which sent the notification
    * @param olderThan notification id
    */
-  fun notificationStatus(job: JobLog, olderThan: String? = null): NotificationStatusCollection
+  fun notificationStatus(ref: Referencable, olderThan: String? = null): NotificationStatusCollection
 }

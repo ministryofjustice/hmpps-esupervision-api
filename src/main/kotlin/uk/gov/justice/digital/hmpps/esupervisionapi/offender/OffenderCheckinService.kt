@@ -65,6 +65,7 @@ class OffenderCheckinService(
   private val offenderRepository: OffenderRepository,
   private val s3UploadService: S3UploadService,
   private val notificationService: NotificationService,
+  private val notificationRepository: CheckinNotificationRepository,
   @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
   private val compareFacesService: RekognitionCompareFacesService,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
@@ -151,6 +152,17 @@ class OffenderCheckinService(
     // notify PoP of checkin invite
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
     val inviteResults = this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
+
+    if (notificationContext.type == NotificationContextType.SINGLE && inviteResults.results.isNotEmpty()) {
+      val checkinNotifications = inviteResults.results.map {
+        CheckinNotification(
+          notificationId = it.notificationId,
+          checkin = saved.uuid,
+          reference = notificationContext.reference,
+        )
+      }
+      notificationRepository.saveAll(checkinNotifications)
+    }
 
     return CheckinCreationInfo(
       saved.dto(this.s3UploadService),

@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.JobLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Referencable
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
 import java.util.UUID
@@ -72,13 +73,12 @@ interface CheckinNotificationRepository : org.springframework.data.jpa.repositor
 
   @Query(
     """
-    SELECT cn FROM CheckinNotification cn WHERE cn.reference = :#{#job.reference()}
+    SELECT cn FROM CheckinNotification cn WHERE cn.reference = :#{#ref.reference}
     AND cn.status IN (:statuses)
-    AND cn.job = :job
     AND cn.createdAt >= :lowerBound
     """,
   )
-  fun findByJobAndStatus(job: JobLog, statuses: List<String>, lowerBound: Instant): List<CheckinNotification>
+  fun findByJobAndStatus(ref: Referencable, statuses: List<String>, lowerBound: Instant): List<CheckinNotification>
 
   @Query(
     """

@@ -6,6 +6,7 @@ import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Index
 import jakarta.persistence.Table
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Referencable
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
 
@@ -48,13 +49,15 @@ open class JobLog(
 
   @Column(name = "ended_at", nullable = true)
   open var endedAt: Instant? = null,
-) : AEntity() {
-  fun dto() = JobLogDto(reference = reference(), jobType = jobType, createdAt = createdAt, endedAt = endedAt)
+) : AEntity(),
+  Referencable {
+  fun dto() = JobLogDto(reference = reference, jobType = jobType, createdAt = createdAt, endedAt = endedAt)
 
   /**
    * An identifier that can be used with external systems.
    *
    * Note: Should be treated as an opaque value.
    */
-  fun reference() = "BLK-${String.format("%05d", id)}"
+  @Transient
+  override val reference = "BLK-${String.format("%05d", id)}"
 }
