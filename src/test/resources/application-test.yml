@@ -21,7 +21,7 @@ aws:
   endpoint-url: "http://localhost:4566"
   s3:
     image-uploads: test-hmpps-esupervision-image-uploads
-    video-uploads: test-hmpss-esupervision-video-uploads
+    video-uploads: test-hmpps-esupervision-video-uploads
 
 notify:
   apiKey: notused
