@@ -26,7 +26,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.CheckinVerificationImages
-import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -67,7 +67,7 @@ class OffenderCheckinService(
   private val notificationService: NotificationService,
   private val notificationRepository: CheckinNotificationRepository,
   @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
-  private val compareFacesService: RekognitionCompareFacesService,
+  private val compareFacesService: OffenderIdVerifier,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
   @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
   private val offenderEventLogRepository: OffenderEventLogRepository,
