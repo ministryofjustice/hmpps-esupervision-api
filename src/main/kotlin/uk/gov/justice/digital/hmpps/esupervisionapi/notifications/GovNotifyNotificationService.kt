@@ -46,9 +46,10 @@ class GovNotifyNotificationService(
     return null
   }
 
-  override fun notificationStatus(job: JobLog, olderThan: String?): NotificationStatusCollection {
-    val list = notifyClient.getNotifications(null, null, job.reference(), olderThan)
-    LOGGER.info("Got {} notifications, reference={}, jobType={}", list.notifications.size, job.reference(), job.jobType)
+  override fun notificationStatus(ref: Referencable, olderThan: String?): NotificationStatusCollection {
+    val list = notifyClient.getNotifications(null, null, ref.reference, olderThan)
+    val jobType = if (ref is JobLog) ref.jobType else null
+    LOGGER.info("Got {} notifications, reference={}, jobType={}", list.notifications.size, ref.reference, jobType)
     val notifications = list.notifications.map { NotificationInfo(it.id, it.status) }
     return StatusCollection(notifications, list.nextPageOlderThan())
   }

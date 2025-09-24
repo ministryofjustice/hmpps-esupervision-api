@@ -86,7 +86,7 @@ class CheckinNotifier(
 
     val logEntry = JobLog(JobType.CHECKIN_NOTIFICATIONS_JOB, now)
     jobLogRepository.saveAndFlush(logEntry)
-    val notificationContext = BulkNotificationContext(logEntry.reference())
+    val notificationContext = BulkNotificationContext(logEntry.reference)
 
     val context = NotifierContext(
       clock,
