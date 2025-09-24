@@ -85,7 +85,7 @@ class OffenderService(
 
       val today = LocalDate.now(clock)
       if (newFirstCheckinDateIsToday(dtoBefore, dto, today)) {
-        checkinService.createCheckin(
+        val creation = checkinService.createCheckin(
           CreateCheckinRequest(
             offender.practitioner,
             offender.uuid,
@@ -93,6 +93,7 @@ class OffenderService(
           ),
           SingleNotificationContext.forCheckin(today),
         )
+        LOG.info("Created a checkin for new offender={}, checkin={}", offender.uuid, creation.checkin.uuid)
       }
 
       return dto
