@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
@@ -20,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
 
@@ -74,11 +76,25 @@ class OffenderService(
     details.validate(offender, clock)
 
     LOG.info("Updating offender={} details with {}", uuid, details)
+    val dtoBefore = offender.dto(this.s3UploadService)
     offender.applyUpdate(details)
     try {
       val dto = offenderRepository.saveAndFlush(offender).dto(
         this.s3UploadService,
       )
+
+      val today = LocalDate.now(clock)
+      if (newFirstCheckinDateIsToday(dtoBefore, dto, today)) {
+        checkinService.createCheckin(
+          CreateCheckinRequest(
+            offender.practitioner,
+            offender.uuid,
+            dto.firstCheckin!!,
+          ),
+          SingleNotificationContext.forCheckin(today),
+        )
+      }
+
       return dto
     } catch (e: DataIntegrityViolationException) {
       LOG.info("Offender update failed, offender uuid={}, error details: {}", offender.uuid, e.message)
@@ -153,6 +169,12 @@ class OffenderService(
     val LOG: Logger = LoggerFactory.getLogger(this::class.java)
   }
 }
+
+private fun newFirstCheckinDateIsToday(
+  beforeChange: OffenderDto,
+  afterChange: OffenderDto,
+  today: LocalDate?,
+): Boolean = beforeChange.firstCheckin != afterChange.firstCheckin && afterChange.firstCheckin == today
 
 private fun Offender.deactivate(terminationTime: Instant) {
   this.status = OffenderStatus.INACTIVE
