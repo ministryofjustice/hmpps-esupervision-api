@@ -47,6 +47,7 @@ fun createNewPractitioner(username: ExternalUserId): Practitioner {
 
 val PRACTITIONER_ALICE = createNewPractitioner("Alice.Smith")
 val PRACTITIONER_BOB = createNewPractitioner("Bob.Jones")
+val PRACTITIONER_DAVE = createNewPractitioner("Dave.Allen")
 
 fun Offender.Companion.create(
   name: String,

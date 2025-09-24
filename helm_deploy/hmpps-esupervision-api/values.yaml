@@ -60,6 +60,9 @@ generic-service:
     hmpps-domain-events-topic:
       HMPPS_SQS_TOPICS_HMPPSEVENTTOPIC_ARN: "topic_arn"
 
+    practitioner-sites:
+      PRACTITIONER_SITE_ASSIGNMENTS: "assignments"
+
   allowlist:
     groups:
       - internal

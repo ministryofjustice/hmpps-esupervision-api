@@ -179,7 +179,21 @@ interface OffenderRepository : org.springframework.data.jpa.repository.JpaReposi
         """,
   )
   fun findAllCheckinNotificationCandidates(lowerBoundInclusive: LocalDate, upperBoundExclusive: LocalDate): Stream<Offender>
+
+  @Query(
+    """
+      select o.practitioner, count(o) from Offender o
+      where o.status != 'INITIAL'
+      group by o.practitioner
+    """,
+  )
+  fun findPractitionerRegistrations(): List<PractitionerRegistrationCount>
 }
+
+open class PractitionerRegistrationCount(
+  val practitioner: ExternalUserId,
+  val registrationCount: Long,
+)
 
 /**
  * When a practitioner adds an offender, a record for the setup process is created.
