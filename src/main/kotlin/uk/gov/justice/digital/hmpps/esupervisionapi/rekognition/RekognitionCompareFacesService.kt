@@ -8,10 +8,14 @@ import software.amazon.awssdk.services.rekognition.model.InvalidParameterExcepti
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 
+interface OffenderIdVerifier {
+  fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): AutomatedIdVerificationResult
+}
+
 class RekognitionCompareFacesService(
   val client: RekognitionClient,
-) {
-  fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): AutomatedIdVerificationResult {
+) : OffenderIdVerifier {
+  override fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): AutomatedIdVerificationResult {
     for (snapshot in snapshots.snapshots) {
       val matches = compareFaces(snapshots.reference, snapshot, requiredConfidence)
       if (matches) {
