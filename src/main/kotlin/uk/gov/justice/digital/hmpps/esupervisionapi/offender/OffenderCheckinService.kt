@@ -465,9 +465,8 @@ class OffenderCheckinService(
 }
 
 fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
+  assert(checkinWindow.days > 1)
   val submissionDate = clock.instant().atZone(clock.zone).toLocalDate()
-  // dueDate + window -- last day when checkin can be submitted (till midnight),
-  // the next day is when checkin submissions are no longer accepted
-  val finalCheckinDate = this.dueDate.plus(checkinWindow)
+  val finalCheckinDate = this.dueDate.plus(checkinWindow.minusDays(1))
   return finalCheckinDate < submissionDate
 }

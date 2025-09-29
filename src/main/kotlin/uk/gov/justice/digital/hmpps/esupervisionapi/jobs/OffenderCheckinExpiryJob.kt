@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepo
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.time.Period
 import kotlin.streams.asSequence
 
@@ -44,8 +45,7 @@ class OffenderCheckinExpiryJob(
   @Transactional
   fun process() {
     val now = clock.instant()
-    val today = now.atZone(clock.zone).toLocalDate()
-    val cutoff = today.minus(Period.ofDays(checkinWindow.toDays().toInt()))
+    val cutoff = cutoffDate(clock, checkinWindow)
 
     LOG.info("processing starts. checkins below cutoff=$cutoff will be marked as expired.")
 
@@ -114,4 +114,14 @@ class OffenderCheckinExpiryJob(
   companion object {
     private val LOG = org.slf4j.LoggerFactory.getLogger(OffenderCheckinExpiryJob::class.java)
   }
+}
+
+/**
+ * Returns the upper inclusive bound for checkins that should be marked as expired.
+ */
+internal fun cutoffDate(clock: Clock, checkinWindow: Duration): LocalDate {
+  val now = clock.instant()
+  val today = now.atZone(clock.zone).toLocalDate()
+  val cutoff = today.minus(Period.ofDays(checkinWindow.toDays().toInt()))
+  return cutoff
 }

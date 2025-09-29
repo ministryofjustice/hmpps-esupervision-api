@@ -31,6 +31,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.DeactivateOffenderC
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResultSummary
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
@@ -43,14 +45,19 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.isPastSubmissionDate
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
+import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
+import java.time.Period
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
 
@@ -313,6 +320,21 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     verify(notificationService, times(1))
       .sendMessage(any<OffenderCheckinsStoppedMessage>(), any(), any())
+  }
+
+  @Test
+  fun `isPastSubmissionDate calculation`() {
+    val offender = Offender.create("mary", crn = "X123456", email = "foo@example.com", practitioner = PRACTITIONER_ALICE, firstCheckinDate = LocalDate.of(2025, 1, 1))
+    val checkin = OffenderCheckin.create(
+      offender = offender,
+      createdBy = PRACTITIONER_ALICE.externalUserId(),
+      dueDate = LocalDate.of(2025, 9, 10),
+    )
+    val clock = Clock.fixed(Instant.parse("2025-09-13T14:30:00Z"), ZoneId.systemDefault())
+    Assertions.assertTrue(checkin.isPastSubmissionDate(clock, Period.ofDays(3)))
+
+    checkin.dueDate = LocalDate.of(2025, 9, 11)
+    Assertions.assertFalse(checkin.isPastSubmissionDate(clock, Period.ofDays(3)))
   }
 
   private fun checkinRequestDto(): Pair<OffenderDto, CreateCheckinRequest> {
