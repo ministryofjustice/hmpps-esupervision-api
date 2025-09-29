@@ -116,7 +116,8 @@ or [raise a PR](https://github.com/ministryofjustice/hmpps-tech-docs).
 
 The application comes with a `dev` spring profile that includes default settings for running locally. This is not
 necessary when deploying to kubernetes as these values are included in the helm configuration templates -
-e.g. `values-dev.yaml`.
+e.g. `values-dev.yaml`. You can also specify an additional `stubrekog` profile when running the application
+to not use Rekognition, andy rely on a stub implementation of the face comparison service.
 
 There is also a `docker-compose.yml` that can be used to run a local instance of the template in docker and also an
 instance of HMPPS Auth (required if your service calls out to other services using a token).
