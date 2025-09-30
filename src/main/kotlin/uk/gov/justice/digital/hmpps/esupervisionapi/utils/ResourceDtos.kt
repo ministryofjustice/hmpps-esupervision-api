@@ -3,9 +3,11 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import jakarta.validation.constraints.NotBlank
 import org.springframework.data.domain.Pageable
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.IOffenderEventLogDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import java.net.URL
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
@@ -66,3 +68,14 @@ data class CheckinReviewRequest(
    */
   val missedCheckinComment: String? = null,
 )
+
+/**
+ * Represents a subset of a log entry for an offender deactivation.
+ */
+data class DeactivationEntry(
+  val uuid: UUID,
+  val comment: String,
+  val createdAt: Instant,
+)
+
+fun IOffenderEventLogDto.toDeactivationEntry() = DeactivationEntry(this.uuid, this.comment, this.createdAt)

@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toDeactivationEntry
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
@@ -63,10 +64,17 @@ class OffenderService(
   }
 
   fun getOffender(uuid: UUID): OffenderDto {
-    val offenderFound = offenderRepository.findByUuid(uuid)
-    return offenderFound.map { it.dto(this.s3UploadService) }.getOrElse {
-      throw ResourceNotFoundException("Offender not found for uuid: $uuid")
+    val result = offenderRepository.findByUuid(uuid)
+    if (result.isPresent) {
+      val offender = result.get()
+      val entry = offenderEventLogRepository
+        .findByOffenderAndLogEntryTypeOrderByCreatedAtDesc(offender, LogEntryType.OFFENDER_DEACTIVATED)
+        .firstOrNull()
+      return offender
+        .dto(this.s3UploadService)
+        .copy(deactivationEntry = entry?.toDeactivationEntry())
     }
+    throw ResourceNotFoundException("Offender not found for uuid: $uuid")
   }
 
   @Transactional

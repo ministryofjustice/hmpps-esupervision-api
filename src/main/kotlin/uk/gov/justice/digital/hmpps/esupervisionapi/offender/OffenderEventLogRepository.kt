@@ -97,6 +97,8 @@ interface OffenderEventLogRepository : org.springframework.data.jpa.repository.J
   )
   fun findAllByOffender(offender: Offender, pageable: Pageable): Page<IOffenderEventLogDto>
 
+  fun findByOffenderAndLogEntryTypeOrderByCreatedAtDesc(offender: Offender, logEntryType: LogEntryType): List<IOffenderEventLogDto>
+
   @Query(
     """
     select
