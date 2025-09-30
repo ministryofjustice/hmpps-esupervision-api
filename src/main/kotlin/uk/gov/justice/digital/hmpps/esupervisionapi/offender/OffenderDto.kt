@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.DeactivationEntry
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.net.URL
 import java.time.Instant
@@ -31,6 +32,8 @@ data class OffenderDto(
   val photoUrl: URL?,
   @JsonDeserialize(using = LocalDateDeserializer::class) val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval,
+  // OFFENDER_DEACTIVATED log entry, included when explicitly requested
+  val deactivationEntry: DeactivationEntry? = null,
 ) : Contactable {
   override fun contactMethods(): Iterable<NotificationMethod> {
     val methods = mutableListOf<NotificationMethod>()
