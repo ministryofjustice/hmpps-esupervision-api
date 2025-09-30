@@ -51,13 +51,12 @@ open class JobLog(
   open var endedAt: Instant? = null,
 ) : AEntity(),
   Referencable {
-  fun dto() = JobLogDto(reference = reference, jobType = jobType, createdAt = createdAt, endedAt = endedAt)
+  fun dto() = JobLogDto(reference = reference(), jobType = jobType, createdAt = createdAt, endedAt = endedAt)
 
   /**
    * An identifier that can be used with external systems.
    *
    * Note: Should be treated as an opaque value.
    */
-  @Transient
-  override val reference = "BLK-${String.format("%05d", id)}"
+  override fun reference(): String = "BLK-${String.format("%05d", id)}"
 }

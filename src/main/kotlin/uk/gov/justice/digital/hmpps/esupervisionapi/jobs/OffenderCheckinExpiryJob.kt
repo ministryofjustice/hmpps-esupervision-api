@@ -57,7 +57,7 @@ class OffenderCheckinExpiryJob(
       val lowerBound = now.minus(Period.ofDays(28))
 
       val chunkSize = 100
-      val context = BulkNotificationContext(logEntry.reference)
+      val context = BulkNotificationContext(logEntry.reference())
       checkinRepository.findAllAboutToExpire(cutoff, lowerBound = lowerBound)
         .asSequence()
         .chunked(chunkSize)
