@@ -11,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationSt
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Referencable
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -52,7 +53,7 @@ class CheckinNotificationStatusUpdater(
 
     val now = clock.instant()
     val daysBack = 5L
-    val newerThan = now.atZone(clock.zone).toLocalDate().atStartOfDay().minusDays(daysBack)
+    val newerThan = clock.today().atStartOfDay().minusDays(daysBack)
     val days: List<java.time.LocalDate> =
       (0L..daysBack).map { newerThan.toLocalDate().plusDays(it) }
     val newerThanInstant = newerThan.toInstant(clock.zone.rules.getOffset(now))

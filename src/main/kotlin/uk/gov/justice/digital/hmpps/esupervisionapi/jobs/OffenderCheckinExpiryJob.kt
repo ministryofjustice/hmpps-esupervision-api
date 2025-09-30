@@ -18,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationCon
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -120,8 +121,7 @@ class OffenderCheckinExpiryJob(
  * Returns the upper inclusive bound for checkins that should be marked as expired.
  */
 internal fun cutoffDate(clock: Clock, checkinWindow: Duration): LocalDate {
-  val now = clock.instant()
-  val today = now.atZone(clock.zone).toLocalDate()
+  val today = clock.today()
   val cutoff = today.minus(Period.ofDays(checkinWindow.toDays().toInt()))
   return cutoff
 }

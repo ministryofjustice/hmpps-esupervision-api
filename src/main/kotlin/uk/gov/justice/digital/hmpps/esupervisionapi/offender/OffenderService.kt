@@ -18,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -204,8 +205,7 @@ internal fun OffenderDetailsUpdate.validate(
   if (offender.status == OffenderStatus.VERIFIED && this.firstCheckin == null) {
     throw BadArgumentException("first checkin date required when offender status is VERIFIED")
   }
-  val now = clock.instant()
-  val today = now.atZone(clock.zone).toLocalDate()
+  val today = clock.today()
   if (this.dateOfBirth != null && this.dateOfBirth.isAfter(today.minusYears(14))) {
     throw BadArgumentException("Invalid date of birth: ${this.dateOfBirth}")
   }
