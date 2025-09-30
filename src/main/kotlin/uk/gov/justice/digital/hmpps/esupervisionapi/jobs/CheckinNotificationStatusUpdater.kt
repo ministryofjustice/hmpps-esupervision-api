@@ -25,8 +25,10 @@ private data class QueryParams(val ref: Referencable, val createdAt: Instant)
  * jobs and one-off notifications from a particular time interval (up to a given number of days back).
  */
 private data class OneOffNotification(
-  override val reference: String,
-) : Referencable
+  private val ref: String,
+) : Referencable {
+  override fun reference(): String = ref
+}
 
 @Service
 class CheckinNotificationStatusUpdater(
@@ -75,7 +77,7 @@ class CheckinNotificationStatusUpdater(
         do {
           val olderThan = batches.lastOrNull()?.previousPageParam
           val batch = notificationService.notificationStatus(notificationAttempt.ref, olderThan)
-          LOG.info("job reference={}, got batch with {} notifications, older than {}", notificationAttempt.ref.reference, batch.notifications.size, olderThan)
+          LOG.info("job reference={}, got batch with {} notifications, older than {}", notificationAttempt.ref.reference(), batch.notifications.size, olderThan)
           batches.add(batch)
         } while (batches.isNotEmpty() && batch.hasNextPage)
 
@@ -88,13 +90,13 @@ class CheckinNotificationStatusUpdater(
           .filter { !terminalIds.contains(it.uuid) }
           .toList()
 
-        LOG.debug("job reference={}, {} records to update", notificationAttempt.ref.reference, notifications.size)
+        LOG.debug("job reference={}, {} records to update", notificationAttempt.ref.reference(), notifications.size)
 
         // update the remaining notification's status
         try {
           updateNotificationStatus(notifications)
         } catch (e: Exception) {
-          LOG.warn("Failed to update notification statuses for job reference=${notificationAttempt.ref.reference}: ${e.message}", e)
+          LOG.warn("Failed to update notification statuses for job reference=${notificationAttempt.ref.reference()}: ${e.message}", e)
         }
       }
     } catch (e: Exception) {
