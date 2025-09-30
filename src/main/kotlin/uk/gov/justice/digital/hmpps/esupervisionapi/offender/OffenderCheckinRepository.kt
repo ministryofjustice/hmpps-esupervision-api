@@ -111,7 +111,7 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   @Query(
     """
     SELECT c FROM OffenderCheckin c  
-    WHERE c.dueDate < :cutoff
+    WHERE c.dueDate <= :cutoff
     AND c.createdAt >= :lowerBound
     AND c.status = 'CREATED'
  """,

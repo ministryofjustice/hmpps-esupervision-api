@@ -10,6 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.NotifierContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -20,7 +21,7 @@ import java.util.UUID
 class CheckinNotifierTest {
 
   val clock: Clock = Clock.fixed(Instant.now(), ZoneId.of("Europe/London"))
-  val today: LocalDate = clock.instant().atZone(clock.zone).toLocalDate()
+  val today: LocalDate = clock.today()
   val practitioner = createNewPractitioner("Bob.Smith")
   val offender = Offender.create("Bob Smith", "B090909", LocalDate.of(1980, 1, 1), today, CheckinInterval.WEEKLY, practitioner = practitioner)
 

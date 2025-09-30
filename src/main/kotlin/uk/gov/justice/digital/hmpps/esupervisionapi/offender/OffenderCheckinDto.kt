@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.net.URL
 import java.time.Clock
 import java.time.Instant
@@ -173,7 +174,7 @@ data class SingleNotificationContext(val ref: String) : NotificationContext(ref,
 
     fun forCheckin(now: LocalDate) = SingleNotificationContext("CHK-${now.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
 
-    fun forCheckin(clock: Clock) = forCheckin(clock.instant().atZone(clock.zone).toLocalDate())
+    fun forCheckin(clock: Clock) = forCheckin(clock.today())
   }
 }
 

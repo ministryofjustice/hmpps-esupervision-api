@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -82,7 +83,7 @@ class CheckinNotifier(
     LOG.info("processing starts")
 
     val now = clock.instant()
-    val lowerBound = now.atZone(clock.zone).toLocalDate()
+    val lowerBound = clock.today()
 
     val logEntry = JobLog(JobType.CHECKIN_NOTIFICATIONS_JOB, now)
     jobLogRepository.saveAndFlush(logEntry)

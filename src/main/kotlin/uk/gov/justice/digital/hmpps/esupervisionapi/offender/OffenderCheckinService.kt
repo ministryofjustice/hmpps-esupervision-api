@@ -35,6 +35,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -117,8 +118,7 @@ class OffenderCheckinService(
 
   fun createCheckin(createCheckin: CreateCheckinRequest, notificationContext: NotificationContext): CheckinCreationInfo {
     val now = clock.instant()
-    // we want to allow the due date of 'today'
-    if (createCheckin.dueDate < now.atZone(clock.zone).toLocalDate()) {
+    if (createCheckin.dueDate < clock.today()) {
       throw BadArgumentException("Due date is in the past: ${createCheckin.dueDate}")
     }
 
@@ -465,9 +465,12 @@ class OffenderCheckinService(
 }
 
 fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
-  val submissionDate = clock.instant().atZone(clock.zone).toLocalDate()
-  // dueDate + window -- last day when checkin can be submitted (till midnight),
-  // the next day is when checkin submissions are no longer accepted
-  val finalCheckinDate = this.dueDate.plus(checkinWindow)
+  assert(checkinWindow.days > 1)
+  val submissionDate = clock.today()
+  val finalCheckinDate = if (checkinWindow.days <= 1) {
+    this.dueDate
+  } else {
+    this.dueDate.plus(checkinWindow.minusDays(1))
+  }
   return finalCheckinDate < submissionDate
 }
