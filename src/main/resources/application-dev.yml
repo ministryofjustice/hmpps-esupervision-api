@@ -14,25 +14,6 @@ hmpps-auth:
 spring:
   config:
     import: "optional:file:.env[.properties]"
-  datasource:
-    url: jdbc:postgresql://${POSTGRES_ENDPOINT}/${POSTGRES_DATABASE}
-    driver-class-name: org.postgresql.Driver
-    username: ${POSTGRES_USERNAME}
-    password: ${POSTGRES_PASSWORD}
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      idle-timeout: 60000
-      connection-timeout: 30000
-      pool-name: HikariPool-esupervision
-  jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        use_sql_comments: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 logging:
   level:
