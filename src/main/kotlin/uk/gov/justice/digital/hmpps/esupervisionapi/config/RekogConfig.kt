@@ -14,9 +14,18 @@ import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.sts.StsClient
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 
+/***
+ * Defines the beans required for id verification (using AWS rekognition in deployments). This is the default
+ * configuration which is applied unless either the 'test' or 'stubrekog' profiles are active. In that case
+ * the @see StubRekogConfig is used. Two beans must be defined by configurations:
+ *   - A bean named 'rekognitionS3' implementing @see S3UploadService
+ *   - A bean implementing @see OffenderIdVerifier
+ */
+@Profile("!test & !stubrekog")
 @Configuration
 class RekogConfig(
   @Value("\${rekognition.region}") val region: String,
@@ -26,7 +35,6 @@ class RekogConfig(
 ) {
 
   @Bean
-  @Profile("!test")
   fun rekognitionCredentialsProvider(): AwsCredentialsProvider {
     val stsClient = StsClient.builder().region(Region.of(region))
       .credentialsProvider(DefaultCredentialsProvider.builder().build())
@@ -70,7 +78,7 @@ class RekogConfig(
   }
 
   @Bean
-  fun rekognitionCompareFacesService(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionCompareFacesService {
+  fun rekognitionCompareFacesService(rekognitionCredentialsProvider: AwsCredentialsProvider): OffenderIdVerifier {
     val client = RekognitionClient.builder()
       .region(Region.of(region))
       .credentialsProvider(rekognitionCredentialsProvider)

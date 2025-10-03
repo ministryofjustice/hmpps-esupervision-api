@@ -116,14 +116,21 @@ or [raise a PR](https://github.com/ministryofjustice/hmpps-tech-docs).
 
 The application comes with a `dev` spring profile that includes default settings for running locally. This is not
 necessary when deploying to kubernetes as these values are included in the helm configuration templates -
-e.g. `values-dev.yaml`.
+e.g. `values-dev.yaml`. You can also specify an additional `stubrekog` profile when running the application
+to not use Rekognition, andy rely on a stub implementation of the face comparison service.
 
 There is also a `docker-compose.yml` that can be used to run a local instance of the template in docker and also an
 instance of HMPPS Auth (required if your service calls out to other services using a token).
 
 ### Rekognition
 
-The API uses [AWS Rekognition](https://aws.amazon.com/rekognition/) to verify user identities. Access to Rekognition is
+The deployed API uses [AWS Rekognition](https://aws.amazon.com/rekognition/) to verify user identities. During development you can configure a stub 
+service which automatically passes the identity match, or you can configure AWS credentials to use the real service.
+The two approaches are described below:
+
+#### AWS credentials
+
+Access to Rekognition is
 granted to a role configured within the Modernisation Platform. To configure access to this role locally you will need
 the following:
 
@@ -139,6 +146,21 @@ From the same page you can obtain temporary credentials from AWS. Click `Access 
 in your environment some other way). These should be the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` variables.
 
 Finally, the name of the S3 data bucket can be found in the AWS console, use this to configure the `REKOG_S3_DATA_BUCKET` setting in your `.env` file.
+
+#### Stub identity service
+
+If you include the `stubrekog` alongside the `dev` profile when running the API e.g. `SPRING_PROFILES_ACTIVE=dev,stubrekog ./gradlew bootRun` then a stub verification service will be configured which always succeeds. 
+Identity image snapshots will be uploaded to an S3 bucket in localstack. Create this local bucket and configure the CORS policy (see [here](#localstack) for the policy document to apply):
+
+```shell
+awslocal s3api create-bucket --bucket hmpps-esupervision-rekognition-uploads
+awslocal s3api put-bucket-cors --bucket hmpps-esupervision-rekognition-uploads --cors-configuration file://cors-config.json
+```
+
+configure the uploads bucket in the environment when running the API:
+
+    REKOG_S3_DATA_BUCKET=hmpps-esupervision-rekogntion-uploads
+
 
 ### Postgres
 
