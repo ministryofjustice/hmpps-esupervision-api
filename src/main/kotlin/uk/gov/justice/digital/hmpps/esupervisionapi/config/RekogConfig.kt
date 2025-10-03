@@ -1,30 +1,31 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
-import org.springframework.core.env.Environment
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.rekognition.RekognitionClient
 import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.sts.StsClient
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
-import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 
+/***
+ * Defines the beans required for id verification (using AWS rekognition in deployments). This is the default
+ * configuration which is applied unless either the 'test' or 'stubrekog' profiles are active. In that case
+ * the @see StubRekogConfig is used. Two beans must be defined by configurations:
+ *   - A bean named 'rekognitionS3' implementing @see S3UploadService
+ *   - A bean implementing @see OffenderIdVerifier
+ */
+@Profile("!test & !stubrekog")
 @Configuration
 class RekogConfig(
   @Value("\${rekognition.region}") val region: String,
@@ -33,21 +34,8 @@ class RekogConfig(
   @Value("\${rekognition.role_session_name}") val roleSessionName: String,
 ) {
 
-  /**
-   * Used only for development, don't use in profiles other than dev/local
-   */
-  @Value("\${aws.endpoint-url}")
-  lateinit var endpointUrl: String
-
-  @Autowired lateinit var environment: Environment
-
   @Bean
-  @Profile("!test")
   fun rekognitionCredentialsProvider(): AwsCredentialsProvider {
-    if (environment.activeProfiles.contains("stubrekog")) {
-      return stubRekogCredentialsProvider()
-    }
-
     val stsClient = StsClient.builder().region(Region.of(region))
       .credentialsProvider(DefaultCredentialsProvider.builder().build())
       .build()
@@ -68,11 +56,6 @@ class RekogConfig(
       .region(Region.of(region))
       .credentialsProvider(rekognitionCredentialsProvider)
 
-    if (environment.activeProfiles.contains("stubrekog")) {
-      builder.endpointOverride(java.net.URI.create(endpointUrl))
-      builder.forcePathStyle(true)
-    }
-
     return builder.build()
   }
 
@@ -81,16 +64,6 @@ class RekogConfig(
     val builder = S3Presigner.builder()
       .region(Region.of(region))
       .credentialsProvider(rekognitionCredentialsProvider)
-
-    if (environment.activeProfiles.contains("stubrekog")) {
-      builder
-        .serviceConfiguration(
-          S3Configuration.builder()
-            .pathStyleAccessEnabled(true).build(),
-        )
-        .endpointOverride(java.net.URI.create(endpointUrl))
-        .region(Region.of(region))
-    }
 
     return builder.build()
   }
@@ -106,10 +79,6 @@ class RekogConfig(
 
   @Bean
   fun rekognitionCompareFacesService(rekognitionCredentialsProvider: AwsCredentialsProvider): OffenderIdVerifier {
-    if (environment.activeProfiles.contains("stubrekog")) {
-      return stubRekognitionCompareFaceService()
-    }
-
     val client = RekognitionClient.builder()
       .region(Region.of(region))
       .credentialsProvider(rekognitionCredentialsProvider)
@@ -121,17 +90,4 @@ class RekogConfig(
   companion object {
     val LOGGER = LoggerFactory.getLogger(this::class.java)
   }
-}
-
-private fun stubRekogCredentialsProvider(): AwsCredentialsProvider = StaticCredentialsProvider
-  .create(AwsBasicCredentials.create("AKAIstub", "stub"))
-
-/**
- * Returns a stub service that always returns MATCH
- */
-fun stubRekognitionCompareFaceService(): OffenderIdVerifier {
-  class StubRekognitionCompareFacesService : OffenderIdVerifier {
-    override fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): AutomatedIdVerificationResult = AutomatedIdVerificationResult.MATCH
-  }
-  return StubRekognitionCompareFacesService()
 }
