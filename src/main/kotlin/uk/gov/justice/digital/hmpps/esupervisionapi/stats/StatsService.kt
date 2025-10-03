@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.stats
 
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
@@ -12,7 +13,11 @@ data class PractitionerRegistrationInfo(
 )
 
 @Service
-class StatsService(val offenderRepository: OffenderRepository, val siteRepository: PractitionerSiteRepository) {
+class StatsService(
+  private val offenderRepository: OffenderRepository,
+  private val siteRepository: PractitionerSiteRepository,
+  private val PerSiteStatsRepository: PerSiteStatsRepository,
+) {
   fun practitionerRegistrations(): List<PractitionerRegistrationInfo> {
     // get registration counts by practitioner
     val registrations = offenderRepository.findPractitionerRegistrations()
@@ -32,5 +37,13 @@ class StatsService(val offenderRepository: OffenderRepository, val siteRepositor
 
   companion object {
     const val UNKNOWN_LOCATION_NAME = "UNKNOWN"
+  }
+
+  fun checkinStats(): Stats {
+    val locations = siteRepository.findAll(PageRequest.of(0, 10000))
+    if (locations.content.isNotEmpty()) {
+      return PerSiteStatsRepository.checkinsSentPerSite(locations.content)
+    }
+    return Stats(emptyList(), emptyList(), emptyList(), emptyList())
   }
 }

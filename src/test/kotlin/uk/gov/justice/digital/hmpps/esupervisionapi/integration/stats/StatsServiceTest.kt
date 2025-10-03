@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration.stats
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_BOB
@@ -11,10 +12,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.InMemoryPractitionerSiteRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.StatsService
 import java.time.LocalDate
 
 class StatsServiceTest : IntegrationTestBase() {
+
+  @Autowired lateinit var perSiteStatsRepository: PerSiteStatsRepository
+
   @AfterEach
   fun tearDown() {
     this.offenderRepository.deleteAll()
@@ -36,7 +41,7 @@ class StatsServiceTest : IntegrationTestBase() {
     )
 
     val locations = InMemoryPractitionerSiteRepository(locationMapping)
-    val statsService = StatsService(this.offenderRepository, locations)
+    val statsService = StatsService(this.offenderRepository, locations, perSiteStatsRepository)
 
     val stats = statsService.practitionerRegistrations()
 
@@ -67,7 +72,7 @@ class StatsServiceTest : IntegrationTestBase() {
     )
 
     val locations = InMemoryPractitionerSiteRepository(locationMapping)
-    val statsService = StatsService(this.offenderRepository, locations)
+    val statsService = StatsService(this.offenderRepository, locations, perSiteStatsRepository)
 
     val stats = statsService.practitionerRegistrations()
 
@@ -102,7 +107,7 @@ class StatsServiceTest : IntegrationTestBase() {
     )
 
     val locations = InMemoryPractitionerSiteRepository(locationMapping)
-    val statsService = StatsService(this.offenderRepository, locations)
+    val statsService = StatsService(this.offenderRepository, locations, perSiteStatsRepository)
 
     val stats = statsService.practitionerRegistrations()
 

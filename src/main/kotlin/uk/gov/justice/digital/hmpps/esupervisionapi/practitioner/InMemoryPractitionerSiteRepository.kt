@@ -10,11 +10,13 @@ class InMemoryPractitionerSiteRepository(
   override fun findLocation(practitionerId: ExternalUserId): PractitionerSite? {
     val siteName = siteAssignments[practitionerId]
     return if (siteName != null) {
-      PractitionerSite(name = siteName)
+      PractitionerSite(practitioner = practitionerId, name = siteName)
     } else {
       null
     }
   }
+
+  override fun findAll(pageable: org.springframework.data.domain.Pageable): org.springframework.data.domain.Page<PractitionerSite> = org.springframework.data.domain.PageImpl(siteAssignments.map { (k, v) -> PractitionerSite(practitioner = k, name = v) })
 
   companion object {
     val LOGGER = LoggerFactory.getLogger(this::class.java)
