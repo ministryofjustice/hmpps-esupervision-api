@@ -28,7 +28,7 @@ data class SiteCountOnNthDay(
 )
 
 data class Stats(
-  val checkinsPerSite: List<SiteCount>,
+  val invitesPerSite: List<SiteCount>,
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
@@ -140,7 +140,7 @@ class PerSiteStatsRepositoryImpl(
     }
 
     return Stats(
-      checkinsPerSite = invitesPerSite,
+      invitesPerSite = invitesPerSite,
       completedCheckinsPerSite = compledCheckinsPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
       offendersPerSite = offendersPerSite,
