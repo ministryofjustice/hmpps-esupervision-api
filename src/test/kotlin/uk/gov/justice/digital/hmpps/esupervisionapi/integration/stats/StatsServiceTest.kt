@@ -20,6 +20,7 @@ import java.time.LocalDate
 class StatsServiceTest : IntegrationTestBase() {
 
   @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
+
   @Autowired lateinit var perSiteStatsRepository: PerSiteStatsRepository
 
   @AfterEach
