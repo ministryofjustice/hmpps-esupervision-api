@@ -17,6 +17,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
@@ -37,6 +39,8 @@ class OffenderCheckinExpiryJob(
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
 ) {
 
+  private val cachingPractitionersRepository = CachingPractitionerRepository(practitionerRepository)
+
   @Scheduled(cron = "\${app.scheduling.offender-checkin-expiry.cron}")
   @SchedulerLock(
     name = "CheckinNotifier - mark checkins as expired",
@@ -53,18 +57,25 @@ class OffenderCheckinExpiryJob(
     val logEntry = JobLog(JobType.CHECKIN_EXIPIRED_NOTIFICATIONS_JOB, now)
     jobLogRepository.saveAndFlush(logEntry)
 
-    var result: Int? = null
+    var totalUpdates = 0
     try {
-      val lowerBound = now.minus(Period.ofDays(28))
+      val lowerBound = cutoff
+        .minus(Period.ofDays(2))
+        .atStartOfDay(clock.zone).toInstant()
 
       val chunkSize = 100
       val context = BulkNotificationContext(logEntry.reference())
       checkinRepository.findAllAboutToExpire(cutoff, lowerBound = lowerBound)
         .asSequence()
         .chunked(chunkSize)
-        .forEach { checkins -> notifyPractitioner(checkins, context) }
+        .forEach { checkins ->
+          LOG.info("processing chunk of ${checkins.size} checkins")
+          notifyPractitioner(checkins, context)
+        }
 
-      result = checkinRepository.updateStatusToExpired(cutoff, lowerBound = lowerBound)
+      val result = checkinRepository.updateStatusToExpired(cutoff, lowerBound = lowerBound)
+      LOG.info("updated {} checkins", result)
+      totalUpdates += result
     } catch (e: Exception) {
       LOG.warn("job failure", e)
     }
@@ -72,8 +83,9 @@ class OffenderCheckinExpiryJob(
     val endTime = clock.instant()
     logEntry.endedAt = endTime
     jobLogRepository.saveAndFlush(logEntry)
+    cachingPractitionersRepository.cache.clear()
 
-    LOG.info("processing ends. result={}, took={}", result, Duration.between(now, clock.instant()))
+    LOG.info("processing ends. total updates={}, took={}", totalUpdates, Duration.between(now, clock.instant()))
   }
 
   private fun notifyPractitioner(
@@ -82,7 +94,8 @@ class OffenderCheckinExpiryJob(
   ) {
     try {
       for (checkin in checkins) {
-        val practitioner = practitionerRepository.expectById(checkin.offender.practitioner)
+        LOG.debug("sending expiry notification for checkin {}, status={}", checkin.uuid, checkin.status)
+        val practitioner = cachingPractitionersRepository.expectById(checkin.offender.practitioner)
         val message = PractitionerCheckinMissedMessage.fromCheckin(checkin, practitioner)
         notificationService.sendMessage(message, practitioner, context)
 
@@ -124,4 +137,19 @@ internal fun cutoffDate(clock: Clock, checkinWindow: Duration): LocalDate {
   val today = clock.today()
   val cutoff = today.minus(Period.ofDays(checkinWindow.toDays().toInt()))
   return cutoff
+}
+
+/**
+ * Note: Not thread safe
+ */
+private class CachingPractitionerRepository(
+  private val delegate: PractitionerRepository,
+  val cache: MutableMap<ExternalUserId, Practitioner> = mutableMapOf(),
+) : PractitionerRepository {
+  override fun findById(id: ExternalUserId): Practitioner? {
+    if (cache.containsKey(id)) return cache[id]
+    val result = delegate.findById(id)
+    if (result != null) cache[id] = result
+    return result
+  }
 }
