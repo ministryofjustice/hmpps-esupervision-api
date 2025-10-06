@@ -9,8 +9,11 @@ with checkin_info as (
              left join tmp_practitioner_sites t on o.practitioner = t.practitioner
     where c.status in ('SUBMITTED', 'REVIEWED')
         and (c.created_at at time zone 'Europe/London')::date between :lowerBound and :upperBound)
-select location, count(checkin_id) as checkin_count, delta + 1 as "nth day"
+
+select location,
+       count(checkin_id) as checkin_count,
+       (delta + 1)::bigint as "nth_day"
 from checkin_info
-group by location, "nth day"
-order by location, "nth day"
+group by location, "nth_day"
+order by location, "nth_day"
 

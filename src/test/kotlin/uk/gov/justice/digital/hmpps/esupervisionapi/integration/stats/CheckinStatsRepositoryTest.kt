@@ -14,6 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.util.UUID
 
 class CheckinStatsRepositoryTest : IntegrationTestBase() {
@@ -40,6 +41,7 @@ class CheckinStatsRepositoryTest : IntegrationTestBase() {
         createdBy = practitionerId,
         status = CheckinStatus.SUBMITTED,
         dueDate = LocalDate.now().minusDays(5),
+        submittedAt = ZonedDateTime.now().minusDays(4).toInstant(),
       ),
       OffenderCheckin.create(
         offender = offender,
