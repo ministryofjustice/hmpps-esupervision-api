@@ -19,7 +19,7 @@ app:
       cron: "0 0 7,8,11 * * *"  # Production schedule (7 AM and 8 AM daily)
       # cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
     offender-checkin-expiry:
-      cron: "0 */10 * * * *"
+      cron: "0 15 9 * * *"
       #cron: "0 0 1,10 * * *"  # Production schedule (1 AM and 10 AM daily)
     offender-checkin-notification-status:
       cron: "0 30 * * * *"
