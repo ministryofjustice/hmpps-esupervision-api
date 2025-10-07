@@ -13,16 +13,19 @@ with checkin_info as (
  counts as (
          select location,
                 offender,
-                count(completed) as completed,
-                count(expired) as expired
+                sum(completed) as completed,
+                sum(expired) as expired
          from checkin_info
          group by location, offender
      )
 select location,
-       coalesce(avg(completed), 0) as avg_completed,
-       coalesce(stddev(completed), 0) as stddev_completed,
-       coalesce(avg(expired), 0) as avg_expired,
-       coalesce(stddev(expired), 0) as stddev_expired,
+       coalesce(avg(completed), 0) as completed_avg,
+       coalesce(stddev(completed), 0) as completed_stddev,
+       coalesce(avg(expired), 0) as expired_avg,
+       coalesce(stddev(expired), 0) as expired_stddev,
+       sum(expired) as expired_total,
+       sum(completed) as completed_total,
        count(offender) as offender_count
 from counts
-group by location;
+group by location
+order by location;
