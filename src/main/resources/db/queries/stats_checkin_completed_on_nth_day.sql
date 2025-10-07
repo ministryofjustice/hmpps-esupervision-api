@@ -3,7 +3,7 @@
 with checkin_info as (
     select coalesce(t.location, 'UNKNOWN') as location,
            c.id as checkin_id,
-           (EXTRACT ('day' from (c.due_date at time zone 'Europe/London')::date  - (c.submitted_at at time zone 'Europe/London')::date)) as delta
+           EXTRACT ('day' from ((c.due_date at time zone 'Europe/London')  - (c.submitted_at at time zone 'Europe/London'))) as delta
     from offender_checkin c
              join offender o on o.id = c.offender_id
              left join tmp_practitioner_sites t on o.practitioner = t.practitioner

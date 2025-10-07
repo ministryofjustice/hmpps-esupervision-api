@@ -41,9 +41,6 @@ class StatsService(
 
   fun checkinStats(): Stats {
     val locations = siteRepository.findAll(PageRequest.of(0, 10000))
-    if (locations.content.isNotEmpty()) {
-      return PerSiteStatsRepository.statsPerSite(locations.content)
-    }
-    return Stats(emptyList(), emptyList(), emptyList(), emptyList())
+    return PerSiteStatsRepository.statsPerSite(locations.content)
   }
 }

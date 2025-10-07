@@ -27,11 +27,21 @@ data class SiteCountOnNthDay(
   val day: Long,
 )
 
+data class SiteCheckinAverages(
+  val location: String,
+  val completedAvg: Long,
+  val completedStdDev: Long,
+  val expiredAvg: Long,
+  val expiredStdDev: Long,
+  val offenderCount: Long,
+)
+
 data class Stats(
   val invitesPerSite: List<SiteCount>,
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
+  val checkinAverages: List<SiteCheckinAverages>,
 )
 
 /**
@@ -62,16 +72,18 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_completed_per_site.sql") private val completedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_on_nth_day.sql") private val completedCheckinsPerNthPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_counts_per_site.sql") private val offendersPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_completed_average_per_site.sql") private val avgCompletedCheckinsPerSite: Resource,
 ) : PerSiteStatsRepository {
 
   private val sqlInvitesPerSite: String by lazy { invitesPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlOffendersPerSite: String by lazy { offendersPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerNthPerSite: String by lazy { completedCheckinsPerNthPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerSite: String by lazy { completedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlAvgCompletedCheckinsPerSite: String by lazy { avgCompletedCheckinsPerSite.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
-    if (siteAssignments.isEmpty()) return Stats(emptyList(), emptyList(), emptyList(), emptyList())
+    if (siteAssignments.isEmpty()) return Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
 
     entityManager.createNativeQuery(createTempTable).executeUpdate()
     entityManager.createNativeQuery("truncate tmp_practitioner_sites").executeUpdate()
@@ -129,11 +141,28 @@ class PerSiteStatsRepositoryImpl(
       SiteCountOnNthDay(location, count, nth)
     }
 
+    @Suppress("UNCHECKED_CAST")
+    rows = entityManager.createNativeQuery(sqlAvgCompletedCheckinsPerSite)
+      .setParameter("lowerBound", lowerBound)
+      .setParameter("upperBound", upperBound)
+      .resultList as List<Array<Any?>>
+
+    val avgCompletedCheckinsPerSite = rows.map { cols ->
+      val location = cols[0] as String
+      val completedAvg = (cols[1] as Number).toLong()
+      val completedStdDev = (cols[2] as Number).toLong()
+      val expiredAvg = (cols[3] as Number).toLong()
+      val expiredStdDev = (cols[4] as Number).toLong()
+      val offenderCount = (cols[5] as Number).toLong()
+      SiteCheckinAverages(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, offenderCount)
+    }
+
     return Stats(
       invitesPerSite = invitesPerSite,
       completedCheckinsPerSite = compledCheckinsPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
       offendersPerSite = offendersPerSite,
+      checkinAverages = avgCompletedCheckinsPerSite,
     )
   }
 }
@@ -161,4 +190,4 @@ val createTempTable = """
       practitioner varchar not null,
       location varchar not null
     ) on commit delete rows
-    """.trimIndent()
+""".trimIndent()
