@@ -70,7 +70,7 @@ class CheckinStatsRepositoryTest : IntegrationTestBase() {
       ),
     )
 
-    val counts = perSiteStatsRepository.checkinsSentPerSite(siteAssignments)
+    val counts = perSiteStatsRepository.statsPerSite(siteAssignments)
 
     assertThat(counts.invitesPerSite).containsExactlyInAnyOrder(
       uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount("Site A", 2),

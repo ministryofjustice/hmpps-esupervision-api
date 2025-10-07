@@ -50,7 +50,7 @@ interface PerSiteStatsRepository {
    *
    * @param siteAssignments mapping of practitioner IDs to their site/location name
    */
-  fun checkinsSentPerSite(siteAssignments: List<PractitionerSite>): Stats
+  fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats
 }
 
 @Repository
@@ -70,21 +70,11 @@ class PerSiteStatsRepositoryImpl(
   private val sqlCompletedCheckinsPerSite: String by lazy { completedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
-  override fun checkinsSentPerSite(siteAssignments: List<PractitionerSite>): Stats {
+  override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
     if (siteAssignments.isEmpty()) return Stats(emptyList(), emptyList(), emptyList(), emptyList())
 
-    entityManager.createNativeQuery(
-      """
-      create temporary table if not exists tmp_practitioner_sites (
-        practitioner varchar not null,
-        location varchar not null
-      ) on commit delete rows
-      """.trimIndent(),
-    ).executeUpdate()
-
+    entityManager.createNativeQuery(createTempTable).executeUpdate()
     entityManager.createNativeQuery("truncate tmp_practitioner_sites").executeUpdate()
-
-    // populate the site assignments table
     siteAssignmentHelper.batchInsert(siteAssignments.map { SiteAssignment(it.practitioner, it.name) })
 
     val lowerBound = LocalDate.of(2025, 1, 1)
@@ -165,3 +155,10 @@ class SiteAssignmentHelper(private val jdbcTemplate: org.springframework.jdbc.co
     )
   }
 }
+
+val createTempTable = """
+    create temporary table if not exists tmp_practitioner_sites (
+      practitioner varchar not null,
+      location varchar not null
+    ) on commit delete rows
+    """.trimIndent()
