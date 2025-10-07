@@ -34,6 +34,7 @@ data class SiteCheckinAverages(
   val expiredAvg: Long,
   val expiredStdDev: Long,
   val offenderCount: Long,
+  val missedPercentage: Double,
 )
 
 data class Stats(
@@ -154,7 +155,8 @@ class PerSiteStatsRepositoryImpl(
       val expiredAvg = (cols[3] as Number).toLong()
       val expiredStdDev = (cols[4] as Number).toLong()
       val offenderCount = (cols[5] as Number).toLong()
-      SiteCheckinAverages(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, offenderCount)
+      val missedPercentage = (cols[6] as Number).toDouble()
+      SiteCheckinAverages(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, offenderCount, missedPercentage)
     }
 
     return Stats(
