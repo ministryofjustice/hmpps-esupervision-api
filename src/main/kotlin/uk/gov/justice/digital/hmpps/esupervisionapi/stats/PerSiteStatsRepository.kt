@@ -37,13 +37,25 @@ data class SiteCheckinAverages(
   val missedPercentage: Double,
 )
 
+data class IdCheckAccuracy(
+  val location: String,
+  val mismatchCount: Long,
+  val falsePositivesAvg: Long,
+  val falsePositiveStdDev: Long,
+  val falseNegativesAvg: Long,
+  val falseNegativesStdDev: Long,
+)
+
 data class Stats(
   val invitesPerSite: List<SiteCount>,
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
   val checkinAverages: List<SiteCheckinAverages>,
+  val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
 )
+
+private val emptyStats = Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
 
 /**
  * Repository for running native Postgres queries over checkins.
@@ -74,6 +86,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_completed_on_nth_day.sql") private val completedCheckinsPerNthPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_counts_per_site.sql") private val offendersPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_average_per_site.sql") private val avgCompletedCheckinsPerSite: Resource,
+  @Value("classpath:db/queries/stats_checkin_id_check_mismatch.sql") private val automatedIdCheckAccuracyResource: Resource,
 ) : PerSiteStatsRepository {
 
   private val sqlInvitesPerSite: String by lazy { invitesPerSiteResource.inputStream.use { it.reader().readText() } }
@@ -81,10 +94,13 @@ class PerSiteStatsRepositoryImpl(
   private val sqlCompletedCheckinsPerNthPerSite: String by lazy { completedCheckinsPerNthPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerSite: String by lazy { completedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAvgCompletedCheckinsPerSite: String by lazy { avgCompletedCheckinsPerSite.inputStream.use { it.reader().readText() } }
+  private val sqlAutomatedIdCheckAccuracyResource: String by lazy { automatedIdCheckAccuracyResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
-    if (siteAssignments.isEmpty()) return Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+    if (siteAssignments.isEmpty()) {
+      return emptyStats
+    }
 
     entityManager.createNativeQuery(createTempTable).executeUpdate()
     entityManager.createNativeQuery("truncate tmp_practitioner_sites").executeUpdate()
@@ -159,12 +175,29 @@ class PerSiteStatsRepositoryImpl(
       SiteCheckinAverages(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, offenderCount, missedPercentage)
     }
 
+    @Suppress("UNCHECKED_CAST")
+    rows = entityManager.createNativeQuery(sqlAutomatedIdCheckAccuracyResource)
+      .setParameter("lowerBound", lowerBound)
+      .setParameter("upperBound", upperBound)
+      .resultList as List<Array<Any?>>
+
+    val automatedIdCheckAccurracy = rows.map { cols ->
+      val location = cols[0] as String
+      val mismatchCount = (cols[1] as Number).toLong()
+      val falsePositivesAvg = (cols[2] as Number).toLong()
+      val falsePositiveStdDev = (cols[3] as Number).toLong()
+      val falseNegativesAvg = (cols[2] as Number).toLong()
+      val falseNegativesStdDev = (cols[3] as Number).toLong()
+      IdCheckAccuracy(location, mismatchCount, falsePositivesAvg, falsePositiveStdDev, falseNegativesAvg, falseNegativesStdDev)
+    }
+
     return Stats(
       invitesPerSite = invitesPerSite,
       completedCheckinsPerSite = compledCheckinsPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
       offendersPerSite = offendersPerSite,
       checkinAverages = avgCompletedCheckinsPerSite,
+      automatedIdCheckAccuracy = automatedIdCheckAccurracy,
     )
   }
 }
