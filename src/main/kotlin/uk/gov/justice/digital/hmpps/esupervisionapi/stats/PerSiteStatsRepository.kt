@@ -27,7 +27,7 @@ data class SiteCountOnNthDay(
   val day: Long,
 )
 
-data class SiteCheckinAverages(
+data class SiteCheckinAverage(
   val location: String,
   val completedAvg: Long,
   val completedStdDev: Long,
@@ -52,7 +52,7 @@ data class Stats(
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
-  val checkinAverages: List<SiteCheckinAverages>,
+  val checkinAverages: List<SiteCheckinAverage>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
 )
 
@@ -174,7 +174,7 @@ class PerSiteStatsRepositoryImpl(
       val completedTotal = (cols[5] as Number).toLong()
       val expiredTotal = (cols[6] as Number).toLong()
       val missedPercentage = (cols[7] as Number).toDouble()
-      SiteCheckinAverages(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, completedTotal, expiredTotal, missedPercentage)
+      SiteCheckinAverage(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, completedTotal, expiredTotal, missedPercentage)
     }
 
     @Suppress("UNCHECKED_CAST")
