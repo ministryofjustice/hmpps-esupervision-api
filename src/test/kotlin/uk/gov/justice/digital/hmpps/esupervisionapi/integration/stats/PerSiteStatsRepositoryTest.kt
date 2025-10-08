@@ -17,7 +17,7 @@ import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.UUID
 
-class CheckinStatsRepositoryTest : IntegrationTestBase() {
+class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
   @Autowired lateinit var perSiteStatsRepository: PerSiteStatsRepository
 
