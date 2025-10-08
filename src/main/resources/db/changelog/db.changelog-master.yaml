@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/changesets/1_initial_import.sql
   - include:
       file: db/changelog/changesets/2_one_checkin_per_day.sql
+  - include:
+      file : db/changelog/changesets/3_new_event_type_for_setup_completion.sql

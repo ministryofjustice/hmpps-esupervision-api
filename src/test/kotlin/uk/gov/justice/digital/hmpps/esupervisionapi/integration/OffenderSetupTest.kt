@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
@@ -55,6 +56,7 @@ class OffenderSetupTest : IntegrationTestBase() {
   internal fun tearDown() {
     checkinRepository.deleteAll()
     offenderSetupRepository.deleteAll()
+    offenderEventLogRepository.deleteAll()
     offenderRepository.deleteAll()
   }
 
@@ -71,6 +73,9 @@ class OffenderSetupTest : IntegrationTestBase() {
       .sendMessage(any<RegistrationConfirmationMessage>(), any(), any())
     notifInOrder.verify(notificationService, times(1))
       .sendMessage(any<OffenderCheckinInviteMessage>(), any(), any())
+
+    val events = offenderEventLogRepository.findAll().toList()
+    Assertions.assertTrue(events.any { it.logEntryType == LogEntryType.OFFENDER_SETUP_COMPLETE })
   }
 
   @Test
