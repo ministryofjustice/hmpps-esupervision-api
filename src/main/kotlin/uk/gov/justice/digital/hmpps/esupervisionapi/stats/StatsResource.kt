@@ -18,4 +18,12 @@ class StatsResource(private val statsService: StatsService) {
     val registrations = statsService.practitionerRegistrations()
     return ResponseEntity.ok(registrations)
   }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Tag(name = "practitioner")
+  @GetMapping("/checkins")
+  fun checkins(): ResponseEntity<Stats> {
+    val checkins = statsService.checkinStats()
+    return ResponseEntity.ok(checkins)
+  }
 }
