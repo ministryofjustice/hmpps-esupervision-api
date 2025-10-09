@@ -7,8 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
@@ -128,5 +130,39 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(counts.invitesPerSite).containsExactlyInAnyOrder(
       uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount("Site A", 1),
     )
+  }
+
+  @Test
+  fun `location with no review mismatches`() {
+    val practitionerId: ExternalUserId = PRACTITIONER_ALICE.externalUserId()
+    val siteAssignments = listOf(PractitionerSite(practitionerId, "Site A"))
+
+    val offender = offenderRepository.save(
+      Offender.create(
+        name = "Bob Carr",
+        crn = "X12344",
+        firstCheckinDate = LocalDate.now().minusDays(9),
+        practitioner = PRACTITIONER_ALICE,
+      ),
+    )
+
+    val checkins = listOf(
+      OffenderCheckin.create(
+        offender = offender,
+        createdBy = practitionerId,
+        status = CheckinStatus.REVIEWED,
+        dueDate = LocalDate.now().minusDays(4),
+        submittedAt = ZonedDateTime.now().minusDays(3).toInstant(),
+        manualIdCheck = ManualIdVerificationResult.MATCH,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        reviewedBy = practitionerId,
+      ),
+    )
+
+    checkinRepository.saveAll(checkins)
+
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+
+    assertThat(stats.automatedIdCheckAccuracy[0].mismatchCount).isEqualTo(0)
   }
 }

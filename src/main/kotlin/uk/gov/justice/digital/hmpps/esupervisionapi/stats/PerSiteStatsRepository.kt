@@ -188,8 +188,8 @@ class PerSiteStatsRepositoryImpl(
       val mismatchCount = (cols[1] as Number).toLong()
       val falsePositivesAvg = (cols[2] as Number).toLong()
       val falsePositiveStdDev = (cols[3] as Number).toLong()
-      val falseNegativesAvg = (cols[2] as Number).toLong()
-      val falseNegativesStdDev = (cols[3] as Number).toLong()
+      val falseNegativesAvg = (cols[4] as Number).toLong()
+      val falseNegativesStdDev = (cols[5] as Number).toLong()
       IdCheckAccuracy(location, mismatchCount, falsePositivesAvg, falsePositiveStdDev, falseNegativesAvg, falseNegativesStdDev)
     }
 
