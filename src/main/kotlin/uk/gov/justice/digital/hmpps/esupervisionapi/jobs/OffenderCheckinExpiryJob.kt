@@ -52,7 +52,7 @@ class OffenderCheckinExpiryJob(
     val now = clock.instant()
     val cutoff = cutoffDate(clock, checkinWindow)
 
-    LOG.info("processing starts. checkins below cutoff=$cutoff will be marked as expired.")
+    LOG.info("processing starts. checkins with due_date <= cutoff=$cutoff will be marked as expired.")
 
     val logEntry = JobLog(JobType.CHECKIN_EXIPIRED_NOTIFICATIONS_JOB, now)
     jobLogRepository.saveAndFlush(logEntry)
