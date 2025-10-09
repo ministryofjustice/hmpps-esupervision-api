@@ -38,9 +38,16 @@ class OffenderResource(
     @Parameter(description = "Zero-based page index")
     @RequestParam(defaultValue = "0") page: Int,
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
+    @RequestParam(required = false) email: String?,
+    @RequestParam(required = false, name = "phone_number") phoneNumber: String?,
   ): ResponseEntity<CollectionDto<OffenderDto>> {
     val pageRequest = PageRequest.of(page, size)
-    val offenders = offenderService.getOffenders(practitionerId, pageable = pageRequest)
+    val offenders = offenderService.getOffenders(
+      practitionerId,
+      email = email,
+      phoneNumber = phoneNumber,
+      pageable = pageRequest,
+    )
     return ResponseEntity.ok(
       CollectionDto(
         pagination = pageRequest.toPagination(),
