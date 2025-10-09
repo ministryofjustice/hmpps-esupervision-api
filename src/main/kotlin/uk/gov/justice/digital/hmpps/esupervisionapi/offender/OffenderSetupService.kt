@@ -25,6 +25,7 @@ class OffenderSetupService(
   private val offenderSetupRepository: OffenderSetupRepository,
   private val offenderCheckinService: OffenderCheckinService,
   private val notificationService: NotificationService,
+  private val offenderEventLogRepository: OffenderEventLogRepository,
 ) {
 
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetup> = offenderSetupRepository.findByUuid(uuid)
@@ -89,6 +90,9 @@ class OffenderSetupService(
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = now
     val saved = offenderRepository.save(offender)
+
+    val logEntry = OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_SETUP_COMPLETE, "complete", practitioner = offender.practitioner, saved, null, now)
+    offenderEventLogRepository.save(logEntry)
 
     // send registration confirmation message to PoP
     val confirmationMessage = RegistrationConfirmationMessage.fromSetup(setup.get())
