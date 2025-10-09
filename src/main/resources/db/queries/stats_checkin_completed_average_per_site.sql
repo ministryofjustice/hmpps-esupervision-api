@@ -23,8 +23,8 @@ select location,
        coalesce(stddev(completed), 0) as completed_stddev,
        coalesce(avg(expired), 0) as expired_avg,
        coalesce(stddev(expired), 0) as expired_stddev,
-       sum(completed) as completed_total,
-       sum(expired) as expired_total,
+       coalesce(sum(completed), 0) as completed_total,
+       coalesce(sum(expired), 0) as expired_total,
        coalesce(sum(expired)/(sum(expired) + sum(completed)) * 100, 0) as "% expired"
 from counts
 group by location

@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.stats
 
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
@@ -20,6 +21,13 @@ import java.util.UUID
 class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
   @Autowired lateinit var perSiteStatsRepository: PerSiteStatsRepository
+
+  @BeforeEach
+  fun setup() {
+    checkinNotificationRepository.deleteAll()
+    checkinRepository.deleteAll()
+    offenderRepository.deleteAll()
+  }
 
   @Test
   fun `counts sent checkins per site using temp table`() {
@@ -74,6 +82,51 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     assertThat(counts.invitesPerSite).containsExactlyInAnyOrder(
       uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount("Site A", 2),
+    )
+  }
+
+  @Test
+  fun `location with no expired checkins`() {
+    val practitionerId: ExternalUserId = PRACTITIONER_ALICE.externalUserId()
+    val siteAssignments = listOf(PractitionerSite(practitionerId, "Site A"))
+
+    val offender = offenderRepository.save(
+      Offender.create(
+        name = "Bob Carr",
+        crn = "X12344",
+        firstCheckinDate = LocalDate.now().minusDays(9),
+        practitioner = PRACTITIONER_ALICE,
+      ),
+    )
+
+    val checkins = listOf(
+      OffenderCheckin.create(
+        offender = offender,
+        createdBy = practitionerId,
+        status = CheckinStatus.SUBMITTED,
+        dueDate = LocalDate.now().minusDays(4),
+        submittedAt = ZonedDateTime.now().minusDays(3).toInstant(),
+      ),
+    )
+
+    val checkin = checkinRepository.saveAll(checkins)
+
+    checkinNotificationRepository.saveAll(
+      listOf(
+        CheckinNotification(
+          notificationId = UUID.randomUUID(),
+          checkin = checkin[0].uuid,
+          reference = "manual-test",
+          status = "sending",
+        ),
+      ),
+    )
+
+    val counts = perSiteStatsRepository.statsPerSite(siteAssignments)
+
+    assertThat(counts.checkinAverages[0].expiredTotal).isEqualTo(0)
+    assertThat(counts.invitesPerSite).containsExactlyInAnyOrder(
+      uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount("Site A", 1),
     )
   }
 }
