@@ -38,7 +38,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinSubmission
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLogService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
@@ -80,8 +79,6 @@ class OffenderCheckinTest : IntegrationTestBase() {
   @Autowired lateinit var s3UploadService: S3UploadService
 
   @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
-
-  @Autowired lateinit var offenderEventLogService: OffenderEventLogService
 
   @Autowired lateinit var rekognitionCompareFacesService: RekognitionCompareFacesService
 
@@ -311,10 +308,10 @@ class OffenderCheckinTest : IntegrationTestBase() {
     val entries = offenderEventLogRepository.findAllByOffender(
       offenderRepository.findByUuid(offender.uuid).get(),
       PageRequest.of(0, 100),
-    )
+    ).sortedBy { it.createdAt }
 
-    Assertions.assertEquals(1, entries.content.size)
-    val entry = entries.content[0]
+    Assertions.assertEquals(2, entries.size) // 1 setup completion + 1 deactivation
+    val entry = entries[1]
     Assertions.assertEquals("probation ended", entry.comment)
     Assertions.assertEquals(PRACTITIONER_ALICE.externalUserId(), entry.practitioner)
 
