@@ -16,7 +16,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCountOnNthDay
 import java.time.LocalDate
+import java.time.OffsetTime
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.util.UUID
 
@@ -164,5 +167,56 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
 
     assertThat(stats.automatedIdCheckAccuracy[0].mismatchCount).isEqualTo(0)
+  }
+
+  @Test
+  fun `checkins on nth day`() {
+    val practitionerId: ExternalUserId = PRACTITIONER_ALICE.externalUserId()
+    val siteAssignments = listOf(PractitionerSite(practitionerId, "Site A"))
+
+    val checkinStart = LocalDate.now().minusDays(28)
+
+    // NOTE: checkin time each day shouldn't matter
+    val checkinTime = OffsetTime.of(14, 37, 0, 0, ZoneOffset.UTC)
+
+    val offender = offenderRepository.save(
+      Offender.create(
+        name = "Bob Carr",
+        crn = "X12344",
+        firstCheckinDate = checkinStart,
+        practitioner = PRACTITIONER_ALICE,
+      ),
+    )
+
+    // create 5 checkins
+    // - 2 completed on day 1
+    // - 1 completed on day 2
+    // - 1 completed on day 3
+    // - 1 uncompleted
+    val checkinsDue = (0..<5).map { checkinStart.plusDays(it * 4L) }
+    val checkinDayOffsets = listOf(0L, 1L, 2L, 0L, null)
+
+    val checkins = checkinsDue.zip(checkinDayOffsets).map { (checkinDue, checkinOffset) ->
+      val status = if (checkinOffset == null) CheckinStatus.CREATED else CheckinStatus.SUBMITTED
+      val submittedAt = if (checkinOffset == null) null else checkinDue.plusDays(checkinOffset)
+      OffenderCheckin.create(
+        offender = offender,
+        createdBy = practitionerId,
+        status = status,
+        dueDate = checkinDue,
+        submittedAt = submittedAt?.atTime(checkinTime)?.toInstant(),
+      )
+    }.toList()
+
+    checkinRepository.saveAll(checkins)
+
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+
+    val checkinDays = stats.completedCheckinsPerNth
+    assertThat(checkinDays).containsExactlyInAnyOrder(
+      SiteCountOnNthDay(location = "Site A", day = 1, count = 2),
+      SiteCountOnNthDay(location = "Site A", day = 2, count = 1),
+      SiteCountOnNthDay(location = "Site A", day = 3, count = 1),
+    )
   }
 }
