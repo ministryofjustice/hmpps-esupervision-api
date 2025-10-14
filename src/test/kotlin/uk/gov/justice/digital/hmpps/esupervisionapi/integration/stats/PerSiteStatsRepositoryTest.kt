@@ -12,9 +12,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
@@ -35,6 +37,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
   fun setup() {
     checkinNotificationRepository.deleteAll()
     checkinRepository.deleteAll()
+    offenderEventLogRepository.deleteAll() // Add this line
     offenderRepository.deleteAll()
   }
 
@@ -641,6 +644,42 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val flaggedCheckins = stats.flaggedCheckinsPerSite
     assertThat(flaggedCheckins).containsExactlyInAnyOrder(
       SiteCount("Site A", 3),
+      SiteCount("Site B", 1),
+      SiteCount("Site C", 0),
+    )
+  }
+
+  @Test
+  fun `counts stopped checkins per site`() {
+    // practitioners set up at 3 different sites
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2 = PRACTITIONER_BOB.externalUserId()
+    val practitioner3 = PRACTITIONER_DAVE.externalUserId()
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+      PractitionerSite(practitioner3, "Site C"),
+    )
+
+    // create offenders assigned to practitioners at each site
+    val offenderA1 = offenderRepository.save(Offender.create(name = "Offender A1", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderA2 = offenderRepository.save(Offender.create(name = "Offender A2", crn = "A654321", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB1 = offenderRepository.save(Offender.create(name = "Offender B1", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val offenderB2 = offenderRepository.save(Offender.create(name = "Offender B2", crn = "B654321", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val offenderC1 = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+
+    // create the deactivation log entries
+    offenderEventLogRepository.saveAll(
+      listOf(
+        OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_DEACTIVATED, "This is a test reason why checkins have been stopped.", practitioner1, offenderA1),
+        OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_DEACTIVATED, "This is a test reason why checkins have been stopped.", practitioner1, offenderA2),
+        OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_DEACTIVATED, "This is a test reason why checkins have been stopped.", practitioner2, offenderB1),
+      ),
+    )
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    val stoppedCheckins = stats.stoppedCheckinsPerSite
+    assertThat(stoppedCheckins).containsExactlyInAnyOrder(
+      SiteCount("Site A", 2),
       SiteCount("Site B", 1),
       SiteCount("Site C", 0),
     )
