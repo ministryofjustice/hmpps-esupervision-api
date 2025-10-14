@@ -54,9 +54,10 @@ data class Stats(
   val offendersPerSite: List<SiteCount>,
   val checkinAverages: List<SiteCheckinAverage>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
+  val flaggedCheckinsPerSite: List<SiteCount>,
 )
 
-private val emptyStats = Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+private val emptyStats = Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
 
 /**
  * Repository for running native Postgres queries over checkins.
@@ -88,6 +89,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_offender_counts_per_site.sql") private val offendersPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_average_per_site.sql") private val avgCompletedCheckinsPerSite: Resource,
   @Value("classpath:db/queries/stats_checkin_id_check_mismatch.sql") private val automatedIdCheckAccuracyResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
 ) : PerSiteStatsRepository {
 
   private val sqlInvitesPerSite: String by lazy { invitesPerSiteResource.inputStream.use { it.reader().readText() } }
@@ -96,6 +98,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlCompletedCheckinsPerSite: String by lazy { completedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAvgCompletedCheckinsPerSite: String by lazy { avgCompletedCheckinsPerSite.inputStream.use { it.reader().readText() } }
   private val sqlAutomatedIdCheckAccuracyResource: String by lazy { automatedIdCheckAccuracyResource.inputStream.use { it.reader().readText() } }
+  private val sqlFlaggedCheckinsPerSite: String by lazy { flaggedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -193,6 +196,18 @@ class PerSiteStatsRepositoryImpl(
       IdCheckAccuracy(location, mismatchCount, falsePositivesAvg, falsePositiveStdDev, falseNegativesAvg, falseNegativesStdDev)
     }
 
+    @Suppress("UNCHECKED_CAST")
+    rows = entityManager.createNativeQuery(sqlFlaggedCheckinsPerSite)
+      .setParameter("lowerBound", lowerBound)
+      .setParameter("upperBound", upperBound)
+      .resultList as List<Array<Any?>>
+
+    val flaggedCheckinsPerSite = rows.map { cols ->
+      val location = cols[0] as String
+      val count = (cols[1] as Number).toLong()
+      SiteCount(location, count)
+    }
+
     return Stats(
       invitesPerSite = invitesPerSite,
       completedCheckinsPerSite = compledCheckinsPerSite,
@@ -200,6 +215,7 @@ class PerSiteStatsRepositoryImpl(
       offendersPerSite = offendersPerSite,
       checkinAverages = avgCompletedCheckinsPerSite,
       automatedIdCheckAccuracy = automatedIdCheckAccurracy,
+      flaggedCheckinsPerSite = flaggedCheckinsPerSite,
     )
   }
 }
