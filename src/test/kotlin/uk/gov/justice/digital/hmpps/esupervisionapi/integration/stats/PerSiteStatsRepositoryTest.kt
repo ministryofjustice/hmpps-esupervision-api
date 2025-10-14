@@ -9,14 +9,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALI
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_BOB
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_DAVE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLog
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
@@ -668,7 +668,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val offenderB2 = offenderRepository.save(Offender.create(name = "Offender B2", crn = "B654321", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
     val offenderC1 = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
 
-    // create the deactivation log entries 
+    // create the deactivation log entries
     offenderEventLogRepository.saveAll(
       listOf(
         OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_DEACTIVATED, "This is a test reason why checkins have been stopped.", practitioner1, offenderA1),

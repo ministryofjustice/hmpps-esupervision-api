@@ -55,7 +55,7 @@ data class Stats(
   val checkinAverages: List<SiteCheckinAverage>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
-  val stoppedCheckinsPerSite: List<SiteCount>
+  val stoppedCheckinsPerSite: List<SiteCount>,
 )
 
 private val emptyStats = Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
@@ -232,7 +232,7 @@ class PerSiteStatsRepositoryImpl(
       checkinAverages = avgCompletedCheckinsPerSite,
       automatedIdCheckAccuracy = automatedIdCheckAccurracy,
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
-      stoppedCheckinsPerSite = stoppedCheckinsPerSite, 
+      stoppedCheckinsPerSite = stoppedCheckinsPerSite,
     )
   }
 }
