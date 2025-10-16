@@ -721,7 +721,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("DRUGS", "HOUSING")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
-        // Check-in with 1 flag 
+        // Check-in with 1 flag
         OffenderCheckin.create(
           offender = offenderA,
           createdBy = practitioner1,
