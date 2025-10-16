@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.stats
 
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.within
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -683,5 +684,59 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       SiteCount("Site B", 1),
       SiteCount("Site C", 0),
     )
+  }
+  @Test
+  fun `calculates average support requests per check-in for each site`() {
+    val practitioner1: ExternalUserId = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2: ExternalUserId = PRACTITIONER_BOB.externalUserId()
+
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+    )
+
+    val offenderA1 = offenderRepository.save(Offender.create(name = "Offender A1", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderA2 = offenderRepository.save(Offender.create(name = "Offender A2", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB1 = offenderRepository.save(Offender.create(name = "Offender B1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+
+    checkinRepository.saveAll(
+      listOf(
+        OffenderCheckin.create(
+          offender = offenderA1,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now(),
+          surveyResponse = mapOf("callback" to "YES", "assistance" to listOf("DRUGS", "HOUSING")) as Map<String, Object>,
+        ),
+        OffenderCheckin.create(
+          offender = offenderA1,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf("callback" to "NO", "assistance" to listOf("MONEY")) as Map<String, Object>,
+        ),
+        OffenderCheckin.create(
+          offender = offenderA2,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now(),
+          surveyResponse = mapOf("callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+        ),
+        OffenderCheckin.create(
+          offender = offenderB1,
+          createdBy = practitioner2, 
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now(),
+          surveyResponse = mapOf("callback" to "YES", "assistance" to listOf("DRUGS", "HOUSING")) as Map<String, Object>,
+        ),
+      ),
+    )
+
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    val supportAverages = stats.averageSupportRequestsPerSite
+
+    assertThat(supportAverages).hasSize(2)
+    assertThat(supportAverages.find { it.location == "Site A" }?.average).isCloseTo(1.33, within(0.01))
+    assertThat(supportAverages.find { it.location == "Site B" }?.average).isCloseTo(3.0, within(0.01))
   }
 }
