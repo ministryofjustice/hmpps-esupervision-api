@@ -25,7 +25,7 @@ select location,
        coalesce(stddev(expired), 0) as expired_stddev,
        coalesce(sum(completed), 0) as completed_total,
        coalesce(sum(expired), 0) as expired_total,
-       coalesce(sum(expired)/(sum(expired) + sum(completed)) * 100, 0) as "% expired"
+       coalesce((sum(expired)::numeric * 100.0) / nullif(sum(expired) + sum(completed), 0), 0) as "% expired"
 from counts
 group by location
 order by location;
