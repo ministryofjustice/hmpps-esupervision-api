@@ -169,8 +169,8 @@ class PerSiteStatsRepositoryImpl(
 
     val completedCheckinsPerNthPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val count = (cols[1] as? Number)?.toLong() ?: 0L
-      val nth = (cols[2] as? Number)?.toLong() ?: 0L
+      val count = (cols[1] as Number).toLong()
+      val nth = (cols[2] as Number).toLong()
       SiteCountOnNthDay(location, count, nth)
     }
 
