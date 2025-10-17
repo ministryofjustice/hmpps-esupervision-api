@@ -55,14 +55,8 @@ class OffenderService(
     pageable: Pageable,
   ): CollectionDto<OffenderDto> {
     if (!email.isNullOrBlank() || !phoneNumber.isNullOrBlank()) {
-      val offenderOpt = when {
-        !email.isNullOrBlank() -> offenderRepository.findByEmail(email.trim().lowercase())
-        !phoneNumber.isNullOrBlank() -> offenderRepository.findByPhoneNumber(phoneNumber.trim())
-        else -> java.util.Optional.empty()
-      }
-
-      val offender = offenderOpt.orElse(null)
-      val content = if (offender != null) listOf(offender.dto(s3UploadService)) else emptyList()
+      val foundOffenders = offenderRepository.findByContactInfo(phoneNumber, email)
+      val content = foundOffenders.map { it.dto(this.s3UploadService) }
       return CollectionDto(pageable.toPagination(), content)
     }
 
