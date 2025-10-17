@@ -694,12 +694,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val siteAssignments = listOf(
       PractitionerSite(practitioner1, "Site A"),
       PractitionerSite(practitioner2, "Site B"),
-      PractitionerSite(practitioner3, "Site C"),
+      // PractitionerSite(practitioner3, "Site C"), // we want to make sure "UNKNOWN" (missing mapping) shows up in the results
     )
 
     val offenderA = offenderRepository.save(Offender.create(name = "Offender A", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
-    val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
-    offenderRepository.save(Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+    val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val offenderC = offenderRepository.save(Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
 
     checkinRepository.saveAll(
       listOf(
@@ -747,6 +747,15 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
+        // some flags, practitioner has no site mapping
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(3),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        ),
       ),
     )
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
@@ -754,6 +763,6 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(flagAverages).hasSize(3)
     assertThat(flagAverages.find { it.location == "Site A" }?.average).isCloseTo(1.67, within(0.01))
     assertThat(flagAverages.find { it.location == "Site B" }?.average).isCloseTo(2.5, within(0.01))
-    assertThat(flagAverages.find { it.location == "Site C" }?.average).isCloseTo(0.0, within(0.01))
+    assertThat(flagAverages.find { it.location == "UNKNOWN" }?.average).isCloseTo(2.0, within(0.01))
   }
 }
