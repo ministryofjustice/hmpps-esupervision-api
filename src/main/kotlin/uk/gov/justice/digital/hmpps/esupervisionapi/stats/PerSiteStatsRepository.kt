@@ -52,10 +52,6 @@ data class IdCheckAccuracy(
   val falseNegativesStdDev: Long,
 )
 
-data class SiteFlagAverage(
-  val location: String,
-  val average: Double,
-)
 
 data class Stats(
   val invitesPerSite: List<SiteCount>,
@@ -66,7 +62,7 @@ data class Stats(
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
   val stoppedCheckinsPerSite: List<SiteCount>,
-  val averageFlagsPerCheckinPerSite: List<SiteFlagAverage>,
+  val averageFlagsPerCheckinPerSite: List<SiteAverage>,
   val averageSupportRequestsPerSite: List<SiteAverage>,
 )
 
@@ -249,7 +245,7 @@ class PerSiteStatsRepositoryImpl(
     val averageFlagsPerCheckinPerSite = rows.map { cols ->
       val location = cols[0] as String
       val average = (cols[1] as? Number)?.toDouble() ?: 0.0
-      SiteFlagAverage(location, average)
+      SiteAverage(location, average)
     }
 
     @Suppress("UNCHECKED_CAST")
