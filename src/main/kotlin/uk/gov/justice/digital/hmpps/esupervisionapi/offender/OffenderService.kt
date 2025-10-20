@@ -48,6 +48,21 @@ class OffenderService(
     return CollectionDto(page.pageable.toPagination(), offenders)
   }
 
+  fun getOffenders(
+    practitionerId: ExternalUserId,
+    email: String?,
+    phoneNumber: String?,
+    pageable: Pageable,
+  ): CollectionDto<OffenderDto> {
+    if (!email.isNullOrBlank() || !phoneNumber.isNullOrBlank()) {
+      val foundOffenders = offenderRepository.findByContactInfo(phoneNumber, email)
+      val content = foundOffenders.map { it.dto(this.s3UploadService) }
+      return CollectionDto(pageable.toPagination(), content)
+    }
+
+    return getOffenders(practitionerId, pageable)
+  }
+
   fun deleteOffender(uuid: UUID): DeleteResult {
     LOG.info("Attempting to delete offender: $uuid")
     val offenderFound = offenderRepository.findByUuid(uuid)

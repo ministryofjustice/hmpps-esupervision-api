@@ -147,8 +147,8 @@ fun offenderStatusTransition(current: OffenderStatus, new: OffenderStatus): Bool
 
 @Repository
 interface OffenderRepository : org.springframework.data.jpa.repository.JpaRepository<Offender, Long> {
-  fun findByEmail(email: String): Optional<Offender>
-  fun findByPhoneNumber(phoneNumber: String): Optional<Offender>
+  @Query("select o from Offender o where o.status = 'VERIFIED' and o.phoneNumber = :phoneNumber or o.email = :email order by o.createdAt")
+  fun findByContactInfo(phoneNumber: String?, email: String?): List<Offender>
   fun findByUuid(uuid: UUID): Optional<Offender>
   fun findAllByPractitioner(practitioner: ExternalUserId, pageable: Pageable): Page<Offender>
 
