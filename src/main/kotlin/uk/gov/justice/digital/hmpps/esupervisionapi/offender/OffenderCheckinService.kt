@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRep
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
@@ -367,23 +368,47 @@ class OffenderCheckinService(
   }
 
   /**
-   * This would be called to trigger a checkin notification (for the offender) outside
-   * the periodically executing job. For example an offender was just added
-   * and first checkin is supposed to happen today (likely after the job already finished).
+   * Send checkin invite notification to the offender, potentially updates
+   * the due date of the checkin (if triggered on a day later than due date).
    *
-   * We require the checkin record as that's what the notification is about and
-   * that's where we store notification references which will allow us to
-   * retrieve the notification status from the provider (e.g. GOV.UK Notify)
+   * This can be called to trigger a checkin notification (for the offender) outside
+   * the periodically executing job. For example, an offender was just added,
+   * and the first checkin is supposed to happen today (likely after the job
+   * is already finished).
    */
-  fun unscheduledNotification(checkinUuid: UUID): OffenderCheckinDto {
+  @Transactional
+  fun unscheduledNotification(checkinUuid: UUID, notificationRequest: CheckinNotificationRequest): OffenderCheckinDto {
     val checkin = checkinRepository.findByUuid(checkinUuid).getOrElse {
       throw BadArgumentException("Checkin=$checkinUuid not found")
     }
-    if (checkin.offender.status == OffenderStatus.VERIFIED) {
-      throw BadArgumentException("Unscheduled notification for offender of status ${checkin.offender.status}")
-    }
     validateCheckinUpdatable(checkin)
-    validateUnscheduledNotification(clock.instant(), checkin)
+    // we should be only updating the latest checkin
+    val latestCheckins = checkinRepository.findFirst3ByOffenderOrderByCreatedAtDesc(checkin.offender)
+    if (latestCheckins[0].uuid != checkinUuid) {
+      throw BadArgumentException("Checkin=$checkinUuid possibly expired. offender=${checkin.offender.uuid}")
+    }
+    val today = clock.today()
+    if (today >= checkin.dueDate.plus(checkinWindowPeriod)) {
+      throw BadArgumentException("Checkin due date has passed for checkin=${checkin.uuid}")
+    }
+
+    val practitioner = notificationRequest.practitioner
+    if (checkin.dueDate != today) {
+      val originalDueDate = checkin.dueDate
+      checkin.dueDate = today
+      checkinRepository.save(checkin)
+      offenderEventLogRepository.save(
+        OffenderEventLog(
+          UUID.randomUUID(),
+          LogEntryType.OFFENDER_CHECKIN_RESCHEDULED,
+          comment = "checkin rescheduled: $originalDueDate -> $today",
+          practitioner = practitioner,
+          offender = checkin.offender,
+          checkin = checkin,
+        ),
+      )
+      LOG.info("Updated checkin due date to $today for checkin=${checkin.uuid}, by practitioner=$practitioner")
+    }
 
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
     this.notificationService.sendMessage(
@@ -392,8 +417,7 @@ class OffenderCheckinService(
       SingleNotificationContext.forCheckin(clock),
     )
 
-    val saved = checkinRepository.save(checkin)
-    return saved.dto(this.s3UploadService)
+    return checkin.dto(this.s3UploadService)
   }
 
   fun cancelCheckins(offenderUuid: UUID, logEntry: OffenderEventLog) {
@@ -454,10 +478,9 @@ class OffenderCheckinService(
       if (checkin.status != CheckinStatus.CREATED) {
         throw BadArgumentException("You can no longer update or add photos/videos to checkin with uuid=${checkin.uuid}")
       }
-    }
-
-    private fun validateUnscheduledNotification(now: Instant, checkin: OffenderCheckin) {
-      TODO("not implemented yet")
+      if (checkin.offender.status != OffenderStatus.VERIFIED) {
+        throw BadArgumentException("Unscheduled notification for offender of status ${checkin.offender.status}")
+      }
     }
 
     private val LOG = LoggerFactory.getLogger(this::class.java)

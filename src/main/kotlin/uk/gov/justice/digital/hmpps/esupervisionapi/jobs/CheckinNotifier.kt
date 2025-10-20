@@ -133,7 +133,6 @@ class CheckinNotifier(
           } catch (e: Exception) {
             LOG.warn("Error processing offender=${offender.uuid}", e)
             numErrors += 1
-            null
           }
         }
         if (notificationStatuses.isNotEmpty()) {

@@ -107,6 +107,16 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
   @EntityGraph(attributePaths = ["offender", "createdBy", "reviewedBy"], type = EntityGraph.EntityGraphType.LOAD)
   fun findAllByCreatedBy(practitionerId: ExternalUserId, pageable: Pageable): Page<OffenderCheckin>
 
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    WHERE c.offender = :offender
+    ORDER BY c.createdAt DESC
+    LIMIT 3
+  """,
+  )
+  fun findFirst3ByOffenderOrderByCreatedAtDesc(offender: Offender): List<OffenderCheckin>
+
   @EntityGraph(attributePaths = ["offender.practitioner"])
   @Query(
     """
