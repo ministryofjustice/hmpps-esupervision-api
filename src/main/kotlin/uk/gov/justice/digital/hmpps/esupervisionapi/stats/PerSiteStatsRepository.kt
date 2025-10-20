@@ -52,7 +52,6 @@ data class IdCheckAccuracy(
   val falseNegativesStdDev: Long,
 )
 
-
 data class Stats(
   val invitesPerSite: List<SiteCount>,
   val completedCheckinsPerSite: List<SiteCount>,

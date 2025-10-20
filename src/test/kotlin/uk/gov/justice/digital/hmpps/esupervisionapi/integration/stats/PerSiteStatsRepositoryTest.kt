@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration.stats
 
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.within
-import org.assertj.core.api.Assertions.within
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -766,6 +765,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(flagAverages.find { it.location == "Site B" }?.average).isCloseTo(2.5, within(0.01))
     assertThat(flagAverages.find { it.location == "UNKNOWN" }?.average).isCloseTo(2.0, within(0.01))
   }
+
   @Test
   fun `calculates average support requests per check-in for each site`() {
     val practitioner1 = PRACTITIONER_ALICE.externalUserId()
@@ -792,7 +792,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "STRUGGLING", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
-        // Check-in with 2 requests for 
+        // Check-in with 2 requests for
         OffenderCheckin.create(
           offender = offenderA,
           createdBy = practitioner1,
