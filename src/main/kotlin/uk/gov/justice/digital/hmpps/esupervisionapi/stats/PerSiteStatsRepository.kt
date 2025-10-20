@@ -137,7 +137,7 @@ class PerSiteStatsRepositoryImpl(
 
     val invitesPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val count = (cols[1] as? Number)?.toLong() ?: 0L
+      val count = (cols[1] as Number).toLong()
       SiteCount(location, count)
     }
 
@@ -149,7 +149,7 @@ class PerSiteStatsRepositoryImpl(
 
     val offendersPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val count = (cols[1] as? Number)?.toLong() ?: 0L
+      val count = (cols[1] as Number).toLong()
       SiteCount(location, count)
     }
 
@@ -161,7 +161,7 @@ class PerSiteStatsRepositoryImpl(
 
     val compledCheckinsPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val count = (cols[1] as? Number)?.toLong() ?: 0L
+      val count = (cols[1] as Number).toLong()
       SiteCount(location, count)
     }
 
@@ -173,8 +173,8 @@ class PerSiteStatsRepositoryImpl(
 
     val completedCheckinsPerNthPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val count = (cols[1] as? Number)?.toLong() ?: 0L
-      val nth = (cols[2] as? Number)?.toLong() ?: 0L
+      val count = (cols[1] as Number).toLong()
+      val nth = (cols[2] as Number).toLong()
       SiteCountOnNthDay(location, count, nth)
     }
 
@@ -186,13 +186,13 @@ class PerSiteStatsRepositoryImpl(
 
     val avgCompletedCheckinsPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val completedAvg = (cols[1] as? Number)?.toLong() ?: 0L
-      val completedStdDev = (cols[2] as? Number)?.toLong() ?: 0L
-      val expiredAvg = (cols[3] as? Number)?.toLong() ?: 0L
-      val expiredStdDev = (cols[4] as? Number)?.toLong() ?: 0L
-      val completedTotal = (cols[5] as? Number)?.toLong() ?: 0L
-      val expiredTotal = (cols[6] as? Number)?.toLong() ?: 0L
-      val missedPercentage = (cols[7] as? Number)?.toDouble() ?: 0.0
+      val completedAvg = (cols[1] as Number).toLong()
+      val completedStdDev = (cols[2] as Number).toLong()
+      val expiredAvg = (cols[3] as Number).toLong()
+      val expiredStdDev = (cols[4] as Number).toLong()
+      val completedTotal = (cols[5] as Number).toLong()
+      val expiredTotal = (cols[6] as Number).toLong()
+      val missedPercentage = (cols[7] as Number).toDouble()
       SiteCheckinAverage(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, completedTotal, expiredTotal, missedPercentage)
     }
 
@@ -204,11 +204,11 @@ class PerSiteStatsRepositoryImpl(
 
     val automatedIdCheckAccurracy = rows.map { cols ->
       val location = cols[0] as String
-      val mismatchCount = (cols[1] as? Number)?.toLong() ?: 0L
-      val falsePositivesAvg = (cols[2] as? Number)?.toLong() ?: 0L
-      val falsePositiveStdDev = (cols[3] as? Number)?.toLong() ?: 0L
-      val falseNegativesAvg = (cols[4] as? Number)?.toLong() ?: 0L
-      val falseNegativesStdDev = (cols[5] as? Number)?.toLong() ?: 0L
+      val mismatchCount = (cols[1] as Number).toLong()
+      val falsePositivesAvg = (cols[2] as Number).toLong()
+      val falsePositiveStdDev = (cols[3] as Number).toLong()
+      val falseNegativesAvg = (cols[4] as Number).toLong()
+      val falseNegativesStdDev = (cols[5] as Number).toLong()
       IdCheckAccuracy(location, mismatchCount, falsePositivesAvg, falsePositiveStdDev, falseNegativesAvg, falseNegativesStdDev)
     }
 
@@ -220,7 +220,7 @@ class PerSiteStatsRepositoryImpl(
 
     val flaggedCheckinsPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val count = (cols[1] as? Number)?.toLong() ?: 0L
+      val count = (cols[1] as Number).toLong()
       SiteCount(location, count)
     }
 
@@ -232,7 +232,7 @@ class PerSiteStatsRepositoryImpl(
 
     val stoppedCheckinsPerSite = rows.map { cols ->
       val location = cols[0] as String
-      val count = (cols[1] as? Number)?.toLong() ?: 0L
+      val count = (cols[1] as Number).toLong()
       SiteCount(location, count)
     }
 
