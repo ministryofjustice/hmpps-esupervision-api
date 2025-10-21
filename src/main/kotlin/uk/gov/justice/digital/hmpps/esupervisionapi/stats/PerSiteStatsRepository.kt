@@ -32,6 +32,12 @@ data class SiteCountOnNthDay(
   val day: Long,
 )
 
+data class SiteCheckinFrequency(
+  val location: String,
+  val intervalDays: Long,
+  val count: Long,
+)
+
 data class SiteCheckinAverage(
   val location: String,
   val completedAvg: Long,
@@ -57,6 +63,7 @@ data class Stats(
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
+  val checkinFrequencyPerSite: List<SiteCheckinFrequency>,
   val checkinAverages: List<SiteCheckinAverage>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
@@ -95,6 +102,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_completed_per_site.sql") private val completedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_on_nth_day.sql") private val completedCheckinsPerNthPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_counts_per_site.sql") private val offendersPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_offender_checkin_frequency.sql") private val checkinFrequencyPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_average_per_site.sql") private val avgCompletedCheckinsPerSite: Resource,
   @Value("classpath:db/queries/stats_checkin_id_check_mismatch.sql") private val automatedIdCheckAccuracyResource: Resource,
   @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
@@ -105,6 +113,7 @@ class PerSiteStatsRepositoryImpl(
 
   private val sqlInvitesPerSite: String by lazy { invitesPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlOffendersPerSite: String by lazy { offendersPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlCheckinFrequencyPerSite: String by lazy { checkinFrequencyPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerNthPerSite: String by lazy { completedCheckinsPerNthPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerSite: String by lazy { completedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAvgCompletedCheckinsPerSite: String by lazy { avgCompletedCheckinsPerSite.inputStream.use { it.reader().readText() } }
@@ -252,11 +261,20 @@ class PerSiteStatsRepositoryImpl(
       SiteAverage(location, avgSupport)
     }
 
+    @Suppress("UNCHECKED_CAST")
+    rows = entityManager.createNativeQuery(sqlCheckinFrequencyPerSite)
+      .setParameter("lowerBound", lowerBound)
+      .setParameter("upperBound", upperBound)
+      .resultList as List<Array<Any?>>
+
+    val checkinFrequencyPerSite = rows.map { cols -> siteCheckinFrequency(cols) }
+
     return Stats(
       invitesPerSite = invitesPerSite,
       completedCheckinsPerSite = compledCheckinsPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
       offendersPerSite = offendersPerSite,
+      checkinFrequencyPerSite = checkinFrequencyPerSite,
       checkinAverages = avgCompletedCheckinsPerSite,
       automatedIdCheckAccuracy = automatedIdCheckAccurracy,
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
@@ -291,3 +309,9 @@ val createTempTable = """
       location varchar not null
     ) on commit delete rows
 """.trimIndent()
+
+private fun siteCheckinFrequency(cols: Array<Any?>): SiteCheckinFrequency = SiteCheckinFrequency(
+  location = cols[0] as String,
+  intervalDays = (cols[1] as Number).toLong(),
+  count = (cols[2] as Number).toLong(),
+)
