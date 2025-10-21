@@ -240,16 +240,16 @@ class PerSiteStatsRepositoryImpl(
       .resultList as List<Array<Any?>>
 
     val averageFlagsPerCheckinPerSite = averageRows.map { cols ->
-        val location = cols[0] as String
-        // Read average_flags from the SECOND column (index 1)
-        val avgFlags = (cols[1] as? Number)?.toDouble() ?: 0.0
-        SiteAverage(location, avgFlags)
+      val location = cols[0] as String
+      // Read average_flags from the SECOND column (index 1)
+      val avgFlags = (cols[1] as? Number)?.toDouble() ?: 0.0
+      SiteAverage(location, avgFlags)
     }
     val averageSupportRequestsPerSite = averageRows.map { cols ->
-        val location = cols[0] as String
-        // Read average_support_requests from the THIRD column (index 2)
-        val avgSupport = (cols[2] as? Number)?.toDouble() ?: 0.0
-        SiteAverage(location, avgSupport)
+      val location = cols[0] as String
+      // Read average_support_requests from the THIRD column (index 2)
+      val avgSupport = (cols[2] as? Number)?.toDouble() ?: 0.0
+      SiteAverage(location, avgSupport)
     }
 
     return Stats(
