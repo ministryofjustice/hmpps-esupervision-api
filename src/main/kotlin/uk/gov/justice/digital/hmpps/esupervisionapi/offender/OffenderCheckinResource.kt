@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
+import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
@@ -125,5 +127,24 @@ class OffenderCheckinResource(
     val passed = offenderCheckinService.verifyCheckinIdentity(uuid, numSnapshots)
     val dto = AutomatedVerificationResult(passed)
     return ResponseEntity.ok(dto)
+  }
+
+  @PostMapping("/{uuid}/invite")
+  @Tag(name = "practitioner")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Send checkin invite notification to the offender",
+    description = "Meant to be used for one-off notifications. Potentially updates the due date of a checkin to 'today'",
+  )
+  fun notify(
+    @PathVariable uuid: UUID,
+    @RequestBody @Valid notificationRequest: CheckinNotificationRequest,
+    bindingResult: BindingResult,
+  ): ResponseEntity<OffenderCheckinDto> {
+    if (bindingResult.hasErrors()) {
+      throw intoResponseStatusException(bindingResult)
+    }
+    val result = offenderCheckinService.unscheduledNotification(uuid, notificationRequest)
+    return ResponseEntity.ok(result)
   }
 }

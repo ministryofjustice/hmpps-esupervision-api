@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/changesets/2_one_checkin_per_day.sql
   - include:
       file : db/changelog/changesets/3_new_event_type_for_setup_completion.sql
+  - include:
+      file : db/changelog/changesets/4_new_event_type_checkin_reschedule.sql

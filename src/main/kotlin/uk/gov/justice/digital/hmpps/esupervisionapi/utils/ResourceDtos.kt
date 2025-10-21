@@ -70,6 +70,15 @@ data class CheckinReviewRequest(
 )
 
 /**
+ * Request to send a checkin invite to an offender.
+ * Use of one-off notifications (e.g., not via a scheduled job).
+ */
+data class CheckinNotificationRequest(
+  @field:NotBlank
+  val practitioner: ExternalUserId,
+)
+
+/**
  * Represents a subset of a log entry for an offender deactivation.
  */
 data class DeactivationEntry(

@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerifica
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.DeactivateOffenderCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResultSummary
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
@@ -46,6 +47,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.isPastSubmissionDate
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
@@ -112,7 +114,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
     offender = offenderSetupService.completeOffenderSetup(setup.uuid)
 
     reset(notificationService)
-    whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
+    whenever(notificationService.sendMessage(any(), any(), any()))
+      .thenReturn(notifResults(), notifResults(), notifResults())
 
     reset(s3UploadService)
 
@@ -267,6 +270,48 @@ class OffenderCheckinTest : IntegrationTestBase() {
     createCheckinRequest(checkinRequest)
       .exchange()
       .expectStatus().is4xxClientError
+  }
+
+  @Test
+  fun `send on-off checkin invite`() {
+    val (offender, checkinRequest) = checkinRequestDto()
+    val createCheckin = createCheckinRequest(checkinRequest)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(OffenderCheckinDto::class.java)
+      .returnResult().responseBody!!
+
+    Assertions.assertEquals(CheckinStatus.CREATED, createCheckin.status)
+    val checkin = checkinRepository.findByUuid(createCheckin.uuid).get()
+    val dueDate = LocalDate.now().minusDays(1)
+    checkin.dueDate = dueDate
+    checkinRepository.save(checkin)
+
+    fun sendInvite(checkin: OffenderCheckin): OffenderCheckinDto {
+      val updatedCheckin = webTestClient.post()
+        .uri("/offender_checkins/${checkin.uuid}/invite")
+        .contentType(MediaType.APPLICATION_JSON)
+        .headers(practitionerRoleAuthHeaders)
+        .bodyValue(CheckinNotificationRequest(checkin.createdBy))
+        .exchange()
+        .expectStatus().isOk
+        .expectBody(OffenderCheckinDto::class.java)
+        .returnResult().responseBody!!
+      return updatedCheckin
+    }
+
+    val firstUpdate = sendInvite(checkin) // this will cause 'dueDate' to be updated'
+    val secondUpdate = sendInvite(checkin) // this won't cause the 'dueDate' to be updated'
+
+    Assertions.assertEquals(LocalDate.now(), firstUpdate.dueDate)
+    Assertions.assertEquals(LocalDate.now(), secondUpdate.dueDate)
+
+    val events = offenderEventLogRepository.findAllCheckinEntries(
+      checkin,
+      setOf(LogEntryType.OFFENDER_CHECKIN_RESCHEDULED),
+      PageRequest.of(0, 10),
+    )
+    Assertions.assertEquals(1, events.content.size)
   }
 
   @Test
