@@ -154,15 +154,8 @@ class OffenderCheckinService(
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
     val inviteResults = this.notificationService.sendMessage(inviteMessage, checkin.offender, notificationContext)
 
-    if (notificationContext.type == NotificationContextType.SINGLE && inviteResults.results.isNotEmpty()) {
-      val checkinNotifications = inviteResults.results.map {
-        CheckinNotification(
-          notificationId = it.notificationId,
-          checkin = saved.uuid,
-          reference = notificationContext.reference,
-        )
-      }
-      notificationRepository.saveAll(checkinNotifications)
+    if (notificationContext.type == NotificationContextType.SINGLE) {
+      notificationRepository.saveInviteNotifications(saved, notificationContext, inviteResults)
     }
 
     return CheckinCreationInfo(
@@ -411,11 +404,13 @@ class OffenderCheckinService(
     }
 
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
-    this.notificationService.sendMessage(
+    val notificationContext = SingleNotificationContext.forCheckin(clock)
+    val inviteResults = this.notificationService.sendMessage(
       inviteMessage,
       checkin.offender,
-      SingleNotificationContext.forCheckin(clock),
+      notificationContext,
     )
+    notificationRepository.saveInviteNotifications(checkin, notificationContext, inviteResults)
 
     return checkin.dto(this.s3UploadService)
   }
@@ -496,4 +491,21 @@ fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): B
     this.dueDate.plus(checkinWindow.minusDays(1))
   }
   return finalCheckinDate < submissionDate
+}
+
+private fun CheckinNotificationRepository.saveInviteNotifications(
+  checkin: OffenderCheckin,
+  context: NotificationContext,
+  results: NotificationResults,
+) {
+  if (results.results.isNotEmpty()) {
+    val checkinNotifications = results.results.map {
+      CheckinNotification(
+        notificationId = it.notificationId,
+        checkin = checkin.uuid,
+        reference = context.reference,
+      )
+    }
+    this.saveAll(checkinNotifications)
+  }
 }

@@ -114,7 +114,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
     offender = offenderSetupService.completeOffenderSetup(setup.uuid)
 
     reset(notificationService)
-    whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
+    whenever(notificationService.sendMessage(any(), any(), any()))
+      .thenReturn(notifResults(), notifResults(), notifResults())
 
     reset(s3UploadService)
 
