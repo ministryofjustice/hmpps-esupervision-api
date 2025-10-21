@@ -99,8 +99,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_id_check_mismatch.sql") private val automatedIdCheckAccuracyResource: Resource,
   @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_number_stopped_checkins.sql") private val stoppedCheckinsPerSiteResource: Resource,
-  @Value("classpath:db/queries/stats_checkin_flag_average_per_site.sql") private val averageFlagsPerCheckinPerSiteResource: Resource,
-  @Value("classpath:db/queries/stats_checkin_support_requests_average_per_site.sql") private val averageSupportRequestsPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_flag_and_support_average_per_site.sql") private val averageFlagsAndSupportRequestsPerCheckinPerSiteResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -112,8 +111,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlAutomatedIdCheckAccuracyResource: String by lazy { automatedIdCheckAccuracyResource.inputStream.use { it.reader().readText() } }
   private val sqlFlaggedCheckinsPerSite: String by lazy { flaggedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlStoppedCheckinsPerSite: String by lazy { stoppedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
-  private val sqlAverageFlagsPerCheckinPerSite: String by lazy { averageFlagsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
-  private val sqlAverageSupportRequestsPerSite: String by lazy { averageSupportRequestsPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageFlagsAndSupportRequestsPerCheckinPerSite: String by lazy { averageFlagsAndSupportRequestsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -236,27 +234,22 @@ class PerSiteStatsRepositoryImpl(
     }
 
     @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlAverageFlagsPerCheckinPerSite)
+    val averageRows = entityManager.createNativeQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite)
       .setParameter("lowerBound", lowerBound)
       .setParameter("upperBound", upperBound)
       .resultList as List<Array<Any?>>
 
-    val averageFlagsPerCheckinPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val average = (cols[1] as? Number)?.toDouble() ?: 0.0
-      SiteAverage(location, average)
+    val averageFlagsPerCheckinPerSite = averageRows.map { cols ->
+        val location = cols[0] as String
+        // Read average_flags from the SECOND column (index 1)
+        val avgFlags = (cols[1] as? Number)?.toDouble() ?: 0.0
+        SiteAverage(location, avgFlags)
     }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlAverageSupportRequestsPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val averageSupportRequestsPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val average = (cols[1] as? Number)?.toDouble() ?: 0.0
-      SiteAverage(location, average)
+    val averageSupportRequestsPerSite = averageRows.map { cols ->
+        val location = cols[0] as String
+        // Read average_support_requests from the THIRD column (index 2)
+        val avgSupport = (cols[2] as? Number)?.toDouble() ?: 0.0
+        SiteAverage(location, avgSupport)
     }
 
     return Stats(
