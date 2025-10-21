@@ -18,6 +18,11 @@ data class SiteCount(
   val count: Long,
 )
 
+data class SiteAverage(
+  val location: String,
+  val average: Double,
+)
+
 /**
  * How many completed checkins were done on the nth day of the checkin window
  */
@@ -47,11 +52,6 @@ data class IdCheckAccuracy(
   val falseNegativesStdDev: Long,
 )
 
-data class SiteFlagAverage(
-  val location: String,
-  val average: Double,
-)
-
 data class Stats(
   val invitesPerSite: List<SiteCount>,
   val completedCheckinsPerSite: List<SiteCount>,
@@ -61,10 +61,11 @@ data class Stats(
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
   val stoppedCheckinsPerSite: List<SiteCount>,
-  val averageFlagsPerCheckinPerSite: List<SiteFlagAverage>,
+  val averageFlagsPerCheckinPerSite: List<SiteAverage>,
+  val averageSupportRequestsPerSite: List<SiteAverage>,
 )
 
-private val emptyStats = Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+private val emptyStats = Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
 
 /**
  * Repository for running native Postgres queries over checkins.
@@ -98,7 +99,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_id_check_mismatch.sql") private val automatedIdCheckAccuracyResource: Resource,
   @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_number_stopped_checkins.sql") private val stoppedCheckinsPerSiteResource: Resource,
-  @Value("classpath:db/queries/stats_checkin_flag_average_per_site.sql") private val averageFlagsPerCheckinPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_flag_and_support_average_per_site.sql") private val averageFlagsAndSupportRequestsPerCheckinPerSiteResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -110,7 +111,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlAutomatedIdCheckAccuracyResource: String by lazy { automatedIdCheckAccuracyResource.inputStream.use { it.reader().readText() } }
   private val sqlFlaggedCheckinsPerSite: String by lazy { flaggedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlStoppedCheckinsPerSite: String by lazy { stoppedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
-  private val sqlAverageFlagsPerCheckinPerSite: String by lazy { averageFlagsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageFlagsAndSupportRequestsPerCheckinPerSite: String by lazy { averageFlagsAndSupportRequestsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -233,15 +234,22 @@ class PerSiteStatsRepositoryImpl(
     }
 
     @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlAverageFlagsPerCheckinPerSite)
+    val averageRows = entityManager.createNativeQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite)
       .setParameter("lowerBound", lowerBound)
       .setParameter("upperBound", upperBound)
       .resultList as List<Array<Any?>>
 
-    val averageFlagsPerCheckinPerSite = rows.map { cols ->
+    val averageFlagsPerCheckinPerSite = averageRows.map { cols ->
       val location = cols[0] as String
-      val average = (cols[1] as? Number)?.toDouble() ?: 0.0
-      SiteFlagAverage(location, average)
+      // Read average_flags from the SECOND column (index 1)
+      val avgFlags = (cols[1] as? Number)?.toDouble() ?: 0.0
+      SiteAverage(location, avgFlags)
+    }
+    val averageSupportRequestsPerSite = averageRows.map { cols ->
+      val location = cols[0] as String
+      // Read average_support_requests from the THIRD column (index 2)
+      val avgSupport = (cols[2] as? Number)?.toDouble() ?: 0.0
+      SiteAverage(location, avgSupport)
     }
 
     return Stats(
@@ -254,6 +262,7 @@ class PerSiteStatsRepositoryImpl(
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
+      averageSupportRequestsPerSite = averageSupportRequestsPerSite,
     )
   }
 }

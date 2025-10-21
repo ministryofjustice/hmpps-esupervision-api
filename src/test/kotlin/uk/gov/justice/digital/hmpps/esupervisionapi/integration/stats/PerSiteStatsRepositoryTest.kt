@@ -765,4 +765,85 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(flagAverages.find { it.location == "Site B" }?.average).isCloseTo(2.5, within(0.01))
     assertThat(flagAverages.find { it.location == "UNKNOWN" }?.average).isCloseTo(2.0, within(0.01))
   }
+
+  @Test
+  fun `calculates average support requests per check-in for each site`() {
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2 = PRACTITIONER_BOB.externalUserId()
+    val practitioner3 = PRACTITIONER_DAVE.externalUserId()
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+      // PractitionerSite(practitioner3, "Site C"), // we want to make sure "UNKNOWN" (missing mapping) shows up in the results
+    )
+
+    val offenderA = offenderRepository.save(Offender.create(name = "Offender A", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val offenderC = offenderRepository.save(Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+
+    checkinRepository.saveAll(
+      listOf(
+        // Check-in with 1 request for support
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now(),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "STRUGGLING", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        ),
+        // Check-in with 2 requests for
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("DRUGS", "HOUSING")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        ),
+        // Check-in with 0 requests
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(2),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+        ),
+        // 3 requests
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now(),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("HOUSING", "MONEY")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+        ),
+        // 0 requests
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        ),
+        // one request practitioner has no site mapping
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(3),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        ),
+      ),
+    )
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    val supportAverages = stats.averageSupportRequestsPerSite
+    assertThat(supportAverages).hasSize(3)
+    assertThat(supportAverages.find { it.location == "Site A" }?.average).isCloseTo(1.0, within(0.01))
+    assertThat(supportAverages.find { it.location == "Site B" }?.average).isCloseTo(1.5, within(0.01))
+    assertThat(supportAverages.find { it.location == "UNKNOWN" }?.average).isCloseTo(1.0, within(0.01))
+  }
 }
