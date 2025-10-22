@@ -315,8 +315,8 @@ class OffenderCheckinService(
     return urls
   }
 
-  fun getCheckins(practitionerId: ExternalUserId, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {
-    val page = checkinRepository.findAllByCreatedBy(practitionerId, pageRequest)
+  fun getCheckins(practitionerId: ExternalUserId, offenderId: UUID?, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {
+    val page = checkinRepository.findAllByCreatedBy(practitionerId, offenderId, pageRequest)
     val checkins = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), checkins)
   }

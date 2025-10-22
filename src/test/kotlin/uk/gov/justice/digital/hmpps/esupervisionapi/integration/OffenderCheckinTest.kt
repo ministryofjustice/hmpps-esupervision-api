@@ -338,7 +338,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .exchange()
       .expectStatus().isOk
 
-    val page = offenderCheckinService.getCheckins(offender.practitioner, PageRequest.of(0, 10))
+    val page = offenderCheckinService.getCheckins(offender.practitioner, null, PageRequest.of(0, 10))
     val checkins = page.content
 
     Assertions.assertEquals(1, checkins.size)

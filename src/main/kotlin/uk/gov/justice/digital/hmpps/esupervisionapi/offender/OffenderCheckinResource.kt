@@ -7,6 +7,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -46,12 +47,22 @@ class OffenderCheckinResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   fun getCheckins(
     @RequestParam("practitioner") practitionerId: ExternalUserId,
+
+    @Parameter(description = "Filter by a offender UUID")
+    @RequestParam(name = "offenderId", required = false) offenderId: UUID?,
+
     @Parameter(description = "Zero-based page index")
     @RequestParam(defaultValue = "0") page: Int,
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
+
+    @Parameter(description = "Sort by due date (sort direction ASC or DESC)")
+    @RequestParam(defaultValue = "DESC") direction: String,
+
   ): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
-    val pageRequest = PageRequest.of(page, size)
-    val checkins = offenderCheckinService.getCheckins(practitionerId, pageRequest)
+    
+    val sortDirection = Sort.Direction.fromString(direction)
+    val pageRequest = PageRequest.of(page, size, Sort.by(sortDirection, "dueDate"))    
+    val checkins = offenderCheckinService.getCheckins(practitionerId, offenderId, pageRequest)
     return ResponseEntity.ok(checkins)
   }
 
