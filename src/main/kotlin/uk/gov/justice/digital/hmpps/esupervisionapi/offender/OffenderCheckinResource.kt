@@ -47,21 +47,16 @@ class OffenderCheckinResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   fun getCheckins(
     @RequestParam("practitioner") practitionerId: ExternalUserId,
-
     @Parameter(description = "Filter by a offender UUID")
     @RequestParam(name = "offenderId", required = false) offenderId: UUID?,
-
     @Parameter(description = "Zero-based page index")
     @RequestParam(defaultValue = "0") page: Int,
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
-
     @Parameter(description = "Sort by due date (sort direction ASC or DESC)")
     @RequestParam(defaultValue = "DESC") direction: String,
-
   ): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
-    
     val sortDirection = Sort.Direction.fromString(direction)
-    val pageRequest = PageRequest.of(page, size, Sort.by(sortDirection, "dueDate"))    
+    val pageRequest = PageRequest.of(page, size, Sort.by(sortDirection, "dueDate"))
     val checkins = offenderCheckinService.getCheckins(practitionerId, offenderId, pageRequest)
     return ResponseEntity.ok(checkins)
   }

@@ -101,7 +101,7 @@ open class OffenderCheckin(
 
 @Repository
 interface OffenderCheckinRepository : org.springframework.data.jpa.repository.JpaRepository<OffenderCheckin, Long> {
-fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
+  fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
 
   // returns checkins created by a practitioner with the given uuid
   @EntityGraph(attributePaths = ["offender", "createdBy", "reviewedBy"], type = EntityGraph.EntityGraphType.LOAD)
