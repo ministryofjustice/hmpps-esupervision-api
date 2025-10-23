@@ -18,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificatio
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
@@ -53,6 +54,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
         crn = "X12345",
         firstCheckinDate = LocalDate.now().minusDays(10),
         practitioner = PRACTITIONER_ALICE,
+        status = OffenderStatus.VERIFIED,
       ),
     )
 

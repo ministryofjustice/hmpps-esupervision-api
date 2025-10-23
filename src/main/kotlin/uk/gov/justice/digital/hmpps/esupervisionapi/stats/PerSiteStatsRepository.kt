@@ -32,6 +32,12 @@ data class SiteCountOnNthDay(
   val day: Long,
 )
 
+data class SiteCheckinFrequency(
+  val location: String,
+  val intervalDays: Long,
+  val count: Long,
+)
+
 data class SiteCheckinAverage(
   val location: String,
   val completedAvg: Long,
@@ -57,6 +63,7 @@ data class Stats(
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
+  val checkinFrequencyPerSite: List<SiteCheckinFrequency>,
   val checkinAverages: List<SiteCheckinAverage>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
@@ -65,7 +72,19 @@ data class Stats(
   val averageSupportRequestsPerSite: List<SiteAverage>,
 )
 
-private val emptyStats = Stats(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+private val emptyStats = Stats(
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+  emptyList(),
+)
 
 /**
  * Repository for running native Postgres queries over checkins.
@@ -95,6 +114,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_completed_per_site.sql") private val completedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_on_nth_day.sql") private val completedCheckinsPerNthPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_counts_per_site.sql") private val offendersPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_offender_checkin_frequency.sql") private val checkinFrequencyPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_average_per_site.sql") private val avgCompletedCheckinsPerSite: Resource,
   @Value("classpath:db/queries/stats_checkin_id_check_mismatch.sql") private val automatedIdCheckAccuracyResource: Resource,
   @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
@@ -105,6 +125,7 @@ class PerSiteStatsRepositoryImpl(
 
   private val sqlInvitesPerSite: String by lazy { invitesPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlOffendersPerSite: String by lazy { offendersPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlCheckinFrequencyPerSite: String by lazy { checkinFrequencyPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerNthPerSite: String by lazy { completedCheckinsPerNthPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerSite: String by lazy { completedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAvgCompletedCheckinsPerSite: String by lazy { avgCompletedCheckinsPerSite.inputStream.use { it.reader().readText() } }
@@ -126,130 +147,22 @@ class PerSiteStatsRepositoryImpl(
     val lowerBound = LocalDate.of(2025, 1, 1)
     val upperBound = LocalDate.now(clock.zone)
 
-    @Suppress("UNCHECKED_CAST")
-    var rows = entityManager.createNativeQuery(sqlInvitesPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
+    val invitesPerSite = entityManager.runPerSiteQuery(sqlInvitesPerSite, lowerBound, upperBound).map(::siteCount)
+    val offendersPerSite = entityManager.runPerSiteQuery(sqlOffendersPerSite, lowerBound, upperBound).map(::siteCount)
+    val compledCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
+    val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
+    val avgCompletedCheckinsPerSite = entityManager.runPerSiteQuery(sqlAvgCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCheckinAverage)
+    val automatedIdCheckAccurracy = entityManager.runPerSiteQuery(sqlAutomatedIdCheckAccuracyResource, lowerBound, upperBound).map(::idCheckAccuracy)
+    val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
+    val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
+    val checkinFrequencyPerSite = entityManager.runPerSiteQuery(sqlCheckinFrequencyPerSite, lowerBound, upperBound).map(::siteCheckinFrequency)
 
-    val invitesPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val count = (cols[1] as Number).toLong()
-      SiteCount(location, count)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlOffendersPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val offendersPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val count = (cols[1] as Number).toLong()
-      SiteCount(location, count)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlCompletedCheckinsPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val compledCheckinsPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val count = (cols[1] as Number).toLong()
-      SiteCount(location, count)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlCompletedCheckinsPerNthPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val completedCheckinsPerNthPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val count = (cols[1] as Number).toLong()
-      val nth = (cols[2] as Number).toLong()
-      SiteCountOnNthDay(location, count, nth)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlAvgCompletedCheckinsPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val avgCompletedCheckinsPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val completedAvg = (cols[1] as Number).toLong()
-      val completedStdDev = (cols[2] as Number).toLong()
-      val expiredAvg = (cols[3] as Number).toLong()
-      val expiredStdDev = (cols[4] as Number).toLong()
-      val completedTotal = (cols[5] as Number).toLong()
-      val expiredTotal = (cols[6] as Number).toLong()
-      val missedPercentage = (cols[7] as Number).toDouble()
-      SiteCheckinAverage(location, completedAvg, completedStdDev, expiredAvg, expiredStdDev, completedTotal, expiredTotal, missedPercentage)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlAutomatedIdCheckAccuracyResource)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val automatedIdCheckAccurracy = rows.map { cols ->
-      val location = cols[0] as String
-      val mismatchCount = (cols[1] as Number).toLong()
-      val falsePositivesAvg = (cols[2] as Number).toLong()
-      val falsePositiveStdDev = (cols[3] as Number).toLong()
-      val falseNegativesAvg = (cols[4] as Number).toLong()
-      val falseNegativesStdDev = (cols[5] as Number).toLong()
-      IdCheckAccuracy(location, mismatchCount, falsePositivesAvg, falsePositiveStdDev, falseNegativesAvg, falseNegativesStdDev)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlFlaggedCheckinsPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val flaggedCheckinsPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val count = (cols[1] as Number).toLong()
-      SiteCount(location, count)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    rows = entityManager.createNativeQuery(sqlStoppedCheckinsPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val stoppedCheckinsPerSite = rows.map { cols ->
-      val location = cols[0] as String
-      val count = (cols[1] as Number).toLong()
-      SiteCount(location, count)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    val averageRows = entityManager.createNativeQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite)
-      .setParameter("lowerBound", lowerBound)
-      .setParameter("upperBound", upperBound)
-      .resultList as List<Array<Any?>>
-
-    val averageFlagsPerCheckinPerSite = averageRows.map { cols ->
-      val location = cols[0] as String
-      // Read average_flags from the SECOND column (index 1)
-      val avgFlags = (cols[1] as? Number)?.toDouble() ?: 0.0
-      SiteAverage(location, avgFlags)
-    }
-    val averageSupportRequestsPerSite = averageRows.map { cols ->
-      val location = cols[0] as String
-      // Read average_support_requests from the THIRD column (index 2)
-      val avgSupport = (cols[2] as? Number)?.toDouble() ?: 0.0
-      SiteAverage(location, avgSupport)
+    val flagsAndSupport = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
+    val averageFlagsPerCheckinPerSite = mutableListOf<SiteAverage>()
+    val averageSupportRequestsPerSite = mutableListOf<SiteAverage>()
+    for (row in flagsAndSupport) {
+      averageFlagsPerCheckinPerSite.add(siteAverage(row[0], row[1]))
+      averageSupportRequestsPerSite.add(siteAverage(row[0], row[2]))
     }
 
     return Stats(
@@ -257,6 +170,7 @@ class PerSiteStatsRepositoryImpl(
       completedCheckinsPerSite = compledCheckinsPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
       offendersPerSite = offendersPerSite,
+      checkinFrequencyPerSite = checkinFrequencyPerSite,
       checkinAverages = avgCompletedCheckinsPerSite,
       automatedIdCheckAccuracy = automatedIdCheckAccurracy,
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
@@ -291,3 +205,53 @@ val createTempTable = """
       location varchar not null
     ) on commit delete rows
 """.trimIndent()
+
+private fun siteCheckinFrequency(cols: Array<Any?>): SiteCheckinFrequency = SiteCheckinFrequency(
+  location = cols[0] as String,
+  intervalDays = (cols[1] as Number).toLong(),
+  count = (cols[2] as Number).toLong(),
+)
+
+private fun EntityManager.runPerSiteQuery(sql: String, lowerBound: LocalDate, upperBound: LocalDate): List<Array<Any?>> {
+  @Suppress("UNCHECKED_CAST")
+  return this.createNativeQuery(sql)
+    .setParameter("lowerBound", lowerBound)
+    .setParameter("upperBound", upperBound)
+    .resultList as List<Array<Any?>>
+}
+
+private fun siteCount(cols: Array<Any?>): SiteCount = SiteCount(
+  location = cols[0] as String,
+  count = (cols[1] as Number).toLong(),
+)
+
+private fun siteCountOnNthDay(cols: Array<Any?>): SiteCountOnNthDay = SiteCountOnNthDay(
+  location = cols[0] as String,
+  count = (cols[1] as Number).toLong(),
+  day = (cols[2] as Number).toLong(),
+)
+
+private fun siteCheckinAverage(cols: Array<Any?>): SiteCheckinAverage = SiteCheckinAverage(
+  location = cols[0] as String,
+  completedAvg = (cols[1] as Number).toLong(),
+  completedStdDev = (cols[2] as Number).toLong(),
+  expiredAvg = (cols[3] as Number).toLong(),
+  expiredStdDev = (cols[4] as Number).toLong(),
+  completedTotal = (cols[5] as Number).toLong(),
+  expiredTotal = (cols[6] as Number).toLong(),
+  missedPercentage = (cols[7] as Number).toDouble(),
+)
+
+private fun idCheckAccuracy(cols: Array<Any?>): IdCheckAccuracy = IdCheckAccuracy(
+  location = cols[0] as String,
+  mismatchCount = (cols[1] as Number).toLong(),
+  falsePositivesAvg = (cols[2] as Number).toLong(),
+  falsePositiveStdDev = (cols[3] as Number).toLong(),
+  falseNegativesAvg = (cols[4] as Number).toLong(),
+  falseNegativesStdDev = (cols[5] as Number).toLong(),
+)
+
+private fun siteAverage(location: Any?, average: Any?): SiteAverage = SiteAverage(
+  location = location as String,
+  average = (average as? Number)?.toDouble() ?: 0.0,
+)
