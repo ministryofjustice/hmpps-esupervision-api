@@ -14,6 +14,7 @@ import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Import
+import org.springframework.core.ParameterizedTypeReference
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -50,6 +51,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompa
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
@@ -87,7 +89,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
   @Autowired lateinit var domainEventPublisher: DomainEventPublisher
 
   /**
-   * Used to setup an offender for tests
+   * Used to setup offenders for tests
    */
   val offenderInfo = OffenderInfo(
     setupUuid = UUID.randomUUID(),
@@ -102,6 +104,20 @@ class OffenderCheckinTest : IntegrationTestBase() {
   )
   var offender: OffenderDto? = null
 
+  val offenderInfo2 = OffenderInfo(
+    setupUuid = UUID.randomUUID(),
+    firstName = "Jane",
+    lastName = "Doe",
+    crn = "B234567",
+    dateOfBirth = LocalDate.of(1990, 2, 2),
+    email = "jane@example.com",
+    practitionerId = PRACTITIONER_ALICE.externalUserId(),
+    firstCheckinDate = LocalDate.now().plusDays(1),
+    checkinInterval = CheckinInterval.WEEKLY,
+  )
+
+  var offender2: OffenderDto? = null
+
   @BeforeEach
   fun setup() {
     practitionerRoleAuthHeaders = setAuthorisation(roles = listOf("ESUPERVISION__ESUPERVISION_UI"))
@@ -109,9 +125,14 @@ class OffenderCheckinTest : IntegrationTestBase() {
     reset(notificationService)
     whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
 
+    // offender 1
     val setup = offenderSetupService.startOffenderSetup(offenderInfo)
     mockSetupPhotoUpload(setup)
     offender = offenderSetupService.completeOffenderSetup(setup.uuid)
+    // offender 2
+    val setup2 = offenderSetupService.startOffenderSetup(offenderInfo2)
+    mockSetupPhotoUpload(setup2)
+    offender2 = offenderSetupService.completeOffenderSetup(setup2.uuid)
 
     reset(notificationService)
     whenever(notificationService.sendMessage(any(), any(), any()))
@@ -338,7 +359,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .exchange()
       .expectStatus().isOk
 
-    val page = offenderCheckinService.getCheckins(offender.practitioner, PageRequest.of(0, 10))
+    val page = offenderCheckinService.getCheckins(offender.practitioner, null, PageRequest.of(0, 10))
     val checkins = page.content
 
     Assertions.assertEquals(1, checkins.size)
@@ -377,6 +398,160 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     checkin.dueDate = LocalDate.of(2025, 9, 11)
     Assertions.assertFalse(checkin.isPastSubmissionDate(clock, Period.ofDays(3)))
+  }
+
+  @Test
+  fun `getCheckins_filtersByFirstOffenderId`() {
+    val checkinRequest1 = CreateCheckinRequest(
+      PRACTITIONER_ALICE.externalUserId(),
+      offender = offender!!.uuid,
+      dueDate = LocalDate.now().plusDays(2),
+    )
+    createCheckinRequest(checkinRequest1).exchange().expectStatus().isOk
+
+    val checkinRequest2 = CreateCheckinRequest(
+      PRACTITIONER_ALICE.externalUserId(),
+      offender = offender2!!.uuid,
+      dueDate = LocalDate.now().plusDays(3),
+    )
+    createCheckinRequest(checkinRequest2).exchange().expectStatus().isOk
+
+    val response = webTestClient.get()
+      .uri { uriBuilder ->
+        uriBuilder.path("/offender_checkins")
+          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
+          .queryParam("offenderId", offender!!.uuid)
+          .build()
+      }
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
+      .returnResult().responseBody!!
+
+    Assertions.assertEquals(1, response.content.size, "Should only return one check-in when filtered by offenderId")
+    Assertions.assertEquals(offender!!.uuid, response.content[0].offender.uuid, "The returned check-in should belong to the filtered offender (offender 1)")
+  }
+
+  @Test
+  fun `getCheckins_filtersBySecondOffenderId`() {
+    val checkinRequest1 = CreateCheckinRequest(
+      PRACTITIONER_ALICE.externalUserId(),
+      offender = offender!!.uuid,
+      dueDate = LocalDate.now().plusDays(2),
+    )
+    createCheckinRequest(checkinRequest1).exchange().expectStatus().isOk
+
+    val checkinRequest2 = CreateCheckinRequest(
+      PRACTITIONER_ALICE.externalUserId(),
+      offender = offender2!!.uuid,
+      dueDate = LocalDate.now().plusDays(3),
+    )
+    createCheckinRequest(checkinRequest2).exchange().expectStatus().isOk
+
+    val response = webTestClient.get()
+      .uri { uriBuilder ->
+        uriBuilder.path("/offender_checkins")
+          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
+          .queryParam("offenderId", offender2!!.uuid)
+          .build()
+      }
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
+      .returnResult().responseBody!!
+
+    Assertions.assertEquals(1, response.content.size, "Should only return one check-in when filtered by the second offenderId")
+    Assertions.assertEquals(offender2!!.uuid, response.content[0].offender.uuid, "The returned check-in should belong to the second offender")
+  }
+
+  @Test
+  fun `getCheckins_returnsEmptyList_whenOffenderHasNoCheckins`() {
+    val offenderInfo3 = OffenderInfo(
+      setupUuid = UUID.randomUUID(), firstName = "Bob", lastName = "Jones", crn = "C345678",
+      dateOfBirth = LocalDate.of(1970, 3, 3), email = "bob_jones@example.com",
+      practitionerId = PRACTITIONER_ALICE.externalUserId(), firstCheckinDate = LocalDate.now().plusDays(1),
+      checkinInterval = CheckinInterval.WEEKLY,
+    )
+    val setup3 = offenderSetupService.startOffenderSetup(offenderInfo3)
+    mockSetupPhotoUpload(setup3)
+    val offender3 = offenderSetupService.completeOffenderSetup(setup3.uuid)
+
+    val response = webTestClient.get()
+      .uri { uriBuilder ->
+        uriBuilder.path("/offender_checkins")
+          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
+          .queryParam("offenderId", offender3.uuid)
+          .build()
+      }
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
+      .returnResult().responseBody!!
+
+    Assertions.assertTrue(response.content.isEmpty(), "Should return an empty list for an offender with no check-ins")
+  }
+
+  @Test
+  fun `getCheckins_returnsEmptyList_whenOffenderIdNotFound`() {
+    val nonExistentUuid = UUID.randomUUID()
+
+    val response = webTestClient.get()
+      .uri { uriBuilder ->
+        uriBuilder.path("/offender_checkins")
+          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
+          .queryParam("offenderId", nonExistentUuid)
+          .build()
+      }
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
+      .returnResult().responseBody!!
+
+    Assertions.assertTrue(response.content.isEmpty(), "Should return an empty list when offenderId is not found")
+  }
+
+  @Test
+  fun `getCheckins_filtersBySecondOffenderId_returnsMultipleCheckins`() {
+    val checkinRequest1 = CreateCheckinRequest(
+      PRACTITIONER_ALICE.externalUserId(),
+      offender = offender2!!.uuid,
+      dueDate = LocalDate.now().plusDays(2),
+    )
+    createCheckinRequest(checkinRequest1).exchange().expectStatus().isOk
+
+    val checkinRequest2 = CreateCheckinRequest(
+      PRACTITIONER_ALICE.externalUserId(),
+      offender = offender2!!.uuid,
+      dueDate = LocalDate.now().plusDays(30),
+    )
+    createCheckinRequest(checkinRequest2).exchange().expectStatus().isOk
+
+    val checkinRequest3 = CreateCheckinRequest(
+      PRACTITIONER_ALICE.externalUserId(),
+      offender = offender2!!.uuid,
+      dueDate = LocalDate.now().plusDays(60),
+    )
+    createCheckinRequest(checkinRequest3).exchange().expectStatus().isOk
+
+    val response = webTestClient.get()
+      .uri { uriBuilder ->
+        uriBuilder.path("/offender_checkins")
+          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
+          .queryParam("offenderId", offender2!!.uuid)
+          .build()
+      }
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
+      .returnResult().responseBody!!
+
+    Assertions.assertEquals(3, response.content.size, "Should return three check-ins when filtered by the second offenderId")
+    Assertions.assertEquals(offender2!!.uuid, response.content[0].offender.uuid, "The returned check-ins should belong to the second offender")
   }
 
   private fun checkinRequestDto(): Pair<OffenderDto, CreateCheckinRequest> {
