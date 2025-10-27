@@ -24,8 +24,7 @@ app:
     offender-checkin-notification-status:
       cron: "0 30 * * * *"
     generic-notification-status:
-      cron: "0 */10 * * * *"
-      # cron: "0 0 20 * * *"
+      cron: "0 0 15 * * *"
 
 spring:
   application:
