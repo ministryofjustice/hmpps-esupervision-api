@@ -23,6 +23,9 @@ app:
       #cron: "0 0 1,10 * * *"  # Production schedule (1 AM and 10 AM daily)
     offender-checkin-notification-status:
       cron: "0 30 * * * *"
+    generic-notification-status:
+      cron: "0 */10 * * * *"
+      # cron: "0 0 20 * * *"
 
 spring:
   application:
