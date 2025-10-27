@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.stats
 
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
+import org.postgresql.util.PGInterval
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.io.Resource
 import org.springframework.jdbc.core.BatchPreparedStatementSetter
@@ -49,6 +50,11 @@ data class SiteCheckinAverage(
   val missedPercentage: Double,
 )
 
+data class SiteReviewTimeAverage(
+  val location: String,
+  val reviewTimeAvg: PGInterval?
+)
+
 data class IdCheckAccuracy(
   val location: String,
   val mismatchCount: Long,
@@ -70,9 +76,11 @@ data class Stats(
   val stoppedCheckinsPerSite: List<SiteCount>,
   val averageFlagsPerCheckinPerSite: List<SiteAverage>,
   val averageSupportRequestsPerSite: List<SiteAverage>,
+  val averageReviewTimePerCheckinPerSite: List<SiteReviewTimeAverage>,
 )
 
 private val emptyStats = Stats(
+  emptyList(),
   emptyList(),
   emptyList(),
   emptyList(),
@@ -120,6 +128,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_number_stopped_checkins.sql") private val stoppedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_flag_and_support_average_per_site.sql") private val averageFlagsAndSupportRequestsPerCheckinPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_submission_to_review_time_average.sql") private val averageReviewResponseTimePerSiteResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -133,6 +142,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlFlaggedCheckinsPerSite: String by lazy { flaggedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlStoppedCheckinsPerSite: String by lazy { stoppedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageFlagsAndSupportRequestsPerCheckinPerSite: String by lazy { averageFlagsAndSupportRequestsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageReviewResponseTimePerSiteResource: String by lazy { averageReviewResponseTimePerSiteResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -156,6 +166,7 @@ class PerSiteStatsRepositoryImpl(
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val checkinFrequencyPerSite = entityManager.runPerSiteQuery(sqlCheckinFrequencyPerSite, lowerBound, upperBound).map(::siteCheckinFrequency)
+    val averageReviewResponseTimePerSite = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::siteReviewTimeAverage)
 
     val flagsAndSupport = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
     val averageFlagsPerCheckinPerSite = mutableListOf<SiteAverage>()
@@ -177,6 +188,7 @@ class PerSiteStatsRepositoryImpl(
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
       averageSupportRequestsPerSite = averageSupportRequestsPerSite,
+      averageReviewTimePerCheckinPerSite = averageReviewResponseTimePerSite,
     )
   }
 }
@@ -254,4 +266,9 @@ private fun idCheckAccuracy(cols: Array<Any?>): IdCheckAccuracy = IdCheckAccurac
 private fun siteAverage(location: Any?, average: Any?): SiteAverage = SiteAverage(
   location = location as String,
   average = (average as? Number)?.toDouble() ?: 0.0,
+)
+
+private fun siteReviewTimeAverage(cols: Array<Any?>): SiteReviewTimeAverage = SiteReviewTimeAverage(
+  location = cols[0] as String,
+  reviewTimeAvg = cols[1] as PGInterval?,
 )

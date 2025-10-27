@@ -95,6 +95,7 @@ fun OffenderCheckin.Companion.create(
   dueDate: LocalDate = LocalDate.now(),
   autoIdCheck: AutomatedIdVerificationResult? = null,
   manualIdCheck: ManualIdVerificationResult? = null,
+  reviewedAt: Instant? = null,
 ): OffenderCheckin = OffenderCheckin(
   uuid = uuid,
   offender = offender,

@@ -25,11 +25,17 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCountOnNthDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.powerSet
+import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetTime
+import java.time.Period
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.TemporalUnit
 import java.util.UUID
+import kotlin.time.Instant
 
 class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
@@ -847,5 +853,114 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(supportAverages.find { it.location == "Site A" }?.average).isCloseTo(1.0, within(0.01))
     assertThat(supportAverages.find { it.location == "Site B" }?.average).isCloseTo(1.5, within(0.01))
     assertThat(supportAverages.find { it.location == "UNKNOWN" }?.average).isCloseTo(1.0, within(0.01))
+  }
+
+  @Test
+  fun `calculates average review response time per site`() {
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2 = PRACTITIONER_BOB.externalUserId()
+    val practitioner3 = PRACTITIONER_DAVE.externalUserId()
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+      // PractitionerSite(practitioner3, "Site C"), // we want to make sure "UNKNOWN" (missing mapping) shows up in the results
+    )
+
+    val offenderA = offenderRepository.save(Offender.create(name = "Offender A", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val offenderC = offenderRepository.save(Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+
+    checkinRepository.saveAll(
+      listOf(
+        // Reviewed with 4 hours between submission & review
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.REVIEWED,
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = java.time.Instant.now().minus(6, ChronoUnit.HOURS),
+          reviewedAt = java.time.Instant.now().minus(2, ChronoUnit.HOURS),
+        ),
+        // Reviewed with 8 hours between submission & review
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = java.time.Instant.now().minus(8, ChronoUnit.HOURS).minus(1, ChronoUnit.DAYS),
+          reviewedAt = java.time.Instant.now().minus(1, ChronoUnit.DAYS),
+        ),
+        // Submitted not yet reviewed
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(2),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = java.time.Instant.now().minus(6, ChronoUnit.HOURS).minus(2, ChronoUnit.DAYS),
+        ),
+        // Reviewed with 36 hours between submission & review
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.REVIEWED,
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = java.time.Instant.now().minus(36, ChronoUnit.HOURS),
+          reviewedAt = java.time.Instant.now(),
+        ),
+        // Reviewed with 12 hours between submission & review
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = java.time.Instant.now().minus(14, ChronoUnit.HOURS).minus(1, ChronoUnit.DAYS),
+          reviewedAt = java.time.Instant.now().minus(2, ChronoUnit.HOURS).minus(1, ChronoUnit.DAYS),
+        ),
+        // Reviewed with 1 hour between submission & review
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(2),
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = java.time.Instant.now().minus(3, ChronoUnit.HOURS).minus(2, ChronoUnit.DAYS),
+          reviewedAt = java.time.Instant.now().minus(2, ChronoUnit.HOURS).minus(2, ChronoUnit.DAYS),
+        ),
+        // Reviewed with 30 minutes & 45 seconds between submission & review
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.REVIEWED,
+          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = java.time.Instant.now().minus(30, ChronoUnit.MINUTES).minus(45, ChronoUnit.MINUTES),
+          reviewedAt = java.time.Instant.now(),
+        ),
+        // Created not submitted or reviewed
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          dueDate = LocalDate.now().minusDays(1),
+          status = CheckinStatus.CREATED,
+        ),
+      )
+    )
+
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    val reviewResponseTimeAverages = stats.averageReviewTimePerCheckinPerSite
+    assertThat(reviewResponseTimeAverages).hasSize(3)
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvg).isEqualTo(Duration.ofHours(6))
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site B" }?.reviewTimeAvg).isEqualTo(Duration.ofHours(24))
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvg)
+      .isEqualTo(Duration.ofMinutes(45).plusSeconds(22).plusNanos(5))
   }
 }
