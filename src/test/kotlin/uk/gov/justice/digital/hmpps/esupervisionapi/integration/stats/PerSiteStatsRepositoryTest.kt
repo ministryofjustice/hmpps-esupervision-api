@@ -769,7 +769,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `calculates average support requests per check-in for each site`() {
+  fun `calculates percentage of check-ins with callback request for each site`() {
     val practitioner1 = PRACTITIONER_ALICE.externalUserId()
     val practitioner2 = PRACTITIONER_BOB.externalUserId()
     val practitioner3 = PRACTITIONER_DAVE.externalUserId()
@@ -785,7 +785,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     checkinRepository.saveAll(
       listOf(
-        // Check-in with 1 request for support
+        // Site A: Check-in 1, callback: YES
         OffenderCheckin.create(
           offender = offenderA,
           createdBy = practitioner1,
@@ -794,7 +794,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "STRUGGLING", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
-        // Check-in with 2 requests for
+        // Site A: Check-in 2, callback: NO
         OffenderCheckin.create(
           offender = offenderA,
           createdBy = practitioner1,
@@ -803,7 +803,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("DRUGS", "HOUSING")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
-        // Check-in with 0 requests
+        // Site A: Check-in 3, callback: NO
         OffenderCheckin.create(
           offender = offenderA,
           createdBy = practitioner1,
@@ -812,7 +812,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
         ),
-        // 3 requests
+        // Site B: Check-in 1, callback: YES
         OffenderCheckin.create(
           offender = offenderB,
           createdBy = practitioner2,
@@ -821,7 +821,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("HOUSING", "MONEY")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
         ),
-        // 0 requests
+        // Site B: Check-in 2, callback: NO
         OffenderCheckin.create(
           offender = offenderB,
           createdBy = practitioner2,
@@ -830,7 +830,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
-        // one request practitioner has no site mapping
+        // UNKNOWN: Check-in 1, callback: YES
         OffenderCheckin.create(
           offender = offenderC,
           createdBy = practitioner3,
@@ -842,10 +842,10 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       ),
     )
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
-    val supportAverages = stats.averageSupportRequestsPerSite
-    assertThat(supportAverages).hasSize(3)
-    assertThat(supportAverages.find { it.location == "Site A" }?.average).isCloseTo(1.0, within(0.01))
-    assertThat(supportAverages.find { it.location == "Site B" }?.average).isCloseTo(1.5, within(0.01))
-    assertThat(supportAverages.find { it.location == "UNKNOWN" }?.average).isCloseTo(1.0, within(0.01))
+    val callbackPercentages = stats.callbackRequestPercentagePerSite
+    assertThat(callbackPercentages).hasSize(3)
+    assertThat(callbackPercentages.find { it.location == "Site A" }?.average).isCloseTo(33.33, within(0.01))
+    assertThat(callbackPercentages.find { it.location == "Site B" }?.average).isCloseTo(50.0, within(0.01))
+    assertThat(callbackPercentages.find { it.location == "UNKNOWN" }?.average).isCloseTo(100.0, within(0.01))
   }
 }
