@@ -3,13 +3,9 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.net.URL
-import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 enum class CheckinStatus {
@@ -144,51 +140,3 @@ fun flaggedFor20250710pilot(survey: SurveyContents): List<String> {
 
   return result.toList()
 }
-
-enum class NotificationContextType {
-  SCHEDULED_JOB,
-  SINGLE,
-}
-
-sealed class NotificationContext(
-  val reference: String,
-  /**
-   * Answers *why* are we sending the notification
-   */
-  val type: NotificationContextType,
-)
-
-/**
- * To be used for bulk notifications (e.g., in a scheduled job, so that we can link
- * are notifications to that job).
- */
-data class BulkNotificationContext(val ref: String) : NotificationContext(ref, NotificationContextType.SCHEDULED_JOB)
-
-/**
- * To be used for one-off notification.
- */
-data class SingleNotificationContext(val ref: String) : NotificationContext(ref, NotificationContextType.SINGLE) {
-
-  companion object {
-    fun from(notificationId: UUID) = SingleNotificationContext("SNGL-$notificationId")
-
-    fun forCheckin(now: LocalDate) = SingleNotificationContext("CHK-${now.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
-
-    fun forCheckin(clock: Clock) = forCheckin(clock.today())
-  }
-}
-
-data class NotificationResultSummary(
-  val notificationId: UUID,
-  val context: NotificationContext,
-  val timestamp: ZonedDateTime,
-  val status: String?,
-  val error: String?,
-)
-
-/**
- * NOTE: stored in as JSON in the DB
- */
-data class NotificationResults(
-  val results: List<NotificationResultSummary>,
-)

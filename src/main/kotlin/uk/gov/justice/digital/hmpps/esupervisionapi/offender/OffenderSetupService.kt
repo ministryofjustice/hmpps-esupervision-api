@@ -6,8 +6,11 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.saveNotifications
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
@@ -26,6 +29,7 @@ class OffenderSetupService(
   private val offenderCheckinService: OffenderCheckinService,
   private val notificationService: NotificationService,
   private val offenderEventLogRepository: OffenderEventLogRepository,
+  private val genericNotificationRepository: GenericNotificationRepository,
 ) {
 
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetup> = offenderSetupRepository.findByUuid(uuid)
@@ -96,8 +100,15 @@ class OffenderSetupService(
 
     // send registration confirmation message to PoP
     val confirmationMessage = RegistrationConfirmationMessage.fromSetup(setup.get())
-    val notifResult = this.notificationService.sendMessage(confirmationMessage, saved, SingleNotificationContext.from(UUID.randomUUID()))
+    val notifContext = SingleNotificationContext.from(confirmationMessage, clock)
+    val notifResult = this.notificationService.sendMessage(confirmationMessage, saved, notifContext)
     LOG.info("Completing offender setup for offender uuid={}, notification-ids={}", saved.uuid, notifResult.results.map { it.notificationId })
+
+    try {
+      genericNotificationRepository.saveNotifications(confirmationMessage.messageType, notifContext, notifResult)
+    } catch (e: Exception) {
+      LOG.warn("Failed to persist registration confirmation notifications for offender={}, reference={}", saved.uuid, notifResult.results.map { it.notificationId }, e)
+    }
 
     val firstCheckinDate = offender.firstCheckin
     LOG.debug("offender={}, firstCheckinDate={}", offender.uuid, firstCheckinDate)
