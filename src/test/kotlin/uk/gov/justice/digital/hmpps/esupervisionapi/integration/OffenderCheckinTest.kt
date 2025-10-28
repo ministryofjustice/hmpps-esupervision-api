@@ -19,6 +19,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResultSummary
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResults
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
@@ -86,6 +87,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
   @Autowired lateinit var domainEventPublisher: DomainEventPublisher
 
+  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+
   /**
    * Used to setup an offender for tests
    */
@@ -124,6 +127,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
   @AfterEach
   fun tearDown() {
+    genericNotificationRepository.deleteAll()
     offenderEventLogRepository.deleteAll()
     offenderSetupRepository.deleteAll()
     offenderCheckinRepository.deleteAll()
