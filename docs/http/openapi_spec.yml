@@ -1,0 +1,129 @@
+title: E-supervision API
+summary: API for managing invites and checkins for remote supervision
+servers:
+  - url: https://esupervision-api-dev.hmpps.service.justice.gov.uk
+    description: Development API
+components:
+  schemas:
+    InviteRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+    Invite:
+      type: object
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        created:
+          type: string
+          format: datetime
+    SurveyResponse:
+      type: object
+      properties:
+        detailsChanged:
+          type: boolean
+
+/invites:
+  get:
+    description: Gets all outstanding invites in the system
+    responses:
+      '200':
+        description: List of invites
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Invite'
+  post:
+    description: Create a new invite
+    requestBody:
+      $ref: '#/components/schemas/InviteRequest'
+/invites/{inviteId}:
+  get:
+    description: Gets an invite
+    responses:
+      '200':
+        description: The invite
+        content:
+          application/json:
+            schema:
+              type:
+                $ref: '#/components/schemas/Invite'
+      '404':
+        description: The invite was not found
+  delete:
+    description: Delete an invite
+    responses:
+      '204':
+        description: The invite was deleted
+      '404':
+        description: The invite does not exist
+/pops/{popId}:
+  get:
+    description: Gets a person on probation
+    responses:
+      '200':
+        description: The person on probation
+        content:
+          application/json:
+            schema:
+              type:
+                $ref: '#/components/schemas/PersonOnProbation'
+      '400':
+        description: The person on probation was not found
+/pops/find:
+  get:
+    description: Searches for a person on probation by their details
+    parameters:
+      - name: firstName
+        in: query
+        required: true
+      - name: lastName
+        in: query
+        required: true
+      - name: dateOfBirth
+        in: query
+        required: true
+    responses:
+      '301':
+        description: Redirects to the person on probation resource
+      '404':
+        description: No person on probation was found with the submitted details
+/pops/{popId}/checkins:
+  post:
+    description: Submit a checkin for a person on probation
+    requestBody:
+      multipart/form-data:
+        schema:
+          type: object
+          properties:
+            video:
+              type: string
+              format: binary
+            answers:
+              type: string
+/pops/{popId}/checkins/{checkinId}/video:
+  get:
+    description: Retrieves the video for the checkin
+    responses:
+      '301':
+        description: Returns a link to the video on s3
+      '404':
+        description: If either the PoP id or checkin id is invalid
+/pops/{popId}/checkins/{checkinId}/survey:
+  get:
+    description: Returns the survey answers for the checkin
+    responses:
+      '200':
+        description: Submitted survey responses for the checkin
+        content:
+          application/json:
+            schema:
+              '#/components/schemas/SurveyResponse'
+
