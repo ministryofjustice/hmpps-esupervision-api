@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockS3Config
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.CheckinNotificationStatusUpdater
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.StatusCollection
@@ -36,10 +37,13 @@ class CheckinNotificationStatusUpdaterTest : IntegrationTestBase() {
 
   @Autowired private lateinit var statusUpdater: CheckinNotificationStatusUpdater
 
+  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+
   private val clock: Clock = Clock.systemUTC()
 
   @AfterEach
   fun cleanUp() {
+    genericNotificationRepository.deleteAll()
     offenderEventLogRepository.deleteAll()
     offenderSetupRepository.deleteAll()
     offenderCheckinRepository.deleteAll()
