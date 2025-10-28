@@ -10,8 +10,10 @@ CREATE TABLE IF NOT EXISTS "generic_notification" (
     "status" VARCHAR(255),
     "updated_at" TIMESTAMP(6) WITH TIME ZONE,
     "job_log" BIGINT,
+    "offender_id" BIGINT,
     CONSTRAINT "generic_notification_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "fk_generic_notification_job_log" FOREIGN KEY ("job_log") REFERENCES "job_log" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
+    CONSTRAINT "fk_generic_notification_offender_id" FOREIGN KEY ("offender_id") REFERENCES "offender" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
     CONSTRAINT "idx_generic_notification_notification_id" UNIQUE(notification_id)
 );
 
@@ -24,3 +26,5 @@ CREATE INDEX IF NOT EXISTS "idx_generic_notification_created_at" ON "generic_not
 -- changeset roland.sadowski:5_create_generic_notification-4 splitStatements:false
 CREATE INDEX IF NOT EXISTS "idx_generic_notification_message_type" ON "generic_notification" USING btree("message_type");
 
+-- changeset roland.sadowski:5_create_generic_notification-5 splitStatements:false
+CREATE INDEX IF NOT EXISTS "idx_generic_notification_offender_id" ON "generic_notification" USING btree("offender_id");

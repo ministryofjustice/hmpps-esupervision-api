@@ -239,7 +239,7 @@ class OffenderCheckinService(
     val offenderNotifResults = this.notificationService.sendMessage(offenderConfirmation, checkin.offender, offenderNotifContext)
 
     try {
-      genericNotificationRepository.saveNotifications(offenderConfirmation.messageType, offenderNotifContext, offenderNotifResults)
+      genericNotificationRepository.saveNotifications(offenderConfirmation.messageType, offenderNotifContext, offender, offenderNotifResults)
     } catch (e: Exception) {
       LOG.warn("Failed to persist offender checkin submitted notifications for checkin={}, reference={}", checkin.uuid, offenderNotifResults.results.map { it.notificationId }, e)
     }

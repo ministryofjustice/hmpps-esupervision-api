@@ -194,7 +194,7 @@ class OffenderService(
     )
 
     try {
-      genericNotificationRepository.saveNotifications(offenderCheckinsStoppedMessage.messageType, notificationContext, notifResults)
+      genericNotificationRepository.saveNotifications(offenderCheckinsStoppedMessage.messageType, notificationContext, offender, notifResults)
     } catch (e: Exception) {
       LOG.warn("Failed to persist offender checkins stopped notifications for offender={}, reference={}", offender.uuid, notifResults.results.map { it.notificationId }, e)
     }

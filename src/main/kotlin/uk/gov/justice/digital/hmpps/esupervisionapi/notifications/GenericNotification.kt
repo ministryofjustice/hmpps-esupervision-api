@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 
+import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Index
@@ -12,13 +13,14 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.JobLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.AEntity
 import java.time.Instant
 import java.util.UUID
 
 /**
  * Generic notification entity for tracking delivery status of various messages.
- * Currently used for offender-specific messages but modelled for extension.
+ * Currently focused on offender specific notifications.
  */
 @Entity
 @Table(
@@ -50,6 +52,10 @@ open class GenericNotification(
   @ManyToOne()
   @JoinColumn(name = "job_log", nullable = true)
   open var job: JobLog? = null,
+
+  @ManyToOne(cascade = [CascadeType.DETACH])
+  @JoinColumn("offender_id", referencedColumnName = "id", nullable = true)
+  open var offender: Offender? = null,
 
   /**
    * Set to one of the relevant statuses obtained from GOV.UK Notify

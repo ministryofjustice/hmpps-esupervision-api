@@ -105,7 +105,7 @@ class OffenderSetupService(
     LOG.info("Completing offender setup for offender uuid={}, notification-ids={}", saved.uuid, notifResult.results.map { it.notificationId })
 
     try {
-      genericNotificationRepository.saveNotifications(confirmationMessage.messageType, notifContext, notifResult)
+      genericNotificationRepository.saveNotifications(confirmationMessage.messageType, notifContext, offender, notifResult)
     } catch (e: Exception) {
       LOG.warn("Failed to persist registration confirmation notifications for offender={}, reference={}", saved.uuid, notifResult.results.map { it.notificationId }, e)
     }
