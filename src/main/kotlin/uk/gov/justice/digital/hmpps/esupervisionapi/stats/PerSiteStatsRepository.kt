@@ -276,13 +276,15 @@ private fun siteAverage(location: Any?, average: Any?): SiteAverage = SiteAverag
 private fun siteReviewTimeAverage(cols: Array<Any?>): SiteReviewTimeAverage = SiteReviewTimeAverage(
   location = cols[0] as String,
   reviewTimeAvg = cols[1] as PGInterval? ?: PGInterval(),
-  reviewTimeAvgText = String.format("%sh%sm%ss",
-    (((cols[1] as PGInterval?)?.days ?: 0) * 24) + ((cols[1] as PGInterval?)?.hours  ?: 0),
+  reviewTimeAvgText = String.format(
+    "%sh%sm%ss",
+    (((cols[1] as PGInterval?)?.days ?: 0) * 24) + ((cols[1] as PGInterval?)?.hours ?: 0),
     (cols[1] as PGInterval?)?.minutes,
-    (cols[1] as PGInterval?)?.wholeSeconds),
+    (cols[1] as PGInterval?)?.wholeSeconds,
+  ),
 )
 
-private fun siteReviewTimeAverageTotal(averagesPerSite: List<SiteReviewTimeAverage>): String{
+private fun siteReviewTimeAverageTotal(averagesPerSite: List<SiteReviewTimeAverage>): String {
   if (averagesPerSite.isEmpty()) return "0h0m0s"
   var hours = 0
   var minutes = 0
@@ -295,5 +297,10 @@ private fun siteReviewTimeAverageTotal(averagesPerSite: List<SiteReviewTimeAvera
     println(averagePerSite)
   }
 
-  return String.format("%sh%sm%ss", hours / averagesPerSite.size, minutes / averagesPerSite.size, wholeSeconds / averagesPerSite.size)
+  return String.format(
+    "%sh%sm%ss",
+    hours / averagesPerSite.size,
+    minutes / averagesPerSite.size,
+    wholeSeconds / averagesPerSite.size,
+  )
 }
