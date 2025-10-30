@@ -15,14 +15,15 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockS3Config
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.CheckinNotificationStatusUpdater
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.StatusCollection
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
@@ -36,10 +37,13 @@ class CheckinNotificationStatusUpdaterTest : IntegrationTestBase() {
 
   @Autowired private lateinit var statusUpdater: CheckinNotificationStatusUpdater
 
+  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+
   private val clock: Clock = Clock.systemUTC()
 
   @AfterEach
   fun cleanUp() {
+    genericNotificationRepository.deleteAll()
     offenderEventLogRepository.deleteAll()
     offenderSetupRepository.deleteAll()
     offenderCheckinRepository.deleteAll()

@@ -19,10 +19,16 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationContextType
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResults
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.saveNotifications
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.CheckinVerificationImages
@@ -76,6 +82,7 @@ class OffenderCheckinService(
   private val practitionerRepository: PractitionerRepository,
   private val eventPublisher: DomainEventPublisher,
   private val appConfig: AppConfig,
+  private val genericNotificationRepository: GenericNotificationRepository,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -228,7 +235,14 @@ class OffenderCheckinService(
 
     // notify PoP that checkin was received
     val offenderConfirmation = OffenderCheckinSubmittedMessage.fromCheckin(checkin)
-    this.notificationService.sendMessage(offenderConfirmation, checkin.offender, SingleNotificationContext.from(UUID.randomUUID()))
+    val offenderNotifContext = SingleNotificationContext.from(offenderConfirmation, clock)
+    val offenderNotifResults = this.notificationService.sendMessage(offenderConfirmation, checkin.offender, offenderNotifContext)
+
+    try {
+      genericNotificationRepository.saveNotifications(offenderConfirmation.messageType, offenderNotifContext, offender, offenderNotifResults)
+    } catch (e: Exception) {
+      LOG.warn("Failed to persist offender checkin submitted notifications for checkin={}, reference={}", checkin.uuid, offenderNotifResults.results.map { it.notificationId }, e)
+    }
 
     if (offender.crn != null) {
       eventPublisher.publish(checkinReceivedEvent(offender, checkin, now))
@@ -409,7 +423,7 @@ class OffenderCheckinService(
     }
 
     val inviteMessage = OffenderCheckinInviteMessage.fromCheckin(checkin, checkinWindowPeriod)
-    val notificationContext = SingleNotificationContext.forCheckin(clock)
+    val notificationContext = SingleNotificationContext.from(inviteMessage, clock)
     val inviteResults = this.notificationService.sendMessage(
       inviteMessage,
       checkin.offender,

@@ -12,9 +12,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.PersonReference
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.BulkNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinMissedMessage
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId

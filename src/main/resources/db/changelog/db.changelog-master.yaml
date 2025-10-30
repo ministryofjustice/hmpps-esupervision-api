@@ -7,3 +7,5 @@ databaseChangeLog:
       file : db/changelog/changesets/3_new_event_type_for_setup_completion.sql
   - include:
       file : db/changelog/changesets/4_new_event_type_checkin_reschedule.sql
+  - include:
+      file: db/changelog/changesets/5_create_generic_notification.sql

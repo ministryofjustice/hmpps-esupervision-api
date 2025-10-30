@@ -16,6 +16,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.EntityExchangeResult
 import org.springframework.test.web.reactive.server.WebTestClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.RegistrationConfirmationMessage
@@ -42,6 +43,8 @@ class OffenderSetupTest : IntegrationTestBase() {
   @Autowired
   private lateinit var notificationService: NotificationService
 
+  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+
   @BeforeEach
   internal fun setUp() {
     practitionerRoleAuthHeaders = setAuthorisation(roles = listOf("ESUPERVISION__ESUPERVISION_UI"))
@@ -54,6 +57,7 @@ class OffenderSetupTest : IntegrationTestBase() {
 
   @AfterEach
   internal fun tearDown() {
+    genericNotificationRepository.deleteAll()
     checkinRepository.deleteAll()
     offenderSetupRepository.deleteAll()
     offenderEventLogRepository.deleteAll()

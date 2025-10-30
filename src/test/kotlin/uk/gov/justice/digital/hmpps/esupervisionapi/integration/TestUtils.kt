@@ -1,10 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResults
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderInfo
