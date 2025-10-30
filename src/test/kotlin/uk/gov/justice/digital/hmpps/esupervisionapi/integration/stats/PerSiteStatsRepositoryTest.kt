@@ -26,17 +26,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCountOnNthDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.powerSet
-import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetTime
-import java.time.Period
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
-import java.time.temporal.TemporalAdjusters
-import java.time.temporal.TemporalUnit
 import java.util.UUID
-import kotlin.time.Instant
 
 class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
@@ -955,18 +950,18 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(1),
           status = CheckinStatus.CREATED,
         ),
-      )
+      ),
     )
 
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
     val reviewResponseTimeAverages = stats.averageReviewTimePerCheckinPerSite
     assertThat(reviewResponseTimeAverages).hasSize(3)
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvg).isEqualTo(PGInterval(0,0,0,6,0,0.0))
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvgText).isEqualTo("6h0m0s")
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site B" }?.reviewTimeAvg).isEqualTo(PGInterval(0,0,0,22,0,0.0))
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site B" }?.reviewTimeAvgText).isEqualTo("22h0m0s")
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "UNKNOWN" }?.reviewTimeAvg).isEqualTo(PGInterval(0,0,0,0,45,22.5))
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h45m22s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site A" }?.reviewTimeAvg).isEqualTo(PGInterval(0, 0, 0, 6, 0, 0.0))
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site A" }?.reviewTimeAvgText).isEqualTo("6h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.reviewTimeAvg).isEqualTo(PGInterval(0, 0, 0, 22, 0, 0.0))
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.reviewTimeAvgText).isEqualTo("22h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.reviewTimeAvg).isEqualTo(PGInterval(0, 0, 0, 0, 45, 22.5))
+    assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h45m22s")
     assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("9h15m7s")
   }
 }
