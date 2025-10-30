@@ -118,6 +118,51 @@ interface OffenderCheckinRepository : org.springframework.data.jpa.repository.Jp
     pageable: Pageable,
   ): Page<OffenderCheckin>
 
+  @EntityGraph(attributePaths = ["offender", "createdBy", "reviewedBy"], type = EntityGraph.EntityGraphType.LOAD)
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    WHERE c.createdBy = :practitionerId
+      AND (:offenderUuid IS NULL OR c.offender.uuid = :offenderUuid)
+      AND (c.status = 'SUBMITTED' OR (c.status = 'EXPIRED' AND c.reviewedAt IS NULL))
+    """,
+  )
+  fun findNeedsAttention(
+    practitionerId: ExternalUserId,
+    offenderUuid: UUID?,
+    pageable: Pageable,
+  ): Page<OffenderCheckin>
+
+  @EntityGraph(attributePaths = ["offender", "createdBy", "reviewedBy"], type = EntityGraph.EntityGraphType.LOAD)
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    WHERE c.createdBy = :practitionerId
+      AND (:offenderUuid IS NULL OR c.offender.uuid = :offenderUuid)
+      AND (c.status = 'REVIEWED' OR (c.status = 'EXPIRED' AND c.reviewedAt IS NOT NULL))
+    """,
+  )
+  fun findReviewed(
+    practitionerId: ExternalUserId,
+    offenderUuid: UUID?,
+    pageable: Pageable,
+  ): Page<OffenderCheckin>
+
+  @EntityGraph(attributePaths = ["offender", "createdBy", "reviewedBy"], type = EntityGraph.EntityGraphType.LOAD)
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    WHERE c.createdBy = :practitionerId
+      AND (:offenderUuid IS NULL OR c.offender.uuid = :offenderUuid)
+      AND c.status = 'CREATED'
+    """,
+  )
+  fun findAwaitingCheckin(
+    practitionerId: ExternalUserId,
+    offenderUuid: UUID?,
+    pageable: Pageable,
+  ): Page<OffenderCheckin>
+
   @Query(
     """
     SELECT c FROM OffenderCheckin c

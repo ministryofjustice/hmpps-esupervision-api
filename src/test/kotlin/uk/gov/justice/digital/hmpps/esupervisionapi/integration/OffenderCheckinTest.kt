@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
+import org.springframework.test.web.reactive.server.returnResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
@@ -27,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderChecki
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinListUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.DeactivateOffenderCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
@@ -47,6 +49,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupServic
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.isPastSubmissionDate
+import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
@@ -117,6 +120,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
   )
 
   var offender2: OffenderDto? = null
+
+  val bogusOffender = OffenderDto(uuid = UUID.randomUUID(), firstName = "Bob", lastName = "Smith", crn = "X000000", dateOfBirth = LocalDate.now(), practitioner = "NONE", email = null, phoneNumber = null, createdAt = Instant.now(), photoUrl = null, firstCheckin = null, checkinInterval = CheckinInterval.WEEKLY)
 
   @BeforeEach
   fun setup() {
@@ -241,6 +246,10 @@ class OffenderCheckinTest : IntegrationTestBase() {
     Assertions.assertEquals(ManualIdVerificationResult.MATCH, reviewedCheckin.manualIdCheck)
 
     verify(domainEventPublisher).publish(any())
+
+    val reviewedCheckins = getCheckins(PRACTITIONER_ALICE, offender, CheckinListUseCase.REVIEWED)
+    Assertions.assertEquals(1, reviewedCheckins.content.size)
+    Assertions.assertEquals(PRACTITIONER_ALICE.externalUserId(), reviewedCheckins.content[0].reviewedBy)
   }
 
   fun mockCheckinVerification(checkin: OffenderCheckinDto, result: AutomatedIdVerificationResult) {
@@ -416,19 +425,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     )
     createCheckinRequest(checkinRequest2).exchange().expectStatus().isOk
 
-    val response = webTestClient.get()
-      .uri { uriBuilder ->
-        uriBuilder.path("/offender_checkins")
-          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
-          .queryParam("offenderId", offender!!.uuid)
-          .build()
-      }
-      .headers(practitionerRoleAuthHeaders)
-      .exchange()
-      .expectStatus().isOk
-      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
-      .returnResult().responseBody!!
-
+    val response = getCheckins(PRACTITIONER_ALICE, offender!!, null)
     Assertions.assertEquals(1, response.content.size, "Should only return one check-in when filtered by offenderId")
     Assertions.assertEquals(offender!!.uuid, response.content[0].offender.uuid, "The returned check-in should belong to the filtered offender (offender 1)")
   }
@@ -449,21 +446,19 @@ class OffenderCheckinTest : IntegrationTestBase() {
     )
     createCheckinRequest(checkinRequest2).exchange().expectStatus().isOk
 
-    val response = webTestClient.get()
-      .uri { uriBuilder ->
-        uriBuilder.path("/offender_checkins")
-          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
-          .queryParam("offenderId", offender2!!.uuid)
-          .build()
-      }
-      .headers(practitionerRoleAuthHeaders)
-      .exchange()
-      .expectStatus().isOk
-      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
-      .returnResult().responseBody!!
-
+    val response = getCheckins(PRACTITIONER_ALICE, offender2!!, null)
     Assertions.assertEquals(1, response.content.size, "Should only return one check-in when filtered by the second offenderId")
     Assertions.assertEquals(offender2!!.uuid, response.content[0].offender.uuid, "The returned check-in should belong to the second offender")
+
+    val responseAwaitingCheckin = getCheckins(PRACTITIONER_ALICE, offender2!!, CheckinListUseCase.AWAITING_CHECKIN)
+    Assertions.assertEquals(1, responseAwaitingCheckin.content.size)
+    Assertions.assertEquals(offender2!!.uuid, responseAwaitingCheckin.content[0].offender.uuid)
+
+    val responseNeedsAttention = getCheckins(PRACTITIONER_ALICE, offender2!!, CheckinListUseCase.NEEDS_ATTENTION)
+    Assertions.assertEquals(0, responseNeedsAttention.content.size)
+
+    val responseReviewed = getCheckins(PRACTITIONER_ALICE, offender2!!, CheckinListUseCase.REVIEWED)
+    Assertions.assertEquals(0, responseReviewed.content.size)
   }
 
   @Test
@@ -478,19 +473,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     mockSetupPhotoUpload(setup3)
     val offender3 = offenderSetupService.completeOffenderSetup(setup3.uuid)
 
-    val response = webTestClient.get()
-      .uri { uriBuilder ->
-        uriBuilder.path("/offender_checkins")
-          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
-          .queryParam("offenderId", offender3.uuid)
-          .build()
-      }
-      .headers(practitionerRoleAuthHeaders)
-      .exchange()
-      .expectStatus().isOk
-      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
-      .returnResult().responseBody!!
-
+    val response = getCheckins(PRACTITIONER_ALICE, offender3, null)
     Assertions.assertTrue(response.content.isEmpty(), "Should return an empty list for an offender with no check-ins")
   }
 
@@ -498,19 +481,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
   fun `getCheckins_returnsEmptyList_whenOffenderIdNotFound`() {
     val nonExistentUuid = UUID.randomUUID()
 
-    val response = webTestClient.get()
-      .uri { uriBuilder ->
-        uriBuilder.path("/offender_checkins")
-          .queryParam("practitioner", PRACTITIONER_ALICE.externalUserId())
-          .queryParam("offenderId", nonExistentUuid)
-          .build()
-      }
-      .headers(practitionerRoleAuthHeaders)
-      .exchange()
-      .expectStatus().isOk
-      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
-      .returnResult().responseBody!!
-
+    val response = getCheckins(PRACTITIONER_ALICE, bogusOffender, null)
     Assertions.assertTrue(response.content.isEmpty(), "Should return an empty list when offenderId is not found")
   }
 
@@ -625,6 +596,27 @@ class OffenderCheckinTest : IntegrationTestBase() {
       )
         .thenReturn(URI("https://the-bucket/pic/$index").toURL())
     }
+  }
+
+  fun getCheckins(practitioner: Practitioner, offender: OffenderDto, useCase: CheckinListUseCase?): CollectionDto<OffenderCheckinDto> {
+    val response = webTestClient.get()
+      .uri uri@{ uriBuilder ->
+        val builder = uriBuilder.path("/offender_checkins")
+          .queryParam("practitioner", practitioner.externalUserId())
+          .queryParam("offenderId", offender.uuid)
+        if (useCase != null) {
+          return@uri builder.queryParam("useCase", useCase.name).build()
+        } else {
+          return@uri builder.build()
+        }
+      }
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+
+    return response
+      .expectBody(object : ParameterizedTypeReference<CollectionDto<OffenderCheckinDto>>() {})
+      .returnResult().responseBody!!
   }
 }
 

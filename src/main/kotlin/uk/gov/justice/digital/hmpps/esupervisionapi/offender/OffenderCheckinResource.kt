@@ -31,6 +31,17 @@ import java.time.Clock
 import java.time.Duration
 import java.util.UUID
 
+/**
+ * Use-case hint for listing offender check-ins.
+ *
+ * Corresponds to the views presented by the fron end.
+ */
+enum class CheckinListUseCase {
+  NEEDS_ATTENTION,
+  REVIEWED,
+  AWAITING_CHECKIN,
+}
+
 @RestController
 @RequestMapping(path = ["/offender_checkins"])
 @Validated
@@ -49,6 +60,8 @@ class OffenderCheckinResource(
     @RequestParam("practitioner") practitionerId: ExternalUserId,
     @Parameter(description = "Filter by a offender UUID")
     @RequestParam(name = "offenderId", required = false) offenderId: UUID?,
+    @Parameter(description = "Hint for which UI tab/use-case to fetch: NEEDS_ATTENTION, REVIEWED, AWAITING_CHECKIN. If omitted, returns all.")
+    @RequestParam(name = "useCase", required = false) useCase: CheckinListUseCase?,
     @Parameter(description = "Zero-based page index")
     @RequestParam(defaultValue = "0") page: Int,
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
@@ -57,7 +70,7 @@ class OffenderCheckinResource(
   ): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
     val sortDirection = Sort.Direction.fromString(direction)
     val pageRequest = PageRequest.of(page, size, Sort.by(sortDirection, "dueDate"))
-    val checkins = offenderCheckinService.getCheckins(practitionerId, offenderId, pageRequest)
+    val checkins = offenderCheckinService.getCheckins(practitionerId, offenderId, pageRequest, useCase)
     return ResponseEntity.ok(checkins)
   }
 
