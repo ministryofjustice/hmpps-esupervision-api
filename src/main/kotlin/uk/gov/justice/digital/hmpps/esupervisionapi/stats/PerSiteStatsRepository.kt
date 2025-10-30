@@ -52,7 +52,8 @@ data class SiteCheckinAverage(
 
 data class SiteReviewTimeAverage(
   val location: String,
-  val reviewTimeAvg: PGInterval?
+  val reviewTimeAvg: PGInterval?,
+  var reviewTimeAvgText: String?,
 )
 
 data class IdCheckAccuracy(
@@ -77,6 +78,7 @@ data class Stats(
   val averageFlagsPerCheckinPerSite: List<SiteAverage>,
   val averageSupportRequestsPerSite: List<SiteAverage>,
   val averageReviewTimePerCheckinPerSite: List<SiteReviewTimeAverage>,
+  val averageReviewTimePerCheckinTotal: String,
 )
 
 private val emptyStats = Stats(
@@ -92,6 +94,7 @@ private val emptyStats = Stats(
   emptyList(),
   emptyList(),
   emptyList(),
+  String(),
 )
 
 /**
@@ -166,7 +169,8 @@ class PerSiteStatsRepositoryImpl(
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val checkinFrequencyPerSite = entityManager.runPerSiteQuery(sqlCheckinFrequencyPerSite, lowerBound, upperBound).map(::siteCheckinFrequency)
-    val averageReviewResponseTimePerSite = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::siteReviewTimeAverage)
+    val averageReviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::siteReviewTimeAverage)
+    val averageReviewResponseTimeTotal = siteReviewTimeAverageTotal(averageReviewResponseTimes)
 
     val flagsAndSupport = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
     val averageFlagsPerCheckinPerSite = mutableListOf<SiteAverage>()
@@ -188,7 +192,8 @@ class PerSiteStatsRepositoryImpl(
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
       averageSupportRequestsPerSite = averageSupportRequestsPerSite,
-      averageReviewTimePerCheckinPerSite = averageReviewResponseTimePerSite,
+      averageReviewTimePerCheckinPerSite = averageReviewResponseTimes,
+      averageReviewResponseTimeTotal,
     )
   }
 }
@@ -270,5 +275,25 @@ private fun siteAverage(location: Any?, average: Any?): SiteAverage = SiteAverag
 
 private fun siteReviewTimeAverage(cols: Array<Any?>): SiteReviewTimeAverage = SiteReviewTimeAverage(
   location = cols[0] as String,
-  reviewTimeAvg = cols[1] as PGInterval?,
+  reviewTimeAvg = cols[1] as PGInterval? ?: PGInterval(),
+  reviewTimeAvgText = String.format("%sh%sm%ss",
+    (((cols[1] as PGInterval?)?.days ?: 0) * 24) + ((cols[1] as PGInterval?)?.hours  ?: 0),
+    (cols[1] as PGInterval?)?.minutes,
+    (cols[1] as PGInterval?)?.wholeSeconds),
 )
+
+private fun siteReviewTimeAverageTotal(averagesPerSite: List<SiteReviewTimeAverage>): String{
+  if (averagesPerSite.isEmpty()) return "0h0m0s"
+  var hours = 0
+  var minutes = 0
+  var wholeSeconds = 0
+  for (averagePerSite in averagesPerSite) {
+    hours += (averagePerSite.reviewTimeAvg?.days ?: 0) * 24
+    hours += averagePerSite.reviewTimeAvg?.hours ?: 0
+    minutes += averagePerSite.reviewTimeAvg?.minutes ?: 0
+    wholeSeconds += averagePerSite.reviewTimeAvg?.wholeSeconds ?: 0
+    println(averagePerSite)
+  }
+
+  return String.format("%sh%sm%ss", hours / averagesPerSite.size, minutes / averagesPerSite.size, wholeSeconds / averagesPerSite.size)
+}

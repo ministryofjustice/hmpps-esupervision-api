@@ -4,6 +4,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.within
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.postgresql.util.PGInterval
 import org.springframework.beans.factory.annotation.Autowired
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
@@ -870,6 +871,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
     val offenderC = offenderRepository.save(Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
 
+    val timeNow = java.time.Instant.now()
+
     checkinRepository.saveAll(
       listOf(
         // Reviewed with 4 hours between submission & review
@@ -879,8 +882,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           status = CheckinStatus.REVIEWED,
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
-          submittedAt = java.time.Instant.now().minus(6, ChronoUnit.HOURS),
-          reviewedAt = java.time.Instant.now().minus(2, ChronoUnit.HOURS),
+          submittedAt = timeNow.minus(6, ChronoUnit.HOURS),
+          reviewedAt = timeNow.minus(2, ChronoUnit.HOURS),
         ),
         // Reviewed with 8 hours between submission & review
         OffenderCheckin.create(
@@ -890,8 +893,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(1),
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
-          submittedAt = java.time.Instant.now().minus(8, ChronoUnit.HOURS).minus(1, ChronoUnit.DAYS),
-          reviewedAt = java.time.Instant.now().minus(1, ChronoUnit.DAYS),
+          submittedAt = timeNow.minus(8, ChronoUnit.HOURS).minus(1, ChronoUnit.DAYS),
+          reviewedAt = timeNow.minus(1, ChronoUnit.DAYS),
         ),
         // Submitted not yet reviewed
         OffenderCheckin.create(
@@ -901,7 +904,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(2),
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
-          submittedAt = java.time.Instant.now().minus(6, ChronoUnit.HOURS).minus(2, ChronoUnit.DAYS),
+          submittedAt = timeNow.minus(6, ChronoUnit.HOURS).minus(2, ChronoUnit.DAYS),
         ),
         // Reviewed with 36 hours between submission & review
         OffenderCheckin.create(
@@ -910,10 +913,10 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           status = CheckinStatus.REVIEWED,
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
-          submittedAt = java.time.Instant.now().minus(36, ChronoUnit.HOURS),
-          reviewedAt = java.time.Instant.now(),
+          submittedAt = timeNow.minus(36, ChronoUnit.HOURS),
+          reviewedAt = timeNow,
         ),
-        // Reviewed with 12 hours between submission & review
+        // Reviewed with 14 hours between submission & review
         OffenderCheckin.create(
           offender = offenderB,
           createdBy = practitioner2,
@@ -921,8 +924,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(1),
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
-          submittedAt = java.time.Instant.now().minus(14, ChronoUnit.HOURS).minus(1, ChronoUnit.DAYS),
-          reviewedAt = java.time.Instant.now().minus(2, ChronoUnit.HOURS).minus(1, ChronoUnit.DAYS),
+          submittedAt = timeNow.minus(10, ChronoUnit.HOURS),
+          reviewedAt = timeNow.minus(2, ChronoUnit.HOURS),
         ),
         // Reviewed with 1 hour between submission & review
         OffenderCheckin.create(
@@ -932,8 +935,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(2),
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
-          submittedAt = java.time.Instant.now().minus(3, ChronoUnit.HOURS).minus(2, ChronoUnit.DAYS),
-          reviewedAt = java.time.Instant.now().minus(2, ChronoUnit.HOURS).minus(2, ChronoUnit.DAYS),
+          submittedAt = timeNow.minus(3, ChronoUnit.HOURS),
+          reviewedAt = timeNow.minus(2, ChronoUnit.HOURS),
         ),
         // Reviewed with 30 minutes & 45 seconds between submission & review
         OffenderCheckin.create(
@@ -942,8 +945,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           status = CheckinStatus.REVIEWED,
           surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
-          submittedAt = java.time.Instant.now().minus(30, ChronoUnit.MINUTES).minus(45, ChronoUnit.MINUTES),
-          reviewedAt = java.time.Instant.now(),
+          submittedAt = timeNow.minus(30, ChronoUnit.MINUTES).minus(45, ChronoUnit.SECONDS),
+          reviewedAt = timeNow,
         ),
         // Created not submitted or reviewed
         OffenderCheckin.create(
@@ -958,9 +961,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
     val reviewResponseTimeAverages = stats.averageReviewTimePerCheckinPerSite
     assertThat(reviewResponseTimeAverages).hasSize(3)
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvg).isEqualTo(Duration.ofHours(6))
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site B" }?.reviewTimeAvg).isEqualTo(Duration.ofHours(24))
-    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvg)
-      .isEqualTo(Duration.ofMinutes(45).plusSeconds(22).plusNanos(5))
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvg).isEqualTo(PGInterval(0,0,0,6,0,0.0))
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site A" }?.reviewTimeAvgText).isEqualTo("6h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site B" }?.reviewTimeAvg).isEqualTo(PGInterval(0,0,0,22,0,0.0))
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "Site B" }?.reviewTimeAvgText).isEqualTo("22h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "UNKNOWN" }?.reviewTimeAvg).isEqualTo(PGInterval(0,0,0,0,45,22.5))
+    assertThat(reviewResponseTimeAverages.find { it.location ==  "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h45m22s")
+    assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("9h15m7s")
   }
 }

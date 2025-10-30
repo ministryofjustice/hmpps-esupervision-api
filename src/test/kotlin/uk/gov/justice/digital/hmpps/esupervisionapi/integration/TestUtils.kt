@@ -102,7 +102,7 @@ fun OffenderCheckin.Companion.create(
   submittedAt = submittedAt,
   createdAt = createdAt,
   reviewedBy = reviewedBy,
-  reviewedAt = null,
+  reviewedAt = reviewedAt,
   createdBy = createdBy,
   status = status,
   surveyResponse = surveyResponse,
