@@ -39,6 +39,12 @@ data class SiteCheckinFrequency(
   val count: Long,
 )
 
+data class LabeledSiteCount(
+  val location: String,
+  val label: String,
+  val count: Long,
+)
+
 data class SiteCheckinAverage(
   val location: String,
   val completedAvg: Long,
@@ -71,6 +77,7 @@ data class IdCheckAccuracy(
 
 data class Stats(
   val invitesPerSite: List<SiteCount>,
+  val inviteStatusPerSite: List<LabeledSiteCount>,
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
@@ -80,12 +87,13 @@ data class Stats(
   val flaggedCheckinsPerSite: List<SiteCount>,
   val stoppedCheckinsPerSite: List<SiteCount>,
   val averageFlagsPerCheckinPerSite: List<SiteAverage>,
-  val averageSupportRequestsPerSite: List<SiteAverage>,
+  val callbackRequestPercentagePerSite: List<SiteAverage>,
   val averageReviewTimePerCheckinPerSite: List<SiteReviewTimeAverage>,
   val averageReviewTimePerCheckinTotal: String,
 )
 
 private val emptyStats = Stats(
+  emptyList(),
   emptyList(),
   emptyList(),
   emptyList(),
@@ -126,6 +134,7 @@ class PerSiteStatsRepositoryImpl(
   private val siteAssignmentHelper: SiteAssignmentHelper,
   private val clock: Clock,
   @Value("classpath:db/queries/stats_checkin_invites_per_site.sql") private val invitesPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_invites_status_per_site.sql") private val invitesStatusPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_per_site.sql") private val completedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completed_on_nth_day.sql") private val completedCheckinsPerNthPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_counts_per_site.sql") private val offendersPerSiteResource: Resource,
@@ -140,6 +149,7 @@ class PerSiteStatsRepositoryImpl(
 ) : PerSiteStatsRepository {
 
   private val sqlInvitesPerSite: String by lazy { invitesPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlInvitesStatusPerSite: String by lazy { invitesStatusPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlOffendersPerSite: String by lazy { offendersPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCheckinFrequencyPerSite: String by lazy { checkinFrequencyPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlCompletedCheckinsPerNthPerSite: String by lazy { completedCheckinsPerNthPerSiteResource.inputStream.use { it.reader().readText() } }
@@ -165,6 +175,7 @@ class PerSiteStatsRepositoryImpl(
     val upperBound = LocalDate.now(clock.zone)
 
     val invitesPerSite = entityManager.runPerSiteQuery(sqlInvitesPerSite, lowerBound, upperBound).map(::siteCount)
+    val invitesStatusPerSite = entityManager.runPerSiteQuery(sqlInvitesStatusPerSite, lowerBound, upperBound).map(::inviteStatus)
     val offendersPerSite = entityManager.runPerSiteQuery(sqlOffendersPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
@@ -176,10 +187,10 @@ class PerSiteStatsRepositoryImpl(
 
     val flagsAndSupport = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
     val averageFlagsPerCheckinPerSite = mutableListOf<SiteAverage>()
-    val averageSupportRequestsPerSite = mutableListOf<SiteAverage>()
+    val callbackRequestPercentagePerSite = mutableListOf<SiteAverage>()
     for (row in flagsAndSupport) {
       averageFlagsPerCheckinPerSite.add(siteAverage(row[0], row[1]))
-      averageSupportRequestsPerSite.add(siteAverage(row[0], row[2]))
+      callbackRequestPercentagePerSite.add(siteAverage(row[0], row[2]))
     }
 
     val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::reviewAverage)
@@ -188,6 +199,7 @@ class PerSiteStatsRepositoryImpl(
 
     return Stats(
       invitesPerSite = invitesPerSite,
+      inviteStatusPerSite = invitesStatusPerSite,
       completedCheckinsPerSite = completedCheckinsPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
       offendersPerSite = offendersPerSite,
@@ -197,7 +209,7 @@ class PerSiteStatsRepositoryImpl(
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
-      averageSupportRequestsPerSite = averageSupportRequestsPerSite,
+      callbackRequestPercentagePerSite = callbackRequestPercentagePerSite,
       averageReviewTimePerCheckinPerSite = averageReviewResponseTimes,
       averageReviewTimePerCheckinTotal = averageReviewResponseTimeTotal,
     )
@@ -277,6 +289,12 @@ private fun idCheckAccuracy(cols: Array<Any?>): IdCheckAccuracy = IdCheckAccurac
 private fun siteAverage(location: Any?, average: Any?): SiteAverage = SiteAverage(
   location = location as String,
   average = (average as? Number)?.toDouble() ?: 0.0,
+)
+
+private fun inviteStatus(cols: Array<Any?>): LabeledSiteCount = LabeledSiteCount(
+  location = cols[0] as String,
+  label = cols[1] as String,
+  count = (cols[2] as Number).toLong(),
 )
 
 private fun reviewAverage(cols: Array<Any?>): ReviewAverage = ReviewAverage(

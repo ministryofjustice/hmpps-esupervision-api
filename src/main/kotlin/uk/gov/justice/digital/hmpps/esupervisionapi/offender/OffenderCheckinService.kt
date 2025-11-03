@@ -315,8 +315,13 @@ class OffenderCheckinService(
     return urls
   }
 
-  fun getCheckins(practitionerId: ExternalUserId, pageRequest: PageRequest): CollectionDto<OffenderCheckinDto> {
-    val page = checkinRepository.findAllByCreatedBy(practitionerId, pageRequest)
+  fun getCheckins(practitionerId: ExternalUserId, offenderId: UUID?, pageRequest: PageRequest, useCase: CheckinListUseCase? = null): CollectionDto<OffenderCheckinDto> {
+    val page = when (useCase) {
+      CheckinListUseCase.NEEDS_ATTENTION -> checkinRepository.findNeedsAttention(practitionerId, offenderId, pageRequest)
+      CheckinListUseCase.REVIEWED -> checkinRepository.findReviewed(practitionerId, offenderId, pageRequest)
+      CheckinListUseCase.AWAITING_CHECKIN -> checkinRepository.findAwaitingCheckin(practitionerId, offenderId, pageRequest)
+      null -> checkinRepository.findAllByCreatedBy(practitionerId, offenderId, pageRequest)
+    }
     val checkins = page.content.map { it.dto(this.s3UploadService) }
     return CollectionDto(page.pageable.toPagination(), checkins)
   }
