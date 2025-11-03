@@ -50,10 +50,14 @@ data class SiteCheckinAverage(
   val missedPercentage: Double,
 )
 
+data class ReviewAverage(
+  val location: String,
+  val reviewTimeAvg: PGInterval,
+)
+
 data class SiteReviewTimeAverage(
   val location: String,
-  val reviewTimeAvg: PGInterval?,
-  var reviewTimeAvgText: String?,
+  var reviewTimeAvgText: String,
 )
 
 data class IdCheckAccuracy(
@@ -169,8 +173,6 @@ class PerSiteStatsRepositoryImpl(
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val checkinFrequencyPerSite = entityManager.runPerSiteQuery(sqlCheckinFrequencyPerSite, lowerBound, upperBound).map(::siteCheckinFrequency)
-    val averageReviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::siteReviewTimeAverage)
-    val averageReviewResponseTimeTotal = siteReviewTimeAverageTotal(averageReviewResponseTimes)
 
     val flagsAndSupport = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
     val averageFlagsPerCheckinPerSite = mutableListOf<SiteAverage>()
@@ -179,6 +181,10 @@ class PerSiteStatsRepositoryImpl(
       averageFlagsPerCheckinPerSite.add(siteAverage(row[0], row[1]))
       averageSupportRequestsPerSite.add(siteAverage(row[0], row[2]))
     }
+
+    val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::reviewAverage)
+    val averageReviewResponseTimes = reviewResponseTimes.map(::siteReviewTimeAverage)
+    val averageReviewResponseTimeTotal = siteReviewTimeAverageTotal(reviewResponseTimes)
 
     return Stats(
       invitesPerSite = invitesPerSite,
@@ -193,7 +199,7 @@ class PerSiteStatsRepositoryImpl(
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
       averageSupportRequestsPerSite = averageSupportRequestsPerSite,
       averageReviewTimePerCheckinPerSite = averageReviewResponseTimes,
-      averageReviewResponseTimeTotal,
+      averageReviewTimePerCheckinTotal = averageReviewResponseTimeTotal,
     )
   }
 }
@@ -273,28 +279,31 @@ private fun siteAverage(location: Any?, average: Any?): SiteAverage = SiteAverag
   average = (average as? Number)?.toDouble() ?: 0.0,
 )
 
-private fun siteReviewTimeAverage(cols: Array<Any?>): SiteReviewTimeAverage = SiteReviewTimeAverage(
+private fun reviewAverage(cols: Array<Any?>): ReviewAverage = ReviewAverage(
   location = cols[0] as String,
-  reviewTimeAvg = cols[1] as PGInterval? ?: PGInterval(),
+  reviewTimeAvg = cols[1] as PGInterval? ?: PGInterval(0, 0, 0, 0, 0, 0.0),
+)
+
+private fun siteReviewTimeAverage(reviewAverage: ReviewAverage): SiteReviewTimeAverage = SiteReviewTimeAverage(
+  location = reviewAverage.location,
   reviewTimeAvgText = String.format(
     "%sh%sm%ss",
-    (((cols[1] as PGInterval?)?.days ?: 0) * 24) + ((cols[1] as PGInterval?)?.hours ?: 0),
-    (cols[1] as PGInterval?)?.minutes,
-    (cols[1] as PGInterval?)?.wholeSeconds,
+    ((reviewAverage.reviewTimeAvg.days) * 24) + (reviewAverage.reviewTimeAvg.hours),
+    reviewAverage.reviewTimeAvg.minutes,
+    reviewAverage.reviewTimeAvg.wholeSeconds,
   ),
 )
 
-private fun siteReviewTimeAverageTotal(averagesPerSite: List<SiteReviewTimeAverage>): String {
+private fun siteReviewTimeAverageTotal(averagesPerSite: List<ReviewAverage>): String {
   if (averagesPerSite.isEmpty()) return "0h0m0s"
   var hours = 0
   var minutes = 0
   var wholeSeconds = 0
   for (averagePerSite in averagesPerSite) {
-    hours += (averagePerSite.reviewTimeAvg?.days ?: 0) * 24
-    hours += averagePerSite.reviewTimeAvg?.hours ?: 0
-    minutes += averagePerSite.reviewTimeAvg?.minutes ?: 0
-    wholeSeconds += averagePerSite.reviewTimeAvg?.wholeSeconds ?: 0
-    println(averagePerSite)
+    hours += (averagePerSite.reviewTimeAvg.days) * 24
+    hours += averagePerSite.reviewTimeAvg.hours
+    minutes += averagePerSite.reviewTimeAvg.minutes
+    wholeSeconds += averagePerSite.reviewTimeAvg.wholeSeconds
   }
 
   return String.format(
