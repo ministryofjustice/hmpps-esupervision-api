@@ -131,7 +131,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     practitionerRoleAuthHeaders = setAuthorisation(roles = listOf("ESUPERVISION__ESUPERVISION_UI"))
 
     reset(notificationService)
-    whenever(notificationService.sendMessage(any(), any(), any())).thenReturn(notifResults())
+    whenever(notificationService.sendMessage(any(), any(), any())).thenAnswer { notifResults() }
 
     // offender 1
     val setup = offenderSetupService.startOffenderSetup(offenderInfo)
@@ -144,7 +144,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
     reset(notificationService)
     whenever(notificationService.sendMessage(any(), any(), any()))
-      .thenReturn(notifResults(), notifResults(), notifResults())
+      .thenAnswer { notifResults() }
 
     reset(s3UploadService)
 
