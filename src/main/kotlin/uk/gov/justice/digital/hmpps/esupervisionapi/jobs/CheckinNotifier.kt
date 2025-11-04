@@ -106,39 +106,41 @@ class CheckinNotifier(
     var numChunks = 0
 
     val chunkSize = 100
-    offenders.asSequence()
-      .chunked(chunkSize)
-      .forEach { offenderChunk ->
-        numChunks += 1
-        LOG.info("processing chunk $numChunks}")
-        val notificationStatuses = ArrayList<CheckinNotification>(offenderChunk.size)
-        for (offender in offenderChunk) {
-          try {
-            numProcessed += 1
-            val checkinInfo = processOffender(offender, context)
-            if (checkinInfo != null) {
-              numNotifAttempts += 1
-              for (result in checkinInfo.notifications.results) {
-                notificationStatuses.add(
-                  CheckinNotification(
-                    notificationId = result.notificationId,
-                    reference = result.context.reference,
-                    job = logEntry,
-                    checkin = checkinInfo.checkin.uuid,
-                    status = null,
-                  ),
-                )
+    offenders.use {
+      it.asSequence()
+        .chunked(chunkSize)
+        .forEach { offenderChunk ->
+          numChunks += 1
+          LOG.info("processing chunk $numChunks}")
+          val notificationStatuses = ArrayList<CheckinNotification>(offenderChunk.size)
+          for (offender in offenderChunk) {
+            try {
+              numProcessed += 1
+              val checkinInfo = processOffender(offender, context)
+              if (checkinInfo != null) {
+                numNotifAttempts += 1
+                for (result in checkinInfo.notifications.results) {
+                  notificationStatuses.add(
+                    CheckinNotification(
+                      notificationId = result.notificationId,
+                      reference = result.context.reference,
+                      job = logEntry,
+                      checkin = checkinInfo.checkin.uuid,
+                      status = null,
+                    ),
+                  )
+                }
               }
+            } catch (e: Exception) {
+              LOG.warn("Error processing offender=${offender.uuid}", e)
+              numErrors += 1
             }
-          } catch (e: Exception) {
-            LOG.warn("Error processing offender=${offender.uuid}", e)
-            numErrors += 1
+          }
+          if (notificationStatuses.isNotEmpty()) {
+            notificationRepository.saveAll(notificationStatuses)
           }
         }
-        if (notificationStatuses.isNotEmpty()) {
-          notificationRepository.saveAll(notificationStatuses)
-        }
-      }
+    }
 
     logEntry.endedAt = clock.instant()
     jobLogRepository.saveAndFlush(logEntry)
