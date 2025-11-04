@@ -7,9 +7,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.createNewPractitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.datesBetweenExclusive
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.NotifierContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
 import java.time.Instant

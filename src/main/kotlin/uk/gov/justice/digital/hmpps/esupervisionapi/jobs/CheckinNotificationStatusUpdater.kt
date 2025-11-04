@@ -9,8 +9,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationIn
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationStatusCollection
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Referencable
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotificationRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import java.time.Clock
 import java.time.Duration

@@ -21,11 +21,15 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.test.web.reactive.server.returnResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResultSummary
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResults
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinInviteMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinSubmittedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinsStoppedMessage
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PractitionerCheckinSubmittedMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinListUseCase
@@ -33,8 +37,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.DeactivateOffenderCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificationResult
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResultSummary
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinDto
@@ -47,7 +49,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.isPastSubmissionDate
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
@@ -90,6 +91,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
   @Autowired lateinit var rekognitionCompareFacesService: RekognitionCompareFacesService
 
   @Autowired lateinit var domainEventPublisher: DomainEventPublisher
+
+  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
 
   /**
    * Used to setup offenders for tests
@@ -150,6 +153,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 
   @AfterEach
   fun tearDown() {
+    genericNotificationRepository.deleteAll()
     offenderEventLogRepository.deleteAll()
     offenderSetupRepository.deleteAll()
     offenderCheckinRepository.deleteAll()
@@ -623,7 +627,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
 fun notifResults() = NotificationResults(
   listOf(
     NotificationResultSummary(
-      java.util.UUID.randomUUID(),
+      UUID.randomUUID(),
       SingleNotificationContext.from(UUID.randomUUID()),
       timestamp = ZonedDateTime.now(),
       null,
