@@ -59,6 +59,7 @@ data class SiteCheckinAverage(
 data class ReviewAverage(
   val location: String,
   val reviewTimeAvg: PGInterval,
+  val reviewCount: Long,
 )
 
 data class SiteReviewTimeAverage(
@@ -300,6 +301,7 @@ private fun inviteStatus(cols: Array<Any?>): LabeledSiteCount = LabeledSiteCount
 private fun reviewAverage(cols: Array<Any?>): ReviewAverage = ReviewAverage(
   location = cols[0] as String,
   reviewTimeAvg = cols[1] as PGInterval? ?: PGInterval(0, 0, 0, 0, 0, 0.0),
+  reviewCount = (cols[2] as Number).toLong(),
 )
 
 private fun siteReviewTimeAverage(reviewAverage: ReviewAverage): SiteReviewTimeAverage = SiteReviewTimeAverage(
@@ -314,20 +316,24 @@ private fun siteReviewTimeAverage(reviewAverage: ReviewAverage): SiteReviewTimeA
 
 private fun siteReviewTimeAverageTotal(averagesPerSite: List<ReviewAverage>): String {
   if (averagesPerSite.isEmpty()) return "0h0m0s"
-  var hours = 0
-  var minutes = 0
-  var wholeSeconds = 0
+  var hours = 0L
+  var minutes = 0L
+  var wholeSeconds = 0L
+  var count = 0L
   for (averagePerSite in averagesPerSite) {
-    hours += (averagePerSite.reviewTimeAvg.days) * 24
-    hours += averagePerSite.reviewTimeAvg.hours
-    minutes += averagePerSite.reviewTimeAvg.minutes
-    wholeSeconds += averagePerSite.reviewTimeAvg.wholeSeconds
+    hours += ((averagePerSite.reviewTimeAvg.days) * 24) * averagePerSite.reviewCount
+    hours += (averagePerSite.reviewTimeAvg.hours) * averagePerSite.reviewCount
+    minutes += (averagePerSite.reviewTimeAvg.minutes) * averagePerSite.reviewCount
+    wholeSeconds += (averagePerSite.reviewTimeAvg.wholeSeconds) * averagePerSite.reviewCount
+    count += averagePerSite.reviewCount
   }
+
+  if (count == 0L) return "0h0m0s"
 
   return String.format(
     "%sh%sm%ss",
-    hours / averagesPerSite.size,
-    minutes / averagesPerSite.size,
-    wholeSeconds / averagesPerSite.size,
+    hours / count,
+    minutes / count,
+    wholeSeconds / count,
   )
 }

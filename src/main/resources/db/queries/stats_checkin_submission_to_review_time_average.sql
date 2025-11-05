@@ -10,7 +10,9 @@ with checkin_info as (
     where c.status = 'REVIEWED' 
     and (c.created_at at time zone 'Europe/London')::date between :lowerBound and :upperBound
 )
-select location, avg(review_time) as review_time_avg
+select location,
+       avg(review_time) as review_time_avg,
+       count(review_time) as review_time_count
 from checkin_info
 group by location
 order by location;

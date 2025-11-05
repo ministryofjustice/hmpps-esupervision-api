@@ -955,6 +955,6 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(reviewResponseTimeAverages.find { it.location == "Site A" }?.reviewTimeAvgText).isEqualTo("6h0m0s")
     assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.reviewTimeAvgText).isEqualTo("0h0m0s")
     assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h45m22s")
-    assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("2h15m7s")
+    assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("3h22m11s")
   }
 }
