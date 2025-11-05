@@ -51,6 +51,7 @@ data class OffenderSetupDto(
   @Schema(description = "Offender's unique ID", required = true)
   val offender: UUID,
   val createdAt: Instant,
+  val startedAt: Instant?,
 )
 
 /**

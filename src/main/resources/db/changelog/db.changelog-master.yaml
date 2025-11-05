@@ -9,3 +9,5 @@ databaseChangeLog:
       file : db/changelog/changesets/4_new_event_type_checkin_reschedule.sql
   - include:
       file: db/changelog/changesets/5_create_generic_notification.sql
+  - include:
+      file : db/changelog/changesets/6_add_started_at_to_offender_setup.sql
