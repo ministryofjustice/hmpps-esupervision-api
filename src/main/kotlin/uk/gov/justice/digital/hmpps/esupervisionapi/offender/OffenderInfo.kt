@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Size
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer
 import java.time.Duration
-import java.time.LocalDate
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 enum class CheckinInterval(val duration: Duration) : Comparable<CheckinInterval> {

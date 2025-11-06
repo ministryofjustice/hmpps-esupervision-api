@@ -77,9 +77,11 @@ data class Stats(
   val stoppedCheckinsPerSite: List<SiteCount>,
   val averageFlagsPerCheckinPerSite: List<SiteAverage>,
   val callbackRequestPercentagePerSite: List<SiteAverage>,
+  val averageTimeToRegister: List<SiteAverage>,
 )
 
 private val emptyStats = Stats(
+  emptyList(),
   emptyList(),
   emptyList(),
   emptyList(),
@@ -129,6 +131,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_number_stopped_checkins.sql") private val stoppedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_flag_and_support_average_per_site.sql") private val averageFlagsAndSupportRequestsPerCheckinPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_offender_average_time_to_register.sql") private val averageTimeToRegisterResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -143,6 +146,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlFlaggedCheckinsPerSite: String by lazy { flaggedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlStoppedCheckinsPerSite: String by lazy { stoppedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageFlagsAndSupportRequestsPerCheckinPerSite: String by lazy { averageFlagsAndSupportRequestsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageTimeToRegister: String by lazy { averageTimeToRegisterResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -156,7 +160,6 @@ class PerSiteStatsRepositoryImpl(
 
     val lowerBound = LocalDate.of(2025, 1, 1)
     val upperBound = LocalDate.now(clock.zone)
-
     val invitesPerSite = entityManager.runPerSiteQuery(sqlInvitesPerSite, lowerBound, upperBound).map(::siteCount)
     val invitesStatusPerSite = entityManager.runPerSiteQuery(sqlInvitesStatusPerSite, lowerBound, upperBound).map(::inviteStatus)
     val offendersPerSite = entityManager.runPerSiteQuery(sqlOffendersPerSite, lowerBound, upperBound).map(::siteCount)
@@ -175,6 +178,7 @@ class PerSiteStatsRepositoryImpl(
       averageFlagsPerCheckinPerSite.add(siteAverage(row[0], row[1]))
       callbackRequestPercentagePerSite.add(siteAverage(row[0], row[2]))
     }
+    val averageTimeToRegister = entityManager.runPerSiteQuery(sqlAverageTimeToRegister, lowerBound, upperBound).map { siteAverage(it[0], it[1]) }
 
     return Stats(
       invitesPerSite = invitesPerSite,
@@ -189,6 +193,7 @@ class PerSiteStatsRepositoryImpl(
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
       callbackRequestPercentagePerSite = callbackRequestPercentagePerSite,
+      averageTimeToRegister = averageTimeToRegister,
     )
   }
 }

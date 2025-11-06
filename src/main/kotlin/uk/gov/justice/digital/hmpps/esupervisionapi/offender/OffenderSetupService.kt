@@ -71,7 +71,7 @@ class OffenderSetupService(
       offender = offender,
       practitioner = offender.practitioner,
       createdAt = now,
-      startedAt = offenderInfo.startedAt
+      startedAt = offenderInfo.startedAt,
     )
 
     val saved = raiseOnConstraintViolation("Offender setup with UUID ${offenderInfo.setupUuid} already exists") {
