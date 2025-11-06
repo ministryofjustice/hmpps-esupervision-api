@@ -60,5 +60,5 @@ data class OffenderInfo(
 
   val checkinInterval: CheckinInterval,
 
-  val startedAt: Instant,
+  val startedAt: Instant?,
 )
