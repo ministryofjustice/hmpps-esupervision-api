@@ -1350,7 +1350,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     )
 
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
-    val averages = stats.averageTimeToCompleteCheckinReviewPerSite
+    val averages = stats.averageSecondsToCompleteCheckinReviewPerSite
     assertThat(averages).containsExactlyInAnyOrder(
       SiteAverage("Site A", 150.0),
       SiteAverage("Site B", 50.0),
