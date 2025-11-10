@@ -65,13 +65,14 @@ class OffenderCheckinExpiryJob(
 
       val chunkSize = 100
       val context = BulkNotificationContext(logEntry.reference())
-      checkinRepository.findAllAboutToExpire(cutoff, lowerBound = lowerBound)
-        .asSequence()
-        .chunked(chunkSize)
-        .forEach { checkins ->
-          LOG.info("processing chunk of ${checkins.size} checkins")
-          notifyPractitioner(checkins, context)
-        }
+      checkinRepository.findAllAboutToExpire(cutoff, lowerBound = lowerBound).use {
+        it.asSequence()
+          .chunked(chunkSize)
+          .forEach { checkins ->
+            LOG.info("processing chunk of ${checkins.size} checkins")
+            notifyPractitioner(checkins, context)
+          }
+      }
 
       val result = checkinRepository.updateStatusToExpired(cutoff, lowerBound = lowerBound)
       LOG.info("updated {} checkins", result)
