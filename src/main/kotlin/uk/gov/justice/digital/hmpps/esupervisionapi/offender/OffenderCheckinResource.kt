@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinEventRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -166,5 +167,24 @@ class OffenderCheckinResource(
     }
     val result = offenderCheckinService.unscheduledNotification(uuid, notificationRequest)
     return ResponseEntity.ok(result)
+  }
+
+  @PostMapping("/{uuid}/event")
+  @Tag(name = "practitioner")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Post a checkin related event",
+    description = "An 'event' might be something used for metrics or audit.",
+  )
+  fun event(
+    @PathVariable uuid: UUID,
+    @RequestBody @Valid checkinEvent: CheckinEventRequest,
+    bindingResult: BindingResult,
+  ): ResponseEntity<Map<String, String>> {
+    if (bindingResult.hasErrors()) {
+      throw intoResponseStatusException(bindingResult)
+    }
+    val eventUuid = offenderCheckinService.checkinEvent(uuid, checkinEvent)
+    return ResponseEntity.ok(mapOf("event" to eventUuid.toString()))
   }
 }
