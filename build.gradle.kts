@@ -26,7 +26,7 @@ dependencies {
   implementation("org.jetbrains.kotlin:kotlin-reflect")
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")
   implementation("uk.gov.service.notify:notifications-java-client:5.2.1-RELEASE")
-  runtimeOnly("org.postgresql:postgresql")
+  implementation("org.postgresql:postgresql")
   runtimeOnly("org.liquibase:liquibase-core")
   implementation("com.googlecode.libphonenumber:libphonenumber:9.0.7")
 
