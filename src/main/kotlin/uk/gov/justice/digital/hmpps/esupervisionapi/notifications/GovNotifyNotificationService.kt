@@ -7,9 +7,9 @@ import org.springframework.web.util.UriComponentsBuilder
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTemplateConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.JobLog
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResultSummary
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResultSummary
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResults
 import uk.gov.service.notify.NotificationClientApi
 import uk.gov.service.notify.NotificationList
 import java.time.Clock
@@ -29,6 +29,7 @@ class GovNotifyNotificationService(
     val notificationRefs = recipient.contactMethods().mapNotNull {
       dispatchNotification(it, context, message, now)
     }
+
     return NotificationResults(notificationRefs)
   }
 

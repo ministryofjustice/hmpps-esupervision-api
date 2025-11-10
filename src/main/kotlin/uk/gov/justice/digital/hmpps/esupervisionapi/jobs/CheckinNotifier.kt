@@ -6,11 +6,11 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.BulkNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.BulkNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinCreationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotificationRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderRepository

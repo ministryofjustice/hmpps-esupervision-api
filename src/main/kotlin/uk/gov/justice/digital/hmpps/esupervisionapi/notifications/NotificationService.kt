@@ -1,7 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationContext
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.NotificationResults
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResults
 import java.util.UUID
 
 data class NotificationInfo(val uuid: UUID, val status: String)

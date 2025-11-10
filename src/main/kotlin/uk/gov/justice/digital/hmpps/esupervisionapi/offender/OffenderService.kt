@@ -7,8 +7,11 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinsStoppedMessage
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.SingleNotificationContext
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.saveNotifications
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
@@ -37,6 +40,7 @@ class OffenderService(
   @Value("\${app.upload-ttl-minutes}") val uploadTTlMinutes: Long,
   private val practitionerRepository: PractitionerRepository,
   private val notificationService: NotificationService,
+  private val genericNotificationRepository: GenericNotificationRepository,
 ) {
 
   val uploadTTl = Duration.ofMinutes(uploadTTlMinutes)
@@ -181,11 +185,19 @@ class OffenderService(
 
     checkinService.cancelCheckins(uuid, logEntry)
 
-    notificationService.sendMessage(
-      OffenderCheckinsStoppedMessage(offenderDto.firstName, offenderDto.lastName),
+    val offenderCheckinsStoppedMessage = OffenderCheckinsStoppedMessage(offenderDto.firstName, offenderDto.lastName)
+    val notificationContext = SingleNotificationContext.from(offenderCheckinsStoppedMessage, clock)
+    val notifResults = notificationService.sendMessage(
+      offenderCheckinsStoppedMessage,
       offenderDto,
-      SingleNotificationContext.from(UUID.randomUUID()),
+      notificationContext,
     )
+
+    try {
+      genericNotificationRepository.saveNotifications(offenderCheckinsStoppedMessage.messageType, notificationContext, offender, notifResults)
+    } catch (e: Exception) {
+      LOG.warn("Failed to persist offender checkins stopped notifications for offender={}, reference={}", offender.uuid, notifResults.results.map { it.notificationId }, e)
+    }
 
     return offender.dto(s3UploadService)
   }
