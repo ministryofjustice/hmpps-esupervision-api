@@ -44,6 +44,13 @@ data class LabeledSiteCount(
   val count: Long,
 )
 
+data class LabeledNotificationSiteCount(
+  val location: String,
+  val messageType: String,
+  val status: String,
+  val count: Long,
+)
+
 data class SiteCheckinAverage(
   val location: String,
   val completedAvg: Long,
@@ -67,6 +74,7 @@ data class IdCheckAccuracy(
 data class Stats(
   val invitesPerSite: List<SiteCount>,
   val inviteStatusPerSite: List<LabeledSiteCount>,
+  val genericNotificationStatusPerSite: List<LabeledNotificationSiteCount>,
   val completedCheckinsPerSite: List<SiteCount>,
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
   val offendersPerSite: List<SiteCount>,
@@ -81,6 +89,7 @@ data class Stats(
 )
 
 private val emptyStats = Stats(
+  emptyList(),
   emptyList(),
   emptyList(),
   emptyList(),
@@ -131,6 +140,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_flagged_per_site.sql") private val flaggedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_number_stopped_checkins.sql") private val stoppedCheckinsPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_flag_and_support_average_per_site.sql") private val averageFlagsAndSupportRequestsPerCheckinPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_generic_offender_notifications_status_per_site.sql") private val genericNotificationsStatusPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_average_time_to_register.sql") private val averageTimeToRegisterResource: Resource,
 
 ) : PerSiteStatsRepository {
@@ -146,6 +156,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlFlaggedCheckinsPerSite: String by lazy { flaggedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlStoppedCheckinsPerSite: String by lazy { stoppedCheckinsPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageFlagsAndSupportRequestsPerCheckinPerSite: String by lazy { averageFlagsAndSupportRequestsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlGenericNotificationsStatusPerSite: String by lazy { genericNotificationsStatusPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageTimeToRegister: String by lazy { averageTimeToRegisterResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
@@ -162,6 +173,7 @@ class PerSiteStatsRepositoryImpl(
     val upperBound = LocalDate.now(clock.zone)
     val invitesPerSite = entityManager.runPerSiteQuery(sqlInvitesPerSite, lowerBound, upperBound).map(::siteCount)
     val invitesStatusPerSite = entityManager.runPerSiteQuery(sqlInvitesStatusPerSite, lowerBound, upperBound).map(::inviteStatus)
+    val genericNotificationsStatusPerSite = entityManager.runPerSiteQuery(sqlGenericNotificationsStatusPerSite, lowerBound, upperBound).map(::genericNotificationStatus)
     val offendersPerSite = entityManager.runPerSiteQuery(sqlOffendersPerSite, lowerBound, upperBound).map(::siteCount)
     val compledCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
@@ -183,6 +195,7 @@ class PerSiteStatsRepositoryImpl(
     return Stats(
       invitesPerSite = invitesPerSite,
       inviteStatusPerSite = invitesStatusPerSite,
+      genericNotificationStatusPerSite = genericNotificationsStatusPerSite,
       completedCheckinsPerSite = compledCheckinsPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
       offendersPerSite = offendersPerSite,
@@ -277,4 +290,11 @@ private fun inviteStatus(cols: Array<Any?>): LabeledSiteCount = LabeledSiteCount
   location = cols[0] as String,
   label = cols[1] as String,
   count = (cols[2] as Number).toLong(),
+)
+
+private fun genericNotificationStatus(cols: Array<Any?>): LabeledNotificationSiteCount = LabeledNotificationSiteCount(
+  location = cols[0] as String,
+  messageType = cols[1] as String,
+  status = cols[2] as String,
+  count = cols[3] as Long,
 )
