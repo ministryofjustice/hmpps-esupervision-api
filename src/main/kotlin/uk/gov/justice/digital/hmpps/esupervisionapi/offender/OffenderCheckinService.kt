@@ -91,6 +91,7 @@ class OffenderCheckinService(
    * @param uuid UUID of the checkin
    * @param includeUploads set to true to ensure vide/snapshot URLs are returned
    */
+  @Transactional
   fun getCheckin(
     uuid: UUID,
     includeUploads: Boolean = false,
@@ -98,6 +99,13 @@ class OffenderCheckinService(
     val checkin = checkinRepository.findByUuid(uuid).getOrElse {
       throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$uuid")
     }
+    
+    // If this is the first time viewing, set the review 'started at' time
+    if (checkin.reviewStartedAt == null) {
+      checkin.reviewStartedAt = clock.instant()
+      checkinRepository.save(checkin)
+    }
+
     val logs = offenderEventLogRepository.findAllCheckinEntries(
       checkin,
       setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED),
@@ -148,6 +156,7 @@ class OffenderCheckinService(
       submittedAt = null,
       reviewedBy = null,
       reviewedAt = null,
+      reviewStartedAt = null, 
       status = CheckinStatus.CREATED,
       surveyResponse = null,
       dueDate = createCheckin.dueDate,
@@ -371,7 +380,7 @@ class OffenderCheckinService(
     } else {
       checkin.status = CheckinStatus.REVIEWED
     }
-
+    
     checkin.reviewedBy = reviewRequest.practitioner
     checkin.manualIdCheck = reviewRequest.manualIdCheck
     checkin.reviewedAt = clock.instant()
