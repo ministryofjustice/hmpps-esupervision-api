@@ -10,6 +10,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALI
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_BOB
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_DAVE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotification
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.CheckinStatus
@@ -33,10 +35,13 @@ import java.util.UUID
 
 class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
+  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+
   @Autowired lateinit var perSiteStatsRepository: PerSiteStatsRepository
 
   @BeforeEach
   fun setup() {
+    genericNotificationRepository.deleteAll()
     checkinNotificationRepository.deleteAll()
     checkinRepository.deleteAll()
     offenderEventLogRepository.deleteAll() // Add this line
@@ -847,5 +852,31 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(callbackPercentages.find { it.location == "Site A" }?.average).isCloseTo(33.33, within(0.01))
     assertThat(callbackPercentages.find { it.location == "Site B" }?.average).isCloseTo(50.0, within(0.01))
     assertThat(callbackPercentages.find { it.location == "UNKNOWN" }?.average).isCloseTo(100.0, within(0.01))
+  }
+
+  @Test
+  fun `generic offender notifications stats`() {
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val offenderA = offenderRepository.save(Offender.create(name = "Offender A", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+
+    val notifs = listOf(
+      GenericNotification(UUID.randomUUID(), "foo", "ref-1", null, offenderA, "delivered"),
+      GenericNotification(UUID.randomUUID(), "foo", "ref-1", null, offenderA, null),
+      GenericNotification(UUID.randomUUID(), "bar", "ref-1", null, offenderB, null),
+    )
+    genericNotificationRepository.saveAll(notifs)
+
+    val stats = perSiteStatsRepository.statsPerSite(listOf(PractitionerSite(practitioner1, "Site A")))
+
+    assertThat(stats.genericNotificationStatusPerSite.size).isEqualTo(3)
+    val unknownStatus = stats.genericNotificationStatusPerSite.filter { it.status == "unknown" }
+    assertThat(unknownStatus.size).isEqualTo(2)
+    assertThat(unknownStatus[0].count).isEqualTo(1)
+    assertThat(unknownStatus[1].count).isEqualTo(1)
+
+    val deliveredStatus = stats.genericNotificationStatusPerSite.filter { it.status == "delivered" }
+    assertThat(deliveredStatus.size).isEqualTo(1)
+    assertThat(deliveredStatus[0].count).isEqualTo(1)
   }
 }
