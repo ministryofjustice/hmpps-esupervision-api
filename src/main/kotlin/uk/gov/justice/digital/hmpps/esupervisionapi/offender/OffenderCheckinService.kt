@@ -101,7 +101,7 @@ class OffenderCheckinService(
     val checkin = checkinRepository.findByUuid(uuid).getOrElse {
       throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$uuid")
     }
-    
+
     // If this is the first time viewing, set the review 'started at' time
     if (checkin.reviewStartedAt == null) {
       checkin.reviewStartedAt = clock.instant()
@@ -158,7 +158,7 @@ class OffenderCheckinService(
       submittedAt = null,
       reviewedBy = null,
       reviewedAt = null,
-      reviewStartedAt = null, 
+      reviewStartedAt = null,
       status = CheckinStatus.CREATED,
       surveyResponse = null,
       dueDate = createCheckin.dueDate,
@@ -382,7 +382,7 @@ class OffenderCheckinService(
     } else {
       checkin.status = CheckinStatus.REVIEWED
     }
-    
+
     checkin.reviewedBy = reviewRequest.practitioner
     checkin.manualIdCheck = reviewRequest.manualIdCheck
     checkin.reviewedAt = clock.instant()

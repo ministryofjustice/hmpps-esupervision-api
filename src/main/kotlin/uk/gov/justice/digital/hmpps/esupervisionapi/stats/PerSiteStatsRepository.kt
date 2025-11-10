@@ -214,7 +214,7 @@ class PerSiteStatsRepositoryImpl(
     val averageReviewResponseTimes = reviewResponseTimes.map(::siteReviewTimeAverage)
     val averageReviewResponseTimeTotal = siteReviewTimeAverageTotal(reviewResponseTimes)
     val averageTimeToCompleteCheckinReviewPerSite = entityManager.runPerSiteQuery(sqlAverageTimeToCompleteCheckinReview, lowerBound, upperBound).map { siteAverage(it[0], it[1]) }
-    
+
     return Stats(
       invitesPerSite = invitesPerSite,
       inviteStatusPerSite = invitesStatusPerSite,
