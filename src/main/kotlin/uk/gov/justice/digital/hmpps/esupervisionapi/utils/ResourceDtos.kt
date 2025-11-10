@@ -78,6 +78,19 @@ data class CheckinNotificationRequest(
   val practitioner: ExternalUserId,
 )
 
+enum class CheckinEventType {
+  /**
+   * Attempt to access the checkin from outside the UK
+   */
+  CHECKIN_OUTSIDE_ACCESS,
+}
+
+data class CheckinEventRequest(
+  // Note: we can't use the LogEntryType here because not every value should be supported here
+  val eventType: CheckinEventType,
+  val comment: String? = null,
+)
+
 /**
  * Represents a subset of a log entry for an offender deactivation.
  */
