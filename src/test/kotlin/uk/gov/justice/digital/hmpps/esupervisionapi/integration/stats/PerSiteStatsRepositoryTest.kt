@@ -20,13 +20,16 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.ManualIdVerificatio
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderEventLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteAverage
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCountOnNthDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.powerSet
+import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetTime
 import java.time.ZoneOffset
@@ -47,7 +50,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     genericNotificationRepository.deleteAll()
     checkinNotificationRepository.deleteAll()
     checkinRepository.deleteAll()
-    offenderEventLogRepository.deleteAll() // Add this line
+    offenderEventLogRepository.deleteAll()
+    offenderSetupRepository.deleteAll()
     offenderRepository.deleteAll()
   }
 
@@ -1215,5 +1219,60 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.reviewTimeAvgText).isEqualTo("0h0m0s")
     assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h45m22s")
     assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("3h22m11s")
+  }
+
+  @Test
+  fun `calculates average time to register per site`() {
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2 = PRACTITIONER_BOB.externalUserId()
+    val practitioner3 = PRACTITIONER_DAVE.externalUserId()
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+    )
+
+    val offenderA1 = offenderRepository.save(Offender.create(name = "Offender A1", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderA2 = offenderRepository.save(Offender.create(name = "Offender A2", crn = "A234567", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB1 = offenderRepository.save(Offender.create(name = "Offender B1", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val offenderC1 = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+
+    val now = Instant.now()
+
+    val setupA1 = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offenderA1,
+      practitioner = practitioner1,
+      createdAt = now.plusSeconds(100),
+      startedAt = now,
+    )
+    val setupA2 = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offenderA2,
+      practitioner = practitioner1,
+      createdAt = now.plusSeconds(300),
+      startedAt = now.plusSeconds(100),
+    )
+    val setupB1 = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offenderB1,
+      practitioner = practitioner2,
+      createdAt = now.plusSeconds(50),
+      startedAt = now,
+    )
+    val setupC1 = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offenderC1,
+      practitioner = practitioner3,
+      createdAt = now.plusSeconds(1000),
+      startedAt = now,
+    )
+    offenderSetupRepository.saveAll(listOf(setupA1, setupA2, setupB1, setupC1))
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    val averages = stats.averageSecondsToRegister
+    assertThat(averages).containsExactlyInAnyOrder(
+      SiteAverage("Site A", 150.0),
+      SiteAverage("Site B", 50.0),
+      SiteAverage("UNKNOWN", 1000.0),
+    )
   }
 }

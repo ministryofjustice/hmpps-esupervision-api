@@ -220,12 +220,16 @@ open class OffenderSetup(
 
   @Column("created_at")
   open var createdAt: Instant,
+
+  @Column("started_at")
+  open var startedAt: Instant?,
 ) : AEntity() {
   fun dto(): OffenderSetupDto = OffenderSetupDto(
     uuid = uuid,
     practitioner = practitioner,
     offender = offender.uuid,
     createdAt = createdAt,
+    startedAt = startedAt,
   )
 }
 

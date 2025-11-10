@@ -107,6 +107,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     practitionerId = PRACTITIONER_ALICE.externalUserId(),
     firstCheckinDate = LocalDate.now().plusDays(1),
     checkinInterval = CheckinInterval.WEEKLY,
+    startedAt = Instant.now().plus(Duration.ofDays(1)),
   )
   var offender: OffenderDto? = null
 
@@ -120,6 +121,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     practitionerId = PRACTITIONER_ALICE.externalUserId(),
     firstCheckinDate = LocalDate.now().plusDays(1),
     checkinInterval = CheckinInterval.WEEKLY,
+    startedAt = Instant.now().plus(Duration.ofDays(1)),
   )
 
   var offender2: OffenderDto? = null
@@ -471,7 +473,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
       setupUuid = UUID.randomUUID(), firstName = "Bob", lastName = "Jones", crn = "C345678",
       dateOfBirth = LocalDate.of(1970, 3, 3), email = "bob_jones@example.com",
       practitionerId = PRACTITIONER_ALICE.externalUserId(), firstCheckinDate = LocalDate.now().plusDays(1),
-      checkinInterval = CheckinInterval.WEEKLY,
+      checkinInterval = CheckinInterval.WEEKLY, startedAt = Instant.now().plus(Duration.ofDays(1)),
     )
     val setup3 = offenderSetupService.startOffenderSetup(offenderInfo3)
     mockSetupPhotoUpload(setup3)
