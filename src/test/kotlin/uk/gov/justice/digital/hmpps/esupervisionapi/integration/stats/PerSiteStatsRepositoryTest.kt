@@ -1268,7 +1268,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     )
     offenderSetupRepository.saveAll(listOf(setupA1, setupA2, setupB1, setupC1))
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
-    val averages = stats.averageTimeToRegister
+    val averages = stats.averageSecondsToRegister
     assertThat(averages).containsExactlyInAnyOrder(
       SiteAverage("Site A", 150.0),
       SiteAverage("Site B", 50.0),
