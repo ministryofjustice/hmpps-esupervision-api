@@ -34,6 +34,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRep
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinEventRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -483,6 +485,22 @@ class OffenderCheckinService(
     } catch (e: Exception) {
       // the images are used only for presentation, we can proceed if copy fails
       LOG.warn("Failed to copy checkin snapshots to image bucket, checkin={}", checkin.uuid, e)
+    }
+  }
+
+  fun checkinEvent(uuid: UUID, request: CheckinEventRequest): UUID {
+    val checkin = checkinRepository.findByUuid(uuid).getOrElse {
+      throw NoResourceFoundException(HttpMethod.POST, "/offender_checkins/$uuid")
+    }
+    when (request.eventType) {
+      CheckinEventType.CHECKIN_OUTSIDE_ACCESS -> {
+        if (checkin.status != CheckinStatus.CREATED) {
+          throw BadArgumentException("Invalid event ${request.eventType} for checkin of status ${checkin.status}")
+        }
+        val event = OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_CHECKIN_OUTSIDE_ACCESS, request.comment ?: "outside access", checkin.offender.practitioner, checkin.offender, checkin)
+        offenderEventLogRepository.save(event)
+        return event.uuid
+      }
     }
   }
 

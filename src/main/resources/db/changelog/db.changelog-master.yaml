@@ -10,4 +10,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/5_create_generic_notification.sql
   - include:
-      file : db/changelog/changesets/6_add_started_at_to_offender_setup.sql
+      file: db/changelog/changesets/6_new_event_type_checkin_outside_access.sql
+  - include:
+      file : db/changelog/changesets/7_add_started_at_to_offender_setup.sql
