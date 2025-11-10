@@ -84,7 +84,7 @@ data class Stats(
   val flaggedCheckinsPerSite: List<SiteCount>,
   val stoppedCheckinsPerSite: List<SiteCount>,
   val averageFlagsPerCheckinPerSite: List<SiteAverage>,
-  val averageSupportRequestsPerSite: List<SiteAverage>,
+  val callbackRequestPercentagePerSite: List<SiteAverage>,
 )
 
 private val emptyStats = Stats(
@@ -182,10 +182,10 @@ class PerSiteStatsRepositoryImpl(
 
     val flagsAndSupport = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
     val averageFlagsPerCheckinPerSite = mutableListOf<SiteAverage>()
-    val averageSupportRequestsPerSite = mutableListOf<SiteAverage>()
+    val callbackRequestPercentagePerSite = mutableListOf<SiteAverage>()
     for (row in flagsAndSupport) {
       averageFlagsPerCheckinPerSite.add(siteAverage(row[0], row[1]))
-      averageSupportRequestsPerSite.add(siteAverage(row[0], row[2]))
+      callbackRequestPercentagePerSite.add(siteAverage(row[0], row[2]))
     }
 
     return Stats(
@@ -201,7 +201,7 @@ class PerSiteStatsRepositoryImpl(
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
-      averageSupportRequestsPerSite = averageSupportRequestsPerSite,
+      callbackRequestPercentagePerSite = callbackRequestPercentagePerSite,
     )
   }
 }

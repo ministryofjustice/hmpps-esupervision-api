@@ -3,7 +3,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.notifications
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
-import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
@@ -23,15 +22,7 @@ import java.util.UUID
  * Currently focused on offender specific notifications.
  */
 @Entity
-@Table(
-  name = "generic_notification",
-  indexes = [
-    Index(name = "idx_generic_notification_notification_id", columnList = "notification_id", unique = true),
-    Index(name = "idx_generic_notification_reference", columnList = "reference"),
-    Index(name = "idx_generic_notification_created_at", columnList = "created_at"),
-    Index(name = "idx_generic_notification_message_type", columnList = "message_type"),
-  ],
-)
+@Table(name = "generic_notification")
 open class GenericNotification(
   @Column("notification_id", unique = true, nullable = false)
   open var notificationId: UUID,
