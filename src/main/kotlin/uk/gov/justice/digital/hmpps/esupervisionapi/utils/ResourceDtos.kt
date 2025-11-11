@@ -83,6 +83,10 @@ enum class CheckinEventType {
    * Attempt to access the checkin from outside the UK
    */
   CHECKIN_OUTSIDE_ACCESS,
+  /**
+   * Practitioner has started the review process for a checkin submitted by a PoP
+   */
+  REVIEW_STARTED,
 }
 
 data class CheckinEventRequest(

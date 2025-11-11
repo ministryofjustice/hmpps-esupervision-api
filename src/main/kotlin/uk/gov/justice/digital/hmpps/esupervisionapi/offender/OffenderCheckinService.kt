@@ -102,12 +102,6 @@ class OffenderCheckinService(
       throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$uuid")
     }
 
-    // If this is the first time viewing, set the review 'started at' time
-    if (checkin.reviewStartedAt == null) {
-      checkin.reviewStartedAt = clock.instant()
-      checkinRepository.save(checkin)
-    }
-
     val logs = offenderEventLogRepository.findAllCheckinEntries(
       checkin,
       setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED),
@@ -510,6 +504,13 @@ class OffenderCheckinService(
         val event = OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_CHECKIN_OUTSIDE_ACCESS, request.comment ?: "outside access", checkin.offender.practitioner, checkin.offender, checkin)
         offenderEventLogRepository.save(event)
         return event.uuid
+      }
+
+      CheckinEventType.REVIEW_STARTED -> {
+        // Every time this event is called, the reviewStartedAt time is updated to now
+        checkin.reviewStartedAt = clock.instant()
+        checkinRepository.save(checkin)
+        return checkin.uuid
       }
     }
   }
