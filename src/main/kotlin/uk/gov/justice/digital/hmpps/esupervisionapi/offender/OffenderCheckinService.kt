@@ -93,7 +93,6 @@ class OffenderCheckinService(
    * @param uuid UUID of the checkin
    * @param includeUploads set to true to ensure vide/snapshot URLs are returned
    */
-  @Transactional
   fun getCheckin(
     uuid: UUID,
     includeUploads: Boolean = false,
@@ -101,7 +100,6 @@ class OffenderCheckinService(
     val checkin = checkinRepository.findByUuid(uuid).getOrElse {
       throw NoResourceFoundException(HttpMethod.GET, "/offender_checkins/$uuid")
     }
-
     val logs = offenderEventLogRepository.findAllCheckinEntries(
       checkin,
       setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED),
