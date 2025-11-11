@@ -498,6 +498,7 @@ class OffenderCheckinService(
   }
 
   fun checkinEvent(uuid: UUID, request: CheckinEventRequest): UUID {
+    LOG.info("CheckinEventRequest(eventType={}) for checkin={}", request.eventType, uuid)
     val checkin = checkinRepository.findByUuid(uuid).getOrElse {
       throw NoResourceFoundException(HttpMethod.POST, "/offender_checkins/$uuid")
     }

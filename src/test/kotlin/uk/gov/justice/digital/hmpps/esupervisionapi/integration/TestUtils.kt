@@ -21,6 +21,7 @@ fun createOffenderInfo(
   practitionerId: String = PRACTITIONER_ALICE.externalUserId(),
   firstCheckinDate: LocalDate,
   checkinInterval: CheckinInterval = CheckinInterval.WEEKLY,
+  startedAt: Instant = Instant.now(),
 ) = OffenderInfo(
   UUID.randomUUID(),
   practitionerId,
@@ -31,6 +32,7 @@ fun createOffenderInfo(
   "${name.split(" ").first()}@example.com",
   firstCheckinDate = firstCheckinDate,
   checkinInterval = checkinInterval,
+  startedAt = startedAt,
 )
 
 /**
