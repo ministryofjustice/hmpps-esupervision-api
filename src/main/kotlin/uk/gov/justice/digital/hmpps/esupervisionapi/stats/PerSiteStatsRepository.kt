@@ -92,6 +92,7 @@ data class Stats(
   val offendersPerSite: List<SiteCount>,
   val checkinFrequencyPerSite: List<SiteCheckinFrequency>,
   val checkinAverages: List<SiteCheckinAverage>,
+  val checkinOutsideAccess: List<SiteCount>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
   val stoppedCheckinsPerSite: List<SiteCount>,
@@ -103,6 +104,7 @@ data class Stats(
 )
 
 private val emptyStats = Stats(
+  emptyList(),
   emptyList(),
   emptyList(),
   emptyList(),
@@ -159,6 +161,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_submission_to_review_time_average.sql") private val averageReviewResponseTimePerSiteResource: Resource,
   @Value("classpath:db/queries/stats_generic_offender_notifications_status_per_site.sql") private val genericNotificationsStatusPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_average_seconds_to_register.sql") private val averageSecondsToRegisterResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_outside_access.sql") private val checkinOutsideAccessResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -176,6 +179,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlAverageReviewResponseTimePerSiteResource: String by lazy { averageReviewResponseTimePerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlGenericNotificationsStatusPerSite: String by lazy { genericNotificationsStatusPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageSecondsToRegister: String by lazy { averageSecondsToRegisterResource.inputStream.use { it.reader().readText() } }
+  private val sqlCheckinOutsideAccess: String by lazy { checkinOutsideAccessResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -196,6 +200,7 @@ class PerSiteStatsRepositoryImpl(
     val completedCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
     val avgCompletedCheckinsPerSite = entityManager.runPerSiteQuery(sqlAvgCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCheckinAverage)
+    val checkinOutsideAccess = entityManager.runPerSiteQuery(sqlCheckinOutsideAccess, lowerBound, upperBound).map(::siteCount)
     val automatedIdCheckAccuracy = entityManager.runPerSiteQuery(sqlAutomatedIdCheckAccuracyResource, lowerBound, upperBound).map(::idCheckAccuracy)
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
@@ -223,6 +228,7 @@ class PerSiteStatsRepositoryImpl(
       offendersPerSite = offendersPerSite,
       checkinFrequencyPerSite = checkinFrequencyPerSite,
       checkinAverages = avgCompletedCheckinsPerSite,
+      checkinOutsideAccess = checkinOutsideAccess,
       automatedIdCheckAccuracy = automatedIdCheckAccuracy,
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
