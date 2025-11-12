@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/changesets/6_new_event_type_checkin_outside_access.sql
   - include:
       file : db/changelog/changesets/7_add_started_at_to_offender_setup.sql
+  - include:
+      file: db/changelog/changesets/8_add_checkin_started_at_field.sql
