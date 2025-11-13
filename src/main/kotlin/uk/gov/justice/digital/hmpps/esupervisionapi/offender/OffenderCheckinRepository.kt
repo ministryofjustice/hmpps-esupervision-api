@@ -57,6 +57,9 @@ open class OffenderCheckin(
   @Column("reviewed_by", nullable = true)
   open var reviewedBy: ExternalUserId?,
 
+  @Column("review_started_at", nullable = true)
+  open var reviewStartedAt: Instant?,
+
   @Column("created_by", nullable = false)
   open var createdBy: ExternalUserId,
 
@@ -88,6 +91,7 @@ open class OffenderCheckin(
     surveyResponse = surveyResponse,
     reviewedBy = reviewedBy,
     reviewedAt = reviewedAt,
+    reviewStartedAt = reviewStartedAt,
     createdBy = createdBy,
     createdAt = createdAt,
     videoUrl = resourceLocator.getCheckinVideo(this),
