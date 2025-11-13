@@ -1215,9 +1215,9 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
     val reviewResponseTimeAverages = stats.averageReviewTimePerCheckinPerSite
     assertThat(reviewResponseTimeAverages).hasSize(3)
-    assertThat(reviewResponseTimeAverages.find { it.location == "Site A" }?.reviewTimeAvgText).isEqualTo("6h0m0s")
-    assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.reviewTimeAvgText).isEqualTo("0h0m0s")
-    assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h45m22s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site A" }?.averageTimeText).isEqualTo("6h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.averageTimeText).isEqualTo("0h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h45m22s")
     assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("3h22m11s")
   }
 
@@ -1234,7 +1234,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val offenderA1 = offenderRepository.save(Offender.create(name = "Offender A1", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
     val offenderA2 = offenderRepository.save(Offender.create(name = "Offender A2", crn = "A234567", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
     val offenderB1 = offenderRepository.save(Offender.create(name = "Offender B1", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
-    val offenderC1 = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+    val offenderC1 = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE)) 
 
     val now = Instant.now()
 
@@ -1267,12 +1267,14 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       startedAt = now,
     )
     offenderSetupRepository.saveAll(listOf(setupA1, setupA2, setupB1, setupC1))
+    
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
-    val averages = stats.averageSecondsToRegister
-    assertThat(averages).containsExactlyInAnyOrder(
-      SiteAverage("Site A", 150.0),
-      SiteAverage("Site B", 50.0),
-      SiteAverage("UNKNOWN", 1000.0),
-    )
+
+    val averages = stats.averageTimeToRegisterPerSite
+    assertThat(averages).hasSize(3)
+    assertThat(averages.find { it.location == "Site A" }?.averageTimeText).isEqualTo("0h2m30s")
+    assertThat(averages.find { it.location == "Site B" }?.averageTimeText).isEqualTo("0h0m50s")
+    assertThat(averages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h16m40s")
+    assertThat(stats.averageTimeToRegisterTotal).isEqualTo("0h5m37s")
   }
 }
