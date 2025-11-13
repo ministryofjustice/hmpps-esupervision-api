@@ -210,16 +210,16 @@ class PerSiteStatsRepositoryImpl(
       averageFlagsPerCheckinPerSite.add(siteAverage(row[0], row[1]))
       callbackRequestPercentagePerSite.add(siteAverage(row[0], row[2]))
     }
-val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound)
+    val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound)
       .map(::intervalAverage)
-    val averageReviewResponseTimes = reviewResponseTimes.map(::siteFormattedTimeAverage) 
-    val averageReviewResponseTimeTotal = siteFormattedTimeAverageTotal(reviewResponseTimes) 
+    val averageReviewResponseTimes = reviewResponseTimes.map(::siteFormattedTimeAverage)
+    val averageReviewResponseTimeTotal = siteFormattedTimeAverageTotal(reviewResponseTimes)
 
     val registrationTimes = entityManager.runPerSiteQuery(sqlAverageTimeToRegister, lowerBound, upperBound)
       .map(::intervalAverage)
     val averageTimeToRegisterPerSite = registrationTimes
-      .map(::siteFormattedTimeAverage) 
-    val averageTimeToRegisterTotal = siteFormattedTimeAverageTotal(registrationTimes) 
+      .map(::siteFormattedTimeAverage)
+    val averageTimeToRegisterTotal = siteFormattedTimeAverageTotal(registrationTimes)
 
     return Stats(
       invitesPerSite = invitesPerSite,
@@ -331,20 +331,19 @@ private fun genericNotificationStatus(cols: Array<Any?>): LabeledNotificationSit
   count = cols[3] as Long,
 )
 
-
 private fun intervalAverage(cols: Array<Any?>): IntervalAverage = IntervalAverage(
   location = cols[0] as String,
-  average = cols[1] as PGInterval? ?: PGInterval(0, 0, 0, 0, 0, 0.0), 
-  count = (cols[2] as Number).toLong(), 
+  average = cols[1] as PGInterval? ?: PGInterval(0, 0, 0, 0, 0, 0.0),
+  count = (cols[2] as Number).toLong(),
 )
 
 private fun siteFormattedTimeAverage(intervalAverage: IntervalAverage): SiteFormattedTimeAverage = SiteFormattedTimeAverage(
   location = intervalAverage.location,
   averageTimeText = String.format(
     "%sh%sm%ss",
-    ((intervalAverage.average.days) * 24) + (intervalAverage.average.hours), 
-    intervalAverage.average.minutes, 
-    intervalAverage.average.wholeSeconds, 
+    ((intervalAverage.average.days) * 24) + (intervalAverage.average.hours),
+    intervalAverage.average.minutes,
+    intervalAverage.average.wholeSeconds,
   ),
 )
 
@@ -355,11 +354,11 @@ private fun siteFormattedTimeAverageTotal(averagesPerSite: List<IntervalAverage>
   var wholeSeconds = 0L
   var count = 0L
   for (averagePerSite in averagesPerSite) {
-    hours += ((averagePerSite.average.days) * 24) * averagePerSite.count 
-    hours += (averagePerSite.average.hours) * averagePerSite.count 
-    minutes += (averagePerSite.average.minutes) * averagePerSite.count 
-    wholeSeconds += (averagePerSite.average.wholeSeconds) * averagePerSite.count 
-    count += averagePerSite.count 
+    hours += ((averagePerSite.average.days) * 24) * averagePerSite.count
+    hours += (averagePerSite.average.hours) * averagePerSite.count
+    minutes += (averagePerSite.average.minutes) * averagePerSite.count
+    wholeSeconds += (averagePerSite.average.wholeSeconds) * averagePerSite.count
+    count += averagePerSite.count
   }
 
   if (count == 0L) return "0h0m0s"

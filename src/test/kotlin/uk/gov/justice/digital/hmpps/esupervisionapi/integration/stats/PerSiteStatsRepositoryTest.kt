@@ -25,7 +25,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteAverage
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCountOnNthDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.powerSet
@@ -1234,7 +1233,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val offenderA1 = offenderRepository.save(Offender.create(name = "Offender A1", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
     val offenderA2 = offenderRepository.save(Offender.create(name = "Offender A2", crn = "A234567", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
     val offenderB1 = offenderRepository.save(Offender.create(name = "Offender B1", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
-    val offenderC1 = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE)) 
+    val offenderC1 = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
 
     val now = Instant.now()
 
@@ -1267,7 +1266,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       startedAt = now,
     )
     offenderSetupRepository.saveAll(listOf(setupA1, setupA2, setupB1, setupC1))
-    
+
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
 
     val averages = stats.averageTimeToRegisterPerSite
