@@ -14,4 +14,6 @@ databaseChangeLog:
   - include:
       file : db/changelog/changesets/7_add_started_at_to_offender_setup.sql
   - include:
-      file: db/changelog/changesets/8_add_review_started_at_to_offender_checkin.sql
+      file: db/changelog/changesets/8_change_offender_event_log_comment_to_text.sql
+  - include:
+      file: db/changelog/changesets/9_add_review_started_at_to_offender_checkin.sql
