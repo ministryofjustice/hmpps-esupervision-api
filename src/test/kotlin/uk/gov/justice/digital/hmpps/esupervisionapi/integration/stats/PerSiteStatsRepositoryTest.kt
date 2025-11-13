@@ -1407,11 +1407,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     )
 
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
-    val averages = stats.averageSecondsToCompleteCheckinReviewPerSite
-    assertThat(averages).containsExactlyInAnyOrder(
-      SiteAverage("Site A", 150.0),
-      SiteAverage("Site B", 50.0),
-      SiteAverage("UNKNOWN", 1000.0),
-    )
+    val averages = stats.averageTimeTakenToCompleteCheckinReviewPerSite
+    assertThat(averages).hasSize(3)
+
+    assertThat(averages.find { it.location == "Site A" }?.reviewTimeAvgText).isEqualTo("0h2m30s")
+    assertThat(averages.find { it.location == "Site B" }?.reviewTimeAvgText).isEqualTo("0h0m50s")
+    assertThat(averages.find { it.location == "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h16m40s")
+    assertThat(stats.averageTimeTakenToCompleteCheckinReviewTotal).isEqualTo("0h5m37s")
   }
 }

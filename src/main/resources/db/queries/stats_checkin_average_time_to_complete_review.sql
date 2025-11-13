@@ -1,10 +1,9 @@
--- calculates the average time in seconds (rounded) from when a practitioner views the checkin for a PoP (review_started_at) to when a checkin is reviewed (reviewed_at)
+-- calculates the average time from when a practitioner views the checkin for a PoP (review_started_at) to when a checkin is reviewed (reviewed_at)
 
 WITH checkin_info AS (
     SELECT
         COALESCE(t.location, 'UNKNOWN') as location,
-        EXTRACT(EPOCH FROM (c.reviewed_at - c.review_started_at)) as duration_seconds
-
+        (c.reviewed_at - c.review_started_at) as review_interval
     FROM offender_checkin c
     JOIN offender o ON c.offender_id = o.id
     LEFT JOIN tmp_practitioner_sites t ON t.practitioner = o.practitioner
@@ -20,12 +19,8 @@ all_sites AS (
 )
 SELECT
     s.location,
-    ROUND(
-        COALESCE(
-            SUM(cc.duration_seconds) / NULLIF(COUNT(cc.duration_seconds), 0),
-            0
-        )
-    ) AS average_review_seconds
+    COALESCE(AVG(cc.review_interval), '0 seconds'::interval) AS review_time_avg,
+    COUNT(cc.review_interval) AS review_time_count
 
 FROM all_sites s
 LEFT JOIN checkin_info cc ON s.location = cc.location

@@ -100,7 +100,8 @@ data class Stats(
   val averageReviewTimePerCheckinPerSite: List<SiteReviewTimeAverage>,
   val averageReviewTimePerCheckinTotal: String,
   val averageSecondsToRegister: List<SiteAverage>,
-  val averageSecondsToCompleteCheckinReviewPerSite: List<SiteAverage>,
+  val averageTimeTakenToCompleteCheckinReviewPerSite: List<SiteReviewTimeAverage>,
+  val averageTimeTakenToCompleteCheckinReviewTotal: String,
 )
 
 private val emptyStats = Stats(
@@ -121,6 +122,7 @@ private val emptyStats = Stats(
   String(),
   emptyList(),
   emptyList(),
+  String(),
 )
 
 /**
@@ -161,7 +163,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_submission_to_review_time_average.sql") private val averageReviewResponseTimePerSiteResource: Resource,
   @Value("classpath:db/queries/stats_generic_offender_notifications_status_per_site.sql") private val genericNotificationsStatusPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_average_seconds_to_register.sql") private val averageSecondsToRegisterResource: Resource,
-  @Value("classpath:db/queries/stats_checkin_average_time_to_complete_review.sql") private val averageSecondsToCompleteCheckinReviewPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_average_time_to_complete_review.sql") private val averageTimeTakenToCompleteCheckinReviewPerSiteResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -179,7 +181,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlAverageReviewResponseTimePerSiteResource: String by lazy { averageReviewResponseTimePerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlGenericNotificationsStatusPerSite: String by lazy { genericNotificationsStatusPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageSecondsToRegister: String by lazy { averageSecondsToRegisterResource.inputStream.use { it.reader().readText() } }
-  private val sqlAverageSecondsToCompleteCheckinReview: String by lazy { averageSecondsToCompleteCheckinReviewPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageTimeTakenToCompleteCheckinReviewPerSite: String by lazy { averageTimeTakenToCompleteCheckinReviewPerSiteResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -216,8 +218,14 @@ class PerSiteStatsRepositoryImpl(
     val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::reviewAverage)
     val averageReviewResponseTimes = reviewResponseTimes.map(::siteReviewTimeAverage)
     val averageReviewResponseTimeTotal = siteReviewTimeAverageTotal(reviewResponseTimes)
+
     val averageSecondsToRegister = entityManager.runPerSiteQuery(sqlAverageSecondsToRegister, lowerBound, upperBound).map { siteAverage(it[0], it[1]) }
-    val averageSecondsToCompleteCheckinReviewPerSite = entityManager.runPerSiteQuery(sqlAverageSecondsToCompleteCheckinReview, lowerBound, upperBound).map { siteAverage(it[0], it[1]) }
+
+    val reviewTimesToComplete = entityManager.runPerSiteQuery(sqlAverageTimeTakenToCompleteCheckinReviewPerSite, lowerBound, upperBound)
+      .map(::reviewAverage)
+    val averageTimeTakenToCompleteCheckinReviewPerSite = reviewTimesToComplete
+      .map(::siteReviewTimeAverage)
+    val averageTimeTakenToCompleteCheckinReviewTotal = siteReviewTimeAverageTotal(reviewTimesToComplete)
 
     return Stats(
       invitesPerSite = invitesPerSite,
@@ -236,7 +244,8 @@ class PerSiteStatsRepositoryImpl(
       averageReviewTimePerCheckinPerSite = averageReviewResponseTimes,
       averageReviewTimePerCheckinTotal = averageReviewResponseTimeTotal,
       averageSecondsToRegister = averageSecondsToRegister,
-      averageSecondsToCompleteCheckinReviewPerSite = averageSecondsToCompleteCheckinReviewPerSite,
+      averageTimeTakenToCompleteCheckinReviewPerSite = averageTimeTakenToCompleteCheckinReviewPerSite,
+      averageTimeTakenToCompleteCheckinReviewTotal = averageTimeTakenToCompleteCheckinReviewTotal,
     )
   }
 }
