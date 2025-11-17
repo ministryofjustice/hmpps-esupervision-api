@@ -123,7 +123,7 @@ private val emptyStats = Stats(
   String(),
   emptyList(),
   emptyList(),
-  String()
+  String(),
 )
 
 /**

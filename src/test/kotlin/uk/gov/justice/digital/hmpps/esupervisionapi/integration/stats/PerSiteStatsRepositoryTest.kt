@@ -1292,7 +1292,6 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     val now = Instant.now()
 
-
     checkinRepository.saveAll(
       listOf(
         // Completed in 100 seconds
@@ -1302,7 +1301,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           status = CheckinStatus.SUBMITTED,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           submittedAt = now.minusSeconds(100),
-          checkinStartedAt = now.minusSeconds(200)
+          checkinStartedAt = now.minusSeconds(200),
         ),
         // Completed in 30 seconds
         OffenderCheckin.create(
@@ -1312,7 +1311,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(1),
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           submittedAt = now,
-          checkinStartedAt = now.minusSeconds(30)
+          checkinStartedAt = now.minusSeconds(30),
         ),
         // Completed in 45 seconds
         OffenderCheckin.create(
@@ -1321,7 +1320,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           status = CheckinStatus.SUBMITTED,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           submittedAt = now,
-          checkinStartedAt = now.minusSeconds(45)
+          checkinStartedAt = now.minusSeconds(45),
         ),
         // Completed in 135 seconds
         OffenderCheckin.create(
@@ -1331,7 +1330,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(1),
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           submittedAt = now,
-          checkinStartedAt = now.minusSeconds(135)
+          checkinStartedAt = now.minusSeconds(135),
         ),
         // Completed in 20 seconds
         OffenderCheckin.create(
@@ -1340,7 +1339,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           status = CheckinStatus.REVIEWED,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           submittedAt = now,
-          checkinStartedAt = now.minusSeconds(20)
+          checkinStartedAt = now.minusSeconds(20),
         ),
         // Completed in 20 seconds
         OffenderCheckin.create(
@@ -1350,7 +1349,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(1),
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           submittedAt = now,
-          checkinStartedAt = now.minusSeconds(20)
+          checkinStartedAt = now.minusSeconds(20),
         ),
         // Completed in 60 seconds
         OffenderCheckin.create(
@@ -1360,7 +1359,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           dueDate = LocalDate.now().minusDays(2),
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           submittedAt = now,
-          checkinStartedAt = now.minusSeconds(60)
+          checkinStartedAt = now.minusSeconds(60),
         ),
         // Created not submitted or reviewed
         OffenderCheckin.create(
