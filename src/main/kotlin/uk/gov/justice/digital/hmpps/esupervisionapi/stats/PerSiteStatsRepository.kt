@@ -42,6 +42,8 @@ data class LabeledSiteCount(
   val location: String,
   val label: String,
   val count: Long,
+  val total: Long? = null,
+  val percentage: Double? = null,
 )
 
 data class LabeledNotificationSiteCount(
@@ -105,6 +107,7 @@ data class Stats(
   val averageCheckinCompletionTimeTotal: String,
   val averageTimeTakenToCompleteCheckinReviewPerSite: List<SiteFormattedTimeAverage>,
   val averageTimeTakenToCompleteCheckinReviewTotal: String,
+  val deviceType: List<LabeledSiteCount>,
 )
 
 private val emptyStats = Stats(
@@ -130,6 +133,7 @@ private val emptyStats = Stats(
   String(),
   emptyList(),
   String(),
+  emptyList(),
 )
 
 /**
@@ -169,6 +173,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_flag_and_support_average_per_site.sql") private val averageFlagsAndSupportRequestsPerCheckinPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_submission_to_review_time_average.sql") private val averageReviewResponseTimePerSiteResource: Resource,
   @Value("classpath:db/queries/stats_generic_offender_notifications_status_per_site.sql") private val genericNotificationsStatusPerSiteResource: Resource,
+  @Value("classpath:db/queries/stats_offender_checkin_device_type.sql") private val deviceTypeResource: Resource,
   @Value("classpath:db/queries/stats_offender_average_time_to_register.sql") private val averageTimeToRegisterResource: Resource,
   @Value("classpath:db/queries/stats_checkin_outside_access.sql") private val checkinOutsideAccessResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completion_time_average.sql") private val averageSecondsToCompleteCheckinResource: Resource,
@@ -193,6 +198,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlCheckinOutsideAccess: String by lazy { checkinOutsideAccessResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageSecondsToCompleteCheckin: String by lazy { averageSecondsToCompleteCheckinResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageTimeTakenToCompleteCheckinReviewPerSite: String by lazy { averageTimeTakenToCompleteCheckinReviewPerSiteResource.inputStream.use { it.reader().readText() } }
+  private val sqlDeviceType: String by lazy { deviceTypeResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -207,7 +213,7 @@ class PerSiteStatsRepositoryImpl(
     val lowerBound = LocalDate.of(2025, 1, 1)
     val upperBound = LocalDate.now(clock.zone)
     val invitesPerSite = entityManager.runPerSiteQuery(sqlInvitesPerSite, lowerBound, upperBound).map(::siteCount)
-    val invitesStatusPerSite = entityManager.runPerSiteQuery(sqlInvitesStatusPerSite, lowerBound, upperBound).map(::inviteStatus)
+    val invitesStatusPerSite = entityManager.runPerSiteQuery(sqlInvitesStatusPerSite, lowerBound, upperBound).map(::labeledSiteCount)
     val genericNotificationsStatusPerSite = entityManager.runPerSiteQuery(sqlGenericNotificationsStatusPerSite, lowerBound, upperBound).map(::genericNotificationStatus)
     val offendersPerSite = entityManager.runPerSiteQuery(sqlOffendersPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
@@ -247,6 +253,8 @@ class PerSiteStatsRepositoryImpl(
       .map(::siteFormattedTimeAverage)
     val averageTimeTakenToCompleteCheckinReviewTotal = siteFormattedTimeAverageTotal(reviewTimesToComplete)
 
+    val deviceTypePerSite = entityManager.runPerSiteQuery(sqlDeviceType, lowerBound, upperBound).map(::labeledSiteCountWithPercentage)
+
     return Stats(
       invitesPerSite = invitesPerSite,
       inviteStatusPerSite = invitesStatusPerSite,
@@ -270,6 +278,7 @@ class PerSiteStatsRepositoryImpl(
       averageCheckinCompletionTimeTotal = averageCheckinCompletionTimeTotal,
       averageTimeTakenToCompleteCheckinReviewPerSite = averageTimeTakenToCompleteCheckinReviewPerSite,
       averageTimeTakenToCompleteCheckinReviewTotal = averageTimeTakenToCompleteCheckinReviewTotal,
+      deviceType = deviceTypePerSite,
     )
   }
 }
@@ -349,10 +358,18 @@ private fun siteAverage(location: Any?, average: Any?): SiteAverage = SiteAverag
   average = (average as? Number)?.toDouble() ?: 0.0,
 )
 
-private fun inviteStatus(cols: Array<Any?>): LabeledSiteCount = LabeledSiteCount(
+private fun labeledSiteCount(cols: Array<Any?>): LabeledSiteCount = LabeledSiteCount(
   location = cols[0] as String,
   label = cols[1] as String,
   count = (cols[2] as Number).toLong(),
+)
+
+private fun labeledSiteCountWithPercentage(cols: Array<Any?>): LabeledSiteCount = LabeledSiteCount(
+  location = cols[0] as String,
+  label = cols[1] as String,
+  count = (cols[2] as Number).toLong(),
+  total = (cols.getOrNull(3) as? Number)?.toLong(),
+  percentage = (cols.getOrNull(4) as? Number)?.toDouble(),
 )
 
 private fun genericNotificationStatus(cols: Array<Any?>): LabeledNotificationSiteCount = LabeledNotificationSiteCount(

@@ -24,6 +24,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
+import uk.gov.justice.digital.hmpps.esupervisionapi.stats.LabeledSiteCount
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCountOnNthDay
@@ -31,12 +32,43 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.powerSet
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetTime
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 class PerSiteStatsRepositoryTest : IntegrationTestBase() {
+
+  private data class CheckinParam(
+    val offender: Offender,
+    val createdBy: ExternalUserId,
+    val status: CheckinStatus,
+    val dueDate: LocalDate? = null,
+    val autoIdCheck: AutomatedIdVerificationResult? = null,
+    val submittedAt: Instant? = null,
+    val checkinStartedAt: Instant? = null,
+    val device: Map<String, Object>? = null,
+  )
+
+  private fun createCheckins(params: List<CheckinParam>): List<OffenderCheckin> = params.map createCheckin@{
+    val checkin = OffenderCheckin.create(
+      offender = it.offender,
+      createdBy = it.createdBy,
+      status = it.status,
+      autoIdCheck = it.autoIdCheck,
+      submittedAt = it.submittedAt,
+      checkinStartedAt = it.checkinStartedAt,
+    )
+    if (it.dueDate != null) {
+      checkin.dueDate = it.dueDate
+    }
+    if (it.device != null) {
+      checkin.surveyResponse = mapOf("device" to it.device as Object)
+    }
+
+    return@createCheckin checkin
+  }
 
   @Autowired
   lateinit var genericNotificationRepository: GenericNotificationRepository
@@ -1266,7 +1298,6 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       startedAt = now,
     )
     offenderSetupRepository.saveAll(listOf(setupA1, setupA2, setupB1, setupC1))
-
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
 
     val averages = stats.averageTimeToRegisterPerSite
@@ -1519,5 +1550,49 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(averages.find { it.location == "Site B" }?.averageTimeText).isEqualTo("0h0m50s")
     assertThat(averages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h16m40s")
     assertThat(stats.averageTimeTakenToCompleteCheckinReviewTotal).isEqualTo("0h5m37s")
+  }
+
+  @Test
+  fun `device type stats`() {
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2 = PRACTITIONER_BOB.externalUserId()
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+    )
+    val offenderA = offenderRepository.save(Offender.create(name = "Offender A1", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB = offenderRepository.save(Offender.create(name = "Offender B1", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val now = Instant.now()
+    val today = ZonedDateTime.ofInstant(now, ZoneId.of("Europe/London")).toLocalDate()
+
+    val protoCheckin = CheckinParam(
+      offender = offenderA,
+      createdBy = practitioner1,
+      status = CheckinStatus.SUBMITTED,
+      autoIdCheck = AutomatedIdVerificationResult.MATCH,
+      submittedAt = now.minusSeconds(100),
+      checkinStartedAt = now.minusSeconds(200),
+    )
+    val deviceMobile = mapOf("deviceType" to "Mobile") as Map<String, Object>
+    val deviceTablet = mapOf("deviceType" to "Tablet") as Map<String, Object>
+
+    val mobilesA = 10L.downTo(1L).map { protoCheckin.copy(dueDate = today.minusDays(it), device = deviceMobile) }
+    val tabletsA = 15L.downTo(11L).map { protoCheckin.copy(dueDate = today.minusDays(it), device = deviceTablet) }
+
+    val mobilesB = 5L.downTo(1L).map { protoCheckin.copy(dueDate = today.minusDays(it), device = deviceMobile, offender = offenderB) }
+    val tabletsB = 10L.downTo(6L).map { protoCheckin.copy(dueDate = today.minusDays(it), device = deviceTablet, offender = offenderB) }
+
+    checkinRepository.saveAll(createCheckins(mobilesA + tabletsA + mobilesB + tabletsB))
+
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    assertThat(stats.deviceType.size == 4)
+    assertThat(stats.deviceType).isEqualTo(
+      listOf(
+        LabeledSiteCount("Site A", label = "Mobile", count = 10, total = 15, 60.0),
+        LabeledSiteCount("Site A", label = "Tablet", count = 5, total = 10, 40.0),
+        LabeledSiteCount("Site B", label = "Mobile", count = 5, total = 15, 60.0),
+        LabeledSiteCount("Site B", label = "Tablet", count = 5, total = 10, 40.0),
+      ),
+    )
   }
 }
