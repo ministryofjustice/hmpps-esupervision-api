@@ -47,6 +47,7 @@ class SurveyTest {
     snapshotUrl = null,
     autoIdCheck = AutomatedIdVerificationResult.MATCH,
     manualIdCheck = null,
+    checkinStartedAt = null,
   )
 
   @Test
