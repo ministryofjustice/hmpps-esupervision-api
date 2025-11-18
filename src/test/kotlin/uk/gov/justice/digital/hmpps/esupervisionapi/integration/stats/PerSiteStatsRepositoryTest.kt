@@ -25,7 +25,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerSite
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.PerSiteStatsRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteAverage
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCount
 import uk.gov.justice.digital.hmpps.esupervisionapi.stats.SiteCountOnNthDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.powerSet
@@ -1267,13 +1266,15 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       startedAt = now,
     )
     offenderSetupRepository.saveAll(listOf(setupA1, setupA2, setupB1, setupC1))
+
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
-    val averages = stats.averageSecondsToRegister
-    assertThat(averages).containsExactlyInAnyOrder(
-      SiteAverage("Site A", 150.0),
-      SiteAverage("Site B", 50.0),
-      SiteAverage("UNKNOWN", 1000.0),
-    )
+
+    val averages = stats.averageTimeToRegisterPerSite
+    assertThat(averages).hasSize(3)
+    assertThat(averages.find { it.location == "Site A" }?.averageTimeText).isEqualTo("0h2m30s")
+    assertThat(averages.find { it.location == "Site B" }?.averageTimeText).isEqualTo("0h0m50s")
+    assertThat(averages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h16m40s")
+    assertThat(stats.averageTimeToRegisterTotal).isEqualTo("0h5m37s")
   }
 
   @Test

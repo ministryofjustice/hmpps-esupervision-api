@@ -99,7 +99,8 @@ data class Stats(
   val callbackRequestPercentagePerSite: List<SiteAverage>,
   val averageReviewTimePerCheckinPerSite: List<SiteFormattedTimeAverage>,
   val averageReviewTimePerCheckinTotal: String,
-  val averageSecondsToRegister: List<SiteAverage>,
+  val averageTimeToRegisterPerSite: List<SiteFormattedTimeAverage>,
+  val averageTimeToRegisterTotal: String,
   val averageCheckinCompletionTimePerSite: List<SiteFormattedTimeAverage>,
   val averageCheckinCompletionTimeTotal: String,
 )
@@ -122,6 +123,7 @@ private val emptyStats = Stats(
   emptyList(),
   String(),
   emptyList(),
+  String(),
   emptyList(),
   String(),
 )
@@ -163,7 +165,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_flag_and_support_average_per_site.sql") private val averageFlagsAndSupportRequestsPerCheckinPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_checkin_submission_to_review_time_average.sql") private val averageReviewResponseTimePerSiteResource: Resource,
   @Value("classpath:db/queries/stats_generic_offender_notifications_status_per_site.sql") private val genericNotificationsStatusPerSiteResource: Resource,
-  @Value("classpath:db/queries/stats_offender_average_seconds_to_register.sql") private val averageSecondsToRegisterResource: Resource,
+  @Value("classpath:db/queries/stats_offender_average_time_to_register.sql") private val averageTimeToRegisterResource: Resource,
   @Value("classpath:db/queries/stats_checkin_outside_access.sql") private val checkinOutsideAccessResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completion_time_average.sql") private val averageSecondsToCompleteCheckinResource: Resource,
 
@@ -182,7 +184,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlAverageFlagsAndSupportRequestsPerCheckinPerSite: String by lazy { averageFlagsAndSupportRequestsPerCheckinPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageReviewResponseTimePerSiteResource: String by lazy { averageReviewResponseTimePerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlGenericNotificationsStatusPerSite: String by lazy { genericNotificationsStatusPerSiteResource.inputStream.use { it.reader().readText() } }
-  private val sqlAverageSecondsToRegister: String by lazy { averageSecondsToRegisterResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageTimeToRegister: String by lazy { averageTimeToRegisterResource.inputStream.use { it.reader().readText() } }
   private val sqlCheckinOutsideAccess: String by lazy { checkinOutsideAccessResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageSecondsToCompleteCheckin: String by lazy { averageSecondsToCompleteCheckinResource.inputStream.use { it.reader().readText() } }
 
@@ -218,11 +220,17 @@ class PerSiteStatsRepositoryImpl(
       averageFlagsPerCheckinPerSite.add(siteAverage(row[0], row[1]))
       callbackRequestPercentagePerSite.add(siteAverage(row[0], row[2]))
     }
-
-    val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound).map(::intervalAverage)
+    val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound)
+      .map(::intervalAverage)
     val averageReviewResponseTimes = reviewResponseTimes.map(::siteFormattedTimeAverage)
     val averageReviewResponseTimeTotal = siteFormattedTimeAverageTotal(reviewResponseTimes)
-    val averageSecondsToRegister = entityManager.runPerSiteQuery(sqlAverageSecondsToRegister, lowerBound, upperBound).map { siteAverage(it[0], it[1]) }
+
+    val registrationTimes = entityManager.runPerSiteQuery(sqlAverageTimeToRegister, lowerBound, upperBound)
+      .map(::intervalAverage)
+    val averageTimeToRegisterPerSite = registrationTimes
+      .map(::siteFormattedTimeAverage)
+    val averageTimeToRegisterTotal = siteFormattedTimeAverageTotal(registrationTimes)
+
     val averageCheckinCompletionIntervals = entityManager.runPerSiteQuery(sqlAverageSecondsToCompleteCheckin, lowerBound, upperBound).map(::intervalAverage)
     val averageCheckinCompletionTimes = averageCheckinCompletionIntervals.map(::siteFormattedTimeAverage)
     val averageCheckinCompletionTimeTotal = siteFormattedTimeAverageTotal(averageCheckinCompletionIntervals)
@@ -244,7 +252,8 @@ class PerSiteStatsRepositoryImpl(
       callbackRequestPercentagePerSite = callbackRequestPercentagePerSite,
       averageReviewTimePerCheckinPerSite = averageReviewResponseTimes,
       averageReviewTimePerCheckinTotal = averageReviewResponseTimeTotal,
-      averageSecondsToRegister = averageSecondsToRegister,
+      averageTimeToRegisterPerSite = averageTimeToRegisterPerSite,
+      averageTimeToRegisterTotal = averageTimeToRegisterTotal,
       averageCheckinCompletionTimePerSite = averageCheckinCompletionTimes,
       averageCheckinCompletionTimeTotal = averageCheckinCompletionTimeTotal,
     )
