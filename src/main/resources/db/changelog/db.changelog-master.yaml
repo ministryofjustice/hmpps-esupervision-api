@@ -15,3 +15,5 @@ databaseChangeLog:
       file : db/changelog/changesets/7_add_started_at_to_offender_setup.sql
   - include:
       file: db/changelog/changesets/8_change_offender_event_log_comment_to_text.sql
+  - include:
+      file: db/changelog/changesets/9_add_checkin_started_at_field.sql

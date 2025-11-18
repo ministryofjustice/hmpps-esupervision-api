@@ -155,6 +155,7 @@ class OffenderCheckinService(
       dueDate = createCheckin.dueDate,
       autoIdCheck = null,
       manualIdCheck = null,
+      checkinStartedAt = null,
     )
 
     val saved = saveCheckin(checkin, offender, createCheckin)
@@ -226,6 +227,7 @@ class OffenderCheckinService(
     checkin.submittedAt = now
     checkin.surveyResponse = checkinInput.survey
     checkin.status = CheckinStatus.SUBMITTED
+    checkin.checkinStartedAt = Instant.ofEpochMilli(checkinInput.survey["checkinStartedAt"] as Long? ?: 0)
 
     checkinRepository.save(checkin)
 

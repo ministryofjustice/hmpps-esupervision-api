@@ -1215,10 +1215,10 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
     val reviewResponseTimeAverages = stats.averageReviewTimePerCheckinPerSite
     assertThat(reviewResponseTimeAverages).hasSize(3)
-    assertThat(reviewResponseTimeAverages.find { it.location == "Site A" }?.reviewTimeAvgText).isEqualTo("6h0m0s")
-    assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.reviewTimeAvgText).isEqualTo("0h0m0s")
-    assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.reviewTimeAvgText).isEqualTo("0h45m22s")
-    assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("3h22m11s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site A" }?.averageTimeText).isEqualTo("6h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "Site B" }?.averageTimeText).isEqualTo("0h0m0s")
+    assertThat(reviewResponseTimeAverages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h45m23s")
+    assertThat(stats.averageReviewTimePerCheckinTotal).isEqualTo("3h22m41s")
   }
 
   @Test
@@ -1274,5 +1274,109 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       SiteAverage("Site B", 50.0),
       SiteAverage("UNKNOWN", 1000.0),
     )
+  }
+
+  @Test
+  fun `calculates average time to complete checkin per site`() {
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2 = PRACTITIONER_BOB.externalUserId()
+    val practitioner3 = PRACTITIONER_DAVE.externalUserId()
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+    )
+
+    val offenderA = offenderRepository.save(Offender.create(name = "Offender A1", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
+    val offenderB = offenderRepository.save(Offender.create(name = "Offender B1", crn = "B123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
+    val offenderC = offenderRepository.save(Offender.create(name = "Offender C1", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+
+    val now = Instant.now()
+
+    checkinRepository.saveAll(
+      listOf(
+        // Completed in 100 seconds
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = now.minusSeconds(100),
+          checkinStartedAt = now.minusSeconds(200),
+        ),
+        // Completed in 30 seconds
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = now,
+          checkinStartedAt = now.minusSeconds(30),
+        ),
+        // Completed in 45 seconds
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.SUBMITTED,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = now,
+          checkinStartedAt = now.minusSeconds(45),
+        ),
+        // Completed in 135 seconds
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = now,
+          checkinStartedAt = now.minusSeconds(135),
+        ),
+        // Completed in 20 seconds
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.REVIEWED,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = now,
+          checkinStartedAt = now.minusSeconds(20),
+        ),
+        // Completed in 20 seconds
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = now,
+          checkinStartedAt = now.minusSeconds(20),
+        ),
+        // Completed in 60 seconds
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(2),
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          submittedAt = now,
+          checkinStartedAt = now.minusSeconds(60),
+        ),
+        // Created not submitted or reviewed
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          dueDate = LocalDate.now().plusDays(1),
+          status = CheckinStatus.CREATED,
+        ),
+      ),
+    )
+
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    val averages = stats.averageCheckinCompletionTimePerSite
+    assertThat(averages).hasSize(3)
+    assertThat(averages.find { it.location == "Site A" }?.averageTimeText).isEqualTo("0h1m5s")
+    assertThat(averages.find { it.location == "Site B" }?.averageTimeText).isEqualTo("0h1m30s")
+    assertThat(averages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h0m33s")
+    assertThat(stats.averageCheckinCompletionTimeTotal).isEqualTo("0h0m58s")
   }
 }
