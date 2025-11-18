@@ -78,6 +78,9 @@ open class OffenderCheckin(
   @Column("id_check_manual", nullable = true)
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult?,
+
+  @Column("checkin_started_at", nullable = true)
+  open var checkinStartedAt: Instant?,
 ) : AEntity() {
   fun dto(resourceLocator: ResourceLocator): OffenderCheckinDto = OffenderCheckinDto(
     uuid = uuid,
@@ -94,6 +97,7 @@ open class OffenderCheckin(
     snapshotUrl = resourceLocator.getCheckinSnapshot(this),
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
+    checkinStartedAt = checkinStartedAt,
   )
 
   companion object {}

@@ -98,6 +98,7 @@ fun OffenderCheckin.Companion.create(
   autoIdCheck: AutomatedIdVerificationResult? = null,
   manualIdCheck: ManualIdVerificationResult? = null,
   reviewedAt: Instant? = null,
+  checkinStartedAt: Instant? = null,
 ): OffenderCheckin = OffenderCheckin(
   uuid = uuid,
   offender = offender,
@@ -111,6 +112,7 @@ fun OffenderCheckin.Companion.create(
   dueDate = dueDate,
   autoIdCheck = autoIdCheck,
   manualIdCheck = manualIdCheck,
+  checkinStartedAt = checkinStartedAt,
 )
 
 /**

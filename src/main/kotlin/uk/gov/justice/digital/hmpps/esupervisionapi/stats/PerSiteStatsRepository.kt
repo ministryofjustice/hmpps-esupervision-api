@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.stats
 
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
-import org.postgresql.util.PGInterval
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.io.Resource
 import org.springframework.jdbc.core.BatchPreparedStatementSetter
@@ -65,7 +64,7 @@ data class SiteCheckinAverage(
 
 data class IntervalAverage(
   val location: String,
-  val average: PGInterval,
+  val average: Long,
   val count: Long,
 )
 
@@ -92,6 +91,7 @@ data class Stats(
   val offendersPerSite: List<SiteCount>,
   val checkinFrequencyPerSite: List<SiteCheckinFrequency>,
   val checkinAverages: List<SiteCheckinAverage>,
+  val checkinOutsideAccess: List<SiteCount>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
   val stoppedCheckinsPerSite: List<SiteCount>,
@@ -101,6 +101,8 @@ data class Stats(
   val averageReviewTimePerCheckinTotal: String,
   val averageTimeToRegisterPerSite: List<SiteFormattedTimeAverage>,
   val averageTimeToRegisterTotal: String,
+  val averageCheckinCompletionTimePerSite: List<SiteFormattedTimeAverage>,
+  val averageCheckinCompletionTimeTotal: String,
 )
 
 private val emptyStats = Stats(
@@ -117,6 +119,9 @@ private val emptyStats = Stats(
   emptyList(),
   emptyList(),
   emptyList(),
+  emptyList(),
+  emptyList(),
+  String(),
   emptyList(),
   String(),
   emptyList(),
@@ -161,6 +166,8 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_checkin_submission_to_review_time_average.sql") private val averageReviewResponseTimePerSiteResource: Resource,
   @Value("classpath:db/queries/stats_generic_offender_notifications_status_per_site.sql") private val genericNotificationsStatusPerSiteResource: Resource,
   @Value("classpath:db/queries/stats_offender_average_time_to_register.sql") private val averageTimeToRegisterResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_outside_access.sql") private val checkinOutsideAccessResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_completion_time_average.sql") private val averageSecondsToCompleteCheckinResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -178,6 +185,8 @@ class PerSiteStatsRepositoryImpl(
   private val sqlAverageReviewResponseTimePerSiteResource: String by lazy { averageReviewResponseTimePerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlGenericNotificationsStatusPerSite: String by lazy { genericNotificationsStatusPerSiteResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageTimeToRegister: String by lazy { averageTimeToRegisterResource.inputStream.use { it.reader().readText() } }
+  private val sqlCheckinOutsideAccess: String by lazy { checkinOutsideAccessResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageSecondsToCompleteCheckin: String by lazy { averageSecondsToCompleteCheckinResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -198,6 +207,7 @@ class PerSiteStatsRepositoryImpl(
     val completedCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
     val avgCompletedCheckinsPerSite = entityManager.runPerSiteQuery(sqlAvgCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCheckinAverage)
+    val checkinOutsideAccess = entityManager.runPerSiteQuery(sqlCheckinOutsideAccess, lowerBound, upperBound).map(::siteCount)
     val automatedIdCheckAccuracy = entityManager.runPerSiteQuery(sqlAutomatedIdCheckAccuracyResource, lowerBound, upperBound).map(::idCheckAccuracy)
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
@@ -221,6 +231,10 @@ class PerSiteStatsRepositoryImpl(
       .map(::siteFormattedTimeAverage)
     val averageTimeToRegisterTotal = siteFormattedTimeAverageTotal(registrationTimes)
 
+    val averageCheckinCompletionIntervals = entityManager.runPerSiteQuery(sqlAverageSecondsToCompleteCheckin, lowerBound, upperBound).map(::intervalAverage)
+    val averageCheckinCompletionTimes = averageCheckinCompletionIntervals.map(::siteFormattedTimeAverage)
+    val averageCheckinCompletionTimeTotal = siteFormattedTimeAverageTotal(averageCheckinCompletionIntervals)
+
     return Stats(
       invitesPerSite = invitesPerSite,
       inviteStatusPerSite = invitesStatusPerSite,
@@ -230,6 +244,7 @@ class PerSiteStatsRepositoryImpl(
       offendersPerSite = offendersPerSite,
       checkinFrequencyPerSite = checkinFrequencyPerSite,
       checkinAverages = avgCompletedCheckinsPerSite,
+      checkinOutsideAccess = checkinOutsideAccess,
       automatedIdCheckAccuracy = automatedIdCheckAccuracy,
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
@@ -239,6 +254,8 @@ class PerSiteStatsRepositoryImpl(
       averageReviewTimePerCheckinTotal = averageReviewResponseTimeTotal,
       averageTimeToRegisterPerSite = averageTimeToRegisterPerSite,
       averageTimeToRegisterTotal = averageTimeToRegisterTotal,
+      averageCheckinCompletionTimePerSite = averageCheckinCompletionTimes,
+      averageCheckinCompletionTimeTotal = averageCheckinCompletionTimeTotal,
     )
   }
 }
@@ -333,40 +350,37 @@ private fun genericNotificationStatus(cols: Array<Any?>): LabeledNotificationSit
 
 private fun intervalAverage(cols: Array<Any?>): IntervalAverage = IntervalAverage(
   location = cols[0] as String,
-  average = cols[1] as PGInterval? ?: PGInterval(0, 0, 0, 0, 0, 0.0),
+  average = (cols[1] as? Number)?.toLong() ?: 0L,
   count = (cols[2] as Number).toLong(),
 )
 
-private fun siteFormattedTimeAverage(intervalAverage: IntervalAverage): SiteFormattedTimeAverage = SiteFormattedTimeAverage(
-  location = intervalAverage.location,
+private fun siteFormattedTimeAverage(timeAverage: IntervalAverage): SiteFormattedTimeAverage = SiteFormattedTimeAverage(
+  location = timeAverage.location,
   averageTimeText = String.format(
     "%sh%sm%ss",
-    ((intervalAverage.average.days) * 24) + (intervalAverage.average.hours),
-    intervalAverage.average.minutes,
-    intervalAverage.average.wholeSeconds,
+    timeAverage.average / 3600,
+    (timeAverage.average % 3600) / 60,
+    timeAverage.average % 60,
   ),
 )
 
 private fun siteFormattedTimeAverageTotal(averagesPerSite: List<IntervalAverage>): String {
   if (averagesPerSite.isEmpty()) return "0h0m0s"
-  var hours = 0L
-  var minutes = 0L
-  var wholeSeconds = 0L
+  var intervalTotal = 0L
   var count = 0L
   for (averagePerSite in averagesPerSite) {
-    hours += ((averagePerSite.average.days) * 24) * averagePerSite.count
-    hours += (averagePerSite.average.hours) * averagePerSite.count
-    minutes += (averagePerSite.average.minutes) * averagePerSite.count
-    wholeSeconds += (averagePerSite.average.wholeSeconds) * averagePerSite.count
+    intervalTotal += (averagePerSite.average * averagePerSite.count)
     count += averagePerSite.count
   }
 
   if (count == 0L) return "0h0m0s"
 
+  intervalTotal /= count
+
   return String.format(
     "%sh%sm%ss",
-    hours / count,
-    minutes / count,
-    wholeSeconds / count,
+    intervalTotal / 3600,
+    (intervalTotal % 3600) / 60,
+    intervalTotal % 60,
   )
 }
