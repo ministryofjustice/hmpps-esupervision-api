@@ -94,7 +94,6 @@ open class OffenderCheckin(
     surveyResponse = surveyResponse,
     reviewedBy = reviewedBy,
     reviewedAt = reviewedAt,
-    reviewStartedAt = reviewStartedAt,
     createdBy = createdBy,
     createdAt = createdAt,
     videoUrl = resourceLocator.getCheckinVideo(this),
