@@ -150,6 +150,7 @@ class OffenderCheckinService(
       submittedAt = null,
       reviewedBy = null,
       reviewedAt = null,
+      reviewStartedAt = null,
       status = CheckinStatus.CREATED,
       surveyResponse = null,
       dueDate = createCheckin.dueDate,
@@ -503,6 +504,13 @@ class OffenderCheckinService(
         val event = OffenderEventLog(UUID.randomUUID(), LogEntryType.OFFENDER_CHECKIN_OUTSIDE_ACCESS, request.comment ?: "outside access", checkin.offender.practitioner, checkin.offender, checkin)
         offenderEventLogRepository.save(event)
         return event.uuid
+      }
+
+      CheckinEventType.REVIEW_STARTED -> {
+        // Every time this event is called, the reviewStartedAt time is updated to now
+        checkin.reviewStartedAt = clock.instant()
+        checkinRepository.save(checkin)
+        return checkin.uuid
       }
     }
   }

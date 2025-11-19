@@ -103,6 +103,8 @@ data class Stats(
   val averageTimeToRegisterTotal: String,
   val averageCheckinCompletionTimePerSite: List<SiteFormattedTimeAverage>,
   val averageCheckinCompletionTimeTotal: String,
+  val averageTimeTakenToCompleteCheckinReviewPerSite: List<SiteFormattedTimeAverage>,
+  val averageTimeTakenToCompleteCheckinReviewTotal: String,
 )
 
 private val emptyStats = Stats(
@@ -120,6 +122,8 @@ private val emptyStats = Stats(
   emptyList(),
   emptyList(),
   emptyList(),
+  emptyList(),
+  String(),
   emptyList(),
   String(),
   emptyList(),
@@ -168,6 +172,7 @@ class PerSiteStatsRepositoryImpl(
   @Value("classpath:db/queries/stats_offender_average_time_to_register.sql") private val averageTimeToRegisterResource: Resource,
   @Value("classpath:db/queries/stats_checkin_outside_access.sql") private val checkinOutsideAccessResource: Resource,
   @Value("classpath:db/queries/stats_checkin_completion_time_average.sql") private val averageSecondsToCompleteCheckinResource: Resource,
+  @Value("classpath:db/queries/stats_checkin_average_time_to_complete_review.sql") private val averageTimeTakenToCompleteCheckinReviewPerSiteResource: Resource,
 
 ) : PerSiteStatsRepository {
 
@@ -187,6 +192,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlAverageTimeToRegister: String by lazy { averageTimeToRegisterResource.inputStream.use { it.reader().readText() } }
   private val sqlCheckinOutsideAccess: String by lazy { checkinOutsideAccessResource.inputStream.use { it.reader().readText() } }
   private val sqlAverageSecondsToCompleteCheckin: String by lazy { averageSecondsToCompleteCheckinResource.inputStream.use { it.reader().readText() } }
+  private val sqlAverageTimeTakenToCompleteCheckinReviewPerSite: String by lazy { averageTimeTakenToCompleteCheckinReviewPerSiteResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
@@ -235,6 +241,12 @@ class PerSiteStatsRepositoryImpl(
     val averageCheckinCompletionTimes = averageCheckinCompletionIntervals.map(::siteFormattedTimeAverage)
     val averageCheckinCompletionTimeTotal = siteFormattedTimeAverageTotal(averageCheckinCompletionIntervals)
 
+    val reviewTimesToComplete = entityManager.runPerSiteQuery(sqlAverageTimeTakenToCompleteCheckinReviewPerSite, lowerBound, upperBound)
+      .map(::intervalAverage)
+    val averageTimeTakenToCompleteCheckinReviewPerSite = reviewTimesToComplete
+      .map(::siteFormattedTimeAverage)
+    val averageTimeTakenToCompleteCheckinReviewTotal = siteFormattedTimeAverageTotal(reviewTimesToComplete)
+
     return Stats(
       invitesPerSite = invitesPerSite,
       inviteStatusPerSite = invitesStatusPerSite,
@@ -256,6 +268,8 @@ class PerSiteStatsRepositoryImpl(
       averageTimeToRegisterTotal = averageTimeToRegisterTotal,
       averageCheckinCompletionTimePerSite = averageCheckinCompletionTimes,
       averageCheckinCompletionTimeTotal = averageCheckinCompletionTimeTotal,
+      averageTimeTakenToCompleteCheckinReviewPerSite = averageTimeTakenToCompleteCheckinReviewPerSite,
+      averageTimeTakenToCompleteCheckinReviewTotal = averageTimeTakenToCompleteCheckinReviewTotal,
     )
   }
 }

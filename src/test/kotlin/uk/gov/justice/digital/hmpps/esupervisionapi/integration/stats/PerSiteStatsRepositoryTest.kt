@@ -1380,4 +1380,144 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(averages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h0m33s")
     assertThat(stats.averageCheckinCompletionTimeTotal).isEqualTo("0h0m58s")
   }
+
+  @Test
+  fun `calculates average time taken to complete a review of a checkin per site`() {
+    val practitioner1 = PRACTITIONER_ALICE.externalUserId()
+    val practitioner2 = PRACTITIONER_BOB.externalUserId()
+    val practitioner3 = PRACTITIONER_DAVE.externalUserId()
+    val siteAssignments = listOf(
+      PractitionerSite(practitioner1, "Site A"),
+      PractitionerSite(practitioner2, "Site B"),
+    )
+
+    val offenderA = offenderRepository.save(
+      Offender.create(
+        name = "Offender A",
+        crn = "A123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_ALICE,
+      ),
+    )
+    val offenderB = offenderRepository.save(
+      Offender.create(
+        name = "Offender B",
+        crn = "B123457",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_BOB,
+      ),
+    )
+    val offenderC = offenderRepository.save(
+      Offender.create(
+        name = "Offender C",
+        crn = "C123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_DAVE,
+      ),
+    )
+
+    val now = Instant.now()
+    checkinRepository.saveAll(
+      listOf(
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now(),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "STRUGGLING",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          reviewStartedAt = now,
+          reviewedAt = now.plusSeconds(100),
+        ),
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("DRUGS", "HOUSING"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          reviewStartedAt = now.plusSeconds(50),
+          reviewedAt = now.plusSeconds(250),
+        ),
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(2),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+          reviewStartedAt = now,
+        ),
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now(),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("HOUSING", "MONEY"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+          reviewStartedAt = now,
+          reviewedAt = now.plusSeconds(50),
+        ),
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          reviewStartedAt = now.plusSeconds(100),
+          reviewedAt = now,
+        ),
+        OffenderCheckin.create(
+          offender = offenderC,
+          createdBy = practitioner3,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(3),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          reviewStartedAt = now,
+          reviewedAt = now.plusSeconds(1000),
+        ),
+      ),
+    )
+
+    val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
+    val averages = stats.averageTimeTakenToCompleteCheckinReviewPerSite
+    assertThat(averages).hasSize(3)
+
+    assertThat(averages.find { it.location == "Site A" }?.averageTimeText).isEqualTo("0h2m30s")
+    assertThat(averages.find { it.location == "Site B" }?.averageTimeText).isEqualTo("0h0m50s")
+    assertThat(averages.find { it.location == "UNKNOWN" }?.averageTimeText).isEqualTo("0h16m40s")
+    assertThat(stats.averageTimeTakenToCompleteCheckinReviewTotal).isEqualTo("0h5m37s")
+  }
 }
