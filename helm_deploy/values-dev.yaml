@@ -7,9 +7,9 @@ generic-service:
   ingress:
     host: esupervision-api-dev.hmpps.service.justice.gov.uk
     annotations:
-      nginx.ingress.kubernetes.io/limit-rps: "2"
-      nginx.ingress.kubernetes.io/limit-rpm: "15"
-      # nginx.ingress.kubernetes.io/limit-burst: "20"
+      nginx.ingress.kubernetes.io/limit-rps: "20"
+      nginx.ingress.kubernetes.io/limit-rpm: "500"
+      nginx.ingress.kubernetes.io/limit-burst: "50"
 
   env:
     APPLICATIONINSIGHTS_CONFIGURATION_FILE: "applicationinsights.dev.json"
