@@ -27,7 +27,8 @@ all_sites AS (
 SELECT
     s.location,
     COALESCE(AVG(cc.flag_count), 0) AS average_flags,
-    COALESCE(AVG(cc.has_callback_request) * 100, 0) AS callback_request_percentage
+    COALESCE(AVG(cc.has_callback_request) * 100, 0) AS callback_request_percentage,
+    COUNT(cc.flag_count) AS checkin_count
 
 FROM all_sites s
 LEFT JOIN checkin_info cc ON s.location = cc.location

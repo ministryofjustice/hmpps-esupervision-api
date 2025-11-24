@@ -915,6 +915,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(flagAverages.find { it.location == "Site A" }?.average).isCloseTo(1.67, within(0.01))
     assertThat(flagAverages.find { it.location == "Site B" }?.average).isCloseTo(2.5, within(0.01))
     assertThat(flagAverages.find { it.location == "UNKNOWN" }?.average).isCloseTo(2.0, within(0.01))
+    assertThat(stats.averageFlagsPerCheckinTotal).isCloseTo(2.0, within(0.01))
   }
 
   @Test
@@ -1047,6 +1048,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     assertThat(callbackPercentages.find { it.location == "Site A" }?.average).isCloseTo(33.33, within(0.01))
     assertThat(callbackPercentages.find { it.location == "Site B" }?.average).isCloseTo(50.0, within(0.01))
     assertThat(callbackPercentages.find { it.location == "UNKNOWN" }?.average).isCloseTo(100.0, within(0.01))
+    assertThat(stats.callbackRequestPercentageTotal).isCloseTo(50.0, within(0.01))
   }
 
   fun `generic offender notifications stats`() {
