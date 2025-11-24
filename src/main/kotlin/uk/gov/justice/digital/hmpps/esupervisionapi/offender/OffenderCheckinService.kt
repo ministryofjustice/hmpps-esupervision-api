@@ -457,10 +457,12 @@ class OffenderCheckinService(
 
     val checkinImages = getCheckinVerificationImages(checkin, numSnapshots)
 
+    val start = System.nanoTime()
     val verificationResult = compareFacesService.verifyCheckinImages(
       checkinImages,
       faceSimilarityThreshold,
     )
+    LOG.info("checkin image verification took {}s (for {} images)", Duration.ofNanos(System.nanoTime() - start).seconds, checkinImages.snapshots.size)
 
     LOG.info("updating checking with automated id check result: {}, checkin={}", verificationResult, checkinUuid)
     checkin.autoIdCheck = verificationResult
