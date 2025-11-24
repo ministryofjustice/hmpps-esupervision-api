@@ -475,7 +475,7 @@ private fun calculateGlobalOntimePercentage(averages: List<SiteCheckinAverage>):
 
 private fun calculateGlobalAverageCheckinsPerPoP(
   checkinAverages: List<SiteCheckinAverage>,
-  offenderCounts: List<SiteCount>
+  offenderCounts: List<SiteCount>,
 ): Double {
   val totalCompletedCheckins = checkinAverages.sumOf { it.completedTotal }
   val totalOffenders = offenderCounts.sumOf { it.count }
