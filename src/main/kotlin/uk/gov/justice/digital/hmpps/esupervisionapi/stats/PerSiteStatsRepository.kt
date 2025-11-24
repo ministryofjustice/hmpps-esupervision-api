@@ -99,6 +99,8 @@ data class Stats(
   val offendersPerSite: List<SiteCount>,
   val checkinFrequencyPerSite: List<SiteCheckinFrequency>,
   val checkinAverages: List<SiteCheckinAverage>,
+  val ontimeCheckinPercentageTotal: Double,
+  val checkinCompletedAverageTotal: Double,
   val checkinOutsideAccess: List<SiteCount>,
   val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
   val flaggedCheckinsPerSite: List<SiteCount>,
@@ -127,6 +129,8 @@ private val emptyStats = Stats(
   emptyList(),
   emptyList(),
   emptyList(),
+  0.0,
+  0.0,
   emptyList(),
   emptyList(),
   emptyList(),
@@ -229,6 +233,12 @@ class PerSiteStatsRepositoryImpl(
     val completedCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
     val avgCompletedCheckinsPerSite = entityManager.runPerSiteQuery(sqlAvgCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCheckinAverage)
+
+    val ontimeCheckinPercentageTotal = calculateGlobalOntimePercentage(avgCompletedCheckinsPerSite)
+    val totalCompletedCheckins = avgCompletedCheckinsPerSite.sumOf { it.completedTotal }
+    val totalOffenders = offendersPerSite.sumOf { it.count }
+
+    val checkinCompletedAverageTotal = calculateGlobalAverageCheckinsPerPoP(avgCompletedCheckinsPerSite, offendersPerSite)
     val checkinOutsideAccess = entityManager.runPerSiteQuery(sqlCheckinOutsideAccess, lowerBound, upperBound).map(::siteCount)
     val automatedIdCheckAccuracy = entityManager.runPerSiteQuery(sqlAutomatedIdCheckAccuracyResource, lowerBound, upperBound).map(::idCheckAccuracy)
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
@@ -284,6 +294,8 @@ class PerSiteStatsRepositoryImpl(
       offendersPerSite = offendersPerSite,
       checkinFrequencyPerSite = checkinFrequencyPerSite,
       checkinAverages = avgCompletedCheckinsPerSite,
+      checkinCompletedAverageTotal = checkinCompletedAverageTotal,
+      ontimeCheckinPercentageTotal = ontimeCheckinPercentageTotal,
       checkinOutsideAccess = checkinOutsideAccess,
       automatedIdCheckAccuracy = automatedIdCheckAccuracy,
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
@@ -447,4 +459,30 @@ private fun calculateWeightedAverageTotal(weightedAverages: List<WeightedAverage
     totalCount += w.count
   }
   return if (totalCount > 0) totalValue / totalCount else 0.0
+}
+
+private fun calculateGlobalOntimePercentage(averages: List<SiteCheckinAverage>): Double {
+  val totalCompleted = averages.sumOf { it.completedTotal }
+  val totalExpired = averages.sumOf { it.expiredTotal }
+  val total = totalCompleted + totalExpired
+
+  return if (total > 0) {
+    (totalCompleted.toDouble() / total) * 100
+  } else {
+    0.0
+  }
+}
+
+private fun calculateGlobalAverageCheckinsPerPoP(
+  checkinAverages: List<SiteCheckinAverage>,
+  offenderCounts: List<SiteCount>
+): Double {
+  val totalCompletedCheckins = checkinAverages.sumOf { it.completedTotal }
+  val totalOffenders = offenderCounts.sumOf { it.count }
+
+  return if (totalOffenders > 0) {
+    totalCompletedCheckins.toDouble() / totalOffenders
+  } else {
+    0.0
+  }
 }
