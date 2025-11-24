@@ -18,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.NullResourceLocator
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toDeactivationEntry
@@ -44,6 +45,7 @@ class OffenderService(
 ) {
 
   val uploadTTl = Duration.ofMinutes(uploadTTlMinutes)
+  val nullResourceLocator = NullResourceLocator()
 
   fun getOffenders(practitionerId: ExternalUserId, pageable: Pageable): CollectionDto<OffenderDto> {
     // TODO: check practitioner exists?
@@ -60,7 +62,7 @@ class OffenderService(
   ): CollectionDto<OffenderDto> {
     if (!email.isNullOrBlank() || !phoneNumber.isNullOrBlank()) {
       val foundOffenders = offenderRepository.findByContactInfo(phoneNumber, email)
-      val content = foundOffenders.map { it.dto(this.s3UploadService) }
+      val content = foundOffenders.map { it.dto(this.nullResourceLocator) }
       return CollectionDto(pageable.toPagination(), content)
     }
 

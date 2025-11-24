@@ -42,6 +42,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationR
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocationInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.NullResourceLocator
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.toPagination
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -88,6 +89,7 @@ class OffenderCheckinService(
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
+  private val nullResourceLocator = NullResourceLocator()
 
   /**
    * @param uuid UUID of the checkin
@@ -341,7 +343,7 @@ class OffenderCheckinService(
       CheckinListUseCase.AWAITING_CHECKIN -> checkinRepository.findAwaitingCheckin(practitionerId, offenderId, pageRequest)
       null -> checkinRepository.findAllByCreatedBy(practitionerId, offenderId, pageRequest)
     }
-    val checkins = page.content.map { it.dto(this.s3UploadService) }
+    val checkins = page.content.map { it.dto(this.nullResourceLocator) }
     return CollectionDto(page.pageable.toPagination(), checkins)
   }
 

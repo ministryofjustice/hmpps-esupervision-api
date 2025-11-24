@@ -4,7 +4,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertNull
 import org.mockito.ArgumentMatchers.anyFloat
+import org.mockito.Mockito
 import org.mockito.Mockito.times
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
@@ -59,6 +61,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import java.net.URI
+import java.net.URL
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -67,6 +70,7 @@ import java.time.Period
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 @Import(MockS3Config::class)
 class OffenderCheckinTest : IntegrationTestBase() {
@@ -149,6 +153,13 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .thenAnswer { notifResults() }
 
     reset(s3UploadService)
+    val counter = AtomicLong(0)
+    Mockito.`when`(s3UploadService.getCheckinVideo(any(), Mockito.anyBoolean()))
+      .thenAnswer { URL("https://mock-s3/checkin-video-${counter.incrementAndGet()}}") }
+    Mockito.`when`(s3UploadService.getCheckinSnapshot(any(), Mockito.anyBoolean()))
+      .thenAnswer { URL("https://mock-s3/checkin-snapshot-${counter.incrementAndGet()}}") }
+    Mockito.`when`(s3UploadService.getOffenderPhoto(any()))
+      .thenAnswer { URL("https://mock-s3/offender-photo-${counter.incrementAndGet()}}") }
 
     reset(domainEventPublisher)
   }
@@ -256,6 +267,7 @@ class OffenderCheckinTest : IntegrationTestBase() {
     val reviewedCheckins = getCheckins(PRACTITIONER_ALICE, offender, CheckinListUseCase.REVIEWED)
     Assertions.assertEquals(1, reviewedCheckins.content.size)
     Assertions.assertEquals(PRACTITIONER_ALICE.externalUserId(), reviewedCheckins.content[0].reviewedBy)
+    Assertions.assertEquals(true, reviewedCheckins.content.all { it.videoUrl == null && it.snapshotUrl == null })
   }
 
   fun mockCheckinVerification(checkin: OffenderCheckinDto, result: AutomatedIdVerificationResult) {
