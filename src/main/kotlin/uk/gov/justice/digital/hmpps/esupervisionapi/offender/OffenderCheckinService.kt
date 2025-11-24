@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
@@ -337,14 +338,35 @@ class OffenderCheckinService(
   }
 
   fun getCheckins(practitionerId: ExternalUserId, offenderId: UUID?, pageRequest: PageRequest, useCase: CheckinListUseCase? = null): CollectionDto<OffenderCheckinDto> {
-    val page = when (useCase) {
-      CheckinListUseCase.NEEDS_ATTENTION -> checkinRepository.findNeedsAttention(practitionerId, offenderId, pageRequest)
-      CheckinListUseCase.REVIEWED -> checkinRepository.findReviewed(practitionerId, offenderId, pageRequest)
-      CheckinListUseCase.AWAITING_CHECKIN -> checkinRepository.findAwaitingCheckin(practitionerId, offenderId, pageRequest)
-      null -> checkinRepository.findAllByCreatedBy(practitionerId, offenderId, pageRequest)
-    }
+    val page = getRawCheckins(useCase, practitionerId, offenderId, pageRequest)
     val checkins = page.content.map { it.dto(this.nullResourceLocator) }
     return CollectionDto(page.pageable.toPagination(), checkins)
+  }
+
+  @Transactional(readOnly = true)
+  internal fun getRawCheckins(
+    useCase: CheckinListUseCase?,
+    practitionerId: ExternalUserId,
+    offenderId: UUID?,
+    pageRequest: PageRequest,
+  ): Page<OffenderCheckin> {
+    val page = when (useCase) {
+      CheckinListUseCase.NEEDS_ATTENTION -> checkinRepository.findNeedsAttention(
+        practitionerId,
+        offenderId,
+        pageRequest,
+      )
+
+      CheckinListUseCase.REVIEWED -> checkinRepository.findReviewed(practitionerId, offenderId, pageRequest)
+      CheckinListUseCase.AWAITING_CHECKIN -> checkinRepository.findAwaitingCheckin(
+        practitionerId,
+        offenderId,
+        pageRequest,
+      )
+
+      null -> checkinRepository.findAllByCreatedBy(practitionerId, offenderId, pageRequest)
+    }
+    return page
   }
 
   @Transactional

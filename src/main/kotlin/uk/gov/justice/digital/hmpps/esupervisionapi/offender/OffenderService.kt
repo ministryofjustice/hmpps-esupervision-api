@@ -1,12 +1,13 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
-import jakarta.transaction.Transactional
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.OffenderCheckinsStoppedMessage
@@ -47,11 +48,18 @@ class OffenderService(
   val uploadTTl = Duration.ofMinutes(uploadTTlMinutes)
   val nullResourceLocator = NullResourceLocator()
 
-  fun getOffenders(practitionerId: ExternalUserId, pageable: Pageable): CollectionDto<OffenderDto> {
-    // TODO: check practitioner exists?
-    val page = offenderRepository.findAllByPractitioner(practitionerId, pageable)
-    val offenders = page.content.map { it.dto(this.s3UploadService) }
-    return CollectionDto(page.pageable.toPagination(), offenders)
+  @Transactional(readOnly = true)
+  internal fun getRawOffenders(practitionerId: ExternalUserId, pageable: Pageable): Page<Offender> = offenderRepository.findAllByPractitioner(practitionerId, pageable)
+
+  @Transactional(readOnly = true)
+  internal fun getRawOffendersByContactInfo(
+    email: String?,
+    phoneNumber: String?,
+    pageable: Pageable,
+  ): Page<Offender> {
+    assert(email != null)
+    assert(phoneNumber != null)
+    return offenderRepository.findByContactInfo(phoneNumber, email, pageable)
   }
 
   fun getOffenders(
@@ -60,13 +68,13 @@ class OffenderService(
     phoneNumber: String?,
     pageable: Pageable,
   ): CollectionDto<OffenderDto> {
-    if (!email.isNullOrBlank() || !phoneNumber.isNullOrBlank()) {
-      val foundOffenders = offenderRepository.findByContactInfo(phoneNumber, email)
-      val content = foundOffenders.map { it.dto(this.nullResourceLocator) }
-      return CollectionDto(pageable.toPagination(), content)
+    val page = if (!email.isNullOrBlank() || !phoneNumber.isNullOrBlank()) {
+      getRawOffendersByContactInfo(email, phoneNumber, pageable)
+    } else {
+      getRawOffenders(practitionerId, pageable)
     }
-
-    return getOffenders(practitionerId, pageable)
+    val offenders = page.content.map { it.dto(this.nullResourceLocator) }
+    return CollectionDto(page.pageable.toPagination(), offenders)
   }
 
   fun deleteOffender(uuid: UUID): DeleteResult {
