@@ -4,6 +4,10 @@
 generic-service:
   ingress:
     host: esupervision-api.hmpps.service.justice.gov.uk
+    annotations:
+      nginx.ingress.kubernetes.io/limit-rps: "50"
+      nginx.ingress.kubernetes.io/limit-rpm: "800"
+      nginx.ingress.kubernetes.io/limit-burst: "120"
 
   env:
     HMPPS_AUTH_URL: "https://sign-in.hmpps.service.justice.gov.uk/auth"
