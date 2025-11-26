@@ -224,8 +224,8 @@ class PerSiteStatsRepositoryImpl(
     entityManager.createNativeQuery("truncate tmp_practitioner_sites").executeUpdate()
     siteAssignmentHelper.batchInsert(siteAssignments.map { SiteAssignment(it.practitioner, it.name) })
 
-    val lowerBound = LocalDate.of(2025, 1, 1)
     val upperBound = LocalDate.now(clock.zone)
+    val lowerBound = upperBound.minusMonths(6)
     val invitesPerSite = entityManager.runPerSiteQuery(sqlInvitesPerSite, lowerBound, upperBound).map(::siteCount)
     val invitesStatusPerSite = entityManager.runPerSiteQuery(sqlInvitesStatusPerSite, lowerBound, upperBound).map(::labeledSiteCount)
     val genericNotificationsStatusPerSite = entityManager.runPerSiteQuery(sqlGenericNotificationsStatusPerSite, lowerBound, upperBound).map(::genericNotificationStatus)
