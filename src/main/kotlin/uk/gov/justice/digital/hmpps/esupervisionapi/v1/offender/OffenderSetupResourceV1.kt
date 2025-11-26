@@ -33,9 +33,8 @@ class OffenderSetupResourceV1(
     Once a photo is uploaded and personal details confirmed, the practitioner will be able to schedule "checkins." """,
   )
   @PostMapping
-  fun startSetup(@RequestBody @Valid offenderInfo: OffenderInfo, bindingResult: BindingResult): ResponseEntity<OffenderSetupDto> {
-    return offenderSetupResource.startSetup(offenderInfo, bindingResult)
-  }
+  fun startSetup(@RequestBody @Valid offenderInfo: OffenderInfo, bindingResult: BindingResult):
+    ResponseEntity<OffenderSetupDto> = offenderSetupResource.startSetup(offenderInfo, bindingResult)
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
@@ -49,9 +48,7 @@ class OffenderSetupResourceV1(
   fun setupPhotoLocation(
     @PathVariable uuid: UUID,
     @RequestParam(name = "content-type", required = true) contentType: String,
-  ): ResponseEntity<UploadLocationResponse> {
-    return offenderSetupResource.setupPhotoLocation(uuid, contentType)
-  }
+  ): ResponseEntity<UploadLocationResponse> = offenderSetupResource.setupPhotoLocation(uuid, contentType)
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/complete")
@@ -61,7 +58,6 @@ class OffenderSetupResourceV1(
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/terminate")
-  fun terminateSetup(@PathVariable uuid: UUID): ResponseEntity<OffenderDto> {
-    return offenderSetupResource.terminateSetup(uuid)
-  }
+  fun terminateSetup(@PathVariable uuid: UUID):
+    ResponseEntity<OffenderDto> = offenderSetupResource.terminateSetup(uuid)
 }

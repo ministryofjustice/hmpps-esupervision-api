@@ -29,7 +29,7 @@ import java.util.UUID
 @RequestMapping("/v1/offenders", produces = ["application/json"])
 @Validated
 class OffenderResourceV1(
-    private val offenderResource: OffenderResource,
+  private val offenderResource: OffenderResource,
 ) {
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
@@ -43,6 +43,7 @@ class OffenderResourceV1(
     @RequestParam(required = false) email: String?,
     @RequestParam(required = false, name = "phone_number") phoneNumber: String?,
   ): ResponseEntity<CollectionDto<OffenderDto>> {
+    println("GET /v1/offenders")
     return offenderResource.getOffenders(
       practitionerId,
       email = email,
@@ -66,8 +67,8 @@ class OffenderResourceV1(
   )
   @PostMapping("/{uuid}/details")
   fun updateDetails(
-      @PathVariable uuid: UUID,
-      @RequestBody @Valid details: OffenderDetailsUpdate,
+    @PathVariable uuid: UUID,
+    @RequestBody @Valid details: OffenderDetailsUpdate,
   ): ResponseEntity<OffenderDto> = offenderResource.updateDetails(uuid, details)
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -83,10 +84,8 @@ class OffenderResourceV1(
   )
   @PostMapping("/{uuid}/deactivate")
   fun terminateCheckins(
-      @PathVariable uuid: UUID,
-      @RequestBody body: DeactivateOffenderCheckinRequest,
-      bindingResult: BindingResult,
-  ): ResponseEntity<OffenderDto> {
-    return offenderResource.terminateCheckins(uuid, body, bindingResult)
-  }
+    @PathVariable uuid: UUID,
+    @RequestBody body: DeactivateOffenderCheckinRequest,
+    bindingResult: BindingResult,
+  ): ResponseEntity<OffenderDto> = offenderResource.terminateCheckins(uuid, body, bindingResult)
 }

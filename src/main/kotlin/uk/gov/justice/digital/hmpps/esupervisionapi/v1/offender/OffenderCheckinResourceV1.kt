@@ -65,16 +65,13 @@ class OffenderCheckinResourceV1(
   fun getCheckin(
     @PathVariable uuid: UUID,
     @RequestParam(name = "include-uploads", required = false, defaultValue = "false") includeUploads: Boolean,
-  ): ResponseEntity<OffenderCheckinResponse> {
-    return offenderCheckinResource.getCheckin(uuid, includeUploads)
-  }
+  ): ResponseEntity<OffenderCheckinResponse> = offenderCheckinResource.getCheckin(uuid, includeUploads)
 
   @PostMapping
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun createCheckin(@RequestBody @Valid createCheckin: CreateCheckinRequest, bindingResult: BindingResult): ResponseEntity<OffenderCheckinDto> {
-    return offenderCheckinResource.createCheckin(createCheckin, bindingResult)
-  }
+  fun createCheckin(@RequestBody @Valid createCheckin: CreateCheckinRequest, bindingResult: BindingResult):
+    ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.createCheckin(createCheckin, bindingResult)
 
   @PostMapping("/{uuid}/upload_location")
   @Tag(name = "offender")
@@ -84,16 +81,13 @@ class OffenderCheckinResourceV1(
     @RequestParam(name = "snapshots", required = false) snapshotContentTypes: List<String> = listOf(),
     @RequestParam(name = "video", required = true) videoContentType: String,
     @RequestParam("reference", required = true) referenceContentType: String,
-  ): ResponseEntity<CheckinUploadLocationResponse> {
-    return offenderCheckinResource.uploadLocation(uuid, snapshotContentTypes, videoContentType, referenceContentType)
-  }
+  ): ResponseEntity<CheckinUploadLocationResponse> = offenderCheckinResource.uploadLocation(uuid, snapshotContentTypes, videoContentType, referenceContentType)
 
   @PostMapping("/{uuid}/submit")
   @Tag(name = "offender")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun submitCheckin(@PathVariable uuid: UUID, @RequestBody @Valid checkinInput: OffenderCheckinSubmission): ResponseEntity<OffenderCheckinDto> {
-    return offenderCheckinResource.submitCheckin(uuid, checkinInput)
-  }
+  fun submitCheckin(@PathVariable uuid: UUID, @RequestBody @Valid checkinInput: OffenderCheckinSubmission):
+    ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.submitCheckin(uuid, checkinInput)
 
   @PostMapping("/{uuid}/review")
   @Tag(name = "practitioner")
@@ -102,9 +96,7 @@ class OffenderCheckinResourceV1(
     @PathVariable uuid: UUID,
     @RequestBody @Valid reviewRequest: CheckinReviewRequest,
     bindingResult: BindingResult,
-  ): ResponseEntity<OffenderCheckinDto> {
-    return offenderCheckinResource.reviewCheckin(uuid, reviewRequest, bindingResult)
-  }
+  ): ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.reviewCheckin(uuid, reviewRequest, bindingResult)
 
   @PostMapping("/{uuid}/auto_id_verify")
   @Tag(name = "practitioner")
@@ -112,9 +104,7 @@ class OffenderCheckinResourceV1(
   fun autoVerifyCheckin(
     @PathVariable uuid: UUID,
     @RequestParam numSnapshots: Int,
-  ): ResponseEntity<AutomatedVerificationResult> {
-    return offenderCheckinResource.autoVerifyCheckin(uuid, numSnapshots)
-  }
+  ): ResponseEntity<AutomatedVerificationResult> = offenderCheckinResource.autoVerifyCheckin(uuid, numSnapshots)
 
   @PostMapping("/{uuid}/invite")
   @Tag(name = "practitioner")
@@ -127,9 +117,7 @@ class OffenderCheckinResourceV1(
     @PathVariable uuid: UUID,
     @RequestBody @Valid notificationRequest: CheckinNotificationRequest,
     bindingResult: BindingResult,
-  ): ResponseEntity<OffenderCheckinDto> {
-    return offenderCheckinResource.notify(uuid, notificationRequest, bindingResult)
-  }
+  ): ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.notify(uuid, notificationRequest, bindingResult)
 
   @PostMapping("/{uuid}/event")
   @Tag(name = "practitioner")
@@ -142,7 +130,5 @@ class OffenderCheckinResourceV1(
     @PathVariable uuid: UUID,
     @RequestBody @Valid checkinEvent: CheckinEventRequest,
     bindingResult: BindingResult,
-  ): ResponseEntity<Map<String, String>> {
-    return offenderCheckinResource.event(uuid, checkinEvent, bindingResult)
-  }
+  ): ResponseEntity<Map<String, String>> = offenderCheckinResource.event(uuid, checkinEvent, bindingResult)
 }

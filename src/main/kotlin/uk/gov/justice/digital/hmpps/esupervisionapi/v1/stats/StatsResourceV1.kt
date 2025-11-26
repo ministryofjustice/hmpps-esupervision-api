@@ -17,14 +17,10 @@ class StatsResourceV1(private val statsResource: StatsResource) {
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @GetMapping("/practitioner/registrations")
-  fun practitionerRegistrations(): ResponseEntity<List<PractitionerRegistrationInfo>> {
-    return statsResource.practitionerRegistrations()
-  }
+  fun practitionerRegistrations(): ResponseEntity<List<PractitionerRegistrationInfo>> = statsResource.practitionerRegistrations()
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @GetMapping("/checkins")
-  fun checkins(): ResponseEntity<Stats> {
-    return statsResource.checkins()
-  }
+  fun checkins(): ResponseEntity<Stats> = statsResource.checkins()
 }
