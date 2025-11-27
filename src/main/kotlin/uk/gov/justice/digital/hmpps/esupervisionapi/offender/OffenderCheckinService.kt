@@ -472,8 +472,6 @@ class OffenderCheckinService(
     LOG.info("Cancelling checkins for offender={}, result={}, logEntry={}", offenderUuid, result, logEntry.uuid)
   }
 
-  fun verifyCheckinIdentity(checkinUuid: UUID, numSnapshots: Int): AutomatedIdVerificationResult = verifyCheckinIdentityAsync(checkinUuid, numSnapshots).get()
-
   fun verifyCheckinIdentityAsync(checkinUuid: UUID, numSnapshots: Int): java.util.concurrent.CompletableFuture<AutomatedIdVerificationResult> {
     val checkin = checkinRepository.findByUuid(checkinUuid).getOrElse {
       throw BadArgumentException("Checkin=$checkinUuid not found")

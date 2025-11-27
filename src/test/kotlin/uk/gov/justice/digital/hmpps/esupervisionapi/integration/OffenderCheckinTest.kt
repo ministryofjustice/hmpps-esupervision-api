@@ -271,8 +271,6 @@ class OffenderCheckinTest : IntegrationTestBase() {
   }
 
   fun mockCheckinVerification(checkin: OffenderCheckinDto, result: AutomatedIdVerificationResult) {
-    whenever(rekognitionCompareFacesService.verifyCheckinImages(any(), anyFloat()))
-      .thenReturn(result)
     whenever(rekognitionCompareFacesService.verifyCheckinImagesAsync(any(), anyFloat()))
       .thenReturn(CompletableFuture.completedFuture(result))
   }

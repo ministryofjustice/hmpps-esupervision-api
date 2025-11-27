@@ -12,7 +12,6 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 
 interface OffenderIdVerifier {
-  fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): AutomatedIdVerificationResult
   fun verifyCheckinImagesAsync(snapshots: CheckinVerificationImages, requiredConfidence: Float): CompletableFuture<AutomatedIdVerificationResult>
 }
 
@@ -20,14 +19,6 @@ class RekognitionCompareFacesService(
   val client: RekognitionClient,
   val asyncClient: RekognitionAsyncClient,
 ) : OffenderIdVerifier {
-
-  override fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): AutomatedIdVerificationResult = try {
-    verifyCheckinImagesAsync(snapshots, requiredConfidence).get()
-  } catch (ce: CompletionException) {
-    val cause = ce.cause
-    if (cause is RekognitionException) throw cause
-    throw ce
-  }
 
   override fun verifyCheckinImagesAsync(snapshots: CheckinVerificationImages, requiredConfidence: Float): CompletableFuture<AutomatedIdVerificationResult> {
     if (snapshots.snapshots.isEmpty()) {
