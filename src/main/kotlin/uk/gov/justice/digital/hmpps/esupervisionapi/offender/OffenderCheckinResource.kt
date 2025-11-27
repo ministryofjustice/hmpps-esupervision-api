@@ -32,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusExce
 import java.time.Clock
 import java.time.Duration
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 /**
  * Use-case hint for listing offender check-ins.
@@ -144,10 +145,11 @@ class OffenderCheckinResource(
   fun autoVerifyCheckin(
     @PathVariable uuid: UUID,
     @RequestParam numSnapshots: Int,
-  ): ResponseEntity<AutomatedVerificationResult> {
-    val passed = offenderCheckinService.verifyCheckinIdentity(uuid, numSnapshots)
-    val dto = AutomatedVerificationResult(passed)
-    return ResponseEntity.ok(dto)
+  ): CompletableFuture<ResponseEntity<AutomatedVerificationResult>> {
+    LOG.debug("Verifying checkin identity for checkin {}", uuid)
+    return offenderCheckinService
+      .verifyCheckinIdentityAsync(uuid, numSnapshots)
+      .thenApply { ResponseEntity.ok(AutomatedVerificationResult(it)) }
   }
 
   @PostMapping("/{uuid}/invite")
@@ -186,5 +188,9 @@ class OffenderCheckinResource(
     }
     val eventUuid = offenderCheckinService.checkinEvent(uuid, checkinEvent)
     return ResponseEntity.ok(mapOf("event" to eventUuid.toString()))
+  }
+
+  companion object {
+    val LOG = org.slf4j.LoggerFactory.getLogger(OffenderCheckinResource::class.java)!!
   }
 }
