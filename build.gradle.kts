@@ -19,7 +19,7 @@ dependencies {
   implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-autoconfigure:1.4.10")
   implementation("com.github.ben-manes.caffeine:caffeine")
   implementation("org.springframework.boot:spring-boot-starter-cache")
-  
+
   api("software.amazon.awssdk:s3")
   implementation("software.amazon.awssdk:s3:2.31.63")
   implementation("software.amazon.awssdk:sts:2.31.63")
