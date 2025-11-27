@@ -55,9 +55,7 @@ class OffenderCheckinResourceV1(
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
     @Parameter(description = "Sort by due date (sort direction ASC or DESC)")
     @RequestParam(defaultValue = "DESC") direction: String,
-  ): ResponseEntity<CollectionDto<OffenderCheckinDto>> {
-    return offenderCheckinResource.getCheckins(practitionerId, offenderId, useCase, page, size, direction)
-  }
+  ): ResponseEntity<CollectionDto<OffenderCheckinDto>> = offenderCheckinResource.getCheckins(practitionerId, offenderId, useCase, page, size, direction)
 
   @GetMapping("/{uuid}")
   @Tag(name = "offender")
@@ -70,8 +68,10 @@ class OffenderCheckinResourceV1(
   @PostMapping
   @Tag(name = "practitioner")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun createCheckin(@RequestBody @Valid createCheckin: CreateCheckinRequest, bindingResult: BindingResult):
-    ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.createCheckin(createCheckin, bindingResult)
+  fun createCheckin(
+    @RequestBody @Valid createCheckin: CreateCheckinRequest,
+    bindingResult: BindingResult,
+  ): ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.createCheckin(createCheckin, bindingResult)
 
   @PostMapping("/{uuid}/upload_location")
   @Tag(name = "offender")
@@ -86,8 +86,10 @@ class OffenderCheckinResourceV1(
   @PostMapping("/{uuid}/submit")
   @Tag(name = "offender")
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  fun submitCheckin(@PathVariable uuid: UUID, @RequestBody @Valid checkinInput: OffenderCheckinSubmission):
-    ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.submitCheckin(uuid, checkinInput)
+  fun submitCheckin(
+    @PathVariable uuid: UUID,
+    @RequestBody @Valid checkinInput: OffenderCheckinSubmission,
+  ): ResponseEntity<OffenderCheckinDto> = offenderCheckinResource.submitCheckin(uuid, checkinInput)
 
   @PostMapping("/{uuid}/review")
   @Tag(name = "practitioner")

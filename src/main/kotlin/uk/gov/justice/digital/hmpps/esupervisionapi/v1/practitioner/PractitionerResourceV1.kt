@@ -19,6 +19,7 @@ class PractitionerResourceV1(private val practitionerResource: PractitionerResou
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
   @GetMapping("/username/{username}")
-  fun getPractitionerByUsername(@PathVariable username: ExternalUserId):
-    ResponseEntity<Practitioner> = practitionerResource.getPractitionerByUsername(username)
+  fun getPractitionerByUsername(
+    @PathVariable username: ExternalUserId,
+  ): ResponseEntity<Practitioner> = practitionerResource.getPractitionerByUsername(username)
 }
