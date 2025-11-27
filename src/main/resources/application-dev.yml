@@ -48,5 +48,3 @@ aws:
 rekognition:
   s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
   role_session_name: development
-  max-concurrency: 10
-  read-timeout-seconds: 20
