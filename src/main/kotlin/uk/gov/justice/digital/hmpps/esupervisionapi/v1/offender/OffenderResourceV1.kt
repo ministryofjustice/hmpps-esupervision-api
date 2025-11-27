@@ -43,7 +43,6 @@ class OffenderResourceV1(
     @RequestParam(required = false) email: String?,
     @RequestParam(required = false, name = "phone_number") phoneNumber: String?,
   ): ResponseEntity<CollectionDto<OffenderDto>> {
-    println("GET /v1/offenders")
     return offenderResource.getOffenders(
       practitionerId,
       email = email,
