@@ -21,7 +21,6 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
-import org.springframework.test.web.reactive.server.returnResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationResultSummary
@@ -70,6 +69,7 @@ import java.time.Period
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicLong
 
 @Import(MockS3Config::class)
@@ -273,6 +273,8 @@ class OffenderCheckinTest : IntegrationTestBase() {
   fun mockCheckinVerification(checkin: OffenderCheckinDto, result: AutomatedIdVerificationResult) {
     whenever(rekognitionCompareFacesService.verifyCheckinImages(any(), anyFloat()))
       .thenReturn(result)
+    whenever(rekognitionCompareFacesService.verifyCheckinImagesAsync(any(), anyFloat()))
+      .thenReturn(CompletableFuture.completedFuture(result))
   }
 
   @Test
