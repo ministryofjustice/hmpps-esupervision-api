@@ -16,8 +16,6 @@ WITH checkin_info AS (
 ),
 all_sites AS (
     SELECT DISTINCT location FROM tmp_practitioner_sites
-    UNION
-    SELECT 'UNKNOWN'
 )
 SELECT
     s.location,

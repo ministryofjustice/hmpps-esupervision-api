@@ -16,8 +16,6 @@ WITH signup_durations AS (
 ),
 all_sites AS (
     SELECT DISTINCT location FROM tmp_practitioner_sites
-    UNION
-    SELECT 'UNKNOWN'
 )
 SELECT
     all_sites.location,
