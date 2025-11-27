@@ -867,7 +867,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     val flagAverages = stats.averageFlagsPerCheckinPerSite
     assertThat(flagAverages).hasSize(2)
     assertThat(flagAverages.find { it.location == "Site A" }?.average).isCloseTo(1.67, within(0.01))
-    assertThat(flagAverages.find { it.location == "Site B" }?.average).isCloseTo(2.5, within(0.01)) 
+    assertThat(flagAverages.find { it.location == "Site B" }?.average).isCloseTo(2.5, within(0.01))
     assertThat(stats.averageFlagsPerCheckinTotal).isCloseTo(2.0, within(0.01))
   }
 
