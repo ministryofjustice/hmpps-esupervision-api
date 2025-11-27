@@ -9,6 +9,7 @@ import java.time.ZoneId
 
 private val defaultTimeZone = ZoneId.of(System.getenv("TZ") ?: "Europe/London")
 
+@EnableCaching
 @SpringBootApplication
 @EnableScheduling
 class EsupervisionApp {

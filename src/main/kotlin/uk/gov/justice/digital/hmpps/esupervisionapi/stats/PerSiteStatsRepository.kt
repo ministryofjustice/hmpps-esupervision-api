@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.stats
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.core.io.Resource
 import org.springframework.jdbc.core.BatchPreparedStatementSetter
 import org.springframework.stereotype.Repository
@@ -215,6 +216,7 @@ class PerSiteStatsRepositoryImpl(
   private val sqlDeviceType: String by lazy { deviceTypeResource.inputStream.use { it.reader().readText() } }
 
   @Transactional
+  @Cacheable("stats")
   override fun statsPerSite(siteAssignments: List<PractitionerSite>): Stats {
     if (siteAssignments.isEmpty()) {
       return emptyStats

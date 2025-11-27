@@ -31,6 +31,12 @@ spring:
     name: esupervision-api
   codec:
     max-in-memory-size: 10MB
+  cache:
+    type: caffeine
+    caffeine:
+    # maximumSize=100: Prevents memory leaks by only keeping the last 100 entries (you only have 1 entry: the stats)
+    # expireAfterWrite=6h: Automatically deletes the data 6 hours after it was created
+    spec: maximumSize=100, expireAfterWrite=6h
 
   jackson:
     date-format: "yyyy-MM-dd HH:mm:ss"
