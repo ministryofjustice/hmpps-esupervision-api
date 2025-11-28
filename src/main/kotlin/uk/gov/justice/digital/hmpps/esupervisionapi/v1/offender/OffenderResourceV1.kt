@@ -42,15 +42,7 @@ class OffenderResourceV1(
     @RequestParam(defaultValue = "20") @Max(100) size: Int,
     @RequestParam(required = false) email: String?,
     @RequestParam(required = false, name = "phone_number") phoneNumber: String?,
-  ): ResponseEntity<CollectionDto<OffenderDto>> {
-    return offenderResource.getOffenders(
-      practitionerId,
-      email = email,
-      phoneNumber = phoneNumber,
-      page = page,
-      size = size,
-    )
-  }
+  ): ResponseEntity<CollectionDto<OffenderDto>> = offenderResource.getOffenders(practitionerId, page, size, email, phoneNumber)
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Tag(name = "practitioner")
