@@ -31,6 +31,10 @@ spring:
     name: esupervision-api
   codec:
     max-in-memory-size: 10MB
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500, expireAfterWrite=6h
 
   jackson:
     date-format: "yyyy-MM-dd HH:mm:ss"
