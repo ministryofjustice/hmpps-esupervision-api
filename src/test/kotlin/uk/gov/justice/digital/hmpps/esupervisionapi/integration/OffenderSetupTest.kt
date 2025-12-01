@@ -31,7 +31,7 @@ import java.net.URI
 import java.time.LocalDate
 import java.util.UUID
 
-@Import(MockS3Config::class)
+@Import(MockConfig::class)
 class OffenderSetupTest : IntegrationTestBase() {
 
   @Autowired private lateinit var offenderSetupService: OffenderSetupService

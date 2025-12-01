@@ -4,7 +4,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertNull
 import org.mockito.ArgumentMatchers.anyFloat
 import org.mockito.Mockito
 import org.mockito.Mockito.times
@@ -72,7 +71,7 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicLong
 
-@Import(MockS3Config::class)
+@Import(MockConfig::class)
 class OffenderCheckinTest : IntegrationTestBase() {
 
   @Autowired

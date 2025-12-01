@@ -11,7 +11,7 @@ import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Import
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
-import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockS3Config
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.CheckinNotificationStatusUpdater
@@ -28,7 +28,7 @@ import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
 
-@Import(MockS3Config::class)
+@Import(MockConfig::class)
 class CheckinNotificationStatusUpdaterTest : IntegrationTestBase() {
 
   @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository

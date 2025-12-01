@@ -10,7 +10,7 @@ import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Import
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
-import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockS3Config
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.GenericNotificationStatusUpdater
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.GenericNotificationRepository
@@ -20,7 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationSt
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import java.util.UUID
 
-@Import(MockS3Config::class)
+@Import(MockConfig::class)
 class GenericNotificationStatusUpdaterTest : IntegrationTestBase() {
 
   @Autowired lateinit var updater: GenericNotificationStatusUpdater

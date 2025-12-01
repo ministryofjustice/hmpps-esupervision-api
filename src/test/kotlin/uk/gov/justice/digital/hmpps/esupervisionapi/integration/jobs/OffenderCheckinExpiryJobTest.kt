@@ -7,7 +7,7 @@ import org.mockito.kotlin.reset
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Import
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
-import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockS3Config
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.MockConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.create
 import uk.gov.justice.digital.hmpps.esupervisionapi.jobs.OffenderCheckinExpiryJob
@@ -25,7 +25,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 
-@Import(MockS3Config::class)
+@Import(MockConfig::class)
 class OffenderCheckinExpiryJobTest : IntegrationTestBase() {
 
   @Autowired lateinit var job: OffenderCheckinExpiryJob
