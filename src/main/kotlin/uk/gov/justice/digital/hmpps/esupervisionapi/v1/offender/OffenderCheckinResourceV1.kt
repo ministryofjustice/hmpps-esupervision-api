@@ -31,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationR
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CollectionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CreateCheckinRequest
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 @RestController
 @RequestMapping(path = ["/v1/offender_checkins"])
@@ -106,7 +107,7 @@ class OffenderCheckinResourceV1(
   fun autoVerifyCheckin(
     @PathVariable uuid: UUID,
     @RequestParam numSnapshots: Int,
-  ): ResponseEntity<AutomatedVerificationResult> = offenderCheckinResource.autoVerifyCheckin(uuid, numSnapshots)
+  ): CompletableFuture<ResponseEntity<AutomatedVerificationResult>> = offenderCheckinResource.autoVerifyCheckin(uuid, numSnapshots)
 
   @PostMapping("/{uuid}/invite")
   @Tag(name = "practitioner")
