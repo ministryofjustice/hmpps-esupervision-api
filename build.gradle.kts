@@ -22,6 +22,7 @@ dependencies {
   implementation("software.amazon.awssdk:s3:2.31.63")
   implementation("software.amazon.awssdk:sts:2.31.63")
   implementation("software.amazon.awssdk:rekognition:2.31.63")
+  implementation("software.amazon.awssdk:netty-nio-client:2.31.63")
 
   implementation("org.jetbrains.kotlin:kotlin-reflect")
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")

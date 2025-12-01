@@ -472,7 +472,7 @@ class OffenderCheckinService(
     LOG.info("Cancelling checkins for offender={}, result={}, logEntry={}", offenderUuid, result, logEntry.uuid)
   }
 
-  fun verifyCheckinIdentity(checkinUuid: UUID, numSnapshots: Int): AutomatedIdVerificationResult {
+  fun verifyCheckinIdentityAsync(checkinUuid: UUID, numSnapshots: Int): java.util.concurrent.CompletableFuture<AutomatedIdVerificationResult> {
     val checkin = checkinRepository.findByUuid(checkinUuid).getOrElse {
       throw BadArgumentException("Checkin=$checkinUuid not found")
     }
@@ -482,18 +482,28 @@ class OffenderCheckinService(
     val checkinImages = getCheckinVerificationImages(checkin, numSnapshots)
 
     val start = System.nanoTime()
-    val verificationResult = compareFacesService.verifyCheckinImages(
-      checkinImages,
-      faceSimilarityThreshold,
-    )
-    LOG.info("checkin image verification took {}s (for {} images)", Duration.ofNanos(System.nanoTime() - start).seconds, checkinImages.snapshots.size)
+    val verification = compareFacesService.verifyCheckinImagesAsync(checkinImages, faceSimilarityThreshold)
 
-    LOG.info("updating checking with automated id check result: {}, checkin={}", verificationResult, checkinUuid)
-    checkin.autoIdCheck = verificationResult
-    val saved = checkinRepository.saveAndFlush(checkin)
-    copySnapshotsOutOfRekognition(saved)
-
-    return verificationResult
+    return verification
+      .whenComplete { result, throwable ->
+        if (throwable != null) {
+          LOG.warn("Async verification failed for checkin={}", checkinUuid, throwable)
+          return@whenComplete
+        }
+        LOG.info(
+          "checkin image verification took {}s (for {} images)",
+          Duration.ofNanos(System.nanoTime() - start).seconds,
+          checkinImages.snapshots.size,
+        )
+        try {
+          LOG.info("updating checking with automated id check result: {}, checkin={}", result, checkinUuid)
+          checkin.autoIdCheck = result
+          val saved = checkinRepository.saveAndFlush(checkin)
+          copySnapshotsOutOfRekognition(saved)
+        } catch (e: Exception) {
+          LOG.error("Failed to persist async verification result for checkin={} (will not retry)", checkinUuid, e)
+        }
+      }
   }
 
   /**
