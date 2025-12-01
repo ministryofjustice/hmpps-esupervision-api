@@ -11,7 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.S3UploadService
 import uk.gov.justice.hmpps.sqs.HmppsQueueService
 
 @TestConfiguration
-class MockS3Config {
+class MockConfig {
   @Bean
   @Primary
   fun mockS3UploadService(): S3UploadService = mock(S3UploadService::class.java)
