@@ -5,6 +5,7 @@ import org.assertj.core.api.Assertions.within
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.cache.CacheManager
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_ALICE
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.PRACTITIONER_BOB
@@ -76,8 +77,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
   @Autowired
   lateinit var perSiteStatsRepository: PerSiteStatsRepository
 
+  @Autowired
+  lateinit var cacheManager: CacheManager
+
   @BeforeEach
   fun setup() {
+    cacheManager.getCache("stats")?.clear()
     genericNotificationRepository.deleteAll()
     checkinNotificationRepository.deleteAll()
     checkinRepository.deleteAll()
