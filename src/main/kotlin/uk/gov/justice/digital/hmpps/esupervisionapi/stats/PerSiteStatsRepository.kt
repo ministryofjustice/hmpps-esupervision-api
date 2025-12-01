@@ -233,17 +233,17 @@ class PerSiteStatsRepositoryImpl(
     val completedCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
     val avgCompletedCheckinsPerSite = entityManager.runPerSiteQuery(sqlAvgCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCheckinAverage)
-
-    val ontimeCheckinPercentageTotal = calculateGlobalOntimePercentage(avgCompletedCheckinsPerSite)
-    val totalCompletedCheckins = avgCompletedCheckinsPerSite.sumOf { it.completedTotal }
-    val totalOffenders = offendersPerSite.sumOf { it.count }
-
-    val checkinCompletedAverageTotal = calculateGlobalAverageCheckinsPerPoP(avgCompletedCheckinsPerSite, offendersPerSite)
     val checkinOutsideAccess = entityManager.runPerSiteQuery(sqlCheckinOutsideAccess, lowerBound, upperBound).map(::siteCount)
     val automatedIdCheckAccuracy = entityManager.runPerSiteQuery(sqlAutomatedIdCheckAccuracyResource, lowerBound, upperBound).map(::idCheckAccuracy)
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val checkinFrequencyPerSite = entityManager.runPerSiteQuery(sqlCheckinFrequencyPerSite, lowerBound, upperBound).map(::siteCheckinFrequency)
+
+    val visibleCheckinStats = avgCompletedCheckinsPerSite.filter { it.location != "UNKNOWN" }
+    val visibleOffenderStats = offendersPerSite.filter { it.location != "UNKNOWN" }
+
+    val ontimeCheckinPercentageTotal = calculateGlobalOntimePercentage(visibleCheckinStats)
+    val checkinCompletedAverageTotal = calculateGlobalAverageCheckinsPerPoP(visibleCheckinStats, visibleOffenderStats)
 
     val flagsAndSupportRows = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
     val flagStats = mutableListOf<WeightedAverage>()
@@ -259,29 +259,41 @@ class PerSiteStatsRepositoryImpl(
     }
 
     val averageFlagsPerCheckinPerSite = flagStats.map { SiteAverage(it.location, it.average) }
-    val averageFlagsPerCheckinTotal = calculateWeightedAverageTotal(flagStats)
+    val averageFlagsPerCheckinTotal = calculateWeightedAverageTotal(
+      flagStats.filter { it.location != "UNKNOWN" },
+    )
 
     val callbackRequestPercentagePerSite = callbackStats.map { SiteAverage(it.location, it.average) }
-    val callbackRequestPercentageTotal = calculateWeightedAverageTotal(callbackStats)
+    val callbackRequestPercentageTotal = calculateWeightedAverageTotal(
+      callbackStats.filter { it.location != "UNKNOWN" },
+    )
 
     val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound)
       .map(::intervalAverage)
     val averageReviewResponseTimes = reviewResponseTimes.map(::siteFormattedTimeAverage)
-    val averageReviewResponseTimeTotal = siteFormattedTimeAverageTotal(reviewResponseTimes)
+    val averageReviewResponseTimeTotal = siteFormattedTimeAverageTotal(
+      reviewResponseTimes.filter { it.location != "UNKNOWN" },
+    )
 
     val registrationTimes = entityManager.runPerSiteQuery(sqlAverageTimeToRegister, lowerBound, upperBound)
       .map(::intervalAverage)
     val averageTimeToRegisterPerSite = registrationTimes.map(::siteFormattedTimeAverage)
-    val averageTimeToRegisterTotal = siteFormattedTimeAverageTotal(registrationTimes)
+    val averageTimeToRegisterTotal = siteFormattedTimeAverageTotal(
+      registrationTimes.filter { it.location != "UNKNOWN" },
+    )
 
     val averageCheckinCompletionIntervals = entityManager.runPerSiteQuery(sqlAverageSecondsToCompleteCheckin, lowerBound, upperBound).map(::intervalAverage)
     val averageCheckinCompletionTimes = averageCheckinCompletionIntervals.map(::siteFormattedTimeAverage)
-    val averageCheckinCompletionTimeTotal = siteFormattedTimeAverageTotal(averageCheckinCompletionIntervals)
+    val averageCheckinCompletionTimeTotal = siteFormattedTimeAverageTotal(
+      averageCheckinCompletionIntervals.filter { it.location != "UNKNOWN" },
+    )
 
     val reviewTimesToComplete = entityManager.runPerSiteQuery(sqlAverageTimeTakenToCompleteCheckinReviewPerSite, lowerBound, upperBound)
       .map(::intervalAverage)
     val averageTimeTakenToCompleteCheckinReviewPerSite = reviewTimesToComplete.map(::siteFormattedTimeAverage)
-    val averageTimeTakenToCompleteCheckinReviewTotal = siteFormattedTimeAverageTotal(reviewTimesToComplete)
+    val averageTimeTakenToCompleteCheckinReviewTotal = siteFormattedTimeAverageTotal(
+      reviewTimesToComplete.filter { it.location != "UNKNOWN" },
+    )
 
     val deviceTypePerSite = entityManager.runPerSiteQuery(sqlDeviceType, lowerBound, upperBound).map(::labeledSiteCountWithPercentage)
 
