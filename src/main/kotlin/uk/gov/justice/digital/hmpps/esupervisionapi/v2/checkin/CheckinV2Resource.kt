@@ -5,6 +5,9 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
@@ -14,9 +17,6 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import jakarta.validation.constraints.Max
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCollectionV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCaseV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNotificationV2Request
@@ -60,7 +60,8 @@ class CheckinV2Resource(
     @Parameter(description = "Page number (zero-indexed)", required = false)
     @RequestParam(defaultValue = "0") page: Int,
     @Parameter(description = "Page size", required = false)
-    @RequestParam(defaultValue = "20") @Max(100) size: Int,
+    @RequestParam(defaultValue = "20")
+    @Max(100) size: Int,
     @Parameter(description = "Sort direction (ASC or DESC)", required = false)
     @RequestParam(defaultValue = "DESC") direction: String,
   ): ResponseEntity<CheckinCollectionV2Response> {
@@ -130,8 +131,8 @@ class CheckinV2Resource(
   @Operation(
     summary = "Verify face against setup photo",
     description = "Performs facial recognition using uploaded snapshot(s) against offender's setup photo. " +
-            "Call this after uploading video/snapshot but before submission to show user the result. " +
-            "User can re-record if NO_MATCH or proceed anyway.",
+      "Call this after uploading video/snapshot but before submission to show user the result. " +
+      "User can re-record if NO_MATCH or proceed anyway.",
   )
   @ApiResponse(responseCode = "200", description = "Facial recognition result")
   @ApiResponse(responseCode = "404", description = "Checkin not found")

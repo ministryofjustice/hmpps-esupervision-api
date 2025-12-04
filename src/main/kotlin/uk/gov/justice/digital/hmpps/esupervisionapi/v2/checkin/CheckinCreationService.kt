@@ -6,7 +6,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2

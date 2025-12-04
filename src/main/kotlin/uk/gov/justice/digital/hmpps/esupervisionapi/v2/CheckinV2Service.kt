@@ -1,9 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
-import java.net.URL
-import java.time.Clock
-import java.time.Duration
-import java.util.UUID
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
@@ -16,36 +12,40 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import java.net.URL
+import java.time.Clock
+import java.time.Duration
+import java.util.UUID
 
 /** V2 Checkin Service Handles all checkin business logic for V2 */
 @Service
 class CheckinV2Service(
-        private val clock: Clock,
-        private val checkinRepository: OffenderCheckinV2Repository,
-        private val offenderRepository: OffenderV2Repository,
-        private val ndiliusApiClient: NdiliusApiClient,
-        private val notificationService: NotificationV2Service,
-        private val checkinCreationService: CheckinCreationService,
-        private val s3UploadService: S3UploadService,
-        private val compareFacesService: OffenderIdVerifier,
-        @Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
-        @Value("\${rekognition.face-similarity.threshold:80.0}")
-        private val faceSimilarityThreshold: Float,
+  private val clock: Clock,
+  private val checkinRepository: OffenderCheckinV2Repository,
+  private val offenderRepository: OffenderV2Repository,
+  private val ndiliusApiClient: NdiliusApiClient,
+  private val notificationService: NotificationV2Service,
+  private val checkinCreationService: CheckinCreationService,
+  private val s3UploadService: S3UploadService,
+  private val compareFacesService: OffenderIdVerifier,
+  @Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
+  @Value("\${rekognition.face-similarity.threshold:80.0}")
+  private val faceSimilarityThreshold: Float,
 ) {
   /** Get checkin by UUID Optionally includes personal details from Ndilius */
   fun getCheckin(uuid: UUID, includePersonalDetails: Boolean = false): CheckinV2Dto {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     // Fetch personal details if requested
     val personalDetails =
-            if (includePersonalDetails) {
-              ndiliusApiClient.getContactDetails(checkin.offender.crn)
-            } else {
-              null
-            }
+      if (includePersonalDetails) {
+        ndiliusApiClient.getContactDetails(checkin.offender.crn)
+      } else {
+        null
+      }
 
     // Get video read URL if video has been uploaded
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
@@ -60,21 +60,21 @@ class CheckinV2Service(
   @Transactional
   fun validateIdentity(uuid: UUID, personalDetails: PersonalDetails): IdentityValidationResponse {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     // Verify CRN matches
     if (checkin.offender.crn != personalDetails.crn) {
       LOGGER.warn(
-              "CRN mismatch for checkin {}: expected {}, got {}",
-              uuid,
-              checkin.offender.crn,
-              personalDetails.crn
+        "CRN mismatch for checkin {}: expected {}, got {}",
+        uuid,
+        checkin.offender.crn,
+        personalDetails.crn,
       )
       return IdentityValidationResponse(
-              verified = false,
-              error = "Personal details do not match our records",
+        verified = false,
+        error = "Personal details do not match our records",
       )
     }
 
@@ -84,8 +84,8 @@ class CheckinV2Service(
     if (!isValid) {
       LOGGER.info("Identity validation failed for checkin {}", uuid)
       return IdentityValidationResponse(
-              verified = false,
-              error = "Personal details do not match our records",
+        verified = false,
+        error = "Personal details do not match our records",
       )
     }
 
@@ -101,19 +101,19 @@ class CheckinV2Service(
 
   /** Get upload locations for video and snapshots */
   fun getUploadLocations(
-          uuid: UUID,
-          videoContentType: String,
-          snapshotContentTypes: List<String>
+    uuid: UUID,
+    videoContentType: String,
+    snapshotContentTypes: List<String>,
   ): UploadLocationsV2Response {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     if (checkin.status != CheckinV2Status.CREATED) {
       throw ResponseStatusException(
-              HttpStatus.BAD_REQUEST,
-              "Cannot upload to checkin with status: ${checkin.status}"
+        HttpStatus.BAD_REQUEST,
+        "Cannot upload to checkin with status: ${checkin.status}",
       )
     }
 
@@ -124,23 +124,23 @@ class CheckinV2Service(
 
     // Generate snapshot upload locations
     val snapshotUrls =
-            snapshotContentTypes.mapIndexed { index, contentType ->
-              val url = s3UploadService.generatePresignedUploadUrl(checkin, contentType, index, ttl)
-              UploadLocation(
-                      url = url,
-                      contentType = contentType,
-                      ttl = "PT${uploadTtlMinutes}M",
-              )
-            }
+      snapshotContentTypes.mapIndexed { index, contentType ->
+        val url = s3UploadService.generatePresignedUploadUrl(checkin, contentType, index, ttl)
+        UploadLocation(
+          url = url,
+          contentType = contentType,
+          ttl = "PT${uploadTtlMinutes}M",
+        )
+      }
 
     return UploadLocationsV2Response(
-            video =
-                    UploadLocation(
-                            url = videoUrl,
-                            contentType = videoContentType,
-                            ttl = "PT${uploadTtlMinutes}M",
-                    ),
-            snapshots = snapshotUrls,
+      video =
+      UploadLocation(
+        url = videoUrl,
+        contentType = videoContentType,
+        ttl = "PT${uploadTtlMinutes}M",
+      ),
+      snapshots = snapshotUrls,
     )
   }
 
@@ -148,9 +148,9 @@ class CheckinV2Service(
   @Transactional
   fun submitCheckin(uuid: UUID, request: SubmitCheckinV2Request): CheckinV2Dto {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     // Validate state
     if (checkin.status != CheckinV2Status.CREATED) {
@@ -159,8 +159,8 @@ class CheckinV2Service(
 
     if (checkin.checkinStartedAt == null) {
       throw ResponseStatusException(
-              HttpStatus.BAD_REQUEST,
-              "Identity must be verified before submission"
+        HttpStatus.BAD_REQUEST,
+        "Identity must be verified before submission",
       )
     }
 
@@ -199,9 +199,9 @@ class CheckinV2Service(
   @Transactional
   fun verifyFace(uuid: UUID, numSnapshots: Int = 1): FacialRecognitionResult {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     // Validate state - must be CREATED (not yet submitted)
     if (checkin.status != CheckinV2Status.CREATED) {
@@ -223,14 +223,14 @@ class CheckinV2Service(
   @Transactional
   fun startReview(uuid: UUID, practitionerId: ExternalUserId): CheckinV2Dto {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     if (checkin.status != CheckinV2Status.SUBMITTED) {
       throw ResponseStatusException(
-              HttpStatus.BAD_REQUEST,
-              "Checkin must be submitted before review"
+        HttpStatus.BAD_REQUEST,
+        "Checkin must be submitted before review",
       )
     }
 
@@ -248,14 +248,14 @@ class CheckinV2Service(
   @Transactional
   fun reviewCheckin(uuid: UUID, request: ReviewCheckinV2Request): CheckinV2Dto {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     if (checkin.status != CheckinV2Status.SUBMITTED) {
       throw ResponseStatusException(
-              HttpStatus.BAD_REQUEST,
-              "Checkin must be submitted before review"
+        HttpStatus.BAD_REQUEST,
+        "Checkin must be submitted before review",
       )
     }
 
@@ -278,23 +278,23 @@ class CheckinV2Service(
   /** Get proxy URL for checkin video */
   fun getVideoProxyUrl(uuid: UUID): URL {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     return s3UploadService.getCheckinVideo(checkin)
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found")
+      ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found")
   }
 
   /** Get proxy URL for checkin snapshot */
   fun getSnapshotProxyUrl(uuid: UUID, index: Int = 0): URL {
     val checkin =
-            checkinRepository.findByUuid(uuid).orElseThrow {
-              ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-            }
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
 
     return s3UploadService.getCheckinSnapshot(checkin, index)
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Snapshot not found")
+      ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Snapshot not found")
   }
 
   // ========================================
@@ -313,8 +313,8 @@ class CheckinV2Service(
     // Check setup photo exists
     if (!s3UploadService.isSetupPhotoUploaded(offender)) {
       throw ResponseStatusException(
-              HttpStatus.BAD_REQUEST,
-              "Setup photo not available for facial recognition"
+        HttpStatus.BAD_REQUEST,
+        "Setup photo not available for facial recognition",
       )
     }
 
@@ -326,10 +326,10 @@ class CheckinV2Service(
 
     // Perform facial recognition
     val images =
-            CheckinVerificationImages(
-                    reference = referenceCoordinate,
-                    snapshots = snapshotCoordinates,
-            )
+      CheckinVerificationImages(
+        reference = referenceCoordinate,
+        snapshots = snapshotCoordinates,
+      )
 
     val result = compareFacesService.verifyCheckinImages(images, faceSimilarityThreshold)
 
@@ -405,7 +405,7 @@ class CheckinV2Service(
         LOGGER.warn(
           "CHECKIN_OUTSIDE_ACCESS event logged for checkin={}, comment={}",
           uuid,
-          request.comment ?: "outside access"
+          request.comment ?: "outside access",
         )
         // TODO: Store to event audit table when V2 event logging is fully implemented
         // For now, just log the event

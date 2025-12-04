@@ -274,8 +274,10 @@ data class CheckinNotificationV2Request(
 enum class CheckinListUseCaseV2 {
   /** Checkins needing attention (SUBMITTED or EXPIRED without review) */
   NEEDS_ATTENTION,
+
   /** Reviewed checkins (REVIEWED or EXPIRED with review) */
   REVIEWED,
+
   /** Checkins awaiting offender submission (CREATED) */
   AWAITING_CHECKIN,
 }
