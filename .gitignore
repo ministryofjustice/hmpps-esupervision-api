@@ -6,7 +6,9 @@
 .idea/
 .gradle/
 .kotlin/
+.vscode/
 build/
+temp/
 
 # CMake
 cmake-build-debug/
