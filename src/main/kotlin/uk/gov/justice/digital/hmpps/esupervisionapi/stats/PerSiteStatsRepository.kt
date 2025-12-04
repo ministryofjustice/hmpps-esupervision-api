@@ -357,7 +357,7 @@ class PerSiteStatsRepositoryImpl(
       },
     )
 
-  // flagged checkins per site + total
+    // flagged checkins per site + total
     val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
     val flaggedCheckinsTotal = flaggedCheckinsPerSite
       .filter { it.location != "UNKNOWN" }
@@ -557,7 +557,7 @@ private fun siteCheckinAverage(cols: Array<Any?>): SiteCheckinAverage {
   val completedTotal = (cols[5] as Number).toLong()
   val expiredTotal = (cols[6] as Number).toLong()
   val total = completedTotal + expiredTotal
-  
+
   // Calculate Percentage
   val percentage = if (total > 0) (completedTotal.toDouble() / total) * 100 else 0.0
 
