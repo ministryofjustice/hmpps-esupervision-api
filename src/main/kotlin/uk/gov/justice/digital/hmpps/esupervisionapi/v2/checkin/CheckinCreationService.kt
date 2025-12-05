@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.time.Clock
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -138,10 +139,10 @@ class CheckinCreationService(
    */
   fun prepareCheckinForOffender(offender: OffenderV2, dueDate: LocalDate): OffenderCheckinV2? {
     try {
-      val daysSinceFirstCheckin = java.time.Period.between(offender.firstCheckin, dueDate).days
-      val intervalDays = offender.checkinInterval.toDays().toInt()
+      val daysSinceFirstCheckin = ChronoUnit.DAYS.between(offender.firstCheckin, dueDate)
+      val intervalDays = offender.checkinInterval.toDays()
 
-      if (intervalDays <= 0 || daysSinceFirstCheckin % intervalDays != 0) {
+      if (intervalDays <= 0 || daysSinceFirstCheckin % intervalDays != 0L) {
         LOGGER.debug("Checkin not due for offender {} on date {}", offender.crn, dueDate)
         return null
       }

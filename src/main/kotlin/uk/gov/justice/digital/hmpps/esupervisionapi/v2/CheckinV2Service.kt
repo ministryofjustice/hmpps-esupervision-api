@@ -208,9 +208,18 @@ class CheckinV2Service(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin already submitted")
     }
 
-    // Verify at least one snapshot exists
-    if (!s3UploadService.isCheckinSnapshotUploaded(checkin, 0)) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot not uploaded")
+    if (numSnapshots < 1) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "numSnapshots must be at least 1")
+    }
+
+    // Verify required snapshots exist before calling Rekognition
+    (0 until numSnapshots).forEach { index ->
+      if (!s3UploadService.isCheckinSnapshotUploaded(checkin, index)) {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Snapshot at index $index not uploaded",
+        )
+      }
     }
 
     // Perform facial recognition

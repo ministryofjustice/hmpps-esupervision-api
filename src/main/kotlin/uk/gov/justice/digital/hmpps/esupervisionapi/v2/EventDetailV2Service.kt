@@ -11,14 +11,17 @@ class EventDetailV2Service(
 ) {
 
   fun getEventDetail(detailUrl: String): EventDetailResponse? {
-    val parts = detailUrl.split("/").filter { it.isNotEmpty() }
-    if (parts.size < 4) {
+    // Support both relative (/v2/events/...) and absolute URLs (https://host/.../v2/events/...)
+    val tail = detailUrl.substringAfter("/v2/events/", missingDelimiterValue = "")
+    val parts = tail.split("/").filter { it.isNotEmpty() }
+
+    if (parts.size < 2) {
       LOGGER.warn("Invalid detail URL format: {}", detailUrl)
       return null
     }
 
-    val eventType = parts[2]
-    val uuidStr = parts[3]
+    val eventType = parts[0]
+    val uuidStr = parts[1]
     val uuid = try {
       UUID.fromString(uuidStr)
     } catch (e: IllegalArgumentException) {

@@ -174,7 +174,6 @@ class OffenderSetupV2Service(
     }
 
     notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails)
-    eventAuditService.recordSetupCompleted(savedOffender, contactDetails)
 
     if (savedCheckin != null) {
       notificationService.sendCheckinCreatedNotifications(savedCheckin, contactDetails)
