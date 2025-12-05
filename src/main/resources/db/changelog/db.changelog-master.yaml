@@ -19,3 +19,5 @@ databaseChangeLog:
       file: db/changelog/changesets/9_add_checkin_started_at_field.sql
   - include:
       file: db/changelog/changesets/10_add_review_started_at_to_offender_checkin.sql
+  - include:
+      file: db/changelog/changesets/11_create_v2_tables.sql

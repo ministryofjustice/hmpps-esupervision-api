@@ -20,6 +20,10 @@ dependencies {
   implementation("com.github.ben-manes.caffeine:caffeine")
   implementation("org.springframework.boot:spring-boot-starter-cache")
 
+  // Resilience4j for circuit breakers and retry
+  implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
+  implementation("org.springframework.boot:spring-boot-starter-aop")
+
   api("software.amazon.awssdk:s3")
   implementation("software.amazon.awssdk:s3:2.31.63")
   implementation("software.amazon.awssdk:sts:2.31.63")
@@ -32,6 +36,7 @@ dependencies {
   implementation("org.postgresql:postgresql")
   runtimeOnly("org.liquibase:liquibase-core")
   implementation("com.googlecode.libphonenumber:libphonenumber:9.0.7")
+  implementation("com.google.guava:guava:33.0.0-jre")
 
   developmentOnly("org.springframework.boot:spring-boot-devtools")
 

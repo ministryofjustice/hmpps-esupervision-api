@@ -55,6 +55,19 @@ services:
       - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
 
+  ndilius-mock:
+    image: stoplight/prism:5
+    container_name: ndilius-mock
+    networks:
+      - hmpps
+    ports:
+      - "4010:4010"
+    command: mock -h 0.0.0.0 /api/ndilius-api.yaml
+    volumes:
+      - ./mock:/api
+    environment:
+      - PRISM_LOG_LEVEL=info
+
 networks:
   hmpps:
 
