@@ -29,7 +29,7 @@ class CheckinV2Service(
   private val s3UploadService: S3UploadService,
   private val compareFacesService: OffenderIdVerifier,
   @Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
-  @Value("\${rekognition.face-similarity.threshold:80.0}")
+  @Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
 ) {
   /** Get checkin by UUID Optionally includes personal details from Ndilius */
@@ -190,9 +190,9 @@ class CheckinV2Service(
   }
 
   /**
-   * Verify offender face against setup photo using AWS Rekognition
-   * This should be called after video/snapshot upload but before checkin submission
-   * Allows user to see result and re-record if NO_MATCH
+   * Verify offender face against setup photo using AWS Rekognition This should be called after
+   * video/snapshot upload but before checkin submission Allows user to see result and re-record if
+   * NO_MATCH
    *
    * @param numSnapshots Number of snapshots to compare against setup photo (default 1)
    */
@@ -311,12 +311,15 @@ class CheckinV2Service(
   // ========================================
 
   /**
-   * Perform facial recognition and return result
-   * Used by verifyFace() endpoint - throws exceptions on failure
+   * Perform facial recognition and return result Used by verifyFace() endpoint - throws exceptions
+   * on failure
    *
    * @param numSnapshots Number of snapshots to compare (indices 0 to numSnapshots-1)
    */
-  private fun performFacialRecognitionInternal(checkin: OffenderCheckinV2, numSnapshots: Int): AutomatedIdVerificationResult {
+  private fun performFacialRecognitionInternal(
+    checkin: OffenderCheckinV2,
+    numSnapshots: Int,
+  ): AutomatedIdVerificationResult {
     val offender = checkin.offender
 
     // Check setup photo exists
@@ -329,9 +332,10 @@ class CheckinV2Service(
 
     // Get S3 coordinates - reference from setup, snapshots from checkin
     val referenceCoordinate = s3UploadService.setupPhotoObjectCoordinate(offender)
-    val snapshotCoordinates = (0 until numSnapshots).map { index ->
-      s3UploadService.checkinObjectCoordinate(checkin, index)
-    }
+    val snapshotCoordinates =
+      (0 until numSnapshots).map { index ->
+        s3UploadService.checkinObjectCoordinate(checkin, index)
+      }
 
     // Perform facial recognition
     val images =
@@ -367,11 +371,12 @@ class CheckinV2Service(
     )
 
     // Use CheckinCreationService - single source of truth for checkin creation
-    val checkin = checkinCreationService.createCheckin(
-      offenderUuid = request.offender,
-      dueDate = request.dueDate,
-      createdBy = request.practitioner,
-    )
+    val checkin =
+      checkinCreationService.createCheckin(
+        offenderUuid = request.offender,
+        dueDate = request.dueDate,
+        createdBy = request.practitioner,
+      )
 
     // Fetch personal details for response
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
@@ -438,16 +443,34 @@ class CheckinV2Service(
     useCase: CheckinListUseCaseV2?,
     pageRequest: org.springframework.data.domain.PageRequest,
   ): CheckinCollectionV2Response {
-    val page = when (useCase) {
-      CheckinListUseCaseV2.NEEDS_ATTENTION -> checkinRepository.findNeedsAttention(practitionerId, offenderUuid, pageRequest)
-      CheckinListUseCaseV2.REVIEWED -> checkinRepository.findReviewed(practitionerId, offenderUuid, pageRequest)
-      CheckinListUseCaseV2.AWAITING_CHECKIN -> checkinRepository.findAwaitingCheckin(practitionerId, offenderUuid, pageRequest)
-      null -> checkinRepository.findAllByCreatedBy(practitionerId, offenderUuid, pageRequest)
-    }
+    val page =
+      when (useCase) {
+        CheckinListUseCaseV2.NEEDS_ATTENTION ->
+          checkinRepository.findNeedsAttention(
+            practitionerId,
+            offenderUuid,
+            pageRequest,
+          )
+        CheckinListUseCaseV2.REVIEWED ->
+          checkinRepository.findReviewed(practitionerId, offenderUuid, pageRequest)
+        CheckinListUseCaseV2.AWAITING_CHECKIN ->
+          checkinRepository.findAwaitingCheckin(
+            practitionerId,
+            offenderUuid,
+            pageRequest,
+          )
+        null ->
+          checkinRepository.findAllByCreatedBy(
+            practitionerId,
+            offenderUuid,
+            pageRequest,
+          )
+      }
 
     val checkins = page.content.map { it.dto(null) }
     return CheckinCollectionV2Response(
-      pagination = PaginationV2(
+      pagination =
+      PaginationV2(
         pageNumber = page.pageable.pageNumber,
         pageSize = page.pageable.pageSize,
       ),

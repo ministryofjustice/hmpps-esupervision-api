@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Max
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -40,7 +41,7 @@ import java.util.UUID
 class CheckinV2Resource(
   private val checkinService: CheckinV2Service,
 ) {
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping
   @Operation(
     summary = "List checkins",
@@ -78,7 +79,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(result)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/{uuid}")
   @Operation(
     summary = "Get checkin by UUID",
@@ -96,7 +97,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(checkin)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/identity-verify")
   @Operation(
     summary = "Verify offender identity against Ndilius",
@@ -113,7 +114,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(result)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/upload_location")
   @Operation(
     summary = "Get upload locations for video and snapshots",
@@ -135,7 +136,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(locations)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/video-verify")
   @Operation(
     summary = "Verify face against setup photo",
@@ -157,7 +158,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(result)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/submit")
   @Operation(
     summary = "Submit checkin",
@@ -174,7 +175,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(checkin)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/review-started")
   @Operation(
     summary = "Mark review as started",
@@ -191,7 +192,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(checkin)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/review")
   @Operation(
     summary = "Complete checkin review",
@@ -208,7 +209,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(checkin)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/{uuid}/proxy/video")
   @Operation(
     summary = "Get video proxy URL",
@@ -223,7 +224,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(mapOf("url" to url.toString()))
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/{uuid}/proxy/snapshot")
   @Operation(
     summary = "Get snapshot proxy URL",
@@ -241,7 +242,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(mapOf("url" to url.toString()))
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping
   @Operation(
     summary = "DEBUG: Manual checkin creation",
@@ -257,7 +258,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(checkin)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/invite")
   @Operation(
     summary = "DEBUG: Manual notification trigger",
@@ -274,7 +275,7 @@ class CheckinV2Resource(
     return ResponseEntity.ok(checkin)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/log-event")
   @Operation(
     summary = "Log checkin audit event",

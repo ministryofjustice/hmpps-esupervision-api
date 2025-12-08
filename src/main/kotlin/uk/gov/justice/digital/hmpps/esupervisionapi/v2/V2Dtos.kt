@@ -50,11 +50,11 @@ data class Name(
 data class PractitionerDetails(
   @Schema(description = "Practitioner's name", required = true) val name: Name,
   @Schema(
-    description = "Practitioner's email address",
-    required = true,
+    description = "Practitioner's email address (optional - may not be available)",
+    required = false,
     example = "practitioner@example.com",
   )
-  val email: String,
+  val email: String? = null,
   @Schema(description = "Local Admin Unit", required = false)
   val localAdminUnit: OrganizationalUnit? = null,
   @Schema(description = "Probation Delivery Unit", required = false)

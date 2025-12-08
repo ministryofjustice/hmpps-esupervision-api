@@ -1,11 +1,11 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
-// import org.springframework.security.access.prepost.PreAuthorize
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
@@ -22,7 +22,7 @@ import java.util.UUID
 class EventV2Resource(
   private val notificationService: NotificationV2Service,
 ) {
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
   @GetMapping("/setup-completed/{uuid}")
   @Operation(
     summary = "Get setup completed event details",
@@ -40,7 +40,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
   @GetMapping("/checkin-created/{uuid}")
   @Operation(
     summary = "Get checkin created event details",
@@ -58,7 +58,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
   @GetMapping("/checkin-submitted/{uuid}")
   @Operation(
     summary = "Get checkin submitted event details",
@@ -76,7 +76,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
   @GetMapping("/checkin-reviewed/{uuid}")
   @Operation(
     summary = "Get checkin reviewed event details",
@@ -94,7 +94,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
   @GetMapping("/checkin-expired/{uuid}")
   @Operation(
     summary = "Get checkin expired event details",

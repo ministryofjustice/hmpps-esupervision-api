@@ -1,12 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
-// import org.springframework.security.access.prepost.PreAuthorize
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -35,7 +35,7 @@ class OffenderSetupV2Resource(
   private val s3UploadService: S3UploadService,
 ) {
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Start V2 offender setup process",
     description =
@@ -60,7 +60,7 @@ class OffenderSetupV2Resource(
     return ResponseEntity.ok(setup)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Get photo upload location for V2 setup",
     description =
@@ -113,7 +113,7 @@ class OffenderSetupV2Resource(
     )
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Complete V2 offender setup",
     description =
@@ -139,7 +139,7 @@ class OffenderSetupV2Resource(
     return ResponseEntity.ok(offender)
   }
 
-  // @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Terminate V2 offender setup",
     description =
