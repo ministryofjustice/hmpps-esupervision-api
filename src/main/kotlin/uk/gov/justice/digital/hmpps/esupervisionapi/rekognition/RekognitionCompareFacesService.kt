@@ -29,7 +29,7 @@ class RekognitionCompareFacesService(
       compareFacesAsync(snapshots.reference, it, requiredConfidence)
     }
     val result = CompletableFuture.allOf(*snapshotRequests.toTypedArray()).thenApply {
-      snapshotRequests.map { it.get() }.any()
+      snapshotRequests.any { it.get() == true }
     }.thenApply {
       when (it) {
         true -> AutomatedIdVerificationResult.MATCH
