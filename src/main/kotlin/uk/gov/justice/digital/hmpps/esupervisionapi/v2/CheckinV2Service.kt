@@ -102,8 +102,7 @@ class CheckinV2Service(
   /** Get upload locations for video and snapshots */
   fun getUploadLocations(
     uuid: UUID,
-    videoContentType: String,
-    snapshotContentTypes: List<String>,
+    snapshotCount: Int = 1,
   ): UploadLocationsV2Response {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
@@ -120,15 +119,15 @@ class CheckinV2Service(
     val ttl = Duration.ofMinutes(uploadTtlMinutes)
 
     // Generate video upload location
-    val videoUrl = s3UploadService.generatePresignedUploadUrl(checkin, videoContentType, ttl)
+    val videoUrl = s3UploadService.generatePresignedUploadUrl(checkin, VIDEO_CONTENT_TYPE, ttl)
 
     // Generate snapshot upload locations
     val snapshotUrls =
-      snapshotContentTypes.mapIndexed { index, contentType ->
-        val url = s3UploadService.generatePresignedUploadUrl(checkin, contentType, index, ttl)
+      (0 until snapshotCount).map { index ->
+        val url = s3UploadService.generatePresignedUploadUrl(checkin, SNAPSHOT_CONTENT_TYPE, index, ttl)
         UploadLocation(
           url = url,
-          contentType = contentType,
+          contentType = SNAPSHOT_CONTENT_TYPE,
           ttl = "PT${uploadTtlMinutes}M",
         )
       }
@@ -137,7 +136,7 @@ class CheckinV2Service(
       video =
       UploadLocation(
         url = videoUrl,
-        contentType = videoContentType,
+        contentType = VIDEO_CONTENT_TYPE,
         ttl = "PT${uploadTtlMinutes}M",
       ),
       snapshots = snapshotUrls,
@@ -480,5 +479,7 @@ class CheckinV2Service(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinV2Service::class.java)
+    private const val VIDEO_CONTENT_TYPE = "video/mp4"
+    private const val SNAPSHOT_CONTENT_TYPE = "image/jpeg"
   }
 }

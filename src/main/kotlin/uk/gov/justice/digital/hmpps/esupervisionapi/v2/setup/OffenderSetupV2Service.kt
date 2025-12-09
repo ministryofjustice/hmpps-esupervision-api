@@ -51,6 +51,16 @@ class OffenderSetupV2Service(
 
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetupV2> = offenderSetupRepository.findByUuid(uuid)
 
+  /** Get proxy URL for setup photo */
+  fun getPhotoProxyUrl(uuid: UUID): java.net.URL {
+    val setup = offenderSetupRepository.findByUuid(uuid).orElseThrow {
+      BadArgumentException("Setup not found: $uuid")
+    }
+
+    return s3UploadService.getOffenderPhoto(setup.offender)
+      ?: throw BadArgumentException("Photo not found for setup: $uuid")
+  }
+
   /** Start offender setup (registration) Creates OffenderV2 and OffenderSetupV2 records */
   @Transactional
   fun startOffenderSetup(offenderInfo: OffenderInfoV2): OffenderSetupV2Dto {

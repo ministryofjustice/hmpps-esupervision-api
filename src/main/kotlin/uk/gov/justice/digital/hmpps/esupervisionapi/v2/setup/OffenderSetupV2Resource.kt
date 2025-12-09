@@ -1,6 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
@@ -8,11 +10,11 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.BindingResult
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
@@ -66,25 +68,12 @@ class OffenderSetupV2Resource(
     description =
     """Request a presigned S3 URL for uploading the offender's photo.
       The returned URL expires after 5 minutes.
-      To upload the image, client must use PUT method with the specified content-type.""",
+      To upload the image, client must use PUT method with Content-Type: image/jpeg.""",
   )
-  @PostMapping("/{uuid}/upload_location")
+  @GetMapping("/{uuid}/upload_location")
   fun setupPhotoLocation(
     @PathVariable uuid: UUID,
-    @RequestParam(name = "content-type", required = true) contentType: String,
   ): ResponseEntity<UploadLocationResponse> {
-    val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
-
-    if (!supportedContentTypes.contains(contentType)) {
-      return ResponseEntity.badRequest()
-        .body(
-          UploadLocationResponse(
-            locationInfo = null,
-            errorMessage = "Supported content types: $supportedContentTypes",
-          ),
-        )
-    }
-
     val setup = offenderSetupService.findSetupByUuid(uuid)
     if (setup.isEmpty) {
       return ResponseEntity.badRequest()
@@ -102,15 +91,30 @@ class OffenderSetupV2Resource(
 
     // Generate presigned URL for photo upload
     val duration = Duration.ofMinutes(5)
-    val url = s3UploadService.generatePresignedUploadUrl(setup.get(), contentType, duration)
+    val url = s3UploadService.generatePresignedUploadUrl(setup.get(), PHOTO_CONTENT_TYPE, duration)
 
     LOGGER.debug("Generated V2 setup photo upload URL for setup={}", uuid)
 
     return ResponseEntity.ok(
       UploadLocationResponse(
-        locationInfo = LocationInfo(url, contentType, duration.toString()),
+        locationInfo = LocationInfo(url, PHOTO_CONTENT_TYPE, duration.toString()),
       ),
     )
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/{uuid}/proxy/photo")
+  @Operation(
+    summary = "Get photo proxy URL",
+    description = "Returns presigned S3 URL for viewing setup photo",
+  )
+  @ApiResponse(responseCode = "200", description = "Photo URL")
+  @ApiResponse(responseCode = "404", description = "Photo not found")
+  fun getPhotoProxyUrl(
+    @Parameter(description = "Setup UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<Map<String, String>> {
+    val url = offenderSetupService.getPhotoProxyUrl(uuid)
+    return ResponseEntity.ok(mapOf("url" to url.toString()))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -162,5 +166,6 @@ class OffenderSetupV2Resource(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(OffenderSetupV2Resource::class.java)
+    private const val PHOTO_CONTENT_TYPE = "image/jpeg"
   }
 }
