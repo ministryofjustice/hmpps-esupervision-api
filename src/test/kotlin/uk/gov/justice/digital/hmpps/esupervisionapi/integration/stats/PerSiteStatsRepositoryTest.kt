@@ -224,7 +224,8 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     val stats = perSiteStatsRepository.statsPerSite(siteAssignments)
 
-    assertThat(stats.automatedIdCheckAccuracy[0].mismatchCount).isEqualTo(0)
+    assertThat(stats.automatedIdCheckAccuracyPerSite[0].mismatchCount).isEqualTo(0)
+    assertThat(stats.automatedIdCheckAccuracyTotal).isEqualTo(0)
   }
 
   @Test
@@ -276,6 +277,15 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       SiteCountOnNthDay(location = "Site A", day = 2, count = 1),
       SiteCountOnNthDay(location = "Site A", day = 3, count = 1),
     )
+
+    assertThat(stats.completedDay1Total).isEqualTo(2)
+    assertThat(stats.completedDay1Percentage).isEqualTo(50.0)
+
+    assertThat(stats.completedDay2Total).isEqualTo(1)
+    assertThat(stats.completedDay2Percentage).isEqualTo(25.0)
+
+    assertThat(stats.completedDay3Total).isEqualTo(1)
+    assertThat(stats.completedDay3Percentage).isEqualTo(25.0)
   }
 
   @Test
@@ -319,6 +329,9 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     val flaggedCheckins = stats.flaggedCheckinsPerSite
     assertThat(flaggedCheckins).containsExactlyInAnyOrder(SiteCount("Site A", 2))
+
+    assertThat(stats.flaggedCheckinsTotal).isEqualTo(2)
+    assertThat(stats.flaggedCheckinsPercentageTotal).isEqualTo(40.0)
   }
 
   @Test
@@ -364,6 +377,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     val flaggedCheckins = stats.flaggedCheckinsPerSite
     assertThat(flaggedCheckins).containsExactlyInAnyOrder(SiteCount("Site A", 1))
+    assertThat(stats.flaggedCheckinsTotal).isEqualTo(1)
   }
 
   @Test
@@ -405,6 +419,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     val flaggedCheckins = stats.flaggedCheckinsPerSite
     assertThat(flaggedCheckins).containsExactlyInAnyOrder(SiteCount("Site A", 0))
+    assertThat(stats.flaggedCheckinsTotal).isEqualTo(0)
   }
 
   @Test
@@ -448,6 +463,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     val flaggedCheckins = stats.flaggedCheckinsPerSite
     assertThat(flaggedCheckins).containsExactlyInAnyOrder(SiteCount("Site A", 1))
+    assertThat(stats.flaggedCheckinsTotal).isEqualTo(1)
   }
 
   @Test
@@ -503,6 +519,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
 
     val flaggedCheckins = stats.flaggedCheckinsPerSite
     assertThat(flaggedCheckins).containsExactlyInAnyOrder(SiteCount("Site A", expectedFlaggedCheckins))
+    assertThat(stats.flaggedCheckinsTotal).isEqualTo(expectedFlaggedCheckins)
   }
 
   @Test
@@ -700,6 +717,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       SiteCount("Site B", 1),
       SiteCount("Site C", 0),
     )
+    assertThat(stats.flaggedCheckinsTotal).isEqualTo(4)
   }
 
   @Test
@@ -789,6 +807,7 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       SiteCount("Site B", 1),
       SiteCount("Site C", 0),
     )
+    assertThat(stats.stoppedCheckinsTotal).isEqualTo(3)
   }
 
   @Test
@@ -802,13 +821,28 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
     )
 
     val offenderA = offenderRepository.save(
-      Offender.create(name = "Offender A", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE),
+      Offender.create(
+        name = "Offender A",
+        crn = "A123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_ALICE,
+      ),
     )
     val offenderB = offenderRepository.save(
-      Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB),
+      Offender.create(
+        name = "Offender B",
+        crn = "B123457",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_BOB,
+      ),
     )
     val offenderC = offenderRepository.save(
-      Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE),
+      Offender.create(
+        name = "Offender C",
+        crn = "C123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_DAVE,
+      ),
     )
 
     checkinRepository.saveAll(
@@ -819,7 +853,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now(),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "STRUGGLING", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "STRUGGLING",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
         // Check-in with 2 assistance flags
@@ -828,7 +867,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now().minusDays(1),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("DRUGS", "HOUSING")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("DRUGS", "HOUSING"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
         // Check-in with 1 flag
@@ -837,7 +881,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.REVIEWED,
           dueDate = LocalDate.now().minusDays(2),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
         ),
 
@@ -846,7 +895,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner2,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now(),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("HOUSING", "MONEY")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("HOUSING", "MONEY"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
         ),
         OffenderCheckin.create(
@@ -854,7 +908,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner2,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now().minusDays(1),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
         // some flags, practitioner has no site mapping
@@ -863,7 +922,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner3,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now().minusDays(3),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
       ),
@@ -886,9 +950,30 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       PractitionerSite(practitioner2, "Site B"),
     )
 
-    val offenderA = offenderRepository.save(Offender.create(name = "Offender A", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
-    val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
-    val offenderC = offenderRepository.save(Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+    val offenderA = offenderRepository.save(
+      Offender.create(
+        name = "Offender A",
+        crn = "A123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_ALICE,
+      ),
+    )
+    val offenderB = offenderRepository.save(
+      Offender.create(
+        name = "Offender B",
+        crn = "B123457",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_BOB,
+      ),
+    )
+    val offenderC = offenderRepository.save(
+      Offender.create(
+        name = "Offender C",
+        crn = "C123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_DAVE,
+      ),
+    )
 
     checkinRepository.saveAll(
       listOf(
@@ -898,7 +983,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now(),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "STRUGGLING", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "STRUGGLING",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
         // Site A: Check-in 2, callback: NO
@@ -907,7 +997,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now().minusDays(1),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("DRUGS", "HOUSING")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("DRUGS", "HOUSING"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
         // Site A: Check-in 3, callback: NO
@@ -916,7 +1011,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.REVIEWED,
           dueDate = LocalDate.now().minusDays(2),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
         ),
         // Site B: Check-in 1, callback: YES
@@ -925,7 +1025,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner2,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now(),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("HOUSING", "MONEY")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("HOUSING", "MONEY"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
         ),
         // Site B: Check-in 2, callback: NO
@@ -934,7 +1039,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner2,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now().minusDays(1),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "OK", "callback" to "NO", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
         // UNKNOWN: Check-in 1, callback: YES
@@ -943,7 +1053,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner3,
           status = CheckinStatus.SUBMITTED,
           dueDate = LocalDate.now().minusDays(3),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot", "mentalHealth" to "NOT_GREAT", "callback" to "YES", "assistance" to listOf("NO_HELP")) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
         ),
       ),
@@ -1327,9 +1442,30 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
       PractitionerSite(practitioner2, "Site B"),
     )
 
-    val offenderA = offenderRepository.save(Offender.create(name = "Offender A", crn = "A123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_ALICE))
-    val offenderB = offenderRepository.save(Offender.create(name = "Offender B", crn = "B123457", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_BOB))
-    val offenderC = offenderRepository.save(Offender.create(name = "Offender C", crn = "C123456", firstCheckinDate = LocalDate.now(), practitioner = PRACTITIONER_DAVE))
+    val offenderA = offenderRepository.save(
+      Offender.create(
+        name = "Offender A",
+        crn = "A123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_ALICE,
+      ),
+    )
+    val offenderB = offenderRepository.save(
+      Offender.create(
+        name = "Offender B",
+        crn = "B123457",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_BOB,
+      ),
+    )
+    val offenderC = offenderRepository.save(
+      Offender.create(
+        name = "Offender C",
+        crn = "C123456",
+        firstCheckinDate = LocalDate.now(),
+        practitioner = PRACTITIONER_DAVE,
+      ),
+    )
 
     val now = Instant.now()
     checkinRepository.saveAll(
@@ -1340,7 +1476,12 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.REVIEWED,
           dueDate = LocalDate.now(),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot" as Object) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "STRUGGLING",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           reviewStartedAt = now,
           reviewedAt = now.plusSeconds(100),
@@ -1350,27 +1491,71 @@ class PerSiteStatsRepositoryTest : IntegrationTestBase() {
           createdBy = practitioner1,
           status = CheckinStatus.REVIEWED,
           dueDate = LocalDate.now().minusDays(1),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot" as Object) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("DRUGS", "HOUSING"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           reviewStartedAt = now.plusSeconds(50),
           reviewedAt = now.plusSeconds(250),
+        ),
+        OffenderCheckin.create(
+          offender = offenderA,
+          createdBy = practitioner1,
+          status = CheckinStatus.SUBMITTED,
+          dueDate = LocalDate.now().minusDays(2),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+          reviewStartedAt = now,
         ),
         OffenderCheckin.create(
           offender = offenderB,
           createdBy = practitioner2,
           status = CheckinStatus.REVIEWED,
           dueDate = LocalDate.now(),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot" as Object) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("HOUSING", "MONEY"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
           reviewStartedAt = now,
           reviewedAt = now.plusSeconds(50),
+        ),
+        OffenderCheckin.create(
+          offender = offenderB,
+          createdBy = practitioner2,
+          status = CheckinStatus.REVIEWED,
+          dueDate = LocalDate.now().minusDays(1),
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "OK",
+            "callback" to "NO",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
+          autoIdCheck = AutomatedIdVerificationResult.MATCH,
+          reviewStartedAt = now.plusSeconds(100),
+          reviewedAt = now,
         ),
         OffenderCheckin.create(
           offender = offenderC,
           createdBy = practitioner3,
           status = CheckinStatus.REVIEWED,
           dueDate = LocalDate.now().minusDays(3),
-          surveyResponse = mapOf("version" to "2025-07-10@pilot" as Object) as Map<String, Object>,
+          surveyResponse = mapOf(
+            "version" to "2025-07-10@pilot",
+            "mentalHealth" to "NOT_GREAT",
+            "callback" to "YES",
+            "assistance" to listOf("NO_HELP"),
+          ) as Map<String, Object>,
           autoIdCheck = AutomatedIdVerificationResult.MATCH,
           reviewStartedAt = now,
           reviewedAt = now.plusSeconds(1000),
