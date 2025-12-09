@@ -9,6 +9,7 @@
 .vscode/
 build/
 temp/
+bin/
 
 # CMake
 cmake-build-debug/

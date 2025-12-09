@@ -3,92 +3,89 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTemplateConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import java.time.Clock
 import java.util.UUID
 
 /**
- * Service responsible for all notification database operations Uses TransactionTemplate for
- * explicit transaction management
+ * Service responsible for building and persisting notification records.
+ * Uses V1 MessageTemplateConfig for template IDs.
  */
 @Service
 class NotificationPersistenceService(
-  private val notificationConfigRepository: NotificationConfigRepository,
+  private val templateConfig: MessageTemplateConfig,
   private val genericNotificationV2Repository: GenericNotificationV2Repository,
   private val transactionTemplate: TransactionTemplate,
   private val clock: Clock,
 ) {
-  /** Get notification configuration for an event type */
-  fun getNotificationConfig(eventType: String): NotificationConfig = notificationConfigRepository.findByEventType(eventType).orElseThrow {
-    IllegalStateException("Notification configuration not found for event type: $eventType")
-  }
-
   /** Build notification records for offender (SMS and/or Email) */
   fun buildOffenderNotifications(
-    config: NotificationConfig,
     offender: OffenderV2,
     contactDetails: ContactDetails,
-    eventType: String,
+    notificationType: NotificationType,
   ): List<NotificationWithRecipient> {
     val notifications = mutableListOf<NotificationWithRecipient>()
+    val channels = templateConfig.channels
 
     // SMS notification
-    val smsTemplateConfigured = config.offenderSmsEnabled && config.offenderSmsTemplateId != null
-    if (smsTemplateConfigured) {
+    if (channels.offenderSmsEnabled) {
       if (contactDetails.mobile == null) {
         LOGGER.error(
-          "NOTIFICATION_UNDELIVERABLE: SMS template configured for event {} but offender has no mobile number [crn={}, offenderUuid={}]",
-          eventType,
+          "NOTIFICATION_UNDELIVERABLE: Offender has no mobile number [type={}, crn={}, offenderUuid={}]",
+          notificationType,
           offender.crn,
           offender.uuid,
         )
       } else {
-        val notification =
-          GenericNotificationV2(
-            notificationId = UUID.randomUUID(),
-            eventType = eventType,
-            recipientType = "OFFENDER",
-            channel = "SMS",
-            offender = offender,
-            practitionerId = null,
-            status = "created",
-            reference = offender.uuid.toString(),
-            createdAt = clock.instant(),
-            errorMessage = null,
-            templateId = config.offenderSmsTemplateId,
-            sentAt = null,
-            updatedAt = null,
-          )
+        val smsTemplateId = templateConfig.templatesFor(PhoneNumber(contactDetails.mobile)).getTemplate(notificationType)
+        val notification = GenericNotificationV2(
+          notificationId = UUID.randomUUID(),
+          eventType = notificationType.name,
+          recipientType = "OFFENDER",
+          channel = "SMS",
+          offender = offender,
+          practitionerId = null,
+          status = "created",
+          reference = offender.uuid.toString(),
+          createdAt = clock.instant(),
+          errorMessage = null,
+          templateId = smsTemplateId,
+          sentAt = null,
+          updatedAt = null,
+        )
         notifications.add(NotificationWithRecipient(notification, contactDetails.mobile))
       }
     }
 
     // Email notification
-    val emailTemplateConfigured = config.offenderEmailEnabled && config.offenderEmailTemplateId != null
-    if (emailTemplateConfigured) {
+    if (channels.offenderEmailEnabled) {
       if (contactDetails.email == null) {
         LOGGER.error(
-          "NOTIFICATION_UNDELIVERABLE: Email template configured for event {} but offender has no email address [crn={}, offenderUuid={}]",
-          eventType,
+          "NOTIFICATION_UNDELIVERABLE: Offender has no email address [type={}, crn={}, offenderUuid={}]",
+          notificationType,
           offender.crn,
           offender.uuid,
         )
       } else {
-        val notification =
-          GenericNotificationV2(
-            notificationId = UUID.randomUUID(),
-            eventType = eventType,
-            recipientType = "OFFENDER",
-            channel = "EMAIL",
-            offender = offender,
-            practitionerId = null,
-            status = "created",
-            reference = offender.uuid.toString(),
-            createdAt = clock.instant(),
-            errorMessage = null,
-            templateId = config.offenderEmailTemplateId,
-            sentAt = null,
-            updatedAt = null,
-          )
+        val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
+        val notification = GenericNotificationV2(
+          notificationId = UUID.randomUUID(),
+          eventType = notificationType.name,
+          recipientType = "OFFENDER",
+          channel = "EMAIL",
+          offender = offender,
+          practitionerId = null,
+          status = "created",
+          reference = offender.uuid.toString(),
+          createdAt = clock.instant(),
+          errorMessage = null,
+          templateId = emailTemplateId,
+          sentAt = null,
+          updatedAt = null,
+        )
         notifications.add(NotificationWithRecipient(notification, contactDetails.email))
       }
     }
@@ -98,54 +95,58 @@ class NotificationPersistenceService(
 
   /** Build notification records for practitioner (Email only) */
   fun buildPractitionerNotifications(
-    config: NotificationConfig,
     offender: OffenderV2,
     contactDetails: ContactDetails,
     checkin: OffenderCheckinV2?,
-    eventType: String,
+    notificationType: NotificationType,
   ): List<NotificationWithRecipient> {
     val notifications = mutableListOf<NotificationWithRecipient>()
+    val channels = templateConfig.channels
+
+    if (!channels.practitionerEmailEnabled) {
+      return notifications
+    }
+
     val practitionerDetails = contactDetails.practitioner
 
     if (practitionerDetails == null) {
-      LOGGER.warn(
-        "Cannot build practitioner notifications for offender {}: practitioner details not available",
+      LOGGER.error(
+        "NOTIFICATION_UNDELIVERABLE: Practitioner details not available [type={}, crn={}, offenderUuid={}]",
+        notificationType,
         offender.crn,
+        offender.uuid,
       )
       return notifications
     }
 
-    // Email notification (SMS for practitioners not currently supported)
-    if (config.practitionerEmailEnabled && config.practitionerEmailTemplateId != null) {
-      if (practitionerDetails.email == null) {
-        LOGGER.error(
-          "NOTIFICATION_UNDELIVERABLE: Email template configured for event {} but practitioner has no email address [crn={}, offenderUuid={}]",
-          eventType,
-          offender.crn,
-          offender.uuid,
-        )
-        return notifications
-      }
-
-      val reference = checkin?.uuid?.toString() ?: offender.uuid.toString()
-      val notification =
-        GenericNotificationV2(
-          notificationId = UUID.randomUUID(),
-          eventType = eventType,
-          recipientType = "PRACTITIONER",
-          channel = "EMAIL",
-          offender = offender,
-          practitionerId = offender.practitionerId,
-          status = "created",
-          reference = reference,
-          createdAt = clock.instant(),
-          errorMessage = null,
-          templateId = config.practitionerEmailTemplateId,
-          sentAt = null,
-          updatedAt = null,
-        )
-      notifications.add(NotificationWithRecipient(notification, practitionerDetails.email))
+    if (practitionerDetails.email == null) {
+      LOGGER.error(
+        "NOTIFICATION_UNDELIVERABLE: Practitioner has no email address [type={}, crn={}, offenderUuid={}]",
+        notificationType,
+        offender.crn,
+        offender.uuid,
+      )
+      return notifications
     }
+
+    val emailTemplateId = templateConfig.templatesFor(Email(practitionerDetails.email)).getTemplate(notificationType)
+    val reference = checkin?.uuid?.toString() ?: offender.uuid.toString()
+    val notification = GenericNotificationV2(
+      notificationId = UUID.randomUUID(),
+      eventType = notificationType.name,
+      recipientType = "PRACTITIONER",
+      channel = "EMAIL",
+      offender = offender,
+      practitionerId = offender.practitionerId,
+      status = "created",
+      reference = reference,
+      createdAt = clock.instant(),
+      errorMessage = null,
+      templateId = emailTemplateId,
+      sentAt = null,
+      updatedAt = null,
+    )
+    notifications.add(NotificationWithRecipient(notification, practitionerDetails.email))
 
     return notifications
   }
@@ -156,8 +157,7 @@ class NotificationPersistenceService(
 
     return transactionTemplate.execute {
       genericNotificationV2Repository.saveAll(notifications).toList()
-    }
-      ?: emptyList()
+    } ?: emptyList()
   }
 
   /** Update single notification status immediately after sending (in own transaction) */
@@ -177,31 +177,14 @@ class NotificationPersistenceService(
     }
   }
 
-  /** Update notification statuses after sending (batch) - kept for backward compatibility */
-  fun updateNotificationStatuses(results: List<SendResult>) {
-    if (results.isEmpty()) return
-
-    transactionTemplate.execute {
-      results.forEach { result ->
-        result.notification.notificationId = result.notificationId
-        result.notification.status = if (result.success) "sent" else "failed"
-        result.notification.sentAt = if (result.success) clock.instant() else null
-        result.notification.errorMessage = result.error
-        result.notification.updatedAt = clock.instant()
-      }
-      genericNotificationV2Repository.saveAll(results.map { it.notification })
-    }
-  }
-
   companion object {
     private val LOGGER = LoggerFactory.getLogger(NotificationPersistenceService::class.java)
   }
 }
 
-// Data classes for notification processing
 data class NotificationWithRecipient(
   val notification: GenericNotificationV2,
-  val recipient: String, // Phone number or email address
+  val recipient: String,
 )
 
 data class SendResult(

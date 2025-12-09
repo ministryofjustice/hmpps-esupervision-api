@@ -21,3 +21,5 @@ databaseChangeLog:
       file: db/changelog/changesets/10_add_review_started_at_to_offender_checkin.sql
   - include:
       file: db/changelog/changesets/11_create_v2_tables.sql
+  - include:
+      file: db/changelog/changesets/12_remove_template_columns_from_notification_config.sql

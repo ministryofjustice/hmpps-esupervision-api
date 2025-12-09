@@ -193,56 +193,6 @@ open class OffenderCheckinV2(
 }
 
 /**
- * Notification Configuration Entity
- */
-@Entity
-@Table(name = "notification_config_v2")
-open class NotificationConfig(
-  @Column(name = "event_type", nullable = false, unique = true, length = 100)
-  open var eventType: String,
-
-  @Column(name = "offender_sms_enabled", nullable = false)
-  open var offenderSmsEnabled: Boolean = true,
-
-  @Column(name = "offender_email_enabled", nullable = false)
-  open var offenderEmailEnabled: Boolean = true,
-
-  @Column(name = "offender_sms_template_id", nullable = true)
-  open var offenderSmsTemplateId: String? = null,
-
-  @Column(name = "offender_email_template_id", nullable = true)
-  open var offenderEmailTemplateId: String? = null,
-
-  @Column(name = "practitioner_sms_enabled", nullable = false)
-  open var practitionerSmsEnabled: Boolean = false,
-
-  @Column(name = "practitioner_email_enabled", nullable = false)
-  open var practitionerEmailEnabled: Boolean = false,
-
-  @Column(name = "practitioner_sms_template_id", nullable = true)
-  open var practitionerSmsTemplateId: String? = null,
-
-  @Column(name = "practitioner_email_template_id", nullable = true)
-  open var practitionerEmailTemplateId: String? = null,
-
-  @Column(name = "updated_at", nullable = false)
-  open var updatedAt: Instant,
-
-  @Column(name = "updated_by", nullable = false)
-  open var updatedBy: String,
-) : V2BaseEntity() {
-  fun dto(): NotificationConfigDto = NotificationConfigDto(
-    eventType = eventType,
-    offenderSmsEnabled = offenderSmsEnabled,
-    offenderEmailEnabled = offenderEmailEnabled,
-    practitionerSmsEnabled = practitionerSmsEnabled,
-    practitionerEmailEnabled = practitionerEmailEnabled,
-    updatedAt = updatedAt,
-    updatedBy = updatedBy,
-  )
-}
-
-/**
  * V2 Generic Notification Entity
  */
 @Entity

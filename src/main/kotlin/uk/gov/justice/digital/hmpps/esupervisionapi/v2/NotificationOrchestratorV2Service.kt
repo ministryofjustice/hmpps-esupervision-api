@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.Clock
@@ -11,7 +12,7 @@ import java.util.UUID
 
 /**
  * V2 Notification Orchestrator Service Orchestrates notification sending by coordinating between:
- * - NotificationPersistenceService for database operations
+ * - NotificationPersistenceService for building and persisting notifications
  * - NotifyGatewayService for GOV.UK Notify API calls
  * - DomainEventService for publishing domain events
  * - EventAuditV2Service for audit logging
@@ -31,12 +32,10 @@ class NotificationOrchestratorV2Service(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
   ) {
-    // Publish event unconditionally - this is the source of truth
     domainEventService.publishSetupCompleted(offender)
 
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
-    // Record audit even if contact details are missing
     if (details != null) {
       eventAuditService.recordSetupCompleted(offender, details)
     } else {
@@ -47,7 +46,6 @@ class NotificationOrchestratorV2Service(
       eventAuditService.recordSetupCompleted(offender, null)
     }
 
-    // Notifications are best effort - don't fail the operation if they can't be sent
     if (details == null) {
       LOGGER.warn(
         "Cannot send notifications for offender {}: contact details not found",
@@ -57,7 +55,6 @@ class NotificationOrchestratorV2Service(
     }
 
     try {
-      val config = notificationPersistence.getNotificationConfig("SETUP_COMPLETED")
       val personalisation =
         mapOf(
           "date" to LocalDate.now(clock).format(DATE_FORMATTER),
@@ -65,10 +62,9 @@ class NotificationOrchestratorV2Service(
 
       val notificationsWithRecipients =
         notificationPersistence.buildOffenderNotifications(
-          config = config,
           offender = offender,
           contactDetails = details,
-          eventType = "SETUP_COMPLETED",
+          notificationType = NotificationType.RegistrationConfirmation,
         )
 
       processAndSendNotifications(notificationsWithRecipients, personalisation)
@@ -110,7 +106,6 @@ class NotificationOrchestratorV2Service(
     }
 
     try {
-      val config = notificationPersistence.getNotificationConfig("CHECKIN_CREATED")
       val personalisation =
         mapOf(
           "date" to checkin.dueDate.format(DATE_FORMATTER),
@@ -118,24 +113,13 @@ class NotificationOrchestratorV2Service(
           "offender_name" to "${details.name.forename} ${details.name.surname}",
         )
 
-      val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
-      notificationsWithRecipients.addAll(
+      // V1 only notifies offender for checkin invite (no practitioner template)
+      val notificationsWithRecipients =
         notificationPersistence.buildOffenderNotifications(
-          config = config,
           offender = checkin.offender,
           contactDetails = details,
-          eventType = "CHECKIN_CREATED",
-        ),
-      )
-      notificationsWithRecipients.addAll(
-        notificationPersistence.buildPractitionerNotifications(
-          config = config,
-          offender = checkin.offender,
-          contactDetails = details,
-          checkin = checkin,
-          eventType = "CHECKIN_CREATED",
-        ),
-      )
+          notificationType = NotificationType.OffenderCheckinInvite,
+        )
 
       processAndSendNotifications(notificationsWithRecipients, personalisation)
     } catch (e: Exception) {
@@ -176,7 +160,6 @@ class NotificationOrchestratorV2Service(
     }
 
     try {
-      val config = notificationPersistence.getNotificationConfig("CHECKIN_SUBMITTED")
       val personalisation =
         mapOf(
           "date" to LocalDate.now(clock).format(DATE_FORMATTER),
@@ -188,19 +171,17 @@ class NotificationOrchestratorV2Service(
       val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
       notificationsWithRecipients.addAll(
         notificationPersistence.buildOffenderNotifications(
-          config = config,
           offender = checkin.offender,
           contactDetails = details,
-          eventType = "CHECKIN_SUBMITTED",
+          notificationType = NotificationType.OffenderCheckinSubmitted,
         ),
       )
       notificationsWithRecipients.addAll(
         notificationPersistence.buildPractitionerNotifications(
-          config = config,
           offender = checkin.offender,
           contactDetails = details,
           checkin = checkin,
-          eventType = "CHECKIN_SUBMITTED",
+          notificationType = NotificationType.PractitionerCheckinSubmitted,
         ),
       )
 
@@ -220,10 +201,8 @@ class NotificationOrchestratorV2Service(
     checkin: OffenderCheckinV2,
     contactDetails: ContactDetails? = null,
   ) {
-    // Publish domain event (no GOV.UK Notify by default for this event)
     domainEventService.publishCheckinReviewed(checkin)
 
-    // Record audit event
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
     if (details != null) {
       eventAuditService.recordCheckinReviewed(checkin, details)
@@ -240,7 +219,6 @@ class NotificationOrchestratorV2Service(
     checkin: OffenderCheckinV2,
     contactDetails: ContactDetails? = null,
   ) {
-    val config = notificationPersistence.getNotificationConfig("CHECKIN_EXPIRED")
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
 
     if (details == null) {
@@ -248,7 +226,6 @@ class NotificationOrchestratorV2Service(
         "Cannot send notifications for checkin {}: contact details not found",
         checkin.uuid,
       )
-      // Continue with domain event even if contact details not found
     } else {
       val personalisation =
         mapOf(
@@ -258,23 +235,19 @@ class NotificationOrchestratorV2Service(
           "due_date" to checkin.dueDate.format(DATE_FORMATTER),
         )
 
-      // Build notifications (practitioner only for expired checkins)
       val notificationsWithRecipients =
         notificationPersistence.buildPractitionerNotifications(
-          config = config,
           offender = checkin.offender,
           contactDetails = details,
           checkin = checkin,
-          eventType = "CHECKIN_EXPIRED",
+          notificationType = NotificationType.PractitionerCheckinMissed,
         )
 
       processAndSendNotifications(notificationsWithRecipients, personalisation)
     }
 
-    // Publish domain event
     domainEventService.publishCheckinExpired(checkin)
 
-    // Record audit event
     if (details != null) {
       eventAuditService.recordCheckinExpired(checkin, details)
     } else {
@@ -288,27 +261,22 @@ class NotificationOrchestratorV2Service(
   /** Get event detail for a given URL */
   fun getEventDetail(detailUrl: String): EventDetailResponse? = eventDetailService.getEventDetail(detailUrl)
 
-  // Private helper methods
-
   private fun processAndSendNotifications(
     notificationsWithRecipients: List<NotificationWithRecipient>,
     personalisation: Map<String, String>,
   ) {
     if (notificationsWithRecipients.isEmpty()) return
 
-    // Save notifications to database
     val savedNotifications =
       notificationPersistence.saveNotifications(
         notificationsWithRecipients.map { it.notification },
       )
 
-    // Reconstruct wrappers with saved entities
     val notificationsToSend =
       savedNotifications.zip(notificationsWithRecipients).map { (saved, wrapper) ->
         NotificationWithRecipient(saved, wrapper.recipient)
       }
 
-    // Send notifications via GOV.UK Notify and update status immediately after each send
     notificationsToSend.forEach { wrapper ->
       val notification = wrapper.notification
       val recipient = wrapper.recipient
@@ -331,7 +299,6 @@ class NotificationOrchestratorV2Service(
           notifyId,
         )
 
-        // Update status immediately in own transaction
         notificationPersistence.updateSingleNotificationStatus(
           notification = notification,
           success = true,
@@ -351,11 +318,10 @@ class NotificationOrchestratorV2Service(
           sanitized,
         )
 
-        // Update status immediately in own transaction
         notificationPersistence.updateSingleNotificationStatus(
           notification = notification,
           success = false,
-          notifyId = UUID.randomUUID(), // Placeholder ID for failed sends
+          notifyId = UUID.randomUUID(),
           error = PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null),
         )
       }

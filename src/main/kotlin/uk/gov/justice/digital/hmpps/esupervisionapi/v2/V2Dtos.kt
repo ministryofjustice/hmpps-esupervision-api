@@ -368,33 +368,3 @@ data class EventDetailResponse(
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
 )
 
-// ========================================
-// Notification Config DTOs
-// ========================================
-
-/** Notification configuration DTO */
-data class NotificationConfigDto(
-  @Schema(description = "Event type", required = true) val eventType: String,
-  @Schema(description = "Offender SMS enabled", required = true)
-  val offenderSmsEnabled: Boolean,
-  @Schema(description = "Offender email enabled", required = true)
-  val offenderEmailEnabled: Boolean,
-  @Schema(description = "Practitioner SMS enabled", required = true)
-  val practitionerSmsEnabled: Boolean,
-  @Schema(description = "Practitioner email enabled", required = true)
-  val practitionerEmailEnabled: Boolean,
-  @Schema(description = "Last updated timestamp", required = true) val updatedAt: Instant,
-  @Schema(description = "Last updated by", required = true) val updatedBy: String,
-)
-
-/** Update notification configuration request */
-data class UpdateNotificationConfigRequest(
-  @Schema(description = "Offender SMS enabled", required = false)
-  val offenderSmsEnabled: Boolean? = null,
-  @Schema(description = "Offender email enabled", required = false)
-  val offenderEmailEnabled: Boolean? = null,
-  @Schema(description = "Practitioner SMS enabled", required = false)
-  val practitionerSmsEnabled: Boolean? = null,
-  @Schema(description = "Practitioner email enabled", required = false)
-  val practitionerEmailEnabled: Boolean? = null,
-)

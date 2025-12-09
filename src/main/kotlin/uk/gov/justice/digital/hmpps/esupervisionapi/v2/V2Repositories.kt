@@ -171,15 +171,6 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
 }
 
 /**
- * Repository for Notification Configuration
- */
-@Repository
-interface NotificationConfigRepository : JpaRepository<NotificationConfig, Long> {
-  fun findByEventType(eventType: String): Optional<NotificationConfig>
-  fun findAllByOrderByEventTypeAsc(): List<NotificationConfig>
-}
-
-/**
  * Repository for V2 Generic Notifications
  */
 @Repository
