@@ -30,7 +30,7 @@ sealed class S3Keyable {
   fun toKey(): String {
     when (this) {
       is SetupPhotoKey -> {
-        return "setup-${this.invite}"
+        return "setup-${this.offender}"
       }
       is CheckinVideoKey -> {
         return "checkin-${this.checkin}/video"
@@ -46,7 +46,7 @@ sealed class S3Keyable {
  * Ensure we're being consistent with object keys in S3
  */
 data class SetupPhotoKey(
-  val invite: UUID,
+  val offender: UUID,
 ) : S3Keyable()
 
 /**

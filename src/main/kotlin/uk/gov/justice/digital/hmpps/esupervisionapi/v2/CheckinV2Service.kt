@@ -49,8 +49,9 @@ class CheckinV2Service(
 
     // Get video read URL if video has been uploaded
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
+    val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
 
-    return checkin.dto(personalDetails, videoUrl)
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl)
   }
 
   /**
@@ -250,7 +251,9 @@ class CheckinV2Service(
     LOGGER.info("Review started for checkin {} by {}", uuid, practitionerId)
 
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails)
+    val videoUrl = s3UploadService.getCheckinVideo(checkin)
+    val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl)
   }
 
   /** Complete checkin review */
@@ -281,7 +284,9 @@ class CheckinV2Service(
     notificationService.sendCheckinReviewedNotifications(checkin)
 
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails)
+    val videoUrl = s3UploadService.getCheckinVideo(checkin)
+    val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl)
   }
 
   /** Get proxy URL for checkin video */
