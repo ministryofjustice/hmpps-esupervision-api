@@ -115,7 +115,7 @@ class CheckinV2Resource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  @GetMapping("/{uuid}/upload_location")
+  @PostMapping("/{uuid}/upload_location")
   @Operation(
     summary = "Get upload locations for video and snapshots",
     description = "Returns presigned S3 URLs for uploading checkin media",
@@ -125,11 +125,14 @@ class CheckinV2Resource(
   @ApiResponse(responseCode = "400", description = "Invalid checkin state")
   fun getUploadLocations(
     @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
-    @Parameter(description = "Number of snapshots to upload", required = false)
-    @RequestParam(name = "snapshotCount", defaultValue = "1")
-    snapshotCount: Int,
+    @Parameter(description = "Video content type", required = false)
+    @RequestParam(name = "video", defaultValue = "video/mp4")
+    videoContentType: String,
+    @Parameter(description = "Snapshot content types", required = false)
+    @RequestParam(name = "snapshots", required = false)
+    snapshotContentTypes: List<String> = listOf("image/jpeg"),
   ): ResponseEntity<UploadLocationsV2Response> {
-    val locations = checkinService.getUploadLocations(uuid, snapshotCount)
+    val locations = checkinService.getUploadLocations(uuid, videoContentType, snapshotContentTypes)
     return ResponseEntity.ok(locations)
   }
 

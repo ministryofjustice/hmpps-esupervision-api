@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
@@ -68,12 +69,25 @@ class OffenderSetupV2Resource(
     description =
     """Request a presigned S3 URL for uploading the offender's photo.
       The returned URL expires after 5 minutes.
-      To upload the image, client must use PUT method with Content-Type: image/jpeg.""",
+      To upload the image, client must use PUT method with the specified content-type.""",
   )
-  @GetMapping("/{uuid}/upload_location")
+  @PostMapping("/{uuid}/upload_location")
   fun setupPhotoLocation(
     @PathVariable uuid: UUID,
+    @RequestParam(name = "content-type", required = true) contentType: String,
   ): ResponseEntity<UploadLocationResponse> {
+    val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
+
+    if (!supportedContentTypes.contains(contentType)) {
+      return ResponseEntity.badRequest()
+        .body(
+          UploadLocationResponse(
+            locationInfo = null,
+            errorMessage = "Supported content types: $supportedContentTypes",
+          ),
+        )
+    }
+
     val setup = offenderSetupService.findSetupByUuid(uuid)
     if (setup.isEmpty) {
       return ResponseEntity.badRequest()
@@ -91,13 +105,13 @@ class OffenderSetupV2Resource(
 
     // Generate presigned URL for photo upload
     val duration = Duration.ofMinutes(5)
-    val url = s3UploadService.generatePresignedUploadUrl(setup.get(), PHOTO_CONTENT_TYPE, duration)
+    val url = s3UploadService.generatePresignedUploadUrl(setup.get(), contentType, duration)
 
     LOGGER.debug("Generated V2 setup photo upload URL for setup={}", uuid)
 
     return ResponseEntity.ok(
       UploadLocationResponse(
-        locationInfo = LocationInfo(url, PHOTO_CONTENT_TYPE, duration.toString()),
+        locationInfo = LocationInfo(url, contentType, duration.toString()),
       ),
     )
   }
@@ -166,6 +180,5 @@ class OffenderSetupV2Resource(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(OffenderSetupV2Resource::class.java)
-    private const val PHOTO_CONTENT_TYPE = "image/jpeg"
   }
 }
