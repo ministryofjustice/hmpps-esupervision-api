@@ -367,4 +367,3 @@ data class EventDetailResponse(
   @Schema(description = "Offender UUID", required = false) val offenderUuid: UUID? = null,
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
 )
-
