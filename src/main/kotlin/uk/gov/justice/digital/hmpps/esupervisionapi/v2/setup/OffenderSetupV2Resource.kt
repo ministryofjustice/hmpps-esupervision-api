@@ -1,8 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
 import io.swagger.v3.oas.annotations.Operation
-import io.swagger.v3.oas.annotations.Parameter
-import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
@@ -10,7 +8,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.BindingResult
-import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -114,21 +111,6 @@ class OffenderSetupV2Resource(
         locationInfo = LocationInfo(url, contentType, duration.toString()),
       ),
     )
-  }
-
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  @GetMapping("/{uuid}/proxy/photo")
-  @Operation(
-    summary = "Get photo proxy URL",
-    description = "Returns presigned S3 URL for viewing setup photo",
-  )
-  @ApiResponse(responseCode = "200", description = "Photo URL")
-  @ApiResponse(responseCode = "404", description = "Photo not found")
-  fun getPhotoProxyUrl(
-    @Parameter(description = "Setup UUID", required = true) @PathVariable uuid: UUID,
-  ): ResponseEntity<Map<String, String>> {
-    val url = offenderSetupService.getPhotoProxyUrl(uuid)
-    return ResponseEntity.ok(mapOf("url" to url.toString()))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")

@@ -24,6 +24,7 @@ class DomainEventService(
    * Publish a setup completed event
    */
   fun publishSetupCompleted(offender: OffenderV2) {
+    LOGGER.info(">>> Initiating SETUP_COMPLETED event for offender={}, crn={}", offender.uuid, offender.crn)
     val detailUrl = "$hostedAt/v2/events/setup-completed/${offender.uuid}"
     publishEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
@@ -37,6 +38,7 @@ class DomainEventService(
    * Publish a checkin created event
    */
   fun publishCheckinCreated(checkin: OffenderCheckinV2) {
+    LOGGER.info(">>> Initiating CHECKIN_CREATED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
     val detailUrl = "$hostedAt/v2/events/checkin-created/${checkin.uuid}"
     publishEvent(
       eventType = DomainEventType.V2_CHECKIN_CREATED,
@@ -50,6 +52,7 @@ class DomainEventService(
    * Publish a checkin submitted event
    */
   fun publishCheckinSubmitted(checkin: OffenderCheckinV2) {
+    LOGGER.info(">>> Initiating CHECKIN_SUBMITTED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
     val detailUrl = "$hostedAt/v2/events/checkin-submitted/${checkin.uuid}"
     publishEvent(
       eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
@@ -63,6 +66,7 @@ class DomainEventService(
    * Publish a checkin reviewed event
    */
   fun publishCheckinReviewed(checkin: OffenderCheckinV2) {
+    LOGGER.info(">>> Initiating CHECKIN_REVIEWED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
     val detailUrl = "$hostedAt/v2/events/checkin-reviewed/${checkin.uuid}"
     publishEvent(
       eventType = DomainEventType.V2_CHECKIN_REVIEWED,
@@ -76,6 +80,7 @@ class DomainEventService(
    * Publish a checkin expired event
    */
   fun publishCheckinExpired(checkin: OffenderCheckinV2) {
+    LOGGER.info(">>> Initiating CHECKIN_EXPIRED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
     val detailUrl = "$hostedAt/v2/events/checkin-expired/${checkin.uuid}"
     publishEvent(
       eventType = DomainEventType.V2_CHECKIN_EXPIRED,

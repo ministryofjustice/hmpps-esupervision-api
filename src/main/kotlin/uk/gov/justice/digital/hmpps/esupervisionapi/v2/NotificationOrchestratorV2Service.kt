@@ -1,12 +1,16 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.Clock
-import java.time.LocalDate
+import java.time.Duration
+import java.time.Period
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -25,8 +29,12 @@ class NotificationOrchestratorV2Service(
   private val eventAuditService: EventAuditV2Service,
   private val eventDetailService: EventDetailV2Service,
   private val ndiliusApiClient: NdiliusApiClient,
+  private val appConfig: AppConfig,
   private val clock: Clock,
+  @Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) {
+  private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
+
   /** Send notifications for setup completed event */
   fun sendSetupCompletedNotifications(
     offender: OffenderV2,
@@ -57,7 +65,9 @@ class NotificationOrchestratorV2Service(
     try {
       val personalisation =
         mapOf(
-          "date" to LocalDate.now(clock).format(DATE_FORMATTER),
+          "name" to "${details.name.forename} ${details.name.surname}",
+          "date" to offender.firstCheckin.format(DATE_FORMATTER),
+          "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
         )
 
       val notificationsWithRecipients =
@@ -106,11 +116,15 @@ class NotificationOrchestratorV2Service(
     }
 
     try {
+      // Calculate final checkin date (last day offender can submit)
+      val finalCheckinDate = checkin.dueDate.plus(checkinWindowPeriod).minusDays(1)
+
       val personalisation =
         mapOf(
-          "date" to checkin.dueDate.format(DATE_FORMATTER),
-          "crn" to checkin.offender.crn,
-          "offender_name" to "${details.name.forename} ${details.name.surname}",
+          "firstName" to details.name.forename,
+          "lastName" to details.name.surname,
+          "date" to finalCheckinDate.format(DATE_FORMATTER),
+          "url" to appConfig.checkinSubmitUrl(checkin.uuid).toString(),
         )
 
       // V1 only notifies offender for checkin invite (no practitioner template)
@@ -160,12 +174,19 @@ class NotificationOrchestratorV2Service(
     }
 
     try {
+      // Calculate flags (survey flags + 1 if auto ID check failed/missing)
+      val surveyFlags = countSurveyFlags(checkin.surveyResponse)
+      val autoIdFailed = checkin.autoIdCheck == null ||
+        checkin.autoIdCheck == uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult.NO_MATCH
+      val totalFlags = surveyFlags + if (autoIdFailed) 1 else 0
+
+      // Include all params needed by both offender and practitioner templates
       val personalisation =
         mapOf(
-          "date" to LocalDate.now(clock).format(DATE_FORMATTER),
-          "crn" to checkin.offender.crn,
-          "offender_name" to "${details.name.forename} ${details.name.surname}",
-          "due_date" to checkin.dueDate.format(DATE_FORMATTER),
+          "name" to "${details.name.forename} ${details.name.surname}",
+          "practitionerName" to checkin.offender.practitionerId,
+          "number" to totalFlags.toString(),
+          "dashboardSubmissionUrl" to appConfig.checkinDashboardUrl(checkin.uuid).toString(),
         )
 
       val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
@@ -229,10 +250,9 @@ class NotificationOrchestratorV2Service(
     } else {
       val personalisation =
         mapOf(
-          "date" to LocalDate.now(clock).format(DATE_FORMATTER),
-          "crn" to checkin.offender.crn,
-          "offender_name" to "${details.name.forename} ${details.name.surname}",
-          "due_date" to checkin.dueDate.format(DATE_FORMATTER),
+          "practitionerName" to checkin.offender.practitionerId,
+          "name" to "${details.name.forename} ${details.name.surname}",
+          "popDashboardUrl" to appConfig.checkinDashboardUrl(checkin.uuid).toString(),
         )
 
       val notificationsWithRecipients =
@@ -330,6 +350,43 @@ class NotificationOrchestratorV2Service(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(NotificationOrchestratorV2Service::class.java)
-    private val DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+
+    // Match V1 date format: "Monday 15 January 2025"
+    private val DATE_FORMATTER = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")
+
+    /** Format checkin frequency - matches V1 RegistrationConfirmationMessage */
+    private fun formatCheckinFrequency(interval: CheckinInterval): String = when (interval) {
+      CheckinInterval.WEEKLY -> "week"
+      CheckinInterval.TWO_WEEKS -> "two weeks"
+      CheckinInterval.FOUR_WEEKS -> "four weeks"
+      CheckinInterval.EIGHT_WEEKS -> "eight weeks"
+    }
+
+    /** Count flagged survey responses - matches V1 flagging logic */
+    private fun countSurveyFlags(surveyResponse: Map<String, Any>?): Int {
+      if (surveyResponse == null) return 0
+
+      var count = 0
+
+      // Mental health flags
+      val mentalHealth = surveyResponse["mentalHealth"]
+      if (mentalHealth == "NOT_GREAT" || mentalHealth == "STRUGGLING") {
+        count++
+      }
+
+      // Assistance flags (anything other than NO_HELP)
+      val assistance = surveyResponse["assistance"]
+      if (assistance != null && assistance != listOf("NO_HELP")) {
+        count++
+      }
+
+      // Callback flag
+      val callback = surveyResponse["callback"]
+      if (callback == "YES") {
+        count++
+      }
+
+      return count
+    }
   }
 }

@@ -8,11 +8,14 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import java.net.URI
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -27,11 +30,15 @@ class NotificationOrchestratorV2ServiceTest {
   private val eventAuditService: EventAuditV2Service = mock()
   private val eventDetailService: EventDetailV2Service = mock()
   private val ndiliusApiClient: NdiliusApiClient = mock()
+  private val appConfig: AppConfig = mock()
 
   private lateinit var service: NotificationOrchestratorV2Service
 
   @BeforeEach
   fun setUp() {
+    whenever(appConfig.checkinSubmitUrl(any())).thenReturn(URI("https://example.com/checkin"))
+    whenever(appConfig.checkinDashboardUrl(any())).thenReturn(URI("https://example.com/dashboard"))
+
     service = NotificationOrchestratorV2Service(
       notificationPersistence,
       notifyGateway,
@@ -39,7 +46,9 @@ class NotificationOrchestratorV2ServiceTest {
       eventAuditService,
       eventDetailService,
       ndiliusApiClient,
+      appConfig,
       clock,
+      Duration.ofHours(72),
     )
   }
 

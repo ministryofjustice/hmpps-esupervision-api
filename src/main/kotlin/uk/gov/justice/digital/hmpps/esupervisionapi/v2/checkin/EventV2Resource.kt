@@ -22,7 +22,7 @@ import java.util.UUID
 class EventV2Resource(
   private val notificationService: NotificationV2Service,
 ) {
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/setup-completed/{uuid}")
   @Operation(
     summary = "Get setup completed event details",
@@ -40,7 +40,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/checkin-created/{uuid}")
   @Operation(
     summary = "Get checkin created event details",
@@ -58,7 +58,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/checkin-submitted/{uuid}")
   @Operation(
     summary = "Get checkin submitted event details",
@@ -76,7 +76,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/checkin-reviewed/{uuid}")
   @Operation(
     summary = "Get checkin reviewed event details",
@@ -94,7 +94,7 @@ class EventV2Resource(
     return ResponseEntity.ok(event)
   }
 
-  @PreAuthorize("hasRole('ROLE_ESUPERVISION__CHECK_IN__RO')")
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/checkin-expired/{uuid}")
   @Operation(
     summary = "Get checkin expired event details",
