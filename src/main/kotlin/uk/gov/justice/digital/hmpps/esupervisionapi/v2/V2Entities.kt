@@ -171,7 +171,11 @@ open class OffenderCheckinV2(
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult? = null,
 ) : V2BaseEntity() {
-  fun dto(personalDetails: ContactDetails? = null, videoUrl: java.net.URL? = null): CheckinV2Dto = CheckinV2Dto(
+  fun dto(
+    personalDetails: ContactDetails? = null,
+    videoUrl: java.net.URL? = null,
+    checkinLogs: CheckinLogsV2Dto = CheckinLogsV2Dto(CheckinLogsHintV2.OMITTED, emptyList()),
+  ): CheckinV2Dto = CheckinV2Dto(
     uuid = uuid,
     crn = offender.crn,
     status = status,
@@ -189,6 +193,7 @@ open class OffenderCheckinV2(
     surveyResponse = surveyResponse,
     personalDetails = personalDetails,
     videoUrl = videoUrl,
+    checkinLogs = checkinLogs,
   )
 }
 

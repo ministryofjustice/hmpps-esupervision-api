@@ -28,6 +28,7 @@ class CheckinV2Service(
   private val checkinCreationService: CheckinCreationService,
   private val s3UploadService: S3UploadService,
   private val compareFacesService: OffenderIdVerifier,
+  private val eventAuditRepository: EventAuditV2Repository,
   @Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
   @Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
@@ -50,7 +51,23 @@ class CheckinV2Service(
     // Get video read URL if video has been uploaded
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
 
-    return checkin.dto(personalDetails, videoUrl)
+    // Fetch checkin logs from audit events
+    val auditEvents = eventAuditRepository.findAllCheckinEvents(uuid, setOf(CheckinLogEntryTypeV2.CHECKIN_CREATED.name))
+    val logs = auditEvents.map { event ->
+      CheckinLogEntryV2Dto(
+        logEntryType = mapEventTypeToLogEntryType(event.eventType),
+        notes = event.notes,
+        practitionerId = event.practitionerId,
+        checkinUuid = event.checkinUuid ?: uuid,
+        occurredAt = event.occurredAt,
+      )
+    }
+    val checkinLogs = CheckinLogsV2Dto(
+      hint = CheckinLogsHintV2.SUBSET,
+      logs = logs,
+    )
+
+    return checkin.dto(personalDetails, videoUrl, checkinLogs)
   }
 
   /**
@@ -477,6 +494,15 @@ class CheckinV2Service(
       content = checkins,
     )
   }
+
+  private fun mapEventTypeToLogEntryType(eventType: String): CheckinLogEntryTypeV2 =
+    when (eventType) {
+      "CHECKIN_CREATED" -> CheckinLogEntryTypeV2.CHECKIN_CREATED
+      "CHECKIN_SUBMITTED" -> CheckinLogEntryTypeV2.CHECKIN_SUBMITTED
+      "CHECKIN_REVIEWED" -> CheckinLogEntryTypeV2.CHECKIN_REVIEWED
+      "CHECKIN_EXPIRED" -> CheckinLogEntryTypeV2.CHECKIN_EXPIRED
+      else -> CheckinLogEntryTypeV2.UNKNOWN
+    }
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinV2Service::class.java)
