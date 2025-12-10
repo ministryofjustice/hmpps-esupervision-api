@@ -24,6 +24,7 @@ class CheckinV2Service(
   private val clock: Clock,
   private val checkinRepository: OffenderCheckinV2Repository,
   private val offenderRepository: OffenderV2Repository,
+  private val offenderEventLogRepository: OffenderEventLogV2Repository,
   private val ndiliusApiClient: NdiliusApiClient,
   private val notificationService: NotificationV2Service,
   private val checkinCreationService: CheckinCreationService,
@@ -293,6 +294,42 @@ class CheckinV2Service(
 
     // Send notifications
     notificationService.sendCheckinReviewedNotifications(checkin)
+
+    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    return checkin.dto(personalDetails)
+  }
+
+  /** Update a checkin */
+  @Transactional
+  fun updateCheckin(uuid: UUID, request: UpdateCheckinV2Request): CheckinV2Dto {
+    val checkin =
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
+
+    if (checkin.status != CheckinV2Status.REVIEWED || checkin.status != CheckinV2Status.EXPIRED) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Checkin must be reviewed before updated",
+      )
+    }
+
+    offenderEventLogRepository.save(
+      OffenderEventLogV2(
+        comment = request.notes,
+        createdAt = clock.instant(),
+        logEntryType =  LogEntryType.OFFENDER_CHECKIN_UPDATED,
+        practitioner = request.updatedBy,
+        UUID.randomUUID(),
+        offender = checkin.offender,
+        checkin = checkin.id,
+      ),
+    )
+
+    LOGGER.info("Checkin updated: {} by {}", uuid, request.updatedBy)
+
+    // Send notifications - To be implemented
+    // notificationService.sendCheckinUpdatedNotifications(checkin)
 
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
     return checkin.dto(personalDetails)

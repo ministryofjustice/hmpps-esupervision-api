@@ -30,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewStartedRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UpdateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UploadLocationsV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.util.UUID
@@ -206,6 +207,23 @@ class CheckinV2Resource(
     @RequestBody @Valid request: ReviewCheckinV2Request,
   ): ResponseEntity<CheckinV2Dto> {
     val checkin = checkinService.reviewCheckin(uuid, request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/update")
+  @Operation(
+    summary = "Update a checkin",
+    description = "Practitioner updates a checkin after it has been reviewed",
+  )
+  @ApiResponse(responseCode = "200", description = "Update completed")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state")
+  fun updateCheckin(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: UpdateCheckinV2Request,
+  ): ResponseEntity<CheckinV2Dto> {
+    val checkin = checkinService.updateCheckin(uuid, request)
     return ResponseEntity.ok(checkin)
   }
 

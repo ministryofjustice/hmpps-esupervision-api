@@ -346,3 +346,40 @@ open class JobLogV2(
   @Column(name = "ended_at", nullable = true)
   open var endedAt: Instant? = null,
 ) : V2BaseEntity()
+
+/**
+ * V2 Offender Event Log Entity
+ * Separate from V1 offender_event_log for complete decoupling
+ */
+@Entity
+@Table(
+  name = "offender_event_log_v2",
+  indexes = [
+    Index(name = "idx_offender_event_log_v2_entry_type", columnList = "log_entry_type", unique = false),
+    Index(name = "idx_offender_event_log_v2_checkin", columnList = "checkin", unique = false),
+  ],
+)
+open class OffenderEventLogV2(
+  @Column(name = "comment", nullable = true)
+  open var comment: String,
+
+  @Column(name = "created_at", nullable = true)
+  open var createdAt: Instant,
+
+  @Column(name = "log_entry_type", nullable = false)
+  @Enumerated(EnumType.STRING)
+  open var logEntryType: LogEntryType,
+
+  @Column(name = "practitioner", nullable = true)
+  open var practitioner: String,
+
+  @Column(name = "uuid", nullable = false)
+  open var uuid: UUID,
+
+  @Column(name = "checkin", nullable = true)
+  open var checkin: Long,
+
+  @ManyToOne(cascade = [CascadeType.DETACH])
+  @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true)
+  open var offender: OffenderV2? = null,
+) : V2BaseEntity()

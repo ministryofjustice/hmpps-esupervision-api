@@ -238,3 +238,60 @@ interface JobLogV2Repository : JpaRepository<JobLogV2, Long> {
   )
   fun findLatestByJobType(jobType: String): List<JobLogV2>
 }
+
+enum class LogEntryType {
+  OFFENDER_SETUP_COMPLETE,
+  OFFENDER_DEACTIVATED,
+  OFFENDER_CHECKIN_NOT_SUBMITTED,
+  OFFENDER_CHECKIN_REVIEW_SUBMITTED,
+  OFFENDER_CHECKIN_UPDATED,
+  OFFENDER_CHECKIN_RESCHEDULED,
+  OFFENDER_CHECKIN_OUTSIDE_ACCESS,
+}
+
+/**
+ * Repository for V2 offender event Log
+ * Separate from V1 offender_event_log for complete decoupling
+ */
+@Repository
+interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long> {
+  fun findByCheckin(checkinId: Long): List<OffenderEventLogV2>
+
+  @Query(
+    """
+    select
+     e.uuid as uuid,
+     e.logEntryType as logEntryType,
+     e.comment as comment,
+     e.createdAt as createdAt,
+     o.uuid as offender,
+     e.practitioner as practitioner
+    from OffenderEventLog e
+    join e.offender o
+    where o = :offender
+    order by e.createdAt desc
+  """,
+  )
+  fun findByOffenderId(offenderId: Long): List<OffenderEventLogV2>
+
+  @Query(
+    """
+    select
+     e.uuid as uuid,
+     e.logEntryType as logEntryType,
+     e.comment as comment,
+     e.createdAt as createdAt,
+     c.uuid as checkin,
+     o.uuid as offender,
+     e.practitioner as practitioner
+    from OffenderEventLog e
+    join e.offender o
+    left join e.checkin c
+    where
+        e.checkin is NOT NULL
+        AND e.logEntryType in :entryTypes and e.checkin = :checkin  
+    order by e.createdAt desc
+  """,
+  )
+  fun findByCheckinAndCheckinLogEntryType(checkinId: Long, entryTypes: Set<LogEntryType>): List<OffenderEventLogV2>
+}
