@@ -318,7 +318,7 @@ class CheckinV2Service(
       OffenderEventLogV2(
         comment = request.notes,
         createdAt = clock.instant(),
-        logEntryType =  LogEntryType.OFFENDER_CHECKIN_UPDATED,
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_UPDATED,
         practitioner = request.updatedBy,
         UUID.randomUUID(),
         offender = checkin.offender,
