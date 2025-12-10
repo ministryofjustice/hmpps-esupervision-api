@@ -227,6 +227,8 @@ data class CheckinV2Dto(
   val snapshotUrl: URL? = null,
   @Schema(description = "Risk management feedback", required = false)
   val riskFeedback: Boolean? = null,
+  @Schema(description = "Checkin logs with practitioner notes", required = true)
+  val checkinLogs: CheckinLogsV2Dto,
 )
 
 /** Submit checkin request */
@@ -356,6 +358,64 @@ data class UploadLocationsV2Response(
   @Schema(description = "Video upload location", required = true) val video: UploadLocation,
   @Schema(description = "Snapshot upload locations", required = true)
   val snapshots: List<UploadLocation>,
+)
+
+// ========================================
+// Offender Event Log DTOs
+// ========================================
+
+/** Hint indicating completeness of the logs collection */
+enum class CheckinLogsHintV2 {
+  /** All logs are included */
+  ALL,
+
+  /** Only a subset of logs is included */
+  SUBSET,
+
+  /** Logs are omitted from the response */
+  OMITTED,
+}
+
+/** Log entry type for V2 checkins - matches EventAuditV2 event types */
+enum class CheckinLogEntryTypeV2
+
+interface IOffenderLogEntryV2Dto {
+  val uuid: UUID
+  val notes: String
+  val createdAt: Instant
+  val logEntryType: LogEntryType
+  val practitioner: String
+  // val offender: UUID
+}
+
+interface IOffenderCheckinReferenceV2 {
+  val checkin: UUID
+}
+
+/**
+ * If we're interested in checkin events specifically,
+ * we can ensure the specific type is used.
+ */
+interface IOffenderCheckinLogEntryV2Dto :
+  IOffenderLogEntryV2Dto,
+  IOffenderCheckinReferenceV2
+
+data class OffenderCheckinLogEntryV2Dto(
+  @field:Schema(description = "Event UUID") override val uuid: UUID,
+  @field:Schema(description = "Notes/comment", required = false) override val notes: String,
+  @field:Schema(description = "Occurred timestamp", required = true) override val createdAt: Instant,
+  @field:Schema(description = "Log entry type", required = true) override val logEntryType: LogEntryType,
+  @field:Schema(description = "Practitioner ID who created the log", required = false)override val practitioner: String,
+  // @field:Schema(description = "Offender UUID") override val offender: UUID,
+  @field:Schema(description = "Checkin UUID", required = true) override val checkin: UUID,
+) : IOffenderCheckinLogEntryV2Dto
+
+/** Wrapper for checkin logs with hint about completeness */
+data class CheckinLogsV2Dto(
+  @Schema(description = "Hint about whether all logs are included", required = true)
+  val hint: CheckinLogsHintV2,
+  @Schema(description = "List of log entries", required = true)
+  val logs: List<IOffenderCheckinLogEntryV2Dto>,
 )
 
 // ========================================

@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
@@ -48,6 +49,7 @@ class CheckinV2ServiceTest {
   private val checkinCreationService: CheckinCreationService = mock()
   private val s3UploadService: S3UploadService = mock()
   private val compareFacesService: OffenderIdVerifier = mock()
+  private val eventAuditRepository: EventAuditV2Repository = mock()
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
 
@@ -66,6 +68,7 @@ class CheckinV2ServiceTest {
       checkinCreationService,
       s3UploadService,
       compareFacesService,
+      eventAuditRepository,
       uploadTtlMinutes,
       faceSimilarityThreshold,
     )
