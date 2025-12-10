@@ -92,7 +92,7 @@ data class IdentityValidationResponse(
 
 /** Facial recognition verification result */
 data class FacialRecognitionResult(
-  @Schema(description = "Verification result: MATCH or NO_MATCH", required = true)
+  @Schema(description = "Verification result: MATCH, NO_MATCH, NO_FACE_DETECTED, or ERROR", required = true)
   val result: AutomatedIdVerificationResult,
 )
 

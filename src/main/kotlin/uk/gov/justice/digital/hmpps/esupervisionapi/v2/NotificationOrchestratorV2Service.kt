@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.Clock
@@ -177,7 +178,7 @@ class NotificationOrchestratorV2Service(
       // Calculate flags (survey flags + 1 if auto ID check failed/missing)
       val surveyFlags = countSurveyFlags(checkin.surveyResponse)
       val autoIdFailed = checkin.autoIdCheck == null ||
-        checkin.autoIdCheck == uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult.NO_MATCH
+        checkin.autoIdCheck != AutomatedIdVerificationResult.MATCH
       val totalFlags = surveyFlags + if (autoIdFailed) 1 else 0
 
       // Include all params needed by both offender and practitioner templates

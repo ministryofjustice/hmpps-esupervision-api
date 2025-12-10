@@ -2,18 +2,27 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import java.time.Clock
 import java.util.UUID
 
 @RestController
@@ -22,6 +31,7 @@ import java.util.UUID
 class OffenderV2Resource(
   private val offenderRepository: OffenderV2Repository,
   private val s3UploadService: S3UploadService,
+  private val clock: Clock,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -77,6 +87,87 @@ class OffenderV2Resource(
     return ResponseEntity.ok(mapOf("url" to url.toString()))
   }
 
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Deactivate offender",
+    description = """Deactivates a VERIFIED offender, changing their status to INACTIVE.
+      This prevents further check-ins from being created or submitted.
+      Only VERIFIED offenders can be deactivated.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Offender deactivated")
+  @ApiResponse(responseCode = "400", description = "Offender not in VERIFIED status")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @PostMapping("/{uuid}/deactivate")
+  fun deactivateOffender(
+    @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
+    @Valid @RequestBody request: DeactivateOffenderRequest,
+  ): ResponseEntity<OffenderSummaryDto> {
+    val offender = offenderRepository.findByUuid(uuid).orElse(null)
+      ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+
+    if (offender.status != OffenderStatus.VERIFIED) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot deactivate offender with status ${offender.status}. Only VERIFIED offenders can be deactivated.",
+      )
+    }
+
+    offender.status = OffenderStatus.INACTIVE
+    offender.updatedAt = clock.instant()
+    val saved = offenderRepository.save(offender)
+
+    LOGGER.info(
+      "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
+      uuid,
+      offender.crn,
+      request.requestedBy,
+      request.reason,
+    )
+
+    return ResponseEntity.ok(saved.toSummaryDto())
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Reactivate offender",
+    description = """Reactivates an INACTIVE offender, changing their status back to VERIFIED.
+      This allows check-ins to be created and submitted again.
+      Only INACTIVE offenders can be reactivated.
+      Note: V1 does not support reactivation, but V2 requires it due to unique CRN constraint.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Offender reactivated")
+  @ApiResponse(responseCode = "400", description = "Offender not in INACTIVE status")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @PostMapping("/{uuid}/reactivate")
+  fun reactivateOffender(
+    @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
+    @Valid @RequestBody request: ReactivateOffenderRequest,
+  ): ResponseEntity<OffenderSummaryDto> {
+    val offender = offenderRepository.findByUuid(uuid).orElse(null)
+      ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+
+    if (offender.status != OffenderStatus.INACTIVE) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot reactivate offender with status ${offender.status}. Only INACTIVE offenders can be reactivated.",
+      )
+    }
+
+    offender.status = OffenderStatus.VERIFIED
+    offender.updatedAt = clock.instant()
+    val saved = offenderRepository.save(offender)
+
+    LOGGER.info(
+      "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
+      uuid,
+      offender.crn,
+      request.requestedBy,
+      request.reason,
+    )
+
+    return ResponseEntity.ok(saved.toSummaryDto())
+  }
+
   companion object {
     private val LOGGER = LoggerFactory.getLogger(OffenderV2Resource::class.java)
   }
@@ -97,4 +188,26 @@ private fun uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2.toSummary
   status = status,
   firstCheckin = firstCheckin,
   checkinInterval = uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval.fromDuration(checkinInterval),
+)
+
+/** Request to deactivate an offender */
+data class DeactivateOffenderRequest(
+  @Schema(description = "Practitioner ID who requested the deactivation", required = true)
+  @field:NotBlank
+  val requestedBy: ExternalUserId,
+
+  @Schema(description = "Reason for deactivation", required = true)
+  @field:NotBlank
+  val reason: String,
+)
+
+/** Request to reactivate an offender */
+data class ReactivateOffenderRequest(
+  @Schema(description = "Practitioner ID who requested the reactivation", required = true)
+  @field:NotBlank
+  val requestedBy: ExternalUserId,
+
+  @Schema(description = "Reason for reactivation", required = true)
+  @field:NotBlank
+  val reason: String,
 )

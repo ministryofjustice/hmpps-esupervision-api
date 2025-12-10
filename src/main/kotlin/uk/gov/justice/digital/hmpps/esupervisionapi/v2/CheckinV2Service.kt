@@ -351,14 +351,14 @@ class CheckinV2Service(
         s3UploadService.checkinObjectCoordinate(checkin, index)
       }
 
-    // Perform facial recognition
+    // Perform facial recognition (async, but we wait for result)
     val images =
       CheckinVerificationImages(
         reference = referenceCoordinate,
         snapshots = snapshotCoordinates,
       )
 
-    val result = compareFacesService.verifyCheckinImages(images, faceSimilarityThreshold)
+    val result = compareFacesService.verifyCheckinImages(images, faceSimilarityThreshold).join()
 
     // Save result to checkin
     checkin.autoIdCheck = result
@@ -370,6 +370,12 @@ class CheckinV2Service(
       }
       AutomatedIdVerificationResult.NO_MATCH -> {
         LOGGER.info("Facial recognition NO_MATCH for checkin {}", checkin.uuid)
+      }
+      AutomatedIdVerificationResult.NO_FACE_DETECTED -> {
+        LOGGER.warn("Facial recognition NO_FACE_DETECTED for checkin {}", checkin.uuid)
+      }
+      AutomatedIdVerificationResult.ERROR -> {
+        LOGGER.error("Facial recognition ERROR for checkin {}", checkin.uuid)
       }
     }
 
