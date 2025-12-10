@@ -25,7 +25,7 @@ interface OffenderIdVerifier {
  * - Detailed debug logging of Rekognition response
  * - Distinguishes between NO_MATCH vs NO_FACE_DETECTED
  */
-class RekognitionCompareFacesService(
+open class RekognitionCompareFacesService(
   private val asyncClient: RekognitionAsyncClient,
 ) : OffenderIdVerifier {
 

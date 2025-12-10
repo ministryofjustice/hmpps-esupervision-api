@@ -201,6 +201,15 @@ class S3UploadService(
   ): URL = generatePresignedUploadUrl(SetupPhotoKey(setup.offender.uuid), contentType, duration)
 
   /**
+   * V2 Offender - generates presigned upload URL for updating offender photo
+   */
+  fun generatePresignedUploadUrl(
+    offender: OffenderV2,
+    contentType: String = "application/octet-stream",
+    duration: Duration,
+  ): URL = generatePresignedUploadUrl(SetupPhotoKey(offender.uuid), contentType, duration)
+
+  /**
    * V2 Setup - checks if setup photo is uploaded
    */
   fun isSetupPhotoUploaded(setup: OffenderSetupV2): Boolean {

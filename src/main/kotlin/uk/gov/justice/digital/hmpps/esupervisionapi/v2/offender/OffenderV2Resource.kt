@@ -16,13 +16,17 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
+import java.time.Duration
 import java.util.UUID
 
 @RestController
@@ -85,6 +89,61 @@ class OffenderV2Resource(
 
     LOGGER.debug("Returning photo proxy URL for offender uuid={}", uuid)
     return ResponseEntity.ok(mapOf("url" to url.toString()))
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Get photo upload location for offender",
+    description = """Request a presigned S3 URL for uploading/updating the offender's reference photo.
+      The returned URL expires after 5 minutes.
+      Only VERIFIED offenders can have their photo updated.
+      To upload the image, client must use PUT method with the specified content-type.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Upload URL generated")
+  @ApiResponse(responseCode = "400", description = "Invalid content type or offender not VERIFIED")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @PostMapping("/{uuid}/upload_location")
+  fun getPhotoUploadLocation(
+    @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
+    @Parameter(description = "Content type of the image", required = true)
+    @RequestParam(name = "content-type") contentType: String,
+  ): ResponseEntity<UploadLocationResponse> {
+    val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
+
+    if (!supportedContentTypes.contains(contentType)) {
+      return ResponseEntity.badRequest().body(
+        UploadLocationResponse(
+          locationInfo = null,
+          errorMessage = "Supported content types: $supportedContentTypes",
+        ),
+      )
+    }
+
+    val offender = offenderRepository.findByUuid(uuid).orElse(null)
+    if (offender == null) {
+      LOGGER.warn("Upload location request failed: offender not found for uuid={}", uuid)
+      return ResponseEntity.notFound().build()
+    }
+
+    if (offender.status != OffenderStatus.VERIFIED) {
+      return ResponseEntity.badRequest().body(
+        UploadLocationResponse(
+          locationInfo = null,
+          errorMessage = "Cannot update photo for offender with status ${offender.status}. Only VERIFIED offenders can have their photo updated.",
+        ),
+      )
+    }
+
+    val duration = Duration.ofMinutes(5)
+    val url = s3UploadService.generatePresignedUploadUrl(offender, contentType, duration)
+
+    LOGGER.info("Generated photo upload URL for offender uuid={}, crn={}", uuid, offender.crn)
+
+    return ResponseEntity.ok(
+      UploadLocationResponse(
+        locationInfo = LocationInfo(url, contentType, duration.toString()),
+      ),
+    )
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
