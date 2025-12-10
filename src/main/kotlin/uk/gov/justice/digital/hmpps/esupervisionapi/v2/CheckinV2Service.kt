@@ -495,14 +495,13 @@ class CheckinV2Service(
     )
   }
 
-  private fun mapEventTypeToLogEntryType(eventType: String): CheckinLogEntryTypeV2 =
-    when (eventType) {
-      "CHECKIN_CREATED" -> CheckinLogEntryTypeV2.CHECKIN_CREATED
-      "CHECKIN_SUBMITTED" -> CheckinLogEntryTypeV2.CHECKIN_SUBMITTED
-      "CHECKIN_REVIEWED" -> CheckinLogEntryTypeV2.CHECKIN_REVIEWED
-      "CHECKIN_EXPIRED" -> CheckinLogEntryTypeV2.CHECKIN_EXPIRED
-      else -> CheckinLogEntryTypeV2.UNKNOWN
-    }
+  private fun mapEventTypeToLogEntryType(eventType: String): CheckinLogEntryTypeV2 = when (eventType) {
+    "CHECKIN_CREATED" -> CheckinLogEntryTypeV2.CHECKIN_CREATED
+    "CHECKIN_SUBMITTED" -> CheckinLogEntryTypeV2.CHECKIN_SUBMITTED
+    "CHECKIN_REVIEWED" -> CheckinLogEntryTypeV2.CHECKIN_REVIEWED
+    "CHECKIN_EXPIRED" -> CheckinLogEntryTypeV2.CHECKIN_EXPIRED
+    else -> CheckinLogEntryTypeV2.UNKNOWN
+  }
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinV2Service::class.java)

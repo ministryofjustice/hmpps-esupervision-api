@@ -5,8 +5,6 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.LogEntryType
-import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Instant
@@ -203,13 +201,15 @@ interface EventAuditV2Repository : JpaRepository<EventAuditV2, Long> {
   fun findAllByPractitionerId(practitionerId: String): List<EventAuditV2>
   fun findAllByCheckinUuid(checkinUuid: UUID): List<EventAuditV2>
 
-  @Query("""
+  @Query(
+    """
     select e
     from EventAuditV2 e
     where
         e.checkinUuid = :checkinUuid AND e.eventType in :eventTypes  
     order by e.occurredAt desc
-  """)
+  """,
+  )
   fun findAllCheckinEvents(checkinUuid: UUID, entryTypes: Set<String>): List<EventAuditV2>
 
   @Query(
