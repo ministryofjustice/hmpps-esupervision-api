@@ -9,6 +9,7 @@ import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -206,6 +207,19 @@ class CheckinV2Service(
     // Validate state - must be CREATED (not yet submitted)
     if (checkin.status != CheckinV2Status.CREATED) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin already submitted")
+    }
+
+    // Validate offender has completed setup (is VERIFIED)
+    if (checkin.offender.status != OffenderStatus.VERIFIED) {
+      LOGGER.warn(
+        "Facial verification attempted for offender {} with status {} (not VERIFIED)",
+        checkin.offender.uuid,
+        checkin.offender.status,
+      )
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Offender setup not completed - cannot perform facial verification",
+      )
     }
 
     if (numSnapshots < 1) {

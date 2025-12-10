@@ -45,12 +45,56 @@ class RekognitionCompareFacesService(
 
       val result = client.compareFaces(compareRequest)
 
+      // Debug logging for Rekognition response
+      LOGGER.debug(
+        "Rekognition response - sourceImageFace: boundingBox={}, confidence={}",
+        result.sourceImageFace()?.boundingBox(),
+        result.sourceImageFace()?.confidence(),
+      )
+
+      LOGGER.debug(
+        "Rekognition response - faceMatches count: {}, unmatchedFaces count: {}",
+        result.faceMatches().size,
+        result.unmatchedFaces().size,
+      )
+
+      result.faceMatches().forEachIndexed { index, match ->
+        LOGGER.debug(
+          "Rekognition faceMatch[{}] - similarity: {}, boundingBox: {}, confidence: {}",
+          index,
+          match.similarity(),
+          match.face()?.boundingBox(),
+          match.face()?.confidence(),
+        )
+      }
+
+      result.unmatchedFaces().forEachIndexed { index, face ->
+        LOGGER.debug(
+          "Rekognition unmatchedFace[{}] - boundingBox: {}, confidence: {}",
+          index,
+          face.boundingBox(),
+          face.confidence(),
+        )
+      }
+
       val isMatch = result.faceMatches().isNotEmpty()
-      LOGGER.info("Match result: $isMatch")
+      LOGGER.info(
+        "Facial comparison result: isMatch={}, faceMatchesCount={}, unmatchedFacesCount={}, topSimilarity={}",
+        isMatch,
+        result.faceMatches().size,
+        result.unmatchedFaces().size,
+        result.faceMatches().maxOfOrNull { it.similarity() },
+      )
 
       return isMatch
     } catch (ex: InvalidParameterException) {
       // Rekognition service could not find any faces in photo
+      LOGGER.warn(
+        "Rekognition InvalidParameterException (no face detected) for comparison {} vs {} - message: {}",
+        referenceCoord.key,
+        comparisonCoord.key,
+        ex.message,
+      )
       return false
     } catch (ex: RekognitionException) {
       LOGGER.warn("Rekognition service error: {}", ex.message)
