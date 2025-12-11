@@ -12,8 +12,8 @@ enum class DomainEventType(val type: String, val description: String) {
     "An e-Supervision V2 remote check-in was created",
   ),
   V2_CHECKIN_SUBMITTED(
-    "$V2_PREFIX.check-in.submitted",
-    "An e-Supervision V2 remote check-in was submitted",
+    "$V2_PREFIX.check-in.received",
+    "An e-Supervision V2 remote check-in was received",
   ),
   V2_CHECKIN_REVIEWED(
     "$V2_PREFIX.check-in.reviewed",
