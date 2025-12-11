@@ -299,9 +299,9 @@ class CheckinV2Service(
     return checkin.dto(personalDetails)
   }
 
-  /** Update a checkin */
+  /** Annotate a checkin */
   @Transactional
-  fun updateCheckin(uuid: UUID, request: UpdateCheckinV2Request): CheckinV2Dto {
+  fun annotateCheckin(uuid: UUID, request: AnnotateCheckinV2Request): CheckinV2Dto {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
@@ -318,7 +318,7 @@ class CheckinV2Service(
       OffenderEventLogV2(
         comment = request.notes,
         createdAt = clock.instant(),
-        logEntryType = LogEntryType.OFFENDER_CHECKIN_UPDATED,
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
         practitioner = request.updatedBy,
         UUID.randomUUID(),
         offender = checkin.offender,
@@ -326,7 +326,7 @@ class CheckinV2Service(
       ),
     )
 
-    LOGGER.info("Checkin updated: {} by {}", uuid, request.updatedBy)
+    LOGGER.info("Checkin annotated: {} by {}", uuid, request.updatedBy)
 
     // Send notifications - To be implemented
     // notificationService.sendCheckinUpdatedNotifications(checkin)

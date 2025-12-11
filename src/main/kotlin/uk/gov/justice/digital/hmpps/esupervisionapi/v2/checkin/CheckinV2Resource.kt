@@ -30,7 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewStartedRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UpdateCheckinV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UploadLocationsV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.util.UUID
@@ -211,19 +211,19 @@ class CheckinV2Resource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  @PostMapping("/{uuid}/update")
+  @PostMapping("/{uuid}/annotate")
   @Operation(
-    summary = "Update a checkin",
-    description = "Practitioner updates a checkin after it has been reviewed",
+    summary = "Annotate a checkin",
+    description = "Practitioner annotates a checkin after it has been reviewed",
   )
   @ApiResponse(responseCode = "200", description = "Update completed")
   @ApiResponse(responseCode = "404", description = "Checkin not found")
   @ApiResponse(responseCode = "400", description = "Invalid state")
-  fun updateCheckin(
+  fun annotateCheckin(
     @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
-    @RequestBody @Valid request: UpdateCheckinV2Request,
+    @RequestBody @Valid request: AnnotateCheckinV2Request,
   ): ResponseEntity<CheckinV2Dto> {
-    val checkin = checkinService.updateCheckin(uuid, request)
+    val checkin = checkinService.annotateCheckin(uuid, request)
     return ResponseEntity.ok(checkin)
   }
 

@@ -247,8 +247,8 @@ data class ReviewStartedRequest(
   val practitionerId: ExternalUserId,
 )
 
-/** Update checkin request */
-data class UpdateCheckinV2Request(
+/** Annotate checkin request */
+data class AnnotateCheckinV2Request(
   @Schema(description = "Updated by practitioner ID", required = true)
   @field:NotBlank
   val updatedBy: ExternalUserId,
