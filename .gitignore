@@ -81,6 +81,3 @@ sonar-project.properties
 
 # local application profile
 src/main/resources/application-local.yml
-cors-config.json
-kubectl
-/volume/cache
