@@ -9,4 +9,4 @@ ALTER TABLE offender_event_log_v2
 ALTER COLUMN log_entry_type TYPE log_entry_type_v2
 USING log_entry_type::text::log_entry_type_v2;
 
-ALTER TABLE offender_event_log_v2_log_entry_type_check DROP CONSTRAINT offender_v2_status_check;
+ALTER TABLE offender_event_log_v2 DROP CONSTRAINT offender_event_log_v2_log_entry_type_check;
