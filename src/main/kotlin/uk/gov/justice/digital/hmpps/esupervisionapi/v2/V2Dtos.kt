@@ -223,6 +223,8 @@ data class CheckinV2Dto(
   val personalDetails: ContactDetails? = null,
   @Schema(description = "Presigned S3 URL for video playback", required = false)
   val videoUrl: URL? = null,
+  @Schema(description = "Checkin logs with practitioner notes", required = true)
+  val checkinLogs: CheckinLogsV2Dto,
 )
 
 /** Submit checkin request */
@@ -337,6 +339,48 @@ data class UploadLocationsV2Response(
   @Schema(description = "Video upload location", required = true) val video: UploadLocation,
   @Schema(description = "Snapshot upload locations", required = true)
   val snapshots: List<UploadLocation>,
+)
+
+// ========================================
+// Checkin Log DTOs
+// ========================================
+
+/** Hint indicating completeness of the logs collection */
+enum class CheckinLogsHintV2 {
+  /** All logs are included */
+  ALL,
+
+  /** Only a subset of logs is included */
+  SUBSET,
+
+  /** Logs are omitted from the response */
+  OMITTED,
+}
+
+/** Log entry type for V2 checkins - matches EventAuditV2 event types */
+enum class CheckinLogEntryTypeV2 {
+  CHECKIN_CREATED,
+  CHECKIN_SUBMITTED,
+  CHECKIN_REVIEWED,
+  CHECKIN_EXPIRED,
+  UNKNOWN,
+}
+
+/** Individual log entry for a V2 checkin */
+data class CheckinLogEntryV2Dto(
+  @Schema(description = "Log entry type", required = true) val logEntryType: CheckinLogEntryTypeV2,
+  @Schema(description = "Notes/comment", required = false) val notes: String? = null,
+  @Schema(description = "Practitioner ID who created the log", required = false) val practitionerId: ExternalUserId? = null,
+  @Schema(description = "Checkin UUID", required = true) val checkinUuid: UUID,
+  @Schema(description = "Occurred timestamp", required = true) val occurredAt: Instant,
+)
+
+/** Wrapper for checkin logs with hint about completeness */
+data class CheckinLogsV2Dto(
+  @Schema(description = "Hint about whether all logs are included", required = true)
+  val hint: CheckinLogsHintV2,
+  @Schema(description = "List of log entries", required = true)
+  val logs: List<CheckinLogEntryV2Dto>,
 )
 
 // ========================================

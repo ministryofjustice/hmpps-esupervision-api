@@ -203,6 +203,17 @@ interface EventAuditV2Repository : JpaRepository<EventAuditV2, Long> {
 
   @Query(
     """
+    select e
+    from EventAuditV2 e
+    where
+        e.checkinUuid = :checkinUuid AND e.eventType in :eventTypes  
+    order by e.occurredAt desc
+  """,
+  )
+  fun findAllCheckinEvents(checkinUuid: UUID, entryTypes: Set<String>): List<EventAuditV2>
+
+  @Query(
+    """
     SELECT a FROM EventAuditV2 a
     WHERE a.crn = :crn
     ORDER BY a.occurredAt
