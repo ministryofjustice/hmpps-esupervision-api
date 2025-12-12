@@ -29,3 +29,5 @@ databaseChangeLog:
       file: db/changelog/changesets/14_add_offender_event_log_v2.sql
   - include:
       file: db/changelog/changesets/15_use_enum_for_log_entry_type.sql
+  - include:
+      file: db/changelog/changesets/16_add_risk_feedback_to_checkins.sql
