@@ -53,15 +53,7 @@ class CheckinV2Service(
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
 
-    val checkinReviewSubmittedLogs = offenderEventLogRepository
-      .findByCheckinAndLogEntryType(checkin.id, LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED)
-
-    var furtherActions = String()
-    if (checkinReviewSubmittedLogs.isNotEmpty()) {
-      furtherActions = checkinReviewSubmittedLogs[0].comment
-    }
-
-    return checkin.dto(personalDetails, videoUrl, snapshotUrl, furtherActions)
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl)
   }
 
   /**
@@ -320,7 +312,7 @@ class CheckinV2Service(
       OffenderEventLogV2(
         comment = request.notes ?: String(),
         createdAt = clock.instant(),
-        logEntryType = LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED,
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
         practitioner = request.reviewedBy,
         uuid = UUID.randomUUID(),
         checkin = checkin.id,
