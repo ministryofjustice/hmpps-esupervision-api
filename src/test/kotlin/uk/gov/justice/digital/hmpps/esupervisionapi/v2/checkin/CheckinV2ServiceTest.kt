@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
@@ -38,6 +39,7 @@ class CheckinV2ServiceTest {
   private val clock = Clock.fixed(Instant.parse("2025-12-03T10:00:00Z"), ZoneId.of("UTC"))
   private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val offenderRepository: OffenderV2Repository = mock()
+  private val offenderEventLogRepository: OffenderEventLogV2Repository = mock()
   private val ndiliusApiClient: NdiliusApiClient = mock()
   private val notificationService: NotificationV2Service = mock()
   private val checkinCreationService: CheckinCreationService = mock()
@@ -54,6 +56,7 @@ class CheckinV2ServiceTest {
       clock,
       checkinRepository,
       offenderRepository,
+      offenderEventLogRepository,
       ndiliusApiClient,
       notificationService,
       checkinCreationService,

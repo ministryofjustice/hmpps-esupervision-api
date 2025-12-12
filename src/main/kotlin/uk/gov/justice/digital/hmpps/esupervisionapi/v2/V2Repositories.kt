@@ -238,3 +238,20 @@ interface JobLogV2Repository : JpaRepository<JobLogV2, Long> {
   )
   fun findLatestByJobType(jobType: String): List<JobLogV2>
 }
+
+enum class LogEntryType {
+  OFFENDER_SETUP_COMPLETE,
+  OFFENDER_DEACTIVATED,
+  OFFENDER_CHECKIN_NOT_SUBMITTED,
+  OFFENDER_CHECKIN_REVIEW_SUBMITTED,
+  OFFENDER_CHECKIN_ANNOTATED,
+  OFFENDER_CHECKIN_RESCHEDULED,
+  OFFENDER_CHECKIN_OUTSIDE_ACCESS,
+}
+
+/**
+ * Repository for V2 offender event Log
+ * Separate from V1 offender_event_log for complete decoupling
+ */
+@Repository
+interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long>

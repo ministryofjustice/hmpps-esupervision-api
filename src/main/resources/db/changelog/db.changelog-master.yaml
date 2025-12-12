@@ -25,3 +25,7 @@ databaseChangeLog:
       file: db/changelog/changesets/12_remove_template_columns_from_notification_config.sql
   - include:
       file: db/changelog/changesets/13_update_auto_id_check_constraint.sql
+  - include:
+      file: db/changelog/changesets/14_add_offender_event_log_v2.sql
+  - include:
+      file: db/changelog/changesets/15_use_enum_for_log_entry_type.sql

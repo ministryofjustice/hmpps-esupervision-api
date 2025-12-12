@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCollectionV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCaseV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNotificationV2Request
@@ -206,6 +207,23 @@ class CheckinV2Resource(
     @RequestBody @Valid request: ReviewCheckinV2Request,
   ): ResponseEntity<CheckinV2Dto> {
     val checkin = checkinService.reviewCheckin(uuid, request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/annotate")
+  @Operation(
+    summary = "Annotate a checkin",
+    description = "Practitioner annotates a checkin after it has been reviewed",
+  )
+  @ApiResponse(responseCode = "200", description = "Update completed")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state")
+  fun annotateCheckin(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: AnnotateCheckinV2Request,
+  ): ResponseEntity<CheckinV2Dto> {
+    val checkin = checkinService.annotateCheckin(uuid, request)
     return ResponseEntity.ok(checkin)
   }
 
