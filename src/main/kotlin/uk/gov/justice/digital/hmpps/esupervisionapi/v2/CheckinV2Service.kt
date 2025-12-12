@@ -279,18 +279,52 @@ class CheckinV2Service(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    if (checkin.status != CheckinV2Status.SUBMITTED) {
+    if (checkin.status == CheckinV2Status.EXPIRED) {
+      val missedCheckinComment = request.missedCheckinComment?.trim()
+      if (missedCheckinComment.isNullOrEmpty()) {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Reason for missed checkin not given",
+        )
+      }
+
+      offenderEventLogRepository.save(
+        OffenderEventLogV2(
+          comment = missedCheckinComment,
+          createdAt = clock.instant(),
+          logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+          practitioner = request.reviewedBy,
+          uuid = UUID.randomUUID(),
+          checkin = checkin.id,
+          offender = checkin.offender,
+        ),
+      )
+    } else if (checkin.status == CheckinV2Status.SUBMITTED) {
+      checkin.status = CheckinV2Status.REVIEWED
+    } else {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "Checkin must be submitted before review",
       )
     }
 
+    offenderEventLogRepository.save(
+      OffenderEventLogV2(
+        comment = request.notes ?: String(),
+        createdAt = clock.instant(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+        practitioner = request.reviewedBy,
+        uuid = UUID.randomUUID(),
+        checkin = checkin.id,
+        offender = checkin.offender,
+      ),
+    )
+
     // Update checkin
     checkin.reviewedAt = clock.instant()
     checkin.reviewedBy = request.reviewedBy
     checkin.manualIdCheck = request.manualIdCheck
-    checkin.status = CheckinV2Status.REVIEWED
+    checkin.riskFeedback = request.riskManagementFeedback
     checkinRepository.save(checkin)
 
     LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
@@ -312,7 +346,7 @@ class CheckinV2Service(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    if (checkin.status != CheckinV2Status.REVIEWED || checkin.status != CheckinV2Status.EXPIRED) {
+    if (checkin.status != CheckinV2Status.REVIEWED && checkin.status != CheckinV2Status.EXPIRED) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "Checkin must be reviewed before updated",

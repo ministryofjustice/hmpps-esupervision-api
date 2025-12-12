@@ -170,6 +170,9 @@ open class OffenderCheckinV2(
   @Column(name = "manual_id_check", nullable = true, length = 50)
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult? = null,
+
+  @Column(name = "risk_feedback", nullable = true)
+  open var riskFeedback: Boolean? = null,
 ) : V2BaseEntity() {
   fun dto(personalDetails: ContactDetails? = null, videoUrl: java.net.URL? = null, snapshotUrl: java.net.URL? = null): CheckinV2Dto = CheckinV2Dto(
     uuid = uuid,
@@ -186,6 +189,7 @@ open class OffenderCheckinV2(
     checkinStartedAt = checkinStartedAt,
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
+    riskFeedback = riskFeedback,
     surveyResponse = surveyResponse,
     personalDetails = personalDetails,
     videoUrl = videoUrl,

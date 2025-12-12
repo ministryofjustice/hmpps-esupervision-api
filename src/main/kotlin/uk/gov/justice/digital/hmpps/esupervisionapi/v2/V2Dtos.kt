@@ -225,6 +225,8 @@ data class CheckinV2Dto(
   val videoUrl: URL? = null,
   @Schema(description = "Presigned S3 URL for snapshot image from the video", required = false)
   val snapshotUrl: URL? = null,
+  @Schema(description = "Risk management feedback", required = false)
+  val riskFeedback: Boolean? = null,
 )
 
 /** Submit checkin request */
@@ -239,7 +241,12 @@ data class ReviewCheckinV2Request(
   val reviewedBy: ExternalUserId,
   @Schema(description = "Manual ID check result", required = false)
   val manualIdCheck: ManualIdVerificationResult? = null,
-  @Schema(description = "Review notes", required = false) val notes: String? = null,
+  @Schema(description = "Review notes", required = false)
+  val notes: String? = null,
+  @Schema(description = "Missed checkin comments", required = false)
+  val missedCheckinComment: String? = null,
+  @Schema(description = "Risk management feedback", required = false)
+  val riskManagementFeedback: Boolean? = null,
 )
 
 /** Review started request */
