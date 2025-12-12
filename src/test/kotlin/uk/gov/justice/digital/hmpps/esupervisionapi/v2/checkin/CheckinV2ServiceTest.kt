@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
@@ -27,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificati
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import java.net.URI
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -52,6 +55,7 @@ class CheckinV2ServiceTest {
 
   @BeforeEach
   fun setUp() {
+    reset(s3UploadService)
     service = CheckinV2Service(
       clock,
       checkinRepository,
@@ -65,6 +69,9 @@ class CheckinV2ServiceTest {
       uploadTtlMinutes,
       faceSimilarityThreshold,
     )
+
+    whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())
+    whenever(s3UploadService.getCheckinVideo(any())).thenReturn(URI.create("https://video/1").toURL())
   }
 
   @Test
@@ -94,6 +101,8 @@ class CheckinV2ServiceTest {
 
     assertEquals(CheckinV2Status.SUBMITTED, result.status)
     assertNotNull(result.submittedAt)
+    assertNull(result.videoUrl, "Submission result should not contain media URLs")
+    assertNull(result.snapshotUrl, "Submission result should not contain media URLs")
     verify(checkinRepository).save(any())
   }
 
@@ -157,6 +166,8 @@ class CheckinV2ServiceTest {
     val result = service.startReview(uuid, "PRACT001")
 
     assertNotNull(result.reviewStartedAt)
+    assertNotNull(result.reviewStartedBy)
+    assertNotNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewStartedBy)
     verify(checkinRepository).save(any())
   }
@@ -190,6 +201,8 @@ class CheckinV2ServiceTest {
 
     assertEquals(CheckinV2Status.REVIEWED, result.status)
     assertNotNull(result.reviewedAt)
+    assertNotNull(result.videoUrl)
+    assertNotNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
     verify(checkinRepository).save(any())

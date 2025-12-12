@@ -223,6 +223,8 @@ data class CheckinV2Dto(
   val personalDetails: ContactDetails? = null,
   @Schema(description = "Presigned S3 URL for video playback", required = false)
   val videoUrl: URL? = null,
+  @Schema(description = "Presigned S3 URL for snapshot image from the video", required = false)
+  val snapshotUrl: URL? = null,
 )
 
 /** Submit checkin request */
