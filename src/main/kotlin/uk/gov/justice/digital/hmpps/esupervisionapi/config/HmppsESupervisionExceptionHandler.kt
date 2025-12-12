@@ -21,6 +21,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.MissingVideoExcepti
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException as V2BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException as V2ResourceNotFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.InvalidOffenderSetupState as V2InvalidOffenderSetupState
 
 @RestControllerAdvice
 class HmppsESupervisionExceptionHandler {
@@ -127,6 +130,39 @@ class HmppsESupervisionExceptionHandler {
         developerMessage = e.message,
       ),
     ).also { log.info("Bad argument exception: {}", e.message) }
+
+  @ExceptionHandler(V2BadArgumentException::class)
+  fun handleV2BadArgumentException(e: V2BadArgumentException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(UNPROCESSABLE_ENTITY)
+    .body(
+      ErrorResponse(
+        status = UNPROCESSABLE_ENTITY,
+        userMessage = "Unprocessable entity: ${e.message}",
+        developerMessage = e.message,
+      ),
+    ).also { log.info("V2 Bad argument exception: {}", e.message) }
+
+  @ExceptionHandler(V2ResourceNotFoundException::class)
+  fun handleV2ResourceNotFoundException(e: V2ResourceNotFoundException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(NOT_FOUND)
+    .body(
+      ErrorResponse(
+        status = NOT_FOUND,
+        userMessage = e.message,
+        developerMessage = e.message,
+      ),
+    ).also { log.info("V2 Resource not found: {}", e.message) }
+
+  @ExceptionHandler(V2InvalidOffenderSetupState::class)
+  fun handleV2InvalidOffenderSetupState(e: V2InvalidOffenderSetupState): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(UNPROCESSABLE_ENTITY)
+    .body(
+      ErrorResponse(
+        status = UNPROCESSABLE_ENTITY,
+        userMessage = e.message,
+        developerMessage = e.message,
+      ),
+    ).also { log.info("V2 Invalid offender setup state: {}", e.message) }
 
   @ExceptionHandler(NoResourceFoundException::class)
   fun handleNoResourceFoundException(e: NoResourceFoundException): ResponseEntity<ErrorResponse> = ResponseEntity

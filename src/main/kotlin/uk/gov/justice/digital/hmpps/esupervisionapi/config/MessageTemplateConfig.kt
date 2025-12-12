@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 class MessageTemplateConfig(
   private val smsTemplates: MessageTypeTemplateConfig,
   private val emailTemplates: MessageTypeTemplateConfig,
+  val channels: NotificationChannelsConfig,
 ) {
   fun templatesFor(method: NotificationMethod) = when (method) {
     is PhoneNumber -> {
@@ -19,3 +20,10 @@ class MessageTemplateConfig(
     }
   }
 }
+
+class NotificationChannelsConfig(
+  val offenderSmsEnabled: Boolean,
+  val offenderEmailEnabled: Boolean,
+  val practitionerSmsEnabled: Boolean,
+  val practitionerEmailEnabled: Boolean,
+)
