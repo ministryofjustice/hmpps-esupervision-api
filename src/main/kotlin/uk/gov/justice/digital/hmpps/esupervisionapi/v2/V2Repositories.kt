@@ -254,4 +254,13 @@ enum class LogEntryType {
  * Separate from V1 offender_event_log for complete decoupling
  */
 @Repository
-interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long>
+interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long> {
+  @Query(
+    """
+    SELECT e FROM OffenderEventLogV2 e
+    WHERE e.checkin = :checkin AND e.logEntryType = :logEntryType
+    ORDER BY e.createdAt DESC
+    """,
+  )
+  fun findByCheckinAndLogEntryType(checkin: Long, logEntryType: LogEntryType): List<OffenderEventLogV2>
+}

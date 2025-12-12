@@ -227,6 +227,8 @@ data class CheckinV2Dto(
   val snapshotUrl: URL? = null,
   @Schema(description = "Risk management feedback", required = false)
   val riskFeedback: Boolean? = null,
+  @Schema(description = "Futher action notes", required = false)
+  val furtherActions: String? = null,
 )
 
 /** Submit checkin request */
