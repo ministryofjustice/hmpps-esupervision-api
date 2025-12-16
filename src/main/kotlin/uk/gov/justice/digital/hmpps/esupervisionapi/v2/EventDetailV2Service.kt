@@ -2,6 +2,11 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 
 @Service
@@ -29,13 +34,14 @@ class EventDetailV2Service(
       return null
     }
 
-    return when (eventType) {
-      "setup-completed" -> getRegistrationCompletedDetail(uuid)
-      "checkin-created" -> getCheckinEventDetail(uuid, "CHECKIN_CREATED")
-      "checkin-submitted" -> getCheckinEventDetail(uuid, "CHECKIN_SUBMITTED")
-      "checkin-reviewed" -> getCheckinEventDetail(uuid, "CHECKIN_REVIEWED")
-      "checkin-expired" -> getCheckinEventDetail(uuid, "CHECKIN_EXPIRED")
-      else -> {
+    return when (val domainEventType = DomainEventType.fromPath(eventType)) {
+      DomainEventType.V2_SETUP_COMPLETED -> getRegistrationCompletedDetail(uuid)
+      DomainEventType.V2_CHECKIN_CREATED,
+      DomainEventType.V2_CHECKIN_SUBMITTED,
+      DomainEventType.V2_CHECKIN_REVIEWED,
+      DomainEventType.V2_CHECKIN_EXPIRED,
+      -> getCheckinEventDetail(uuid, domainEventType)
+      null -> {
         LOGGER.warn("Unknown event type in detail URL: {}", detailUrl)
         null
       }
@@ -51,9 +57,10 @@ class EventDetailV2Service(
 
     val notes = formatSetupCompletedNotes(offender)
 
+    val eventType = DomainEventType.V2_SETUP_COMPLETED
     return EventDetailResponse(
-      eventReferenceId = "SETUP_COMPLETED-$offenderUuid",
-      eventType = "SETUP_COMPLETED",
+      eventReferenceId = "${eventType.eventTypeName}-$offenderUuid",
+      eventType = eventType.eventTypeName,
       notes = notes,
       crn = offender.crn,
       offenderUuid = offenderUuid,
@@ -62,7 +69,7 @@ class EventDetailV2Service(
     )
   }
 
-  private fun getCheckinEventDetail(checkinUuid: UUID, eventType: String): EventDetailResponse? {
+  private fun getCheckinEventDetail(checkinUuid: UUID, eventType: DomainEventType): EventDetailResponse? {
     val checkin = checkinRepository.findByUuid(checkinUuid).orElse(null)
     if (checkin == null) {
       LOGGER.warn("Checkin not found for UUID: {}", checkinUuid)
@@ -71,14 +78,15 @@ class EventDetailV2Service(
 
     val notes = formatCheckinNotes(checkin, eventType)
     val timestamp = when (eventType) {
-      "CHECKIN_SUBMITTED" -> checkin.submittedAt ?: checkin.createdAt
-      "CHECKIN_REVIEWED" -> checkin.reviewedAt ?: checkin.createdAt
+      DomainEventType.V2_CHECKIN_SUBMITTED -> checkin.submittedAt ?: checkin.createdAt
+      DomainEventType.V2_CHECKIN_REVIEWED -> checkin.reviewedAt ?: checkin.createdAt
+      DomainEventType.V2_CHECKIN_CREATED, DomainEventType.V2_CHECKIN_EXPIRED -> checkin.createdAt
       else -> checkin.createdAt
     }
 
     return EventDetailResponse(
-      eventReferenceId = "$eventType-$checkinUuid",
-      eventType = eventType,
+      eventReferenceId = "${eventType.eventTypeName}-$checkinUuid",
+      eventType = eventType.eventTypeName,
       notes = notes,
       crn = checkin.offender.crn,
       offenderUuid = checkin.offender.uuid,
@@ -101,67 +109,213 @@ class EventDetailV2Service(
     return lines.joinToString("\n")
   }
 
-  private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: String): String {
+  private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType): String {
     val lines = mutableListOf<String>()
-    lines.add(formatEventTypeTitle(eventType))
-    lines.add("Checkin UUID: ${checkin.uuid}")
-    lines.add("CRN: ${checkin.offender.crn}")
-    lines.add("Status: ${checkin.status}")
-    lines.add("Due date: ${checkin.dueDate}")
-    lines.add("Created at: ${checkin.createdAt}")
-    checkin.checkinStartedAt?.let { lines.add("Checkin started at: $it") }
-    checkin.submittedAt?.let { lines.add("Submitted at: $it") }
-    checkin.autoIdCheck?.let { lines.add("Automated ID check: $it") }
 
-    if (eventType == "CHECKIN_REVIEWED") {
-      checkin.reviewedAt?.let { lines.add("Reviewed at: $it") }
-      checkin.reviewedBy?.let { lines.add("Reviewed by: $it") }
-      checkin.manualIdCheck?.let { lines.add("Manual ID check: $it") }
+    // Format timestamp with label appropriate to the event type
+    val (timestampLabel, timestamp) = when (eventType) {
+      DomainEventType.V2_CHECKIN_CREATED -> "Check in created" to checkin.createdAt
+      DomainEventType.V2_CHECKIN_SUBMITTED -> "Check in submitted" to (checkin.submittedAt ?: checkin.createdAt)
+      DomainEventType.V2_CHECKIN_REVIEWED -> "Check in reviewed" to (checkin.reviewedAt ?: checkin.createdAt)
+      DomainEventType.V2_CHECKIN_EXPIRED -> "Check in expired" to checkin.createdAt
+      else -> "Check in" to checkin.createdAt
+    }
+    lines.add("$timestampLabel: ${formatHumanReadableDateTime(timestamp)}")
+
+    // Automated ID check
+    checkin.autoIdCheck?.let {
+      lines.add("Automated ID check: ${formatIdCheckResult(it.name)}")
     }
 
-    checkin.surveyResponse?.let { survey ->
-      lines.add("Survey response: $survey")
-      val flagged = computeFlaggedResponses(survey)
-      if (flagged.isNotEmpty()) {
-        lines.add("Flagged responses: ${flagged.joinToString(", ")}")
+    // Manual ID check (for reviewed events)
+    if (eventType == DomainEventType.V2_CHECKIN_REVIEWED) {
+      checkin.manualIdCheck?.let {
+        lines.add("Manual ID check: ${formatIdCheckResult(it.name)}")
       }
+    }
+
+    // Survey response in human-readable format
+    checkin.surveyResponse?.let { survey ->
+      lines.add("")
+      lines.add("Survey response:")
+      lines.addAll(formatSurveyResponseHumanReadable(survey))
     }
 
     return lines.joinToString("\n")
   }
 
-  private fun computeFlaggedResponses(survey: Map<String, Any>): List<String> {
-    val version = survey["version"] as? String ?: return emptyList()
-    return when (version) {
-      "2025-07-10@pilot" -> computeFlaggedFor20250710pilot(survey)
-      else -> emptyList()
+  private fun formatHumanReadableDateTime(instant: Instant): String {
+    val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy 'at' h:mma", Locale.UK)
+    return instant
+      .atZone(ZoneId.of("Europe/London"))
+      .format(formatter)
+      .replace("AM", "am")
+      .replace("PM", "pm")
+  }
+
+  private fun formatIdCheckResult(result: String): String = when (result) {
+    "MATCH" -> "Match"
+    "NO_MATCH" -> "No match"
+    "NO_FACE_DETECTED" -> "No face detected"
+    "ERROR" -> "Error"
+    "CONFIRMED" -> "Confirmed"
+    "REJECTED" -> "Rejected"
+    else -> result
+  }
+
+  /**
+   * Format survey response in human-readable format
+   * Schema-agnostic: dynamically processes all fields except telemetry
+   */
+  private fun formatSurveyResponseHumanReadable(survey: Map<String, Any>): List<String> {
+    val lines = mutableListOf<String>()
+
+    // Fields to skip (telemetry/metadata)
+    val skipFields = setOf(
+      "device",
+      "version",
+      "checkinStartedAt",
+      "timestamp",
+      "metadata",
+    )
+
+    // Custom labels for known fields (optional enhancement)
+    val customLabels = mapOf(
+      "mentalHealth" to "How they have been feeling",
+      "assistance" to "Anything they need support with",
+      "callback" to "If they need us to contact them before their next appointment",
+      "callbackDetails" to "What they want to talk about",
+      "mentalHealthSupport" to "What they want us to know about mental health",
+      "alcoholSupport" to "What they want us to know about alcohol",
+      "drugsSupport" to "What they want us to know about drugs",
+      "moneySupport" to "What they want us to know about money",
+      "housingSupport" to "What they want us to know about housing",
+      "supportSystemSupport" to "What they want us to know about their support system",
+      "otherSupport" to "What they want us to know about something else",
+    )
+
+    for ((key, value) in survey) {
+      // Skip telemetry fields
+      if (key in skipFields) continue
+
+      // Skip null or empty values
+      if (value == null) continue
+      if (value is String && value.isBlank()) continue
+      if (value is List<*> && value.isEmpty()) continue
+      if (value is Map<*, *> && value.isEmpty()) continue
+
+      // Get label (custom or generated from key)
+      val label = customLabels[key] ?: camelCaseToHumanReadable(key)
+
+      // Format the value based on its type
+      val formattedValue = formatValue(value)
+
+      // Skip if formatted value is empty
+      if (formattedValue.isBlank()) continue
+
+      lines.add("$label: $formattedValue")
+    }
+
+    return lines
+  }
+
+  /**
+   * Recursively format any value to human-readable string
+   */
+  @Suppress("UNCHECKED_CAST")
+  private fun formatValue(value: Any?, indent: Int = 0): String {
+    if (value == null) return ""
+
+    return when (value) {
+      is String -> formatStringValue(value)
+      is Boolean -> if (value) "Yes" else "No"
+      is Number -> value.toString()
+      is List<*> -> formatListValue(value, indent)
+      is Map<*, *> -> formatMapValue(value as Map<String, Any>, indent)
+      else -> value.toString()
     }
   }
 
-  private fun computeFlaggedFor20250710pilot(survey: Map<String, Any>): List<String> {
-    val result = mutableListOf<String>()
+  /**
+   * Format string values - convert enums and special values to readable text
+   */
+  private fun formatStringValue(value: String): String {
+    if (value.isBlank()) return ""
 
-    val mentalHealth = survey["mentalHealth"]
-    if (mentalHealth == "NOT_GREAT" || mentalHealth == "STRUGGLING") {
-      result.add("mentalHealth")
+    // Common enum patterns to human-readable
+    return when {
+      // Yes/No values
+      value.equals("YES", ignoreCase = true) -> "Yes"
+      value.equals("NO", ignoreCase = true) -> "No"
+      // NO_HELP special case
+      value == "NO_HELP" -> ""
+      // SCREAMING_SNAKE_CASE to Title Case
+      value.contains("_") && value == value.uppercase() -> {
+        value.lowercase().split("_").joinToString(" ") { word ->
+          word.replaceFirstChar { it.uppercase() }
+        }
+      }
+      // Already readable
+      else -> value
     }
-
-    val assistance = survey["assistance"]
-    val noAssistanceNeeded = listOf("NO_HELP")
-    if (assistance != null && assistance != noAssistanceNeeded) {
-      result.add("assistance")
-    }
-
-    val callback = survey["callback"]
-    if (callback == "YES") {
-      result.add("callback")
-    }
-
-    return result
   }
 
-  private fun formatEventTypeTitle(eventType: String): String = eventType.split("_").joinToString(" ") { word ->
-    word.lowercase().replaceFirstChar { it.uppercase() }
+  /**
+   * Format list values
+   */
+  private fun formatListValue(list: List<*>, indent: Int): String {
+    val filteredList = list.filterNotNull()
+      .map { formatValue(it, indent) }
+      .filter { it.isNotBlank() && it != "No help" }
+
+    if (filteredList.isEmpty()) return ""
+    if (filteredList.size == 1) return filteredList.first()
+
+    return filteredList.joinToString(", ")
+  }
+
+  /**
+   * Format map/object values as key: value pairs
+   */
+  private fun formatMapValue(map: Map<String, Any>, indent: Int): String {
+    if (map.isEmpty()) return ""
+
+    val indentStr = "  ".repeat(indent + 1)
+    val entries = map.entries
+      .filter { (_, v) -> v != null }
+      .mapNotNull { (k, v) ->
+        val formattedValue = formatValue(v, indent + 1)
+        if (formattedValue.isBlank()) {
+          null
+        } else {
+          "$indentStr${camelCaseToHumanReadable(k)}: $formattedValue"
+        }
+      }
+
+    if (entries.isEmpty()) return ""
+
+    return "\n" + entries.joinToString("\n")
+  }
+
+  /**
+   * Convert camelCase to Human Readable
+   * e.g., "mentalHealthSupport" -> "Mental health support"
+   */
+  private fun camelCaseToHumanReadable(camelCase: String): String {
+    if (camelCase.isBlank()) return ""
+
+    val result = StringBuilder()
+    for ((index, char) in camelCase.withIndex()) {
+      if (char.isUpperCase() && index > 0) {
+        result.append(' ')
+        result.append(char.lowercase())
+      } else if (index == 0) {
+        result.append(char.uppercase())
+      } else {
+        result.append(char)
+      }
+    }
+    return result.toString()
   }
 
   companion object {

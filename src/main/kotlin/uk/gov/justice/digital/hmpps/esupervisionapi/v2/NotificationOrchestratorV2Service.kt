@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationTy
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.Clock
 import java.time.Duration
@@ -41,7 +42,12 @@ class NotificationOrchestratorV2Service(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
   ) {
-    domainEventService.publishSetupCompleted(offender)
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_SETUP_COMPLETED,
+      uuid = offender.uuid,
+      crn = offender.crn,
+      description = "Practitioner completed setup for offender ${offender.crn}",
+    )
 
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
@@ -94,7 +100,12 @@ class NotificationOrchestratorV2Service(
     checkin: OffenderCheckinV2,
     contactDetails: ContactDetails? = null,
   ) {
-    domainEventService.publishCheckinCreated(checkin)
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_CHECKIN_CREATED,
+      uuid = checkin.uuid,
+      crn = checkin.offender.crn,
+      description = "Check-in created for ${checkin.offender.crn} with due date ${checkin.dueDate}",
+    )
 
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
 
@@ -152,7 +163,12 @@ class NotificationOrchestratorV2Service(
     checkin: OffenderCheckinV2,
     contactDetails: ContactDetails? = null,
   ) {
-    domainEventService.publishCheckinSubmitted(checkin)
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
+      uuid = checkin.uuid,
+      crn = checkin.offender.crn,
+      description = "Check-in submitted for ${checkin.offender.crn}",
+    )
 
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
 
@@ -223,7 +239,12 @@ class NotificationOrchestratorV2Service(
     checkin: OffenderCheckinV2,
     contactDetails: ContactDetails? = null,
   ) {
-    domainEventService.publishCheckinReviewed(checkin)
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_CHECKIN_REVIEWED,
+      uuid = checkin.uuid,
+      crn = checkin.offender.crn,
+      description = "Check-in reviewed for ${checkin.offender.crn} by ${checkin.reviewedBy}",
+    )
 
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
     if (details != null) {
@@ -267,7 +288,12 @@ class NotificationOrchestratorV2Service(
       processAndSendNotifications(notificationsWithRecipients, personalisation)
     }
 
-    domainEventService.publishCheckinExpired(checkin)
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_CHECKIN_EXPIRED,
+      uuid = checkin.uuid,
+      crn = checkin.offender.crn,
+      description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
+    )
 
     if (details != null) {
       eventAuditService.recordCheckinExpired(checkin, details)

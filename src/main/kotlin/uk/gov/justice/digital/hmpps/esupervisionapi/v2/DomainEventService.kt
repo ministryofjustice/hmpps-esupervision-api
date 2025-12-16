@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.Dom
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.Clock
+import java.util.UUID
 
 /**
  * Service responsible for constructing and publishing domain events
@@ -21,84 +22,17 @@ class DomainEventService(
   @Value("\${app.hostedAt}") private val hostedAt: String,
 ) {
   /**
-   * Publish a setup completed event
+   * Publish a domain event
    */
-  fun publishSetupCompleted(offender: OffenderV2) {
-    LOGGER.info(">>> Initiating SETUP_COMPLETED event for offender={}, crn={}", offender.uuid, offender.crn)
-    val detailUrl = "$hostedAt/v2/events/setup-completed/${offender.uuid}"
-    publishEvent(
-      eventType = DomainEventType.V2_SETUP_COMPLETED,
-      crn = offender.crn,
-      detailUrl = detailUrl,
-      description = "Practitioner completed setup for offender ${offender.crn}",
-    )
-  }
-
-  /**
-   * Publish a checkin created event
-   */
-  fun publishCheckinCreated(checkin: OffenderCheckinV2) {
-    LOGGER.info(">>> Initiating CHECKIN_CREATED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
-    val detailUrl = "$hostedAt/v2/events/checkin-created/${checkin.uuid}"
-    publishEvent(
-      eventType = DomainEventType.V2_CHECKIN_CREATED,
-      crn = checkin.offender.crn,
-      detailUrl = detailUrl,
-      description = "Check-in created for ${checkin.offender.crn} with due date ${checkin.dueDate}",
-    )
-  }
-
-  /**
-   * Publish a checkin submitted event
-   */
-  fun publishCheckinSubmitted(checkin: OffenderCheckinV2) {
-    LOGGER.info(">>> Initiating CHECKIN_SUBMITTED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
-    val detailUrl = "$hostedAt/v2/events/checkin-submitted/${checkin.uuid}"
-    publishEvent(
-      eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
-      crn = checkin.offender.crn,
-      detailUrl = detailUrl,
-      description = "Check-in submitted for ${checkin.offender.crn}",
-    )
-  }
-
-  /**
-   * Publish a checkin reviewed event
-   */
-  fun publishCheckinReviewed(checkin: OffenderCheckinV2) {
-    LOGGER.info(">>> Initiating CHECKIN_REVIEWED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
-    val detailUrl = "$hostedAt/v2/events/checkin-reviewed/${checkin.uuid}"
-    publishEvent(
-      eventType = DomainEventType.V2_CHECKIN_REVIEWED,
-      crn = checkin.offender.crn,
-      detailUrl = detailUrl,
-      description = "Check-in reviewed for ${checkin.offender.crn} by ${checkin.reviewedBy}",
-    )
-  }
-
-  /**
-   * Publish a checkin expired event
-   */
-  fun publishCheckinExpired(checkin: OffenderCheckinV2) {
-    LOGGER.info(">>> Initiating CHECKIN_EXPIRED event for checkin={}, crn={}", checkin.uuid, checkin.offender.crn)
-    val detailUrl = "$hostedAt/v2/events/checkin-expired/${checkin.uuid}"
-    publishEvent(
-      eventType = DomainEventType.V2_CHECKIN_EXPIRED,
-      crn = checkin.offender.crn,
-      detailUrl = detailUrl,
-      description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
-    )
-  }
-
-  /**
-   * Generic publish method for custom events
-   */
-  fun publishEvent(
+  fun publishDomainEvent(
     eventType: DomainEventType,
+    uuid: UUID,
     crn: String,
-    detailUrl: String,
     description: String,
   ) {
+    LOGGER.info(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
+    val detailUrl = "$hostedAt/v2/events/${eventType.pathSegment}/$uuid"
+
     try {
       val event = DomainEvent(
         eventType = eventType.type,
@@ -111,7 +45,10 @@ class DomainEventService(
       eventPublisher.publish(event)
       LOGGER.info("Published domain event: eventType={}, crn={}, detailUrl={}", eventType.type, crn, detailUrl)
     } catch (e: Exception) {
-      LOGGER.error("Failed to publish domain event: {}", PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", crn, null) + " [eventType=${eventType.type}]")
+      LOGGER.error(
+        "Failed to publish domain event: {}",
+        PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", crn, null) + " [eventType=${eventType.type}]",
+      )
     }
   }
 
