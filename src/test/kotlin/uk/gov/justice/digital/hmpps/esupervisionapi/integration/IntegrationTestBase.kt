@@ -55,12 +55,20 @@ abstract class IntegrationTestBase {
   }
 
   companion object {
+    private const val STRINGTYPE_UNSPECIFIED = "stringtype=unspecified"
+
+    private fun withQueryParam(baseUrl: String, queryParam: String): String =
+      if ('?' in baseUrl) "$baseUrl&$queryParam" else "$baseUrl?$queryParam"
+
     @DynamicPropertySource
     @JvmStatic
     fun configureProperties(registry: DynamicPropertyRegistry) {
       val postgres = TestContainersSessionListener.postgres
 
-      registry.add("spring.datasource.url") { postgres.jdbcUrl }
+      registry.add("spring.datasource.url") {
+        val jdbcUrl = postgres.jdbcUrl
+        withQueryParam(jdbcUrl, STRINGTYPE_UNSPECIFIED)
+      }
       registry.add("spring.datasource.username") { postgres.username }
       registry.add("spring.datasource.password") { postgres.password }
     }
