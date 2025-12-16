@@ -278,6 +278,18 @@ data class CreateCheckinV2Request(
   val dueDate: LocalDate,
 )
 
+/** Create checkin by crn request (DEBUG ONLY) */
+data class CreateCheckinByCrnV2Request(
+  @Schema(description = "Practitioner ID", required = true)
+  @field:NotBlank
+  val practitioner: ExternalUserId,
+  @Schema(description = "Offender CRN", required = true)
+  val offender: String,
+  @Schema(description = "Due date", required = true)
+  @JsonDeserialize(using = LocalDateDeserializer::class)
+  val dueDate: LocalDate,
+)
+
 /** Checkin notification request (DEBUG ONLY) */
 data class CheckinNotificationV2Request(
   @Schema(description = "Practitioner ID", required = true)

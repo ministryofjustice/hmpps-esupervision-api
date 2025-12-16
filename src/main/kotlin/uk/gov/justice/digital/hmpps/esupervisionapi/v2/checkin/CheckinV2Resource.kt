@@ -23,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCaseV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNotificationV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.FacialRecognitionResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
@@ -273,6 +274,22 @@ class CheckinV2Resource(
     @RequestBody @Valid request: CreateCheckinV2Request,
   ): ResponseEntity<CheckinV2Dto> {
     val checkin = checkinService.createCheckin(request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/crn")
+  @Operation(
+    summary = "DEBUG: Manual checkin creation by crn",
+    description =
+    "DEBUG ONLY - Manually create a checkin outside the automated job schedule. Use for testing purposes.",
+  )
+  @ApiResponse(responseCode = "200", description = "Checkin created")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  fun createCheckinByCrn(
+    @RequestBody @Valid request: CreateCheckinByCrnV2Request,
+  ): ResponseEntity<CheckinV2Dto> {
+    val checkin = checkinService.createCheckinByCrn(request)
     return ResponseEntity.ok(checkin)
   }
 

@@ -480,6 +480,31 @@ class CheckinV2Service(
   }
 
   @Transactional
+  fun createCheckinByCrn(request: CreateCheckinByCrnV2Request): CheckinV2Dto {
+    LOGGER.info(
+      "DEBUG: Manually creating checkin by crn for offender {} with due date {}",
+      request.offender,
+      request.dueDate,
+    )
+
+    val offender = offenderRepository.findByCrn(request.offender).orElseThrow {
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $request.offender")
+    }
+
+    // Use CheckinCreationService - single source of truth for checkin creation
+    val checkin =
+      checkinCreationService.createCheckin(
+        offenderUuid = offender.uuid,
+        dueDate = request.dueDate,
+        createdBy = request.practitioner,
+      )
+
+    // Fetch personal details for response
+    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    return checkin.dto(personalDetails)
+  }
+
+  @Transactional
   fun sendInvite(uuid: UUID, request: CheckinNotificationV2Request): CheckinV2Dto {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
