@@ -57,8 +57,7 @@ abstract class IntegrationTestBase {
   companion object {
     private const val STRINGTYPE_UNSPECIFIED = "stringtype=unspecified"
 
-    private fun withQueryParam(baseUrl: String, queryParam: String): String =
-      if ('?' in baseUrl) "$baseUrl&$queryParam" else "$baseUrl?$queryParam"
+    private fun withQueryParam(baseUrl: String, queryParam: String): String = if ('?' in baseUrl) "$baseUrl&$queryParam" else "$baseUrl?$queryParam"
 
     @DynamicPropertySource
     @JvmStatic
