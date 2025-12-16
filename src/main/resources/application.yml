@@ -75,7 +75,7 @@ spring:
             scope: read
 
   datasource:
-    url: jdbc:postgresql://${POSTGRES_ENDPOINT}/${POSTGRES_DATABASE}
+    url: jdbc:postgresql://${POSTGRES_ENDPOINT}/${POSTGRES_DATABASE}?stringtype=unspecified
     driver-class-name: org.postgresql.Driver
     username: ${POSTGRES_USERNAME}
     password: ${POSTGRES_PASSWORD}

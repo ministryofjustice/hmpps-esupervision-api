@@ -174,7 +174,12 @@ open class OffenderCheckinV2(
   @Column(name = "risk_feedback", nullable = true)
   open var riskFeedback: Boolean? = null,
 ) : V2BaseEntity() {
-  fun dto(personalDetails: ContactDetails? = null, videoUrl: java.net.URL? = null, snapshotUrl: java.net.URL? = null): CheckinV2Dto = CheckinV2Dto(
+  fun dto(
+    personalDetails: ContactDetails? = null,
+    videoUrl: java.net.URL? = null,
+    snapshotUrl: java.net.URL? = null,
+    checkinLogs: CheckinLogsV2Dto = CheckinLogsV2Dto(CheckinLogsHintV2.OMITTED, emptyList()),
+  ): CheckinV2Dto = CheckinV2Dto(
     uuid = uuid,
     crn = offender.crn,
     status = status,
@@ -194,6 +199,7 @@ open class OffenderCheckinV2(
     personalDetails = personalDetails,
     videoUrl = videoUrl,
     snapshotUrl = snapshotUrl,
+    checkinLogs = checkinLogs,
   )
 }
 

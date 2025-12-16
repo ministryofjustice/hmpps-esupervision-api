@@ -53,7 +53,10 @@ class CheckinV2Service(
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
 
-    return checkin.dto(personalDetails, videoUrl, snapshotUrl)
+    val events = offenderEventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED))
+    val checkinLogs = CheckinLogsV2Dto(hint = CheckinLogsHintV2.SUBSET, logs = events)
+
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl, checkinLogs)
   }
 
   /**
