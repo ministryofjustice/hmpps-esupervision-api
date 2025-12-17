@@ -255,10 +255,10 @@ class CheckinV2Service(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    if (checkin.status != CheckinV2Status.SUBMITTED) {
+    if (checkin.status != CheckinV2Status.SUBMITTED && checkin.status != CheckinV2Status.EXPIRED) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
-        "Checkin must be submitted before review",
+        "Checkin must be submitted or expired before being reviewed",
       )
     }
 
@@ -325,7 +325,7 @@ class CheckinV2Service(
     if (checkin.status != CheckinV2Status.REVIEWED && checkin.status != CheckinV2Status.EXPIRED) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
-        "Checkin must be reviewed before updated",
+        "Checkin must be reviewed before being annotated",
       )
     }
 
