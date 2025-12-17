@@ -287,7 +287,7 @@ class CheckinV2Service(
       OffenderEventLogV2(
         comment = reviewInfo.comment,
         createdAt = clock.instant(),
-        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+        logEntryType = reviewInfo.logEntryType,
         practitioner = request.reviewedBy,
         uuid = UUID.randomUUID(),
         checkin = checkin.id,
@@ -583,6 +583,7 @@ class CheckinV2Service(
 data class CheckinReviewInfo(
   val newStatus: CheckinV2Status,
   val comment: String,
+  val logEntryType: LogEntryType,
 )
 
 /**
@@ -592,15 +593,18 @@ data class CheckinReviewInfo(
 fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewInfo {
   var errorMessage: String? = null
   var newStatus: CheckinV2Status
+  var logEntryType: LogEntryType
   val comment = when (checkin.status) {
     CheckinV2Status.EXPIRED -> {
       errorMessage = "Reason for missed checkin not given"
       newStatus = CheckinV2Status.EXPIRED
+      logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED
       missedCheckinComment?.trim()
     }
     CheckinV2Status.SUBMITTED -> {
       errorMessage = "No review comment given"
       newStatus = CheckinV2Status.REVIEWED
+      logEntryType = LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED
       notes?.trim()
     }
     else -> throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't review checkin withs status ${checkin.status}")
@@ -608,5 +612,5 @@ fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewI
   if (comment.isBlank()) throw ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)
 
   assert(checkin.status.canTransitionTo(newStatus))
-  return CheckinReviewInfo(newStatus, comment)
+  return CheckinReviewInfo(newStatus, comment, logEntryType)
 }
