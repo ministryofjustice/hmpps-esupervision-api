@@ -31,3 +31,5 @@ databaseChangeLog:
       file: db/changelog/changesets/15_use_enum_for_log_entry_type.sql
   - include:
       file: db/changelog/changesets/16_add_risk_feedback_to_checkins.sql
+  - include:
+      file: db/changelog/changesets/17_add_contact_preference_to_offender.sql

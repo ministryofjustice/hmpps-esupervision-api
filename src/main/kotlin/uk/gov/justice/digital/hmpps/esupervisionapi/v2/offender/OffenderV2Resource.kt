@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
@@ -239,6 +240,7 @@ data class OffenderSummaryDto(
   val status: OffenderStatus,
   val firstCheckin: java.time.LocalDate,
   val checkinInterval: uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval,
+  val contactPreference: ContactPreference,
 )
 
 private fun uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2.toSummaryDto() = OffenderSummaryDto(
@@ -247,6 +249,7 @@ private fun uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2.toSummary
   status = status,
   firstCheckin = firstCheckin,
   checkinInterval = uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval.fromDuration(checkinInterval),
+  contactPreference = contactPreference,
 )
 
 /** Request to deactivate an offender */

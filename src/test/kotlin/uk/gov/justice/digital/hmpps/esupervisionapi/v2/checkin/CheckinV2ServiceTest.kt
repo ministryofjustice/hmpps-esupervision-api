@@ -25,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
@@ -245,5 +246,6 @@ class CheckinV2ServiceTest {
     createdAt = clock.instant(),
     createdBy = "PRACT001",
     updatedAt = clock.instant(),
+    contactPreference = ContactPreference.PHONE,
   )
 }

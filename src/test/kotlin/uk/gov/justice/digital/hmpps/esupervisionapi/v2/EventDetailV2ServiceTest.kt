@@ -8,6 +8,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Instant
@@ -310,6 +311,7 @@ class EventDetailV2ServiceTest {
     createdAt = Instant.parse("2025-06-01T10:00:00Z"),
     createdBy = "PRACT001",
     updatedAt = Instant.parse("2025-06-01T10:00:00Z"),
+    contactPreference = ContactPreference.PHONE,
   )
 
   private fun createCheckin(
