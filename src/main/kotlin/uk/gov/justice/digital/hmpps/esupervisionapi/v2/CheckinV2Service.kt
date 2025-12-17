@@ -255,7 +255,7 @@ class CheckinV2Service(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    if (checkin.status != CheckinV2Status.SUBMITTED) {
+    if (checkin.status != CheckinV2Status.SUBMITTED && checkin.status != CheckinV2Status.EXPIRED) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "Checkin must be submitted before review",
