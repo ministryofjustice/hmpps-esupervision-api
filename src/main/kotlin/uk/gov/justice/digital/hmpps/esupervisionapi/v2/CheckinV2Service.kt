@@ -282,46 +282,50 @@ class CheckinV2Service(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    if (checkin.status == CheckinV2Status.EXPIRED) {
-      val missedCheckinComment = request.missedCheckinComment?.trim()
-      if (missedCheckinComment.isNullOrEmpty()) {
-        throw ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Reason for missed checkin not given",
+    when (checkin.status) {
+      CheckinV2Status.EXPIRED -> {
+        val missedCheckinComment = request.missedCheckinComment?.trim()
+        if (missedCheckinComment.isNullOrEmpty()) {
+          throw ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Reason for missed checkin not given",
+          )
+        }
+
+        offenderEventLogRepository.save(
+          OffenderEventLogV2(
+            comment = missedCheckinComment,
+            createdAt = clock.instant(),
+            logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+            practitioner = request.reviewedBy,
+            uuid = UUID.randomUUID(),
+            checkin = checkin.id,
+            offender = checkin.offender,
+          ),
         )
       }
+      CheckinV2Status.SUBMITTED -> {
+        checkin.status = CheckinV2Status.REVIEWED
 
-      offenderEventLogRepository.save(
-        OffenderEventLogV2(
-          comment = missedCheckinComment,
-          createdAt = clock.instant(),
-          logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
-          practitioner = request.reviewedBy,
-          uuid = UUID.randomUUID(),
-          checkin = checkin.id,
-          offender = checkin.offender,
-        ),
-      )
-    } else if (checkin.status == CheckinV2Status.SUBMITTED) {
-      checkin.status = CheckinV2Status.REVIEWED
-    } else {
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Checkin must be submitted before review",
-      )
+        offenderEventLogRepository.save(
+          OffenderEventLogV2(
+            comment = request.notes ?: String(),
+            createdAt = clock.instant(),
+            logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+            practitioner = request.reviewedBy,
+            uuid = UUID.randomUUID(),
+            checkin = checkin.id,
+            offender = checkin.offender,
+          ),
+        )
+      }
+      else -> {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Checkin must be submitted before review ${checkin.status}",
+        )
+      }
     }
-
-    offenderEventLogRepository.save(
-      OffenderEventLogV2(
-        comment = request.notes ?: String(),
-        createdAt = clock.instant(),
-        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
-        practitioner = request.reviewedBy,
-        uuid = UUID.randomUUID(),
-        checkin = checkin.id,
-        offender = checkin.offender,
-      ),
-    )
 
     // Update checkin
     checkin.reviewedAt = clock.instant()
