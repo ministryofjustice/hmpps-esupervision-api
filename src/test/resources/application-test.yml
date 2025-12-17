@@ -25,6 +25,11 @@ aws:
 
 notify:
   apiKey: notused
+  channels:
+    offender-sms-enabled: true
+    offender-email-enabled: true
+    practitioner-sms-enabled: false
+    practitioner-email-enabled: true
   sms-templates:
     POP_CHECKIN_INVITE: d332e869-a667-43ad-8a01-9c2b609e01c8
     PRACTITIONER_CHECKIN_SUBMITTED: 611d8bed-f8ae-46ec-b38f-9173135d206c
