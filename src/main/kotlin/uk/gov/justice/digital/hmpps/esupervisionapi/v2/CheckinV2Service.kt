@@ -282,52 +282,21 @@ class CheckinV2Service(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    when (checkin.status) {
-      CheckinV2Status.EXPIRED -> {
-        val missedCheckinComment = request.missedCheckinComment?.trim()
-        if (missedCheckinComment.isNullOrEmpty()) {
-          throw ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "Reason for missed checkin not given",
-          )
-        }
-
-        offenderEventLogRepository.save(
-          OffenderEventLogV2(
-            comment = missedCheckinComment,
-            createdAt = clock.instant(),
-            logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
-            practitioner = request.reviewedBy,
-            uuid = UUID.randomUUID(),
-            checkin = checkin.id,
-            offender = checkin.offender,
-          ),
-        )
-      }
-      CheckinV2Status.SUBMITTED -> {
-        checkin.status = CheckinV2Status.REVIEWED
-
-        offenderEventLogRepository.save(
-          OffenderEventLogV2(
-            comment = request.notes ?: String(),
-            createdAt = clock.instant(),
-            logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
-            practitioner = request.reviewedBy,
-            uuid = UUID.randomUUID(),
-            checkin = checkin.id,
-            offender = checkin.offender,
-          ),
-        )
-      }
-      else -> {
-        throw ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Checkin must be submitted before review ${checkin.status}",
-        )
-      }
-    }
+    val reviewInfo = request.appliedTo(checkin)
+    offenderEventLogRepository.save(
+      OffenderEventLogV2(
+        comment = reviewInfo.comment,
+        createdAt = clock.instant(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+        practitioner = request.reviewedBy,
+        uuid = UUID.randomUUID(),
+        checkin = checkin.id,
+        offender = checkin.offender,
+      ),
+    )
 
     // Update checkin
+    checkin.status = reviewInfo.newStatus
     checkin.reviewedAt = clock.instant()
     checkin.reviewedBy = request.reviewedBy
     checkin.manualIdCheck = request.manualIdCheck
@@ -609,4 +578,35 @@ class CheckinV2Service(
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinV2Service::class.java)
   }
+}
+
+data class CheckinReviewInfo(
+  val newStatus: CheckinV2Status,
+  val comment: String,
+)
+
+/**
+ * @return log entry comment appropriate for this checkin (depends on checkin status), and new status (possibly unchanged)
+ * @throws ResponseStatusException on missing/blank comment or invalid checkin state
+ */
+fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewInfo {
+  var errorMessage: String? = null
+  var newStatus: CheckinV2Status
+  val comment = when (checkin.status) {
+    CheckinV2Status.EXPIRED -> {
+      errorMessage = "Reason for missed checkin not given"
+      newStatus = CheckinV2Status.EXPIRED
+      missedCheckinComment?.trim()
+    }
+    CheckinV2Status.SUBMITTED -> {
+      errorMessage = "No review comment given"
+      newStatus = CheckinV2Status.REVIEWED
+      notes?.trim()
+    }
+    else -> throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't review checkin withs status ${checkin.status}")
+  } ?: ""
+  if (comment.isBlank()) throw ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)
+
+  assert(checkin.status.canTransitionTo(newStatus))
+  return CheckinReviewInfo(newStatus, comment)
 }
