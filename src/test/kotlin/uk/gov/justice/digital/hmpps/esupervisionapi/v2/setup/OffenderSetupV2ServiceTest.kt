@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -77,6 +78,7 @@ class OffenderSetupV2ServiceTest {
       crn = crn,
       firstCheckin = firstCheckin,
       checkinInterval = CheckinInterval.WEEKLY,
+      contactPreference = ContactPreference.EMAIL,
     )
 
     val savedOffender = OffenderV2(
@@ -89,6 +91,7 @@ class OffenderSetupV2ServiceTest {
       createdAt = clock.instant(),
       createdBy = practitionerId,
       updatedAt = clock.instant(),
+      contactPreference = ContactPreference.EMAIL,
     )
 
     val savedSetup = OffenderSetupV2(
@@ -129,6 +132,7 @@ class OffenderSetupV2ServiceTest {
       createdAt = clock.instant(),
       createdBy = "PRACT001",
       updatedAt = clock.instant(),
+      contactPreference = ContactPreference.EMAIL,
     )
 
     val setup = OffenderSetupV2(
@@ -184,6 +188,7 @@ class OffenderSetupV2ServiceTest {
       createdAt = clock.instant(),
       createdBy = "PRACT001",
       updatedAt = clock.instant(),
+      contactPreference = ContactPreference.EMAIL,
     )
 
     val setup = OffenderSetupV2(
@@ -218,6 +223,7 @@ class OffenderSetupV2ServiceTest {
       createdAt = clock.instant(),
       createdBy = "PRACT001",
       updatedAt = clock.instant(),
+      contactPreference = ContactPreference.EMAIL,
     )
 
     val setup = OffenderSetupV2(
