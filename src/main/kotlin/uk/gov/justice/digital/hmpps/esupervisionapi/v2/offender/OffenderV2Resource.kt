@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -28,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.util.UUID
 
 @RestController
@@ -57,7 +60,7 @@ class OffenderV2Resource(
     }
 
     LOGGER.info("Found offender by CRN: crn={}, status={}", offender.crn, offender.status)
-    return ResponseEntity.ok(offender.toSummaryDto())
+    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender)))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -77,19 +80,14 @@ class OffenderV2Resource(
       return ResponseEntity.notFound().build()
     }
 
-    if (offender.status != OffenderStatus.VERIFIED) {
-      LOGGER.warn("Photo proxy request failed: offender uuid={} status={} is not VERIFIED", uuid, offender.status)
-      return ResponseEntity.notFound().build()
-    }
-
-    val url = s3UploadService.getOffenderPhoto(offender)
-    if (url == null) {
-      LOGGER.warn("Photo proxy request failed: photo not found in S3 for offender uuid={}", uuid)
+    val photoUrl = getOffenderPhotoUrl(offender)
+    if (photoUrl == null) {
+      LOGGER.warn("Photo proxy request failed: offender uuid={} status={}", uuid, offender.status)
       return ResponseEntity.notFound().build()
     }
 
     LOGGER.debug("Returning photo proxy URL for offender uuid={}", uuid)
-    return ResponseEntity.ok(mapOf("url" to url.toString()))
+    return ResponseEntity.ok(mapOf("url" to photoUrl))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -228,6 +226,17 @@ class OffenderV2Resource(
     return ResponseEntity.ok(saved.toSummaryDto())
   }
 
+  private fun getOffenderPhotoUrl(offender: OffenderV2): String? {
+    if (offender.status != OffenderStatus.VERIFIED) {
+      return null
+    }
+    val url = s3UploadService.getOffenderPhoto(offender)
+    if (url == null) {
+      LOGGER.warn("Photo not found in S3 for offender crn={}, uuid={}", offender.crn, offender.uuid)
+    }
+    return url?.toString()
+  }
+
   companion object {
     private val LOGGER = LoggerFactory.getLogger(OffenderV2Resource::class.java)
   }
@@ -238,18 +247,20 @@ data class OffenderSummaryDto(
   val uuid: UUID,
   val crn: String,
   val status: OffenderStatus,
-  val firstCheckin: java.time.LocalDate,
-  val checkinInterval: uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval,
+  val firstCheckin: LocalDate,
+  val checkinInterval: CheckinInterval,
   val contactPreference: ContactPreference,
+  val photoUrl: String? = null,
 )
 
-private fun uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2.toSummaryDto() = OffenderSummaryDto(
+private fun OffenderV2.toSummaryDto(photoUrl: String? = null) = OffenderSummaryDto(
   uuid = uuid,
   crn = crn,
   status = status,
   firstCheckin = firstCheckin,
-  checkinInterval = uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval.fromDuration(checkinInterval),
+  checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   contactPreference = contactPreference,
+  photoUrl = photoUrl,
 )
 
 /** Request to deactivate an offender */
