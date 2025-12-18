@@ -11,8 +11,8 @@ ALTER TABLE offender_v2 DROP CONSTRAINT offender_v2_status_check;
 
 -- changeset roland:17_v2_use_enums-2 splitStatements:false
 CREATE TYPE offender_checkin_status_v2 as ENUM ('CREATED', 'SUBMITTED', 'REVIEWED', 'EXPIRED', 'CANCELLED');
-CREATE TYPE verify_id_manual_result_v2 as ENUM ('MATCH', 'NO_MATCH', 'NO_FACE_DETECTED', 'ERROR');
-CREATE TYPE verify_id_auto_result_v2 as ENUM ('MATCH', 'NO_MATCH');
+CREATE TYPE verify_id_manual_result_v2 as ENUM ('MATCH', 'NO_MATCH');
+CREATE TYPE verify_id_auto_result_v2 as ENUM ('MATCH', 'NO_MATCH', 'NO_FACE_DETECTED', 'ERROR');
 
 ALTER TABLE offender_checkin_v2
 ALTER COLUMN status TYPE offender_checkin_status_v2
