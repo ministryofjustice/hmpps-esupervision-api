@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Schema
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
@@ -27,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.util.UUID
 
 @RestController
@@ -36,6 +40,7 @@ class OffenderV2Resource(
   private val offenderRepository: OffenderV2Repository,
   private val s3UploadService: S3UploadService,
   private val clock: Clock,
+  private val checkinCreationService: CheckinCreationService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -223,8 +228,66 @@ class OffenderV2Resource(
       request.requestedBy,
       request.reason,
     )
-
     return ResponseEntity.ok(saved.toSummaryDto())
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Update offender details",
+    description = """Updates offender details. All fields need to be set to their desired value 
+        (as in, no partial updates are allowed)
+        
+        Updating the check in schedule settings may trigger a notification if the new first check in date
+        is *today*.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Offender details updated")
+  @ApiResponse(responseCode = "204", description = "No update required")
+  @ApiResponse(responseCode = "400", description = "Can't complete operation due to offender status or invalid input")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @PostMapping("/{uuid}/update_details")
+  fun updateDetails(
+    @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
+    @Valid @RequestBody request: OffenderDetailsUpdateRequest,
+  ): ResponseEntity<OffenderSummaryDto> {
+    val offender = offenderRepository.findByUuid(uuid).orElse(null)
+      ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+
+    if (offender.status == OffenderStatus.INACTIVE) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot update offender with status ${offender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+      )
+    }
+
+    val offenderBefore = offender.toSummaryDto()
+
+    var updateRequired = false
+    if (request.checkinSchedule != null) {
+      validate(request.checkinSchedule)
+      val scheduleUpdate = request.checkinSchedule
+      offender.firstCheckin = scheduleUpdate.firstCheckin
+      offender.checkinInterval = scheduleUpdate.checkinInterval.duration
+      offender.updatedAt = clock.instant()
+      updateRequired = true
+    }
+
+    if (updateRequired) {
+      val saved = offenderRepository.save(offender)
+      val offenderAfter = saved.toSummaryDto()
+      if (newFirstCheckinDateIsToday(offenderBefore, offenderAfter, LocalDate.now(clock))) {
+        LOGGER.debug("Creating check-in for offender {} as first check-in date is today", offenderAfter.uuid)
+        checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, "")
+      }
+      return ResponseEntity.ok(offenderAfter)
+    } else {
+      return ResponseEntity.noContent().build()
+    }
+  }
+
+  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {
+    if (scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
+    }
   }
 
   companion object {
@@ -237,8 +300,8 @@ data class OffenderSummaryDto(
   val uuid: UUID,
   val crn: String,
   val status: OffenderStatus,
-  val firstCheckin: java.time.LocalDate,
-  val checkinInterval: uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval,
+  val firstCheckin: LocalDate,
+  val checkinInterval: CheckinInterval,
 )
 
 private fun uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2.toSummaryDto() = OffenderSummaryDto(
@@ -246,7 +309,7 @@ private fun uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2.toSummary
   crn = crn,
   status = status,
   firstCheckin = firstCheckin,
-  checkinInterval = uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval.fromDuration(checkinInterval),
+  checkinInterval = CheckinInterval.fromDuration(checkinInterval),
 )
 
 /** Request to deactivate an offender */
@@ -270,3 +333,28 @@ data class ReactivateOffenderRequest(
   @field:NotBlank
   val reason: String,
 )
+
+/** Request to update offender check in schedule */
+data class CheckinScheduleUpdateRequest(
+  @field:Schema(description = "Id of the user requesting the change", required = true)
+  val requestedBy: uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId,
+  @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
+  val checkinInterval: CheckinInterval,
+)
+
+/**
+ * Container for various offender details updates.
+ *
+ * Note: try grouping related details into a single data class (like schedule update)
+ * and avoid adding top level fields for random bits of information. This will
+ * make it clear what the semantics of the update is/should be and make validation easier.
+ */
+data class OffenderDetailsUpdateRequest(
+  val checkinSchedule: CheckinScheduleUpdateRequest?,
+)
+
+private fun newFirstCheckinDateIsToday(
+  beforeChange: OffenderSummaryDto,
+  afterChange: OffenderSummaryDto,
+  today: LocalDate,
+): Boolean = beforeChange.firstCheckin != afterChange.firstCheckin && afterChange.firstCheckin == today
