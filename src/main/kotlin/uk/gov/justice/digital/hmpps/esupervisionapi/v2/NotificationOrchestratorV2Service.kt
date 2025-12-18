@@ -98,7 +98,7 @@ class NotificationOrchestratorV2Service(
   /** Send notifications for checkin created event */
   fun sendCheckinCreatedNotifications(
     checkin: OffenderCheckinV2,
-    contactDetails: ContactDetails? = null,
+    contactDetails: ContactDetails,
   ) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_CREATED,
@@ -107,34 +107,14 @@ class NotificationOrchestratorV2Service(
       description = "Check-in created for ${checkin.offender.crn} with due date ${checkin.dueDate}",
     )
 
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
-
-    if (details != null) {
-      eventAuditService.recordCheckinCreated(checkin, details)
-    } else {
-      LOGGER.warn(
-        "Recording audit without contact details for checkin {}: contact details not found",
-        checkin.uuid,
-      )
-      eventAuditService.recordCheckinCreated(checkin, null)
-    }
-
-    if (details == null) {
-      LOGGER.warn(
-        "Cannot send notifications for checkin {}: contact details not found",
-        checkin.uuid,
-      )
-      return
-    }
-
     try {
       // Calculate final checkin date (last day offender can submit)
       val finalCheckinDate = checkin.dueDate.plus(checkinWindowPeriod).minusDays(1)
 
       val personalisation =
         mapOf(
-          "firstName" to details.name.forename,
-          "lastName" to details.name.surname,
+          "firstName" to contactDetails.name.forename,
+          "lastName" to contactDetails.name.surname,
           "date" to finalCheckinDate.format(DATE_FORMATTER),
           "url" to appConfig.checkinSubmitUrlV2(checkin.uuid).toString(),
         )
@@ -143,7 +123,7 @@ class NotificationOrchestratorV2Service(
       val notificationsWithRecipients =
         notificationPersistence.buildOffenderNotifications(
           offender = checkin.offender,
-          contactDetails = details,
+          contactDetails = contactDetails,
           notificationType = NotificationType.OffenderCheckinInvite,
         )
 

@@ -507,7 +507,11 @@ class CheckinV2Service(
         null
       }
 
-    notificationService.sendCheckinCreatedNotifications(checkin, contactDetails)
+    if (contactDetails != null) {
+      notificationService.sendCheckinCreatedNotifications(checkin, contactDetails)
+    } else {
+      LOGGER.warn("Skipping manual notification for checkin {}: contact details not found", uuid)
+    }
 
     return checkin.dto(contactDetails)
   }
