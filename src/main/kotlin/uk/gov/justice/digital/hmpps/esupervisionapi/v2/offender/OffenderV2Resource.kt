@@ -76,13 +76,13 @@ class OffenderV2Resource(
   ): ResponseEntity<Map<String, String>> {
     val offender = offenderRepository.findByUuid(uuid).orElse(null)
     if (offender == null) {
-      LOGGER.warn("Photo proxy request failed: offender not found for uuid={}", uuid)
+      LOGGER.info("Photo proxy request failed: offender not found for uuid={}", uuid)
       return ResponseEntity.notFound().build()
     }
 
     val photoUrl = getOffenderPhotoUrl(offender)
     if (photoUrl == null) {
-      LOGGER.warn("Photo proxy request failed: offender uuid={} status={}", uuid, offender.status)
+      LOGGER.info("Photo proxy request failed: offender uuid={} status={}", uuid, offender.status)
       return ResponseEntity.notFound().build()
     }
 
@@ -232,7 +232,7 @@ class OffenderV2Resource(
     }
     val url = s3UploadService.getOffenderPhoto(offender)
     if (url == null) {
-      LOGGER.warn("Photo not found in S3 for offender crn={}, uuid={}", offender.crn, offender.uuid)
+      LOGGER.info("Photo not found in S3 for offender crn={}, uuid={}", offender.crn, offender.uuid)
     }
     return url?.toString()
   }
