@@ -13,6 +13,7 @@ import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -63,6 +64,10 @@ open class OffenderV2(
 
   @Column(name = "updated_at", nullable = false)
   open var updatedAt: Instant,
+
+  @Column(name = "contact_preference", nullable = false)
+  @Enumerated(EnumType.STRING)
+  open var contactPreference: ContactPreference,
 ) : V2BaseEntity() {
   fun dto(personalDetails: ContactDetails? = null): OffenderV2Dto = OffenderV2Dto(
     uuid = uuid,
@@ -74,6 +79,7 @@ open class OffenderV2(
     createdAt = createdAt,
     createdBy = createdBy,
     updatedAt = updatedAt,
+    contactPreference = contactPreference,
     personalDetails = personalDetails,
   )
 }

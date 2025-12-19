@@ -7,6 +7,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTemplateConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import java.time.Clock
 import java.util.UUID
 
@@ -31,7 +32,7 @@ class NotificationPersistenceService(
     val channels = templateConfig.channels
 
     // SMS notification
-    if (channels.offenderSmsEnabled) {
+    if (channels.offenderSmsEnabled && offender.contactPreference == ContactPreference.PHONE) {
       if (contactDetails.mobile == null) {
         LOGGER.error(
           "NOTIFICATION_UNDELIVERABLE: Offender has no mobile number [type={}, crn={}, offenderUuid={}]",
@@ -61,7 +62,7 @@ class NotificationPersistenceService(
     }
 
     // Email notification
-    if (channels.offenderEmailEnabled) {
+    if (channels.offenderEmailEnabled && offender.contactPreference == ContactPreference.EMAIL) {
       if (contactDetails.email == null) {
         LOGGER.error(
           "NOTIFICATION_UNDELIVERABLE: Offender has no email address [type={}, crn={}, offenderUuid={}]",

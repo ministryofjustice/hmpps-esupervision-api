@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.net.URI
 import java.time.Clock
@@ -186,6 +187,7 @@ class NotificationOrchestratorV2ServiceTest {
     createdAt = clock.instant(),
     createdBy = "PRACT001",
     updatedAt = clock.instant(),
+    contactPreference = ContactPreference.PHONE,
   )
 
   private fun createCheckin(
