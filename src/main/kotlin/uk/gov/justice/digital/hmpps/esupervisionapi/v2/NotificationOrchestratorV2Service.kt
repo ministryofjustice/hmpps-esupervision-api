@@ -136,7 +136,7 @@ class NotificationOrchestratorV2Service(
           "firstName" to details.name.forename,
           "lastName" to details.name.surname,
           "date" to finalCheckinDate.format(DATE_FORMATTER),
-          "url" to appConfig.checkinSubmitUrl(checkin.uuid).toString(),
+          "url" to appConfig.checkinSubmitUrlV2(checkin.uuid).toString(),
         )
 
       // V1 only notifies offender for checkin invite (no practitioner template)
@@ -203,7 +203,7 @@ class NotificationOrchestratorV2Service(
           "name" to "${details.name.forename} ${details.name.surname}",
           "practitionerName" to checkin.offender.practitionerId,
           "number" to totalFlags.toString(),
-          "dashboardSubmissionUrl" to appConfig.checkinDashboardUrl(checkin.uuid).toString(),
+          "dashboardSubmissionUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
         )
 
       val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
@@ -274,7 +274,7 @@ class NotificationOrchestratorV2Service(
         mapOf(
           "practitionerName" to checkin.offender.practitionerId,
           "name" to "${details.name.forename} ${details.name.surname}",
-          "popDashboardUrl" to appConfig.checkinDashboardUrl(checkin.uuid).toString(),
+          "popDashboardUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
         )
 
       val notificationsWithRecipients =
