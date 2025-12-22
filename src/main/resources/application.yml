@@ -12,6 +12,7 @@ app:
   hostedAt: ${HOSTED_AT}
   mpopUrl: ${MPOP_URL}
   checkinUrl: ${POP_UI_URL}
+  apiBaseUrl: ${API_BASE_URL}
   # how long should the presigned S3 URLs be valid for?
   upload-ttl-minutes: 10
   scheduling:

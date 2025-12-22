@@ -19,13 +19,13 @@ class DomainEventServiceTest {
 
   private val eventPublisher: DomainEventPublisher = mock()
   private val clock = Clock.fixed(Instant.parse("2025-06-15T10:00:00Z"), ZoneId.of("UTC"))
-  private val hostedAt = "https://esupervision.example.com"
+  private val apiBaseUrl = "https://esupervision-api.example.com"
 
   private lateinit var service: DomainEventService
 
   @BeforeEach
   fun setUp() {
-    service = DomainEventService(eventPublisher, clock, hostedAt)
+    service = DomainEventService(eventPublisher, clock, apiBaseUrl)
   }
 
   @Test
@@ -43,7 +43,7 @@ class DomainEventServiceTest {
     verify(eventPublisher).publish(captor.capture())
 
     val event = captor.firstValue
-    assertThat(event.detailUrl).isEqualTo("$hostedAt/v2/events/setup-completed/$uuid")
+    assertThat(event.detailUrl).isEqualTo("$apiBaseUrl/v2/events/setup-completed/$uuid")
     assertThat(event.eventType).isEqualTo("esupervision.setup.completed")
   }
 
@@ -62,7 +62,7 @@ class DomainEventServiceTest {
     verify(eventPublisher).publish(captor.capture())
 
     val event = captor.firstValue
-    assertThat(event.detailUrl).isEqualTo("$hostedAt/v2/events/checkin-submitted/$uuid")
+    assertThat(event.detailUrl).isEqualTo("$apiBaseUrl/v2/events/checkin-submitted/$uuid")
     assertThat(event.eventType).isEqualTo("esupervision.check-in.received")
   }
 
