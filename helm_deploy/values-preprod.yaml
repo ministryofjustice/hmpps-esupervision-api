@@ -14,7 +14,8 @@ generic-service:
   env:
     APPLICATIONINSIGHTS_CONFIGURATION_FILE: "applicationinsights.dev.json"
     HMPPS_AUTH_URL: "https://sign-in-preprod.hmpps.service.justice.gov.uk/auth"
-    HOSTED_AT: "https://esupervision-api-preprod.hmpps.service.justice.gov.uk"
+    HOSTED_AT: "https://esupervision-preprod.hmpps.service.justice.gov.uk"
+    API_BASE_URL: "https://esupervision-api-preprod.hmpps.service.justice.gov.uk"
     MANAGE_USERS_API: "https://manage-users-api-preprod.hmpps.service.justice.gov.uk/"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack

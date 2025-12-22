@@ -1,5 +1,6 @@
 app:
   hostedAt: "http://localhost:3000"
+  apiBaseUrl: "http://localhost:8080"
 
 server:
   shutdown: immediate
