@@ -177,7 +177,14 @@ class OffenderSetupV2Service(
     notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails)
 
     if (savedCheckin != null) {
-      notificationService.sendCheckinCreatedNotifications(savedCheckin, contactDetails)
+      if (contactDetails != null) {
+        notificationService.sendCheckinCreatedNotifications(savedCheckin, contactDetails)
+      } else {
+        LOGGER.warn(
+          "Skipping checkin created notifications for checkin {}: contact details not found",
+          savedCheckin.uuid,
+        )
+      }
     }
 
     return savedOffender.dto(contactDetails)
