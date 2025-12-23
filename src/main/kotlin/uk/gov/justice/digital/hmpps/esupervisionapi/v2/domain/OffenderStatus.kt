@@ -9,6 +9,6 @@ enum class OffenderStatus {
   fun canTransitionTo(newStatus: OffenderStatus): Boolean = when (this) {
     INITIAL -> true
     VERIFIED -> newStatus != INITIAL
-    INACTIVE -> false
+    INACTIVE -> newStatus == VERIFIED
   }
 }
