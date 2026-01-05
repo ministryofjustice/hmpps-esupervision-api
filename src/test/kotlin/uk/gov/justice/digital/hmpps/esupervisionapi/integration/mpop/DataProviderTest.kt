@@ -2,12 +2,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration.mpop
 
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MultiSampleStubDataProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 
 class DataProviderTest {
   @Test
   fun `multi sample data provider`() {
-    val provider = MultiSampleStubDataProvider()
+    val provider = GeneratingStubDataProvider()
     val case1 = provider.provideCase("X001101")
     val case2 = provider.provideCase("X001122")
 

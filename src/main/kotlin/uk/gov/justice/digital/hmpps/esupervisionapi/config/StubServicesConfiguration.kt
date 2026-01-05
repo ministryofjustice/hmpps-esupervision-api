@@ -5,7 +5,7 @@ import org.springframework.beans.factory.DisposableBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MultiSampleStubDataProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -17,7 +17,7 @@ import java.nio.file.Path
 class StubServicesConfiguration {
 
   @Bean
-  @Profile("stubndilius")
+  @Profile("local & stubndilius")
   fun ndiliusApiClient(): INdiliusApiClient {
     LOG.info("Creating stubbed Ndilius API client")
     return StubNdiliusApiClient()
@@ -36,7 +36,7 @@ class StubServicesConfiguration {
  */
 class StubNdiliusApiClient(
   val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/ndilius-responses/default.json")),
-  val dataProvider: StubDataProvider = MultiSampleStubDataProvider(),
+  val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
 ) : INdiliusApiClient,
   DisposableBean {
 

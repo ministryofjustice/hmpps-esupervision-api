@@ -48,7 +48,7 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> "00" will become part of the practitioner's surname and contact info
  * - X001122 -> "11" will become part of the practitioner's local admin, probation delivery and provider code
  */
-class MultiSampleStubDataProvider : StubDataProvider {
+class GeneratingStubDataProvider : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
     val parsed = parseCrn(crn)
     return ContactDetails(
