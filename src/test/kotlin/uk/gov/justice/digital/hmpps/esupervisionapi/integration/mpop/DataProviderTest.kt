@@ -2,7 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration.mpop
 
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
-import uk.gov.justice.digital.hmpps.esupervisionapi.mpop.MultiSampleStubDataProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MultiSampleStubDataProvider
 
 class DataProviderTest {
   @Test

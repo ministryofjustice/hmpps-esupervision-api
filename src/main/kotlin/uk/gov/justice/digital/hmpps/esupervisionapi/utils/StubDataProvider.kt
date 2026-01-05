@@ -1,11 +1,18 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.mpop
+package uk.gov.justice.digital.hmpps.esupervisionapi.utils
+
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
+
+typealias CRN = String
 
 interface StubDataProvider {
-  fun provideCase(crn: CRN): CaseDto
+  fun provideCase(crn: CRN): ContactDetails
 }
 
 class DefaultStubDataProvider : StubDataProvider {
-  override fun provideCase(crn: CRN): CaseDto = CaseDto(
+  override fun provideCase(crn: CRN): ContactDetails = ContactDetails(
     crn = crn,
     name = Name(
       forename = "John",
@@ -13,21 +20,21 @@ class DefaultStubDataProvider : StubDataProvider {
     ),
     mobile = "07700900123",
     email = "john.smith@example.com",
-    practitioner = Practitioner(
+    practitioner = PractitionerDetails(
       name = Name(
         forename = "Sarah",
         surname = "Johnson",
       ),
       email = "sarah.johnson@justice.gov.uk",
-      localAdminUnit = UnitInfo(
+      localAdminUnit = OrganizationalUnit(
         code = "LAU001",
         description = "London Central Local Admin Unit",
       ),
-      probationDeliveryUnit = UnitInfo(
+      probationDeliveryUnit = OrganizationalUnit(
         code = "PDU001",
         description = "London Probation Delivery Unit",
       ),
-      provider = UnitInfo(
+      provider = OrganizationalUnit(
         code = "PRV001",
         description = "London Probation Service",
       ),
@@ -42,9 +49,9 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> "11" will become part of the practitioner's local admin, probation delivery and provider code
  */
 class MultiSampleStubDataProvider : StubDataProvider {
-  override fun provideCase(crn: CRN): CaseDto {
+  override fun provideCase(crn: CRN): ContactDetails {
     val parsed = parseCrn(crn)
-    return CaseDto(
+    return ContactDetails(
       crn = crn,
       name = Name(
         forename = "Person",
@@ -52,21 +59,21 @@ class MultiSampleStubDataProvider : StubDataProvider {
       ),
       mobile = "0770090${parsed.person.padStart(4, '0')}",
       email = "person.number${parsed.person}@example.com",
-      practitioner = Practitioner(
+      practitioner = PractitionerDetails(
         name = Name(
           forename = "Practitioner",
           surname = "Number${parsed.practitioner}",
         ),
         email = "practitioner.number${parsed.practitioner}@justice.gov.uk",
-        localAdminUnit = UnitInfo(
+        localAdminUnit = OrganizationalUnit(
           code = "LAU${parsed.unit.padStart(3, '0')}",
           description = "Local Admin Unit ${parsed.unit}",
         ),
-        probationDeliveryUnit = UnitInfo(
+        probationDeliveryUnit = OrganizationalUnit(
           code = "PDU${parsed.unit.padStart(3, '0')}",
           description = "Probation Delivery Unit ${parsed.unit}",
         ),
-        provider = UnitInfo(
+        provider = OrganizationalUnit(
           code = "PRV${parsed.unit.padStart(3, '0')}",
           description = "Provider ${parsed.unit}",
         ),

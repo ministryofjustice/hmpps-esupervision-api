@@ -3,27 +3,37 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 
+interface INdiliusApiClient {
+  fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
+  fun getContactDetails(crn: String): ContactDetails?
+  fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
+
+  // ?MAX_BATCH_SIZE
+}
+
 /**
  * Client for Ndilius API with circuit breaker and retry resilience patterns
  * Based on OpenAPI spec provided
  */
+@Profile("!stubndilius")
 @Service
 class NdiliusApiClient(
   private val ndiliusApiWebClient: WebClient,
-) {
+) : INdiliusApiClient {
   /**
    * Get contact details for a single person on probation by CRN
    * GET /case/{crn}
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsFallback")
   @Retry(name = "ndiliusApi")
-  fun getContactDetails(crn: String): ContactDetails? {
+  override fun getContactDetails(crn: String): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
 
     return try {
@@ -52,7 +62,7 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
   @Retry(name = "ndiliusApi")
-  fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
+  override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
     if (crns.isEmpty()) {
       return emptyList()
     }
@@ -105,7 +115,7 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "validatePersonalDetailsFallback")
   @Retry(name = "ndiliusApi")
-  fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
+  override fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
     LOGGER.info("Validating personal details for CRN: {}", personalDetails.crn)
 
     return try {

@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -28,7 +28,7 @@ class CheckinCreationService(
   private val clock: Clock,
   private val offenderRepository: OffenderV2Repository,
   private val checkinRepository: OffenderCheckinV2Repository,
-  private val ndiliusApiClient: NdiliusApiClient,
+  private val ndiliusApiClient: INdiliusApiClient,
   private val notificationService: NotificationV2Service,
 ) {
 

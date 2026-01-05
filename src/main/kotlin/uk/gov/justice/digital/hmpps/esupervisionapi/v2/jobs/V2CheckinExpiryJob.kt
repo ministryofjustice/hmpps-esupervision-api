@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
@@ -22,7 +23,7 @@ import kotlin.streams.asSequence
 class V2CheckinExpiryJob(
   private val clock: Clock,
   private val checkinRepository: OffenderCheckinV2Repository,
-  private val ndiliusApiClient: NdiliusApiClient,
+  private val ndiliusApiClient: INdiliusApiClient,
   private val notificationService: NotificationV2Service,
   private val jobLogRepository: JobLogV2Repository,
   private val transactionTemplate: TransactionTemplate,
