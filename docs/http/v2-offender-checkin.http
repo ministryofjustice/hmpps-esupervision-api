@@ -1,0 +1,76 @@
+@practitioner_id = ??
+@offender_uuid = baaa0179-75b1-4993-9546-d83dbb00ab48
+@checkin_uuid = 619733d3-f437-48a2-af06-e29609528467
+@offender_snapshot_photo = /Path/to/the/photo.png
+
+### [SYSTEM/PRACTITIONER] Create a checkin
+POST {{HOST}}/v2/offender_checkins
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+    "practitioner": "{{practitioner_id}}",
+    "offender": "{{offender_uuid}}",
+    "dueDate": "2025-12-23"
+}
+
+### [SYSTEM/PRACTITIONER] Get the checkin
+GET {{HOST}}/v2/offender_checkins/{{checkin_uuid}}?include-personal-details=true
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+### [OFFENDER] verify offender details
+
+POST {{HOST}}/v2/offender_checkins/{{checkin_uuid}}/identity-verify
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+  "crn": "X000004",
+  "name": {
+    "forename": "foo",
+    "surname": "bar"
+  },
+  "dateOfBirth": "2000-01-01"
+}
+
+### [OFFENDER] get uplaod locations
+POST {{HOST}}/v2/offender_checkins/{{checkin_uuid}}/upload_location?video=video/mp4&snapshots=image/jpeg
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+> {%
+if (response.status == 200) {
+    const videoUrl = response.body["video"]["url"]
+    const snapshotsUrl = response.body["snapshots"][0]["url"]
+    client.global.set("video_upload_url", videoUrl)
+    client.global.set("snapshot_upload_url", snapshotsUrl)
+}
+ %}
+
+
+### [OFFENDER] (pretend to) upload a video
+PUT {{video_upload_url}}
+Content-Type: image/mp4
+
+< {{offender_snapshot_photo}}
+
+### [OFFENDER] uplaod snapshot
+PUT {{snapshot_upload_url}}
+Content-Type: image/png
+
+< {{offender_snapshot_photo}}
+
+### [OFFENDER] verify video
+POST {{HOST}}/v2/offender_checkins/{{checkin_uuid}}/video-verify?numSnapshots=1
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+### [OFFENDER] submit checkin
+POST {{HOST}}/v2/offender_checkins/{{checkin_uuid}}/submit
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+  "survey": {}
+}
