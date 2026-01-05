@@ -33,45 +33,42 @@ V2 is a complete architectural refactoring of the eSupervision API with improved
 ## System Architecture
 
 ```mermaid
-flowchart TB
-    subgraph "Frontend Applications"
-        PCUI[Probation Check-in UI<br/>Offender facing]
-        MPOP[MPOP Dashboard<br/>Practitioner facing]
+%%{init: {'theme': 'base', 'themeVariables': { 'background': '#f5f5f5', 'primaryColor': '#e1f5fe', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#e8f5e9'}}}%%
+flowchart LR
+    subgraph System[" "]
+        subgraph Clients
+            UI[MPOP UI]
+            APP[Probation Check In UI]
+        end
+
+        subgraph API[eSupervision API V2]
+            REST[REST Layer]
+            SVC[Services]
+            DB[(PostgreSQL)]
+        end
+
+        subgraph AWS
+            S3[S3 Storage]
+            SQS[SQS Events]
+            REK[Rekognition]
+        end
+
+        subgraph External
+            NDL[Ndilius]
+            GOV[GOV.UK Notify]
+        end
     end
 
-    subgraph "eSupervision API V2"
-        API[REST API Layer]
-        SVC[Service Layer]
-        REPO[Repository Layer]
-        JOBS[Scheduled Jobs]
-    end
-
-    subgraph "External Services"
-        NDILIUS[Ndilius<br/>PII Source of Truth]
-        NOTIFY[GOV.UK Notify<br/>SMS/Email]
-        S3[AWS S3<br/>Video/Image Storage]
-        REKOG[AWS Rekognition<br/>Facial Recognition]
-        SQS[AWS SQS<br/>Domain Events]
-    end
-
-    subgraph "Database"
-        PG[(PostgreSQL<br/>V2 Tables)]
-    end
-
-    PCUI --> API
-    MPOP --> API
-    API --> SVC
-    SVC --> REPO
-    SVC --> NDILIUS
-    SVC --> NOTIFY
+    UI --> REST
+    APP --> REST
+    REST --> SVC
+    SVC --> DB
     SVC --> S3
-    SVC --> REKOG
     SVC --> SQS
-    REPO --> PG
-    JOBS --> SVC
-
-    SQS -.->|Callback| NDILIUS
-    NDILIUS -.->|Query Details| API
+    SVC --> REK
+    SVC --> NDL
+    SVC --> GOV
+    SQS -.-> NDL
 ```
 
 ---
@@ -147,7 +144,7 @@ flowchart LR
     subgraph "Events"
         E -->|Publish| H[SQS]
         H -->|Callback| I[Ndilius]
-        I -->|Details| J[/v2/events/*]
+        I -->|Details| J[v2/events API]
     end
 
     subgraph "Notifications"
