@@ -185,6 +185,7 @@ open class OffenderCheckinV2(
     videoUrl: java.net.URL? = null,
     snapshotUrl: java.net.URL? = null,
     checkinLogs: CheckinLogsV2Dto = CheckinLogsV2Dto(CheckinLogsHintV2.OMITTED, emptyList()),
+    photoUrl: java.net.URL? = null,
   ): CheckinV2Dto = CheckinV2Dto(
     uuid = uuid,
     crn = offender.crn,
@@ -206,6 +207,7 @@ open class OffenderCheckinV2(
     videoUrl = videoUrl,
     snapshotUrl = snapshotUrl,
     checkinLogs = checkinLogs,
+    photoUrl = photoUrl,
   )
 }
 

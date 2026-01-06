@@ -52,11 +52,12 @@ class CheckinV2Service(
     // Get video read URL if video has been uploaded
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
+    val photoUrl = s3UploadService.getOffenderPhoto(checkin.offender)
 
     val events = offenderEventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED))
     val checkinLogs = CheckinLogsV2Dto(hint = CheckinLogsHintV2.SUBSET, logs = events)
 
-    return checkin.dto(personalDetails, videoUrl, snapshotUrl, checkinLogs)
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl, checkinLogs, photoUrl)
   }
 
   /**
