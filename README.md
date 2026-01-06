@@ -4,7 +4,65 @@
 [![Docker Repository on ghcr](https://img.shields.io/badge/ghcr.io-repository-2496ED.svg?logo=docker)](https://ghcr.io/ministryofjustice/hmpps-esupervision-api)
 [![API docs](https://img.shields.io/badge/API_docs_-view-85EA2D.svg?logo=swagger)](https://hmpps-template-kotlin-dev.hmpps.service.justice.gov.uk/webjars/swagger-ui/index.html?configUrl=/v3/api-docs)
 
-Template github repo used for new Kotlin based projects.
+The eSupervision API provides backend services for remote probation check-ins, enabling offenders to complete video check-ins and practitioners to review submissions.
+
+## V2 Architecture
+
+The API has been refactored to **V2** with significant architectural improvements:
+
+| Feature | Description |
+|---------|-------------|
+| **No PII Storage** | Personal data fetched on-demand from Ndilius (source of truth) |
+| **Complete Isolation** | V2 code in separate `v2` package with `_v2` database tables |
+| **Domain Events** | Full integration with AWS SQS for event publishing to Ndilius |
+| **Performance** | Batch operations, fetch joins, lazy loading for S3 URLs |
+
+### Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[V2 Overview](docs/v2/README.md)** | Architecture overview and package structure |
+| **[User Journeys](docs/v2/USER_JOURNEYS.md)** | Setup, checkin, and review flows |
+| **[Domain Events](docs/v2/DOMAIN_EVENTS.md)** | Event publishing and Ndilius integration |
+| **[Notifications](docs/v2/NOTIFICATIONS.md)** | SMS/Email notification system |
+| **[Background Jobs](docs/v2/BACKGROUND_JOBS.md)** | Scheduled jobs |
+| **[Data Model](docs/v2/DATA_MODEL.md)** | Entity relationships and schema |
+| **[Implementation Notes](docs/v2/IMPLEMENTATION_NOTES.md)** | UI changes, tests, GDS compliance |
+| **[V1→V2 Migration](docs/V1_TO_V2_MIGRATION.md)** | Data migration guide |
+
+### Key V2 Endpoints
+
+| Category | Base Path | Description |
+|----------|-----------|-------------|
+| Setup | `/v2/offender_setup` | Offender registration flow |
+| Checkins | `/v2/offender_checkins` | Check-in CRUD and lifecycle |
+| Events | `/v2/events` | Domain event callback endpoints for Ndilius |
+
+### V2 Flows Overview
+
+```mermaid
+flowchart LR
+    subgraph Setup
+        A[Practitioner] -->|Register Offender| B[/v2/offender_setup]
+        B -->|Upload Photo| C[S3]
+    end
+
+    subgraph Checkin
+        D[Offender] -->|Complete Checkin| E[/v2/offender_checkins]
+        E -->|Verify Face| F[Rekognition]
+        E -->|Upload Video| C
+    end
+
+    subgraph Review
+        G[Practitioner] -->|Review| E
+    end
+
+    subgraph Events
+        E -->|Publish| H[SQS]
+        H -->|Callback| I[Ndilius]
+        I -->|Get Details| J[/v2/events]
+    end
+```
 
 # Instructions
 
