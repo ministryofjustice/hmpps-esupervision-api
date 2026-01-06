@@ -15,7 +15,10 @@ generic-service:
     APPLICATIONINSIGHTS_CONFIGURATION_FILE: "applicationinsights.dev.json"
     HMPPS_AUTH_URL: "https://sign-in-dev.hmpps.service.justice.gov.uk/auth"
     HOSTED_AT: "https://esupervision-dev.hmpps.service.justice.gov.uk"
+    API_BASE_URL: "https://esupervision-api-dev.hmpps.service.justice.gov.uk"
     MANAGE_USERS_API: "https://manage-users-api-dev.hmpps.service.justice.gov.uk/"
+    MPOP_URL: "https://manage-people-on-probation-dev.hmpps.service.justice.gov.uk"
+    POP_UI_URL: "https://probation-check-in-dev.hmpps.service.justice.gov.uk"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts

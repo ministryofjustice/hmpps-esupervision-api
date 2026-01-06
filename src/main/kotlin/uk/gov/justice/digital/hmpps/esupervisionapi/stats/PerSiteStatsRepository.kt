@@ -63,6 +63,7 @@ data class SiteCheckinAverage(
   val completedTotal: Long,
   val expiredTotal: Long,
   val missedPercentage: Double,
+  val ontimePercentage: Double,
 )
 
 data class IntervalAverage(
@@ -93,23 +94,55 @@ data class IdCheckAccuracy(
 
 data class Stats(
   val invitesPerSite: List<SiteCount>,
+  val invitesTotal: Long,
   val inviteStatusPerSite: List<LabeledSiteCount>,
   val genericNotificationStatusPerSite: List<LabeledNotificationSiteCount>,
+
   val completedCheckinsPerSite: List<SiteCount>,
+  val completedCheckinsTotal: Long,
+
   val completedCheckinsPerNth: List<SiteCountOnNthDay>,
+  val completedDay1Total: Long,
+  val completedDay1Percentage: Double,
+  val completedDay2Total: Long,
+  val completedDay2Percentage: Double,
+  val completedDay3Total: Long,
+  val completedDay3Percentage: Double,
+
   val offendersPerSite: List<SiteCount>,
+  val offendersTotal: Long,
+
   val checkinFrequencyPerSite: List<SiteCheckinFrequency>,
+  val frequencyWeeklyTotal: Long,
+  val frequencyFortnightlyTotal: Long,
+  val frequency4WeeksTotal: Long,
+  val frequency8WeeksTotal: Long,
+
   val checkinAverages: List<SiteCheckinAverage>,
   val ontimeCheckinPercentageTotal: Double,
   val checkinCompletedAverageTotal: Double,
+  val expiredCheckinsTotal: Long,
+  val expiredCheckinsPercentageTotal: Double,
+
   val checkinOutsideAccess: List<SiteCount>,
-  val automatedIdCheckAccuracy: List<IdCheckAccuracy>,
+  val checkinOutsideAccessTotal: Long,
+
+  val automatedIdCheckAccuracyPerSite: List<IdCheckAccuracy>,
+  val automatedIdCheckAccuracyTotal: Long,
+  val automatedIdCheckAccuracyPercentageTotal: Double,
+
   val flaggedCheckinsPerSite: List<SiteCount>,
+  val flaggedCheckinsTotal: Long,
+  val flaggedCheckinsPercentageTotal: Double,
+
   val stoppedCheckinsPerSite: List<SiteCount>,
+  val stoppedCheckinsTotal: Long,
+
   val averageFlagsPerCheckinPerSite: List<SiteAverage>,
   val averageFlagsPerCheckinTotal: Double,
   val callbackRequestPercentagePerSite: List<SiteAverage>,
   val callbackRequestPercentageTotal: Double,
+
   val averageReviewTimePerCheckinPerSite: List<SiteFormattedTimeAverage>,
   val averageReviewTimePerCheckinTotal: String,
   val averageTimeToRegisterPerSite: List<SiteFormattedTimeAverage>,
@@ -123,19 +156,40 @@ data class Stats(
 
 private val emptyStats = Stats(
   emptyList(),
+  0L,
   emptyList(),
   emptyList(),
   emptyList(),
+  0L,
   emptyList(),
+  0L,
+  0.0,
+  0L,
+  0.0,
+  0L,
+  0.0,
   emptyList(),
+  0L,
   emptyList(),
+  0L,
+  0L,
+  0L,
+  0L,
   emptyList(),
   0.0,
   0.0,
+  0L,
+  0.0,
   emptyList(),
+  0L,
   emptyList(),
+  0L,
+  0.0,
   emptyList(),
+  0L,
+  0.0,
   emptyList(),
+  0L,
   emptyList(),
   0.0,
   emptyList(),
@@ -228,24 +282,117 @@ class PerSiteStatsRepositoryImpl(
 
     val lowerBound = LocalDate.of(2025, 1, 1)
     val upperBound = LocalDate.now(clock.zone)
+    // invites per site + total
     val invitesPerSite = entityManager.runPerSiteQuery(sqlInvitesPerSite, lowerBound, upperBound).map(::siteCount)
+    val invitesTotal = invitesPerSite
+      .filter { it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    // invite status per site
     val invitesStatusPerSite = entityManager.runPerSiteQuery(sqlInvitesStatusPerSite, lowerBound, upperBound).map(::labeledSiteCount)
+    // generic notifications status per site + total
     val genericNotificationsStatusPerSite = entityManager.runPerSiteQuery(sqlGenericNotificationsStatusPerSite, lowerBound, upperBound).map(::genericNotificationStatus)
+    // offenders per site + total
     val offendersPerSite = entityManager.runPerSiteQuery(sqlOffendersPerSite, lowerBound, upperBound).map(::siteCount)
+    val offendersTotal = offendersPerSite
+      .filter { it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    // completed checkins per site + total
     val completedCheckinsPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
+    val completedCheckinsTotal = completedCheckinsPerSite
+      .filter { it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    // completed checkins per nth site
     val completedCheckinsPerNthPerSite = entityManager.runPerSiteQuery(sqlCompletedCheckinsPerNthPerSite, lowerBound, upperBound).map(::siteCountOnNthDay)
+    val completedDay1Total = completedCheckinsPerNthPerSite
+      .filter { it.day == 1L && it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    val completedDay1Percentage = round(if (completedCheckinsTotal > 0) (completedDay1Total.toDouble() / completedCheckinsTotal) * 100 else 0.0)
+
+    val completedDay2Total = completedCheckinsPerNthPerSite
+      .filter { it.day == 2L && it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    val completedDay2Percentage = round(if (completedCheckinsTotal > 0) (completedDay2Total.toDouble() / completedCheckinsTotal) * 100 else 0.0)
+
+    val completedDay3Total = completedCheckinsPerNthPerSite
+      .filter { it.day == 3L && it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    val completedDay3Percentage = round(if (completedCheckinsTotal > 0) (completedDay3Total.toDouble() / completedCheckinsTotal) * 100 else 0.0)
+
+    // average completed checkins per site
     val avgCompletedCheckinsPerSite = entityManager.runPerSiteQuery(sqlAvgCompletedCheckinsPerSite, lowerBound, upperBound).map(::siteCheckinAverage)
-    val checkinOutsideAccess = entityManager.runPerSiteQuery(sqlCheckinOutsideAccess, lowerBound, upperBound).map(::siteCount)
-    val automatedIdCheckAccuracy = entityManager.runPerSiteQuery(sqlAutomatedIdCheckAccuracyResource, lowerBound, upperBound).map(::idCheckAccuracy)
-    val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
-    val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
-    val checkinFrequencyPerSite = entityManager.runPerSiteQuery(sqlCheckinFrequencyPerSite, lowerBound, upperBound).map(::siteCheckinFrequency)
 
     val visibleCheckinStats = avgCompletedCheckinsPerSite.filter { it.location != "UNKNOWN" }
     val visibleOffenderStats = offendersPerSite.filter { it.location != "UNKNOWN" }
 
-    val ontimeCheckinPercentageTotal = calculateGlobalOntimePercentage(visibleCheckinStats)
-    val checkinCompletedAverageTotal = calculateGlobalAverageCheckinsPerPoP(visibleCheckinStats, visibleOffenderStats)
+    val ontimeCheckinPercentageTotal = round(calculateGlobalOntimePercentage(visibleCheckinStats))
+    val checkinCompletedAverageTotal = round(calculateGlobalAverageCheckinsPerPoP(visibleCheckinStats, visibleOffenderStats))
+
+    val expiredCheckinsTotal = visibleCheckinStats.sumOf { it.expiredTotal }
+    val totalCompleted = visibleCheckinStats.sumOf { it.completedTotal }
+    val totalCheckins = expiredCheckinsTotal + totalCompleted
+    val expiredCheckinsPercentageTotal = round(
+      if (totalCheckins > 0) {
+        (expiredCheckinsTotal.toDouble() / totalCheckins) * 100
+      } else {
+        0.0
+      },
+    )
+
+    // checkin outside access per site
+    val checkinOutsideAccess = entityManager.runPerSiteQuery(sqlCheckinOutsideAccess, lowerBound, upperBound).map(::siteCount)
+    val checkinOutsideAccessTotal = checkinOutsideAccess
+      .filter { it.location != "UNKNOWN" }
+      .sumOf { it.count }
+
+    // automatedIdCheckAccuracy per site + total
+    val automatedIdCheckAccuracyPerSite = entityManager.runPerSiteQuery(sqlAutomatedIdCheckAccuracyResource, lowerBound, upperBound).map(::idCheckAccuracy)
+    val automatedIdCheckAccuracyTotal = automatedIdCheckAccuracyPerSite
+      .filter { it.location != "UNKNOWN" }
+      .sumOf { it.mismatchCount }
+    val automatedIdCheckAccuracyPercentageTotal = round(
+      if (completedCheckinsTotal > 0) {
+        (automatedIdCheckAccuracyTotal.toDouble() / completedCheckinsTotal) * 100
+      } else {
+        0.0
+      },
+    )
+
+    // flagged checkins per site + total
+    val flaggedCheckinsPerSite = entityManager.runPerSiteQuery(sqlFlaggedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
+    val flaggedCheckinsTotal = flaggedCheckinsPerSite
+      .filter { it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    val flaggedCheckinsPercentageTotal = round(
+      if (completedCheckinsTotal > 0) {
+        (flaggedCheckinsTotal.toDouble() / completedCheckinsTotal) * 100
+      } else {
+        0.0
+      },
+    )
+
+    // stopped checkins per site + total
+    val stoppedCheckinsPerSite = entityManager.runPerSiteQuery(sqlStoppedCheckinsPerSite, lowerBound, upperBound).map(::siteCount)
+    val stoppedCheckinsTotal = stoppedCheckinsPerSite
+      .filter { it.location != "UNKNOWN" }
+      .sumOf { it.count }
+    // checkin frequency per site
+    val checkinFrequencyPerSite = entityManager.runPerSiteQuery(sqlCheckinFrequencyPerSite, lowerBound, upperBound).map(::siteCheckinFrequency)
+
+    val frequencyWeeklyTotal = checkinFrequencyPerSite
+      .filter { it.intervalDays == 7L && it.location != "UNKNOWN" }
+      .sumOf { it.count }
+
+    val frequencyFortnightlyTotal = checkinFrequencyPerSite
+      .filter { it.intervalDays == 14L && it.location != "UNKNOWN" }
+      .sumOf { it.count }
+
+    val frequency4WeeksTotal = checkinFrequencyPerSite
+      .filter { it.intervalDays == 28L && it.location != "UNKNOWN" }
+      .sumOf { it.count }
+
+    val frequency8WeeksTotal = checkinFrequencyPerSite
+      .filter { it.intervalDays == 56L && it.location != "UNKNOWN" }
+      .sumOf { it.count }
 
     val flagsAndSupportRows = entityManager.runPerSiteQuery(sqlAverageFlagsAndSupportRequestsPerCheckinPerSite, lowerBound, upperBound)
     val flagStats = mutableListOf<WeightedAverage>()
@@ -259,61 +406,86 @@ class PerSiteStatsRepositoryImpl(
       flagStats.add(WeightedAverage(location, avgFlags, count))
       callbackStats.add(WeightedAverage(location, avgCallback, count))
     }
-
-    val averageFlagsPerCheckinPerSite = flagStats.map { SiteAverage(it.location, it.average) }
-    val averageFlagsPerCheckinTotal = calculateWeightedAverageTotal(
-      flagStats.filter { it.location != "UNKNOWN" },
+    // average flags per checkin per site + total
+    val averageFlagsPerCheckinPerSite = flagStats.map { SiteAverage(it.location, round(it.average)) }
+    val averageFlagsPerCheckinTotal = round(
+      calculateWeightedAverageTotal(
+        flagStats.filter { it.location != "UNKNOWN" },
+      ),
     )
-
-    val callbackRequestPercentagePerSite = callbackStats.map { SiteAverage(it.location, it.average) }
-    val callbackRequestPercentageTotal = calculateWeightedAverageTotal(
-      callbackStats.filter { it.location != "UNKNOWN" },
+    // average callback request percentage per checkin per site + total
+    val callbackRequestPercentagePerSite = callbackStats.map { SiteAverage(it.location, round(it.average)) }
+    val callbackRequestPercentageTotal = round(
+      calculateWeightedAverageTotal(
+        callbackStats.filter { it.location != "UNKNOWN" },
+      ),
     )
-
+    // average review response time + total
     val reviewResponseTimes = entityManager.runPerSiteQuery(sqlAverageReviewResponseTimePerSiteResource, lowerBound, upperBound)
       .map(::intervalAverage)
     val averageReviewResponseTimes = reviewResponseTimes.map(::siteFormattedTimeAverage)
     val averageReviewResponseTimeTotal = siteFormattedTimeAverageTotal(
       reviewResponseTimes.filter { it.location != "UNKNOWN" },
     )
-
+    // average time to register per site + total
     val registrationTimes = entityManager.runPerSiteQuery(sqlAverageTimeToRegister, lowerBound, upperBound)
       .map(::intervalAverage)
     val averageTimeToRegisterPerSite = registrationTimes.map(::siteFormattedTimeAverage)
     val averageTimeToRegisterTotal = siteFormattedTimeAverageTotal(
       registrationTimes.filter { it.location != "UNKNOWN" },
     )
-
+    // average checkin completetion times per site + total
     val averageCheckinCompletionIntervals = entityManager.runPerSiteQuery(sqlAverageSecondsToCompleteCheckin, lowerBound, upperBound).map(::intervalAverage)
     val averageCheckinCompletionTimes = averageCheckinCompletionIntervals.map(::siteFormattedTimeAverage)
     val averageCheckinCompletionTimeTotal = siteFormattedTimeAverageTotal(
       averageCheckinCompletionIntervals.filter { it.location != "UNKNOWN" },
     )
-
+    // average review of checkin time per site + total
     val reviewTimesToComplete = entityManager.runPerSiteQuery(sqlAverageTimeTakenToCompleteCheckinReviewPerSite, lowerBound, upperBound)
       .map(::intervalAverage)
     val averageTimeTakenToCompleteCheckinReviewPerSite = reviewTimesToComplete.map(::siteFormattedTimeAverage)
     val averageTimeTakenToCompleteCheckinReviewTotal = siteFormattedTimeAverageTotal(
       reviewTimesToComplete.filter { it.location != "UNKNOWN" },
     )
-
+    // device type per site
     val deviceTypePerSite = entityManager.runPerSiteQuery(sqlDeviceType, lowerBound, upperBound).map(::labeledSiteCountWithPercentage)
 
     return Stats(
       invitesPerSite = invitesPerSite,
+      invitesTotal = invitesTotal,
       inviteStatusPerSite = invitesStatusPerSite,
       completedCheckinsPerSite = completedCheckinsPerSite,
+      completedCheckinsTotal = completedCheckinsTotal,
       genericNotificationStatusPerSite = genericNotificationsStatusPerSite,
       completedCheckinsPerNth = completedCheckinsPerNthPerSite,
+      completedDay1Total = completedDay1Total,
+      completedDay1Percentage = completedDay1Percentage,
+      completedDay2Total = completedDay2Total,
+      completedDay2Percentage = completedDay2Percentage,
+      completedDay3Total = completedDay3Total,
+      completedDay3Percentage = completedDay3Percentage,
       offendersPerSite = offendersPerSite,
+      offendersTotal = offendersTotal,
       checkinFrequencyPerSite = checkinFrequencyPerSite,
+      frequencyWeeklyTotal = frequencyWeeklyTotal,
+      frequencyFortnightlyTotal = frequencyFortnightlyTotal,
+      frequency4WeeksTotal = frequency4WeeksTotal,
+      frequency8WeeksTotal = frequency8WeeksTotal,
       checkinAverages = avgCompletedCheckinsPerSite,
       checkinCompletedAverageTotal = checkinCompletedAverageTotal,
       ontimeCheckinPercentageTotal = ontimeCheckinPercentageTotal,
+      expiredCheckinsTotal = expiredCheckinsTotal,
+      expiredCheckinsPercentageTotal = expiredCheckinsPercentageTotal,
       checkinOutsideAccess = checkinOutsideAccess,
-      automatedIdCheckAccuracy = automatedIdCheckAccuracy,
+      checkinOutsideAccessTotal = checkinOutsideAccessTotal,
+      automatedIdCheckAccuracyPerSite = automatedIdCheckAccuracyPerSite,
+      automatedIdCheckAccuracyTotal = automatedIdCheckAccuracyTotal,
+      automatedIdCheckAccuracyPercentageTotal = automatedIdCheckAccuracyPercentageTotal,
       flaggedCheckinsPerSite = flaggedCheckinsPerSite,
+      flaggedCheckinsTotal = flaggedCheckinsTotal,
+      flaggedCheckinsPercentageTotal = flaggedCheckinsPercentageTotal,
       stoppedCheckinsPerSite = stoppedCheckinsPerSite,
+      stoppedCheckinsTotal = stoppedCheckinsTotal,
       averageFlagsPerCheckinPerSite = averageFlagsPerCheckinPerSite,
       averageFlagsPerCheckinTotal = averageFlagsPerCheckinTotal,
       callbackRequestPercentagePerSite = callbackRequestPercentagePerSite,
@@ -381,16 +553,26 @@ private fun siteCountOnNthDay(cols: Array<Any?>): SiteCountOnNthDay = SiteCountO
   day = (cols[2] as Number).toLong(),
 )
 
-private fun siteCheckinAverage(cols: Array<Any?>): SiteCheckinAverage = SiteCheckinAverage(
-  location = cols[0] as String,
-  completedAvg = (cols[1] as Number).toLong(),
-  completedStdDev = (cols[2] as Number).toLong(),
-  expiredAvg = (cols[3] as Number).toLong(),
-  expiredStdDev = (cols[4] as Number).toLong(),
-  completedTotal = (cols[5] as Number).toLong(),
-  expiredTotal = (cols[6] as Number).toLong(),
-  missedPercentage = (cols[7] as Number).toDouble(),
-)
+private fun siteCheckinAverage(cols: Array<Any?>): SiteCheckinAverage {
+  val completedTotal = (cols[5] as Number).toLong()
+  val expiredTotal = (cols[6] as Number).toLong()
+  val total = completedTotal + expiredTotal
+
+  // Calculate Percentage
+  val percentage = if (total > 0) (completedTotal.toDouble() / total) * 100 else 0.0
+
+  return SiteCheckinAverage(
+    location = cols[0] as String,
+    completedAvg = (cols[1] as Number).toLong(),
+    completedStdDev = (cols[2] as Number).toLong(),
+    expiredAvg = (cols[3] as Number).toLong(),
+    expiredStdDev = (cols[4] as Number).toLong(),
+    completedTotal = completedTotal,
+    expiredTotal = expiredTotal,
+    missedPercentage = (cols[7] as Number).toDouble(),
+    ontimePercentage = round(percentage),
+  )
+}
 
 private fun idCheckAccuracy(cols: Array<Any?>): IdCheckAccuracy = IdCheckAccuracy(
   location = cols[0] as String,
@@ -500,3 +682,5 @@ private fun calculateGlobalAverageCheckinsPerPoP(
     0.0
   }
 }
+
+private fun round(value: Double): Double = kotlin.math.round(value * 100) / 100.0

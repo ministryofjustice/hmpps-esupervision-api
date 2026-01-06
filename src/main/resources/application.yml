@@ -6,9 +6,13 @@ api:
   base:
     url:
       manage-users-api: ${MANAGE_USERS_API}
+      ndilius-api: ${NDILIUS_API_URL:https://esupervision-and-delius-dev.hmpps.service.justice.gov.uk}
 
 app:
   hostedAt: ${HOSTED_AT}
+  mpopUrl: ${MPOP_URL}
+  checkinUrl: ${POP_UI_URL}
+  apiBaseUrl: ${API_BASE_URL}
   # how long should the presigned S3 URLs be valid for?
   upload-ttl-minutes: 10
   scheduling:
@@ -25,6 +29,12 @@ app:
       cron: "0 30 * * * *"
     generic-notification-status:
       cron: "0 0 15 * * *"
+    # V2 Scheduled Jobs (core features - always enabled)
+    v2-checkin-creation:
+      cron: "0 0 9 * * *"  # Every day at 9 AM (matches V1 timing)
+    v2-checkin-expiry:
+      cron: "0 15 9 * * *"  # Every day at 9:15 AM (matches V1 timing)
+      grace-period-days: 3
 
 spring:
   application:
@@ -60,8 +70,15 @@ spring:
             authorization-grant-type: client_credentials
             scope: read
 
+          ndilius-api:
+            provider: hmpps-auth
+            client-id: ${API_CLIENT_ID}
+            client-secret: ${API_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+            scope: read
+
   datasource:
-    url: jdbc:postgresql://${POSTGRES_ENDPOINT}/${POSTGRES_DATABASE}
+    url: jdbc:postgresql://${POSTGRES_ENDPOINT}/${POSTGRES_DATABASE}?stringtype=unspecified
     driver-class-name: org.postgresql.Driver
     username: ${POSTGRES_USERNAME}
     password: ${POSTGRES_PASSWORD}
@@ -128,6 +145,11 @@ aws:
 
 notify:
   apiKey: ${NOTIFY_API_KEY}
+  channels:
+    offender-sms-enabled: true
+    offender-email-enabled: true
+    practitioner-sms-enabled: false
+    practitioner-email-enabled: true
   sms-templates:
     POP_CHECKIN_INVITE: 41f78d9f-95d1-45c4-bad2-ec53fcddc017
     PRACTITIONER_CHECKIN_SUBMITTED: 6923e8c1-543c-44b9-bcc4-766ce4bb6a23
@@ -155,3 +177,138 @@ rekognition:
   s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
   max-concurrency: 10
   read-timeout-seconds: 20
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      ndiliusApi:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 60s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 3s
+        record-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadGateway
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout
+        ignore-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest
+          - org.springframework.web.reactive.function.client.WebClientResponseException.NotFound
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Unauthorized
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Forbidden
+
+      govNotify:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 60s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 5s
+        record-exceptions:
+          - uk.gov.service.notify.NotificationClientException
+
+      awsS3:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 70
+        slow-call-rate-threshold: 90
+        slow-call-duration-threshold: 10s
+        record-exceptions:
+          - software.amazon.awssdk.core.exception.SdkException
+          - software.amazon.awssdk.services.s3.model.S3Exception
+
+      awsRekognition:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 70
+        slow-call-rate-threshold: 90
+        slow-call-duration-threshold: 8s
+        record-exceptions:
+          - software.amazon.awssdk.services.rekognition.model.RekognitionException
+        ignore-exceptions:
+          - software.amazon.awssdk.services.rekognition.model.InvalidParameterException
+
+  retry:
+    instances:
+      ndiliusApi:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadGateway
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout
+        ignore-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest
+          - org.springframework.web.reactive.function.client.WebClientResponseException.NotFound
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Unauthorized
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Forbidden
+
+      govNotify:
+        max-attempts: 3
+        wait-duration: 1000ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - uk.gov.service.notify.NotificationClientException
+
+      awsS3:
+        max-attempts: 2
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - software.amazon.awssdk.core.exception.SdkException
+          - software.amazon.awssdk.services.s3.model.S3Exception
+
+      awsRekognition:
+        max-attempts: 2
+        wait-duration: 300ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - software.amazon.awssdk.services.rekognition.model.RekognitionException
+        ignore-exceptions:
+          - software.amazon.awssdk.services.rekognition.model.InvalidParameterException
+
+  timelimiter:
+    instances:
+      ndiliusApi:
+        timeout-duration: 5s
+        cancel-running-future: true
+
+      govNotify:
+        timeout-duration: 10s
+        cancel-running-future: true
+
+      awsS3:
+        timeout-duration: 15s
+        cancel-running-future: true
+
+      awsRekognition:
+        timeout-duration: 30s
+        cancel-running-future: true
