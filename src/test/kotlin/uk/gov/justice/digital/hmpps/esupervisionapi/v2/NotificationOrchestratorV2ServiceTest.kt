@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.net.URI
 import java.time.Clock
@@ -36,8 +37,8 @@ class NotificationOrchestratorV2ServiceTest {
 
   @BeforeEach
   fun setUp() {
-    whenever(appConfig.checkinSubmitUrl(any())).thenReturn(URI("https://example.com/checkin"))
-    whenever(appConfig.checkinDashboardUrl(any())).thenReturn(URI("https://example.com/dashboard"))
+    whenever(appConfig.checkinSubmitUrlV2(any())).thenReturn(URI("https://example.com/submitv2"))
+    whenever(appConfig.checkinReviewUrlV2(any(), any())).thenReturn(URI("https://example.com/reviewv2"))
 
     service = NotificationOrchestratorV2Service(
       notificationPersistence,
@@ -186,6 +187,7 @@ class NotificationOrchestratorV2ServiceTest {
     createdAt = clock.instant(),
     createdBy = "PRACT001",
     updatedAt = clock.instant(),
+    contactPreference = ContactPreference.PHONE,
   )
 
   private fun createCheckin(

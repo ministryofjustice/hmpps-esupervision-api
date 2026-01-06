@@ -68,6 +68,7 @@ class OffenderSetupV2Service(
         createdAt = now,
         createdBy = offenderInfo.practitionerId,
         updatedAt = now,
+        contactPreference = offenderInfo.contactPreference,
       )
 
     raiseOnConstraintViolation("CRN ${offenderInfo.crn} already exists") {

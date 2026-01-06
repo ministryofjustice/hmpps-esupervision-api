@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -116,6 +117,8 @@ data class OffenderV2Dto(
   @Schema(description = "Created timestamp", required = true) val createdAt: Instant,
   @Schema(description = "Created by practitioner ID", required = true) val createdBy: String,
   @Schema(description = "Last updated timestamp", required = true) val updatedAt: Instant,
+  @Schema(description = "Contact preference - phone or email", required = true)
+  val contactPreference: ContactPreference,
   @Schema(description = "Personal details from Ndilius (optional)", required = false)
   val personalDetails: ContactDetails? = null,
 )
@@ -155,6 +158,8 @@ data class OffenderInfoV2(
   val firstCheckin: LocalDate,
   @Schema(description = "Interval between checkins", required = true)
   val checkinInterval: CheckinInterval,
+  @Schema(description = "POP contact preference", required = true)
+  val contactPreference: ContactPreference,
   @Schema(description = "Setup start timestamp (optional)", required = false)
   val startedAt: Instant? = null,
 )

@@ -23,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.net.URI
@@ -79,6 +80,7 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
         createdAt = Instant.now(),
         createdBy = "SYSTEM",
         updatedAt = Instant.now(),
+        contactPreference = ContactPreference.PHONE,
       ),
     )
 
@@ -133,6 +135,7 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
         createdAt = Instant.now(),
         createdBy = "SYSTEM",
         updatedAt = Instant.now(),
+        contactPreference = ContactPreference.PHONE,
       ),
     )
 

@@ -19,7 +19,7 @@ import java.util.UUID
 class DomainEventService(
   private val eventPublisher: DomainEventPublisher,
   private val clock: Clock,
-  @Value("\${app.hostedAt}") private val hostedAt: String,
+  @Value("\${app.apiBaseUrl}") private val apiBaseUrl: String,
 ) {
   /**
    * Publish a domain event
@@ -31,7 +31,7 @@ class DomainEventService(
     description: String,
   ) {
     LOGGER.info(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
-    val detailUrl = "$hostedAt/v2/events/${eventType.pathSegment}/$uuid"
+    val detailUrl = "$apiBaseUrl/v2/events/${eventType.pathSegment}/$uuid"
 
     try {
       val event = DomainEvent(

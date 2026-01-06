@@ -9,13 +9,17 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.net.URI
@@ -32,12 +36,13 @@ class OffenderV2ResourceTest {
   private val clock = Clock.fixed(Instant.parse("2025-12-10T10:00:00Z"), ZoneId.of("UTC"))
   private val offenderRepository: OffenderV2Repository = mock()
   private val s3UploadService: S3UploadService = mock()
+  private val checkinCreationService: CheckinCreationService = mock()
 
   private lateinit var resource: OffenderV2Resource
 
   @BeforeEach
   fun setUp() {
-    resource = OffenderV2Resource(offenderRepository, s3UploadService, clock)
+    resource = OffenderV2Resource(offenderRepository, s3UploadService, clock, checkinCreationService)
   }
 
   // ========================================
@@ -282,6 +287,38 @@ class OffenderV2ResourceTest {
     assertNotNull(result.body?.locationInfo)
   }
 
+  @Test
+  fun `updateDetails - successful update`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    offender.firstCheckin = LocalDate.now(clock).minusDays(3)
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
+    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
+
+    verify(checkinCreationService, times(1)).createCheckin(any(), any(), any())
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(scheduleUpdate.firstCheckin, result.body?.firstCheckin)
+    assertEquals(scheduleUpdate.checkinInterval, result.body?.checkinInterval)
+  }
+
+  @Test
+  fun `updateDetails - no update`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = null))
+
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    assertEquals(HttpStatus.NO_CONTENT, result.statusCode)
+  }
+
   // ========================================
   // Helper Methods
   // ========================================
@@ -296,5 +333,6 @@ class OffenderV2ResourceTest {
     createdAt = clock.instant(),
     createdBy = "PRACT001",
     updatedAt = clock.instant(),
+    contactPreference = ContactPreference.PHONE,
   )
 }
