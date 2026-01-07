@@ -602,14 +602,15 @@ fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewI
       missedCheckinComment?.trim()
     }
     CheckinV2Status.SUBMITTED -> {
-      errorMessage = "No review comment given"
       newStatus = CheckinV2Status.REVIEWED
       logEntryType = LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED
       notes?.trim()
     }
     else -> throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't review checkin withs status ${checkin.status}")
   } ?: ""
-  if (comment.isBlank()) throw ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)
+  if (checkin.status == CheckinV2Status.EXPIRED && comment.isBlank()) {
+    throw ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)
+  }
 
   assert(checkin.status.canTransitionTo(newStatus))
   return CheckinReviewInfo(newStatus, comment, logEntryType)
