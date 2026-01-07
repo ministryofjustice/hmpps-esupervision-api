@@ -1,4 +1,4 @@
-@reference_photo_path = /Users/YOUR.NAME/Desktop/correct.png
+# NOTE: update the PUT to S3 with the path to your file: e.g. /Users/YOUR.NAME/Desktop/correct.png
 
 ### Start offender setup
 < {%
@@ -31,7 +31,7 @@ Authorization: Bearer {{hmpps_auth.token}}
 PUT http://localhost:4566/image-uploads/setup-{{offender_uuid}}
 Content-Type: image/png
 
-< {{reference_photo_path}}
+< /Users/YOUR.NAME/Desktop/correct.png
 
 ### Complete offender setup
 POST {{HOST}}/v2/offender_setup/{{setup_uuid}}/complete

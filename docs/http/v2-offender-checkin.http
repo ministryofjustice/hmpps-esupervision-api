@@ -1,7 +1,5 @@
 @practitioner_id = ??
-@offender_uuid = baaa0179-75b1-4993-9546-d83dbb00ab48
-@checkin_uuid = 619733d3-f437-48a2-af06-e29609528467
-@offender_snapshot_photo = /Path/to/the/photo.png
+@offender_uuid = e635e5d9-5e66-4c9e-8dd8-144e1d2dbb9e
 
 ### [SYSTEM/PRACTITIONER] Create a checkin
 POST {{HOST}}/v2/offender_checkins
@@ -11,8 +9,15 @@ Content-Type: application/json
 {
     "practitioner": "{{practitioner_id}}",
     "offender": "{{offender_uuid}}",
-    "dueDate": "2025-12-23"
+    "dueDate": "2026-01-08"
 }
+
+> {%
+    if (response.status === 200) {
+        const checkinUuid = response.body["uuid"]
+        client.global.set("checkin_uuid", checkinUuid)
+    }
+%}
 
 ### [SYSTEM/PRACTITIONER] Get the checkin
 GET {{HOST}}/v2/offender_checkins/{{checkin_uuid}}?include-personal-details=true
@@ -53,13 +58,13 @@ if (response.status == 200) {
 PUT {{video_upload_url}}
 Content-Type: image/mp4
 
-< {{offender_snapshot_photo}}
+< /Users/YOUR.NAME/Desktop/correct.png
 
 ### [OFFENDER] uplaod snapshot
 PUT {{snapshot_upload_url}}
 Content-Type: image/png
 
-< {{offender_snapshot_photo}}
+< /Users/YOUR.NAME/Desktop/correct.png
 
 ### [OFFENDER] verify video
 POST {{HOST}}/v2/offender_checkins/{{checkin_uuid}}/video-verify?numSnapshots=1

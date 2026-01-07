@@ -53,8 +53,29 @@ Before we can submit a check-in, we need to onboard an offender to the system. T
 1. Submitting a request to the API `POST /v2/offender_setup`
 2. Uploading a reference photo to S3
 
-See [Offender setup](http/v2-offender-setup.http) script (which can be run via Intellij Idea HTTP client, and should be
-easy to port to curl). Adjust the payload (including the CRN, which should match the one in the JSON file, See [Stub NDelius API])
+See [Offender setup](http/v2-offender-setup.http) script which can be run via Intellij Idea HTTP client (there's also a CLI version
+which you can install without the IDE: [HTTP Client CLI](https://www.jetbrains.com/help/idea/http-client-cli.html)), and should be
+easy to port to curl. The token to call the API can be obtained via:
+
+```
+PRACTITIONER_TOKEN=$(curl -X POST "http://localhost:8090/auth/oauth/token?grant_type=client_credentials" \
+     -H "Authorization:Basic $(echo -n 'hmpps-typescript-template-system:clientsecret' | base64)" \
+      |  jq -r ".access_token")
+      
+cat <<EOF > docs/http/http-client.private.env.json
+{
+  "local": {
+    "HOST": "http://localhost:8080",
+    "hmpps_auth": {
+      "token": "$PRACTITIONER_TOKEN"
+    }
+  }
+}
+EOF
+```
+
+
+Adjust the payload (including the CRN, which should match the one in the JSON file, See [Stub NDelius API])
 
 Once an offender has been successfully onboarded, you can create a check-in for them: See [Check-in](http/v2-offender-checkin.http) script.
 
