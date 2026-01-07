@@ -110,23 +110,9 @@ class NotificationPersistenceService(
 
     val practitionerDetails = contactDetails.practitioner
 
-    if (practitionerDetails == null) {
-      LOGGER.error(
-        "NOTIFICATION_UNDELIVERABLE: Practitioner details not available [type={}, crn={}, offenderUuid={}]",
-        notificationType,
-        offender.crn,
-        offender.uuid,
-      )
-      return notifications
-    }
-
-    if (practitionerDetails.email == null) {
-      LOGGER.error(
-        "NOTIFICATION_UNDELIVERABLE: Practitioner has no email address [type={}, crn={}, offenderUuid={}]",
-        notificationType,
-        offender.crn,
-        offender.uuid,
-      )
+    if (practitionerDetails?.email == null) {
+      val reason = if (practitionerDetails == null) "details missing" else "no email"
+      LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}, offenderUuid={}]", reason, notificationType, offender.crn, offender.uuid)
       return notifications
     }
 

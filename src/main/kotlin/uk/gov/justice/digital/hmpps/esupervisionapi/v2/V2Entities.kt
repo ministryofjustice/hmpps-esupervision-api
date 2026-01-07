@@ -166,6 +166,9 @@ open class OffenderCheckinV2(
   @Column(name = "reviewed_by", nullable = true)
   open var reviewedBy: String? = null,
 
+  /**
+   * This marks the time of the first submission attempt by the offender
+   */
   @Column(name = "checkin_started_at", nullable = true)
   open var checkinStartedAt: Instant? = null,
 

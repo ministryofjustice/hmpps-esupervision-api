@@ -29,21 +29,21 @@ class NotificationV2Service(
   /**
    * Send notifications for checkin submitted event
    */
-  fun sendCheckinSubmittedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails? = null) {
+  fun sendCheckinSubmittedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
     orchestrator.sendCheckinSubmittedNotifications(checkin, contactDetails)
   }
 
   /**
    * Send notifications for checkin reviewed event
    */
-  fun sendCheckinReviewedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails? = null) {
+  fun sendCheckinReviewedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
     orchestrator.sendCheckinReviewedNotifications(checkin, contactDetails)
   }
 
   /**
    * Send notifications for checkin expired event
    */
-  fun sendCheckinExpiredNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails? = null) {
+  fun sendCheckinExpiredNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
     orchestrator.sendCheckinExpiredNotifications(checkin, contactDetails)
   }
 
