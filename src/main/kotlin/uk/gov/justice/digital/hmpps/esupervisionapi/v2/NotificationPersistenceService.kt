@@ -97,7 +97,7 @@ class NotificationPersistenceService(
   /** Build notification records for practitioner (Email only) */
   fun buildPractitionerNotifications(
     offender: OffenderV2,
-    contactDetails: ContactDetails,
+    contactDetails: PractitionerDetails?,
     checkin: OffenderCheckinV2?,
     notificationType: NotificationType,
   ): List<NotificationWithRecipient> {
@@ -108,15 +108,13 @@ class NotificationPersistenceService(
       return notifications
     }
 
-    val practitionerDetails = contactDetails.practitioner
-
-    if (practitionerDetails?.email == null) {
-      val reason = if (practitionerDetails == null) "details missing" else "no email"
+    if (contactDetails?.email == null) {
+      val reason = if (contactDetails == null) "details missing" else "no email"
       LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}, offenderUuid={}]", reason, notificationType, offender.crn, offender.uuid)
       return notifications
     }
 
-    val emailTemplateId = templateConfig.templatesFor(Email(practitionerDetails.email)).getTemplate(notificationType)
+    val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
     val reference = checkin?.uuid?.toString() ?: offender.uuid.toString()
     val notification = GenericNotificationV2(
       notificationId = UUID.randomUUID(),
@@ -133,7 +131,7 @@ class NotificationPersistenceService(
       sentAt = null,
       updatedAt = null,
     )
-    notifications.add(NotificationWithRecipient(notification, practitionerDetails.email))
+    notifications.add(NotificationWithRecipient(notification, contactDetails.email))
 
     return notifications
   }

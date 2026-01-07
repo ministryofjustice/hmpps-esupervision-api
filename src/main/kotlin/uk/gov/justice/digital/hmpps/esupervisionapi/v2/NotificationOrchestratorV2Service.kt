@@ -167,7 +167,7 @@ class NotificationOrchestratorV2Service(
       notificationsWithRecipients.addAll(
         notificationPersistence.buildPractitionerNotifications(
           offender = checkin.offender,
-          contactDetails = details,
+          contactDetails = details.practitioner,
           checkin = checkin,
           notificationType = NotificationType.PractitionerCheckinSubmitted,
         ),
@@ -212,7 +212,7 @@ class NotificationOrchestratorV2Service(
     val notificationsWithRecipients =
       notificationPersistence.buildPractitionerNotifications(
         offender = checkin.offender,
-        contactDetails = details,
+        contactDetails = details.practitioner,
         checkin = checkin,
         notificationType = NotificationType.PractitionerCheckinMissed,
       )
