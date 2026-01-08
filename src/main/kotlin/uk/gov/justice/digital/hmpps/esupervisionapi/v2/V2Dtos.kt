@@ -234,6 +234,10 @@ data class CheckinV2Dto(
   val riskFeedback: Boolean? = null,
   @Schema(description = "Checkin logs with practitioner notes", required = true)
   val checkinLogs: CheckinLogsV2Dto,
+  @Schema(description = "Presigned S3 URL for reference photo", required = false)
+  val photoUrl: URL? = null,
+  @Schema(description = "Notes of further actions to be taken after checkin review", required = false)
+  val furtherActions: String? = null,
 )
 
 /** Submit checkin request */
