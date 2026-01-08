@@ -14,7 +14,7 @@ Log in at http://localhost:8090/auth/ui
 In `hmpps-typescript-template` client, under "Authorities" add the following roles:
 - ESUPERVISION__PRACTITIONER__RW
 
-In `hmpps-typescript-template` client, under "Authorities" add the following roles:
+In `hmpps-typescript-template-system` client, under "Authorities" add the following roles:
 - ESUPERVISION__ESUPERVISION_UI
 
 ### S3
