@@ -319,6 +319,29 @@ class OffenderV2ResourceTest {
     assertEquals(HttpStatus.NO_CONTENT, result.statusCode)
   }
 
+  @Test
+  fun `updateDetails - successful contact preference update`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
+        contactPreference = ContactPreference.PHONE
+    }
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    val preferenceUpdate = ContactPreferenceUpdateRequest("XYZ0111", ContactPreference.EMAIL)
+    
+    val result = resource.updateDetails(
+      uuid, 
+      OffenderDetailsUpdateRequest(checkinSchedule = null, contactPreference = preferenceUpdate)
+    )
+
+    verify(offenderRepository).save(offender)
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(ContactPreference.EMAIL, result.body?.contactPreference)
+    assertEquals(ContactPreference.EMAIL, offender.contactPreference)
+  }
+
   // ========================================
   // Helper Methods
   // ========================================
