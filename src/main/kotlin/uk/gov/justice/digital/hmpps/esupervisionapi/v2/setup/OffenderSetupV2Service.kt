@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -45,7 +45,7 @@ class OffenderSetupV2Service(
   private val s3UploadService: S3UploadService,
   private val notificationService: NotificationV2Service,
   private val eventAuditService: EventAuditV2Service,
-  private val ndiliusApiClient: NdiliusApiClient,
+  private val ndiliusApiClient: INdiliusApiClient,
   private val transactionTemplate: TransactionTemplate,
 ) {
 

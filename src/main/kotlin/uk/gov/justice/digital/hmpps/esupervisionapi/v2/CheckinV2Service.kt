@@ -25,7 +25,7 @@ class CheckinV2Service(
   private val checkinRepository: OffenderCheckinV2Repository,
   private val offenderRepository: OffenderV2Repository,
   private val offenderEventLogRepository: OffenderEventLogV2Repository,
-  private val ndiliusApiClient: NdiliusApiClient,
+  private val ndiliusApiClient: INdiliusApiClient,
   private val notificationService: NotificationV2Service,
   private val checkinCreationService: CheckinCreationService,
   private val s3UploadService: S3UploadService,

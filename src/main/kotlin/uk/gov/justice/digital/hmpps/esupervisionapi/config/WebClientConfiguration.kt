@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Profile
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction
 import org.springframework.web.reactive.function.client.WebClient
@@ -33,6 +34,7 @@ class WebClientConfiguration(
     .authorisedWebClient(authorizedClientManager, registrationId = "manage-users-api", url = manageUsersApiBaseUri, timeout = timeout)
 
   @Bean
+  @Profile("!stubndilius")
   fun ndiliusApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
     .filters {
       it.add(

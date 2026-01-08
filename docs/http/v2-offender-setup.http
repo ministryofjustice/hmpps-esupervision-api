@@ -1,0 +1,38 @@
+# NOTE: update the PUT to S3 with the path to your file: e.g. /Users/YOUR.NAME/Desktop/correct.png
+
+### Start offender setup
+< {%
+    const setupUuid = $random.uuid
+    request.variables.set('setupUuid', setupUuid)
+%}
+POST {{HOST}}/v2/offender_setup
+Content-Type: application/json
+Authorization: Bearer {{hmpps_auth.token}}
+
+{
+  "setupUuid": "{{$uuid}}",
+  "practitionerId": "??",
+  "crn": "X000004",
+  "firstCheckin": "2025-01-01",
+  "checkinInterval": "WEEKLY",
+  "contactPreference": "PHONE"
+}
+
+> {%
+    if (response.status === 200) {
+        const offenderUuid = response.body["offenderUuid"]
+        client.log(`initiated setup uuid=${offenderUuid}`)
+        client.global.set("offender_uuid", offenderUuid)
+        client.global.set("setup_uuid", response.body["uuid"])
+    }
+%}
+
+### Upload offender's reference image
+PUT http://localhost:4566/image-uploads/setup-{{offender_uuid}}
+Content-Type: image/png
+
+< /Users/YOUR.NAME/Desktop/correct.png
+
+### Complete offender setup
+POST {{HOST}}/v2/offender_setup/{{setup_uuid}}/complete
+Authorization: Bearer {{hmpps_auth.token}}

@@ -64,56 +64,11 @@ flowchart LR
     end
 ```
 
-# Instructions
+## HMPPS Documentation Links 
 
-If this is a HMPPS project then the project will be created as part of bootstrapping -
-see [dps-project-bootstrap](https://github.com/ministryofjustice/dps-project-bootstrap). You are able to specify a
-template application using the `github_template_repo` attribute to clone without the need to manually do this yourself
-within GitHub.
-
-This project is community managed by the mojdt `#kotlin-dev` slack channel.
-Please raise any questions or queries there. Contributions welcome!
-
-Our security policy is located [here](https://github.com/ministryofjustice/hmpps-template-kotlin/security/policy).
+Security policy is located [here](https://github.com/ministryofjustice/hmpps-template-kotlin/security/policy).
 
 Documentation to create new service is located [here](https://tech-docs.hmpps.service.justice.gov.uk/applicationplatform/newservice-GHA/).
-
-## Creating a Cloud Platform namespace
-
-When deploying to a new namespace, you may wish to use the
-[templates project namespace](https://github.com/ministryofjustice/cloud-platform-environments/tree/main/namespaces/live.cloud-platform.service.justice.gov.uk/hmpps-templates-dev)
-as the basis for your new namespace. This namespace contains both the kotlin and typescript template projects, 
-which is the usual way that projects are setup.
-
-Copy this folder and update all the existing namespace references to correspond to the environment to which you're deploying.
-
-If you only need the kotlin configuration then remove all typescript references and remove the elasticache configuration. 
-
-To ensure the correct github teams can approve releases, you will need to make changes to the configuration in `resources/service-account-github` where the appropriate team names will need to be added (based on [lines 98-100](https://github.com/ministryofjustice/cloud-platform-environments/blob/main/namespaces/live.cloud-platform.service.justice.gov.uk/hmpps-templates-dev/resources/serviceaccount-github.tf#L98) and the reference appended to the teams list below [line 112](https://github.com/ministryofjustice/cloud-platform-environments/blob/main/namespaces/live.cloud-platform.service.justice.gov.uk/hmpps-templates-dev/resources/serviceaccount-github.tf#L112)). Note: hmpps-sre is in this list to assist with deployment issues.
-
-Submit a PR to the Cloud Platform team in
-#ask-cloud-platform. Further instructions from the Cloud Platform team can be found in
-the [Cloud Platform User Guide](https://user-guide.cloud-platform.service.justice.gov.uk/#cloud-platform-user-guide)
-
-## Renaming from HMPPS Template Kotlin - github Actions
-
-Once the new repository is deployed. Navigate to the repository in github, and select the `Actions` tab.
-Click the link to `Enable Actions on this repository`.
-
-Find the Action workflow named: `rename-project-create-pr` and click `Run workflow`. This workflow will
-execute the `rename-project.bash` and create Pull Request for you to review. Review the PR and merge.
-
-Note: ideally this workflow would run automatically however due to a recent change github Actions are not
-enabled by default on newly created repos. There is no way to enable Actions other then to click the button in the UI.
-If this situation changes we will update this project so that the workflow is triggered during the bootstrap project.
-Further reading: <https://github.community/t/workflow-isnt-enabled-in-repos-generated-from-template/136421>
-
-The script takes six arguments:
-
-### New project name
-
-This should start with `hmpps-` e.g. `hmpps-prison-visits` so that it can be easily distinguished in github from
-other departments projects. Try to avoid using abbreviations so that others can understand easily what your project is.
 
 ### Slack channel for release notifications
 
@@ -155,11 +110,6 @@ This is so that we can link a component to a product and thus provide team and p
 Portal. Refer to the developer portal at https://developer-portal.hmpps.service.justice.gov.uk/products to find your
 product id. This is configured in `helm_deploy/<project_name>/values.yaml`.
 
-## Manually branding from template app
-
-Run the `rename-project.bash` without any arguments. This will prompt for the six required parameters and create a PR.
-The script requires a recent version of `bash` to be installed, as well as GNU `sed` in the path.
-
 ## Common Kotlin patterns
 
 Many patterns have evolved for HMPPS Kotlin applications. Using these patterns provides consistency across our suite of 
@@ -171,6 +121,8 @@ If this documentation is incorrect or needs improving please report to [#ask-pri
 or [raise a PR](https://github.com/ministryofjustice/hmpps-tech-docs). 
 
 ## Running the application locally
+
+See [Local Development](docs/local-development.md) for details.
 
 The application comes with a `dev` spring profile that includes default settings for running locally. This is not
 necessary when deploying to kubernetes as these values are included in the helm configuration templates -

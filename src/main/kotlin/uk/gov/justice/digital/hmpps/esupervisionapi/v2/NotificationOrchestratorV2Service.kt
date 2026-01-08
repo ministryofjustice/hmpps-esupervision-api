@@ -30,7 +30,7 @@ class NotificationOrchestratorV2Service(
   private val domainEventService: DomainEventService,
   private val eventAuditService: EventAuditV2Service,
   private val eventDetailService: EventDetailV2Service,
-  private val ndiliusApiClient: NdiliusApiClient,
+  private val ndiliusApiClient: INdiliusApiClient,
   private val appConfig: AppConfig,
   private val clock: Clock,
   @Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
