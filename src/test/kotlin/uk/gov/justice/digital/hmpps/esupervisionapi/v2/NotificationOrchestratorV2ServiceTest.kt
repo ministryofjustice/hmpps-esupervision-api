@@ -92,7 +92,6 @@ class NotificationOrchestratorV2ServiceTest {
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
     service.sendCheckinCreatedNotifications(checkin, contactDetails)
 
@@ -100,6 +99,7 @@ class NotificationOrchestratorV2ServiceTest {
     verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinInvite))
     verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any())
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any())
+    verify(ndiliusApiClient, never()).getContactDetails(any())
   }
 
   @Test
@@ -116,7 +116,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendCheckinSubmittedNotifications(checkin, contactDetails)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any())
-    verify(eventAuditService).recordCheckinSubmitted(checkin, contactDetails)
+    verify(eventAuditService, never()).recordCheckinSubmitted(checkin, contactDetails)
   }
 
   @Test
@@ -147,7 +147,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendCheckinReviewedNotifications(checkin, contactDetails)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any())
-    verify(eventAuditService).recordCheckinReviewed(checkin, contactDetails)
+    verify(eventAuditService, never()).recordCheckinReviewed(checkin, contactDetails)
   }
 
   @Test
