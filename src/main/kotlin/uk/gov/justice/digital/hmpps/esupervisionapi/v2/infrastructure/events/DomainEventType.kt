@@ -37,8 +37,8 @@ enum class DomainEventType(
    * but external services call it "update". */
   V2_CHECKIN_UPDATED(
     "$V2_PREFIX.check-in.updated",
-    "An e-Supervision V2 remote check-in was updated",
-    "checkin-updated",
+    "An e-Supervision V2 remote check-in was annotated",
+    "checkin-annotated",
   ),
   ;
 

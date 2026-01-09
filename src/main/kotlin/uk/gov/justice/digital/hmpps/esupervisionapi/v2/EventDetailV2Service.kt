@@ -127,7 +127,7 @@ class EventDetailV2Service(
     val lines = mutableListOf<String>()
 
     lines.add("Check in updated: ${formatHumanReadableDateTime(log.createdAt)}")
-    lines.add("Updated by: ${log.practitioner}")
+    lines.add("Annotated by: ${log.practitioner}")
     lines.add("Notes: ${log.notes}")
 
     return lines.joinToString("\n")
