@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.time.Clock
 import java.time.LocalDate
@@ -30,6 +31,7 @@ class CheckinCreationService(
   private val checkinRepository: OffenderCheckinV2Repository,
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationService: NotificationV2Service,
+  private val eventAuditService: EventAuditV2Service,
 ) {
 
   /**
@@ -96,7 +98,12 @@ class CheckinCreationService(
         null
       }
 
-    notificationService.sendCheckinCreatedNotifications(saved, contactDetails)
+    if (contactDetails != null) {
+      notificationService.sendCheckinCreatedNotifications(saved, contactDetails)
+    } else {
+      LOGGER.warn("Skipping notifications for checkin {}: contact details not found", saved.uuid)
+    }
+    eventAuditService.recordCheckinCreated(checkin, contactDetails)
 
     return saved
   }

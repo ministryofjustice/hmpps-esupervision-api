@@ -50,47 +50,37 @@ class NotificationOrchestratorV2Service(
     )
 
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+    eventAuditService.recordSetupCompleted(offender, details)
 
     if (details != null) {
-      eventAuditService.recordSetupCompleted(offender, details)
+      try {
+        val personalisation =
+          mapOf(
+            "name" to "${details.name.forename} ${details.name.surname}",
+            "date" to offender.firstCheckin.format(DATE_FORMATTER),
+            "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
+          )
+
+        val notificationsWithRecipients =
+          notificationPersistence.buildOffenderNotifications(
+            offender = offender,
+            contactDetails = details,
+            notificationType = NotificationType.RegistrationConfirmation,
+          )
+
+        processAndSendNotifications(notificationsWithRecipients, personalisation)
+      } catch (e: Exception) {
+        val sanitized = PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid)
+        LOGGER.warn(
+          "Failed to send setup completed notifications for offender {}: {}",
+          offender.crn,
+          sanitized,
+        )
+      }
     } else {
       LOGGER.warn(
         "Recording audit without contact details for offender {}: contact details not found",
         offender.crn,
-      )
-      eventAuditService.recordSetupCompleted(offender, null)
-    }
-
-    if (details == null) {
-      LOGGER.warn(
-        "Cannot send notifications for offender {}: contact details not found",
-        offender.crn,
-      )
-      return
-    }
-
-    try {
-      val personalisation =
-        mapOf(
-          "name" to "${details.name.forename} ${details.name.surname}",
-          "date" to offender.firstCheckin.format(DATE_FORMATTER),
-          "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
-        )
-
-      val notificationsWithRecipients =
-        notificationPersistence.buildOffenderNotifications(
-          offender = offender,
-          contactDetails = details,
-          notificationType = NotificationType.RegistrationConfirmation,
-        )
-
-      processAndSendNotifications(notificationsWithRecipients, personalisation)
-    } catch (e: Exception) {
-      val sanitized = PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid)
-      LOGGER.error(
-        "Failed to send setup completed notifications for offender {}: {}",
-        offender.crn,
-        sanitized,
       )
     }
   }
@@ -98,7 +88,7 @@ class NotificationOrchestratorV2Service(
   /** Send notifications for checkin created event */
   fun sendCheckinCreatedNotifications(
     checkin: OffenderCheckinV2,
-    contactDetails: ContactDetails? = null,
+    contactDetails: ContactDetails,
   ) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_CREATED,
@@ -107,34 +97,14 @@ class NotificationOrchestratorV2Service(
       description = "Check-in created for ${checkin.offender.crn} with due date ${checkin.dueDate}",
     )
 
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
-
-    if (details != null) {
-      eventAuditService.recordCheckinCreated(checkin, details)
-    } else {
-      LOGGER.warn(
-        "Recording audit without contact details for checkin {}: contact details not found",
-        checkin.uuid,
-      )
-      eventAuditService.recordCheckinCreated(checkin, null)
-    }
-
-    if (details == null) {
-      LOGGER.warn(
-        "Cannot send notifications for checkin {}: contact details not found",
-        checkin.uuid,
-      )
-      return
-    }
-
     try {
       // Calculate final checkin date (last day offender can submit)
       val finalCheckinDate = checkin.dueDate.plus(checkinWindowPeriod).minusDays(1)
 
       val personalisation =
         mapOf(
-          "firstName" to details.name.forename,
-          "lastName" to details.name.surname,
+          "firstName" to contactDetails.name.forename,
+          "lastName" to contactDetails.name.surname,
           "date" to finalCheckinDate.format(DATE_FORMATTER),
           "url" to appConfig.checkinSubmitUrlV2(checkin.uuid).toString(),
         )
@@ -143,7 +113,7 @@ class NotificationOrchestratorV2Service(
       val notificationsWithRecipients =
         notificationPersistence.buildOffenderNotifications(
           offender = checkin.offender,
-          contactDetails = details,
+          contactDetails = contactDetails,
           notificationType = NotificationType.OffenderCheckinInvite,
         )
 
@@ -161,7 +131,7 @@ class NotificationOrchestratorV2Service(
   /** Send notifications for checkin submitted event */
   fun sendCheckinSubmittedNotifications(
     checkin: OffenderCheckinV2,
-    contactDetails: ContactDetails? = null,
+    details: ContactDetails,
   ) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
@@ -169,26 +139,6 @@ class NotificationOrchestratorV2Service(
       crn = checkin.offender.crn,
       description = "Check-in submitted for ${checkin.offender.crn}",
     )
-
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
-
-    if (details != null) {
-      eventAuditService.recordCheckinSubmitted(checkin, details)
-    } else {
-      LOGGER.warn(
-        "Recording audit without contact details for checkin {}: contact details not found",
-        checkin.uuid,
-      )
-      eventAuditService.recordCheckinSubmitted(checkin, null)
-    }
-
-    if (details == null) {
-      LOGGER.warn(
-        "Cannot send notifications for checkin {}: contact details not found",
-        checkin.uuid,
-      )
-      return
-    }
 
     try {
       // Calculate flags (survey flags + 1 if auto ID check failed/missing)
@@ -217,7 +167,7 @@ class NotificationOrchestratorV2Service(
       notificationsWithRecipients.addAll(
         notificationPersistence.buildPractitionerNotifications(
           offender = checkin.offender,
-          contactDetails = details,
+          contactDetails = details.practitioner,
           checkin = checkin,
           notificationType = NotificationType.PractitionerCheckinSubmitted,
         ),
@@ -237,7 +187,7 @@ class NotificationOrchestratorV2Service(
   /** Send notifications for checkin reviewed event */
   fun sendCheckinReviewedNotifications(
     checkin: OffenderCheckinV2,
-    contactDetails: ContactDetails? = null,
+    details: ContactDetails,
   ) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_REVIEWED,
@@ -245,48 +195,29 @@ class NotificationOrchestratorV2Service(
       crn = checkin.offender.crn,
       description = "Check-in reviewed for ${checkin.offender.crn} by ${checkin.reviewedBy}",
     )
-
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    if (details != null) {
-      eventAuditService.recordCheckinReviewed(checkin, details)
-    } else {
-      LOGGER.warn(
-        "Cannot record audit for reviewed checkin {}: contact details not found",
-        checkin.uuid,
-      )
-    }
   }
 
   /** Send notifications for checkin expired event */
   fun sendCheckinExpiredNotifications(
     checkin: OffenderCheckinV2,
-    contactDetails: ContactDetails? = null,
+    details: ContactDetails,
   ) {
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(checkin.offender.crn)
-
-    if (details == null) {
-      LOGGER.warn(
-        "Cannot send notifications for checkin {}: contact details not found",
-        checkin.uuid,
+    val personalisation =
+      mapOf(
+        "practitionerName" to checkin.offender.practitionerId,
+        "name" to "${details.name.forename} ${details.name.surname}",
+        "popDashboardUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
       )
-    } else {
-      val personalisation =
-        mapOf(
-          "practitionerName" to checkin.offender.practitionerId,
-          "name" to "${details.name.forename} ${details.name.surname}",
-          "popDashboardUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
-        )
 
-      val notificationsWithRecipients =
-        notificationPersistence.buildPractitionerNotifications(
-          offender = checkin.offender,
-          contactDetails = details,
-          checkin = checkin,
-          notificationType = NotificationType.PractitionerCheckinMissed,
-        )
+    val notificationsWithRecipients =
+      notificationPersistence.buildPractitionerNotifications(
+        offender = checkin.offender,
+        contactDetails = details.practitioner,
+        checkin = checkin,
+        notificationType = NotificationType.PractitionerCheckinMissed,
+      )
 
-      processAndSendNotifications(notificationsWithRecipients, personalisation)
-    }
+    processAndSendNotifications(notificationsWithRecipients, personalisation)
 
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_EXPIRED,
@@ -294,15 +225,6 @@ class NotificationOrchestratorV2Service(
       crn = checkin.offender.crn,
       description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
     )
-
-    if (details != null) {
-      eventAuditService.recordCheckinExpired(checkin, details)
-    } else {
-      LOGGER.warn(
-        "Cannot record audit for expired checkin {}: contact details not found",
-        checkin.uuid,
-      )
-    }
   }
 
   /** Get event detail for a given URL */

@@ -7,12 +7,15 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -29,6 +32,7 @@ class V2CheckinExpiryJob(
   private val transactionTemplate: TransactionTemplate,
   @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
+  private val eventAuditService: EventAuditV2Service,
 ) {
   @Scheduled(cron = "\${app.scheduling.v2-checkin-expiry.cron}")
   @SchedulerLock(
@@ -79,11 +83,7 @@ class V2CheckinExpiryJob(
         // Fetch contact details in batches for notifications (practitioner emails only) - NO
         // transaction
         val crns = checkins.map { it.offender.crn }.distinct()
-        val contactDetailsMap =
-          mutableMapOf<
-            String,
-            uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails,
-            >()
+        val contactDetailsMap = mutableMapOf<String, ContactDetails>()
 
         crns.chunked(NdiliusApiClient.MAX_BATCH_SIZE).forEachIndexed { batchIndex, batchCrns ->
           LOGGER.info("Fetching contact details batch {}: {} CRNs", batchIndex + 1, batchCrns.size)
@@ -92,25 +92,38 @@ class V2CheckinExpiryJob(
               ndiliusApiClient.getContactDetailsForMultiple(batchCrns).associateBy { it.crn }
             contactDetailsMap.putAll(batchDetails)
           } catch (e: Exception) {
-            LOGGER.error("Failed to fetch contact details for batch {}", batchIndex + 1, e)
+            LOGGER.warn("Failed to fetch contact details for batch {}", batchIndex + 1, e)
           }
         }
 
         // Send notifications with pre-fetched contact details - NO transaction
-        checkins.forEach { checkin ->
+        val sentNotifications = mutableListOf<Pair<OffenderCheckinV2, ContactDetails>>()
+        val notSentNotifications = mutableSetOf<Int>()
+        checkins.forEachIndexed { index, checkin ->
           try {
             val contactDetails = contactDetailsMap[checkin.offender.crn]
-            notificationService.sendCheckinExpiredNotifications(checkin, contactDetails)
+            if (contactDetails != null) {
+              notificationService.sendCheckinExpiredNotifications(checkin, contactDetails)
+              sentNotifications.add(Pair(checkin, contactDetails))
+            } else {
+              notSentNotifications.add(index)
+            }
+
             LOGGER.info(
-              "Sent expiry notifications for checkin {} (offender {}, due date was {})",
+              "Expiry notifications for checkin {} (offender {}, due date was {}): {}",
               checkin.uuid,
               checkin.offender.crn,
               checkin.dueDate,
+              if (contactDetails == null) "not sent (missing details)" else "sent",
             )
           } catch (e: Exception) {
-            LOGGER.error("Failed to send expiry notifications for checkin {}", checkin.uuid, e)
+            LOGGER.warn("Failed to send expiry notifications for checkin {}", checkin.uuid, e)
+            notSentNotifications.add(index)
           }
         }
+
+        eventAuditService.recordCheckinExpired(sentNotifications)
+        eventAuditService.recordCheckinExpired(notSentNotifications.map { Pair(checkins[it], null) })
       }
     } catch (e: Exception) {
       LOGGER.error("V2 Checkin Expiry Job failed", e)
