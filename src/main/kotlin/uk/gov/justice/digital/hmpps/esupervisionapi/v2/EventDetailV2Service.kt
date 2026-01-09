@@ -110,53 +110,53 @@ class EventDetailV2Service(
     return lines.joinToString("\n")
   }
 
-  private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType): String {
-    val lines = mutableListOf<String>()
+private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType): String {
+      val sb = StringBuilder()
 
-    when (eventType) {
-      DomainEventType.V2_SETUP_COMPLETED -> {
-        lines.add("Check in: ${formatHumanReadableDateTime(checkin.createdAt)}")
-      }
-      DomainEventType.V2_CHECKIN_CREATED -> {
-        lines.add("Check in created: ${formatHumanReadableDateTime(checkin.createdAt)}")
-      }
-      DomainEventType.V2_CHECKIN_SUBMITTED -> {
-        lines.add("Check in submitted: ${formatHumanReadableDateTime((checkin.submittedAt ?: checkin.createdAt))}")
-        checkin.autoIdCheck?.let {
-          lines.add("Automated ID check: ${formatIdCheckResult(it.name)}")
+      when (eventType) {
+        DomainEventType.V2_SETUP_COMPLETED -> {
+          sb.appendLine("Check in: ${formatHumanReadableDateTime(checkin.createdAt)}")
         }
-        checkin.surveyResponse?.let { survey ->
-          lines.add("")
-          lines.add("Survey response:")
-          lines.addAll(formatSurveyResponseHumanReadable(survey))
+        DomainEventType.V2_CHECKIN_CREATED -> {
+          sb.appendLine("Check in created: ${formatHumanReadableDateTime(checkin.createdAt)}")
         }
-      }
-      DomainEventType.V2_CHECKIN_REVIEWED -> {
-        lines.add("Check in reviewed: ${formatHumanReadableDateTime((checkin.reviewedAt ?: checkin.createdAt))}")
-        checkin.autoIdCheck?.let {
-          lines.add("Automated ID check: ${formatIdCheckResult(it.name)}")
+        DomainEventType.V2_CHECKIN_SUBMITTED -> {
+          sb.appendLine("Check in submitted: ${formatHumanReadableDateTime((checkin.submittedAt ?: checkin.createdAt))}")
+          checkin.autoIdCheck?.let {
+            sb.appendLine("Automated ID check: ${formatIdCheckResult(it.name)}")
+          }
+          checkin.surveyResponse?.let { survey ->
+            sb.appendLine()
+            sb.appendLine("Survey response:")
+            formatSurveyResponseHumanReadable(survey).forEach { sb.appendLine(it) }
+          }
         }
-        checkin.manualIdCheck?.let {
-          lines.add("Manual ID check: ${formatIdCheckResult(it.name)}")
-        }
-        lines.add("")
-        lines.add("Checkin status: Reviewed")
+        DomainEventType.V2_CHECKIN_REVIEWED -> {
+          sb.appendLine("Check in reviewed: ${formatHumanReadableDateTime((checkin.reviewedAt ?: checkin.createdAt))}")
+          checkin.autoIdCheck?.let {
+            sb.appendLine("Automated ID check: ${formatIdCheckResult(it.name)}")
+          }
+          checkin.manualIdCheck?.let {
+            sb.appendLine("Manual ID check: ${formatIdCheckResult(it.name)}")
+          }
+          sb.appendLine()
+          sb.appendLine("Checkin status: Reviewed")
 
-        val comments = eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED)).firstOrNull()?.notes
-        if (comments != null) lines.add("What action are you taking after reviewing this check in: $comments")
-      }
-      DomainEventType.V2_CHECKIN_EXPIRED -> {
-        lines.add("Check in expired: ${formatHumanReadableDateTime(checkin.createdAt)}")
-        lines.add("")
-        lines.add("Checkin status: Missed")
+          val comments = eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED)).firstOrNull()?.notes
+          if (comments != null) sb.appendLine("What action are you taking after reviewing this check in: $comments")
+        }
+        DomainEventType.V2_CHECKIN_EXPIRED -> {
+          sb.appendLine("Check in expired: ${formatHumanReadableDateTime(checkin.createdAt)}")
+          sb.appendLine()
+          sb.appendLine("Checkin status: Missed")
 
-        val comments = eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).firstOrNull()?.notes
-        if (comments != null) lines.add("Why did they miss their check in: $comments")
+          val comments = eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).firstOrNull()?.notes
+          if (comments != null) sb.appendLine("Why did they miss their check in: $comments")
+        }
       }
+
+      return sb.toString().trimEnd('\n')
     }
-
-    return lines.joinToString("\n")
-  }
 
   private fun formatHumanReadableDateTime(instant: Instant): String {
     val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy 'at' h:mma", Locale.UK)
