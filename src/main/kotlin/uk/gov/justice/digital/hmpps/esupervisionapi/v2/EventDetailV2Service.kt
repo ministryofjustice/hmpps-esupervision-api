@@ -142,16 +142,21 @@ class EventDetailV2Service(
         sb.appendLine()
         sb.appendLine("Checkin status: Reviewed")
 
-        val comments = eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED)).firstOrNull()?.notes
-        if (comments != null) sb.appendLine("What action are you taking after reviewing this check in: $comments")
+        eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED)).lastOrNull()?.let {
+          sb.appendLine("What action are you taking after reviewing this check in: ${it.notes}")
+        }
       }
       DomainEventType.V2_CHECKIN_EXPIRED -> {
         sb.appendLine("Check in expired: ${formatHumanReadableDateTime(checkin.createdAt)}")
         sb.appendLine()
         sb.appendLine("Checkin status: Missed")
 
-        val comments = eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).firstOrNull()?.notes
-        if (comments != null) sb.appendLine("Why did they miss their check in: $comments")
+        // Note: it's possible we get multiple log entries of that type as the "reviewCheckin" endpoint
+        // might get concurrent requests (and they would write log entries, but only one of them would update the checkin)
+        // We should ensure that does not happen, but if it does, let's return the last (query returns sorted by date asc)
+        eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).lastOrNull()?.let {
+          sb.appendLine("Why did they miss their check in: ${it.notes}")
+        }
       }
     }
 
