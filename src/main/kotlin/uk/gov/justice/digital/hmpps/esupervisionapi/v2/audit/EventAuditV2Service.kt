@@ -145,25 +145,35 @@ class EventAuditV2Service(
   /**
    * Record checkin expired event
    */
-  fun recordCheckinExpired(checkin: OffenderCheckinV2, contactDetails: ContactDetails?) {
+  fun recordCheckinExpired(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) {
     try {
-      if (contactDetails?.practitioner == null) {
-        LOGGER.warn("Cannot record audit for checkin {}: practitioner details not found", checkin.uuid)
-        return
+      val audits = mutableListOf<EventAuditV2>()
+      for ((checkin, contactDetails) in checkins) {
+        if (contactDetails?.practitioner == null) {
+          LOGGER.warn("Cannot record audit for checkin {}: practitioner details not found", checkin.uuid)
+          continue
+        }
+
+        audits.add(
+          buildAudit(
+            "CHECKIN_EXPIRED",
+            checkin.offender,
+            contactDetails,
+            checkin,
+            notes = "Expired by scheduled job",
+          ),
+        )
       }
 
-      val audit = buildAudit(
-        "CHECKIN_EXPIRED",
-        checkin.offender,
-        contactDetails,
-        checkin,
-        notes = "Expired by scheduled job",
-      )
-
-      transactionTemplate.execute { auditRepository.save(audit) }
-      LOGGER.info("Recorded CHECKIN_EXPIRED audit event for checkin={}", checkin.uuid)
+      if (audits.isNotEmpty()) {
+        transactionTemplate.execute { auditRepository.saveAll(audits) }
+        LOGGER.info("Recorded CHECKIN_EXPIRED audit events for {} checkins", audits.size)
+      } else {
+        LOGGER.info("No CHECKIN_EXPIRED audits to record")
+      }
     } catch (e: Exception) {
-      LOGGER.error("Failed to record checkin expired audit: {}", PiiSanitizer.sanitizeException(e, checkin.offender.crn, checkin.uuid))
+      val ids = checkins.map { "${it.first.offender.crn}:${it.first.uuid}" }.toTypedArray()
+      LOGGER.error("Failed to record checkin expired audits: {}  {}", ids, PiiSanitizer.sanitizeException(e, null, null))
     }
   }
 

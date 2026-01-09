@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
@@ -33,6 +34,7 @@ class CheckinV2Service(
   @Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
   @Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
+  private val eventAuditService: EventAuditV2Service,
 ) {
   /** Get checkin by UUID Optionally includes personal details from Ndilius */
   fun getCheckin(uuid: UUID, includePersonalDetails: Boolean = false): CheckinV2Dto {
@@ -168,16 +170,12 @@ class CheckinV2Service(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    // Validate state
     if (checkin.status != CheckinV2Status.CREATED) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin already submitted")
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't submit checkin with status: ${checkin.status}")
     }
 
     if (checkin.checkinStartedAt == null) {
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Identity must be verified before submission",
-      )
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Identity must be verified before submission")
     }
 
     // Verify video exists
@@ -198,11 +196,14 @@ class CheckinV2Service(
     LOGGER.info("Checkin submitted: {}", uuid)
 
     // Send notifications
-    notificationService.sendCheckinSubmittedNotifications(checkin)
+    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    if (contactDetails != null) {
+      notificationService.sendCheckinSubmittedNotifications(checkin, contactDetails)
+    }
 
-    // Fetch personal details for response
-    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails)
+    eventAuditService.recordCheckinSubmitted(checkin, contactDetails)
+
+    return checkin.dto(contactDetails)
   }
 
   /**
@@ -315,13 +316,16 @@ class CheckinV2Service(
 
     LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
 
-    // Send notifications
-    notificationService.sendCheckinReviewedNotifications(checkin)
+    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    if (contactDetails != null) {
+      notificationService.sendCheckinReviewedNotifications(checkin, contactDetails)
+    }
 
-    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    eventAuditService.recordCheckinReviewed(checkin, contactDetails)
+
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
-    return checkin.dto(personalDetails, videoUrl, snapshotUrl)
+    return checkin.dto(contactDetails, videoUrl, snapshotUrl)
   }
 
   /** Annotate a checkin */
@@ -507,7 +511,11 @@ class CheckinV2Service(
         null
       }
 
-    notificationService.sendCheckinCreatedNotifications(checkin, contactDetails)
+    if (contactDetails != null) {
+      notificationService.sendCheckinCreatedNotifications(checkin, contactDetails)
+    } else {
+      LOGGER.warn("Skipping manual notification for checkin {}: contact details not found", uuid)
+    }
 
     return checkin.dto(contactDetails)
   }

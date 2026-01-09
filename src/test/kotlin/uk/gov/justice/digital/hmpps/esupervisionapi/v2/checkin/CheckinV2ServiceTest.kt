@@ -24,6 +24,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
@@ -51,6 +52,7 @@ class CheckinV2ServiceTest {
   private val compareFacesService: OffenderIdVerifier = mock()
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
+  private val eventAuditService: EventAuditV2Service = mock()
 
   private lateinit var service: CheckinV2Service
 
@@ -69,6 +71,7 @@ class CheckinV2ServiceTest {
       compareFacesService,
       uploadTtlMinutes,
       faceSimilarityThreshold,
+      eventAuditService,
     )
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())
