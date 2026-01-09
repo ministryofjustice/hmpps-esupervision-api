@@ -111,4 +111,22 @@ class EventV2Resource(
 
     return ResponseEntity.ok(event)
   }
+
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/checkin-updated/{uuid}")
+  @Operation(
+    summary = "Get checkin updated event details",
+    description =
+    "Callback URL for Ndilius to query formatted notes for checkin updated event",
+  )
+  fun getCheckinUpdatedEvent(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<EventDetailResponse> {
+    val detailUrl = "/v2/events/checkin-updated/$uuid"
+    val event =
+      notificationService.getEventDetail(detailUrl)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found")
+
+    return ResponseEntity.ok(event)
+  }
 }

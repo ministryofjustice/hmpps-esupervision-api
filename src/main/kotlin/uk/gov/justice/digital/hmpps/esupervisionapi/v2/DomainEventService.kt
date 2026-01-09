@@ -30,7 +30,7 @@ class DomainEventService(
     crn: String,
     description: String,
   ) {
-    LOGGER.info(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
+    LOGGER.debug(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
     val detailUrl = "$apiBaseUrl/v2/events/${eventType.pathSegment}/$uuid"
 
     try {

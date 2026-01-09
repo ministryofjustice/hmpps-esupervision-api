@@ -8,6 +8,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
+import kotlin.jvm.optionals.getOrNull
 
 @Service
 class EventDetailV2Service(
@@ -42,6 +43,7 @@ class EventDetailV2Service(
       DomainEventType.V2_CHECKIN_REVIEWED,
       DomainEventType.V2_CHECKIN_EXPIRED,
       -> getCheckinEventDetail(uuid, domainEventType)
+      DomainEventType.V2_CHECKIN_UPDATED -> getCheckinUpdatedEventDetail(uuid)
       null -> {
         LOGGER.warn("Unknown event type in detail URL: {}", detailUrl)
         null
@@ -94,6 +96,41 @@ class EventDetailV2Service(
       checkinUuid = checkinUuid,
       timestamp = timestamp,
     )
+  }
+
+  private fun getCheckinUpdatedEventDetail(annotationUuid: UUID): EventDetailResponse? {
+    val annotation = eventLogRepository.findCheckinLogByUuid(annotationUuid).getOrNull()
+    if (annotation == null) {
+      LOGGER.warn("Checkin annotation not found for UUID: {}", annotationUuid)
+      return null
+    }
+    val checkin = checkinRepository.findByUuid(annotation.checkin).orElse(null)
+    if (checkin == null) {
+      LOGGER.warn("Checkin not found for UUID: {}", annotation.checkin)
+    }
+
+    val eventType = DomainEventType.V2_CHECKIN_UPDATED
+    val notes = formatCheckinUpdateNotes(annotation)
+
+    return EventDetailResponse(
+      eventReferenceId = "${eventType.eventTypeName}-$annotationUuid",
+      eventType = eventType.eventTypeName,
+      notes = notes,
+      crn = checkin.offender.crn,
+      offenderUuid = checkin.offender.uuid,
+      checkinUuid = annotation.checkin,
+      timestamp = annotation.createdAt,
+    )
+  }
+
+  private fun formatCheckinUpdateNotes(log: IOffenderCheckinLogEntryV2Dto): String {
+    val lines = mutableListOf<String>()
+
+    lines.add("Check in updated: ${formatHumanReadableDateTime(log.createdAt)}")
+    lines.add("Updated by: ${log.practitioner}")
+    lines.add("Notes: ${log.notes}")
+
+    return lines.joinToString("\n")
   }
 
   private fun formatSetupCompletedNotes(offender: OffenderV2): String {
@@ -157,6 +194,9 @@ class EventDetailV2Service(
         eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).lastOrNull()?.let {
           sb.appendLine("Why did they miss their check in: ${it.notes}")
         }
+      }
+      DomainEventType.V2_CHECKIN_UPDATED -> {
+
       }
     }
 

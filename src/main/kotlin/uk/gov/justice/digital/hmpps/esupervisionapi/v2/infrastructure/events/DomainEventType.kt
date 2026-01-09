@@ -32,6 +32,14 @@ enum class DomainEventType(
     "An e-Supervision V2 remote check-in was expired",
     "checkin-expired",
   ),
+
+  /** In esupervision we talk about "annotating a check-in" rather than "updating it",
+   * but external services call it "update". */
+  V2_CHECKIN_UPDATED(
+    "$V2_PREFIX.check-in.updated",
+    "An e-Supervision V2 remote check-in was updated",
+    "checkin-updated",
+  ),
   ;
 
   /** Event type name without V2_ prefix (e.g., "SETUP_COMPLETED" instead of "V2_SETUP_COMPLETED") */
