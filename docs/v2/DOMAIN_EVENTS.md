@@ -13,6 +13,7 @@ Domain events are published to AWS SQS for integration with Ndilius and other do
 | `V2_CHECKIN_SUBMITTED` | `checkin-submitted` | Offender submitted checkin | Yes |
 | `V2_CHECKIN_REVIEWED` | `checkin-reviewed` | Practitioner reviewed checkin | Yes |
 | `V2_CHECKIN_EXPIRED` | `checkin-expired` | Checkin marked as expired | Yes |
+| `V2_CHECKIN_UPDATED` | `checkin-updated` | Checkin updated (annotated) | Yes |
 
 ---
 
@@ -147,6 +148,13 @@ If they need us to contact them: Yes
 What they want to talk about: Need help with rent
 ```
 
+**Checkin Updated:**
+```
+Check in updated: 16 January 2025 at 10:00am
+Updated by: U123456
+Notes: Spoke to offender about housing issue. Referring to housing officer.
+```
+
 ---
 
 ## Event Callback Endpoints
@@ -158,6 +166,7 @@ What they want to talk about: Need help with rent
 | `GET` | `/v2/events/checkin-submitted/{uuid}` | Checkin submitted event details |
 | `GET` | `/v2/events/checkin-reviewed/{uuid}` | Checkin reviewed event details |
 | `GET` | `/v2/events/checkin-expired/{uuid}` | Checkin expired event details |
+| `GET` | `/v2/events/checkin-updated/{uuid}` | Checkin updated event details |
 
 ---
 
@@ -188,6 +197,7 @@ classDiagram
         V2_CHECKIN_SUBMITTED
         V2_CHECKIN_REVIEWED
         V2_CHECKIN_EXPIRED
+        V2_CHECKIN_UPDATED
         +eventTypeName: String
         +pathSegment: String
         +type: String

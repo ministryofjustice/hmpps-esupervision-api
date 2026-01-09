@@ -48,6 +48,13 @@ class NotificationV2Service(
   }
 
   /**
+   * Send notifications for checkin updated event
+   */
+  fun sendCheckinUpdatedNotifications(checkin: OffenderCheckinV2, annotation: OffenderEventLogV2) {
+    orchestrator.sendCheckinUpdatedNotifications(checkin, annotation)
+  }
+
+  /**
    * Get event detail for a given URL
    */
   fun getEventDetail(detailUrl: String): EventDetailResponse? = orchestrator.getEventDetail(detailUrl)

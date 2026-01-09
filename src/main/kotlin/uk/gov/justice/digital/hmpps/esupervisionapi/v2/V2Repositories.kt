@@ -266,8 +266,25 @@ interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long>
         c.uuid as checkin
     from OffenderEventLogV2 e
     left join OffenderCheckinV2 c on e.checkin = c.id
-    where e.checkin is not null and c = :checkin and e.logEntryType in :ofType  
+    where e.checkin is not null and c = :checkin and e.logEntryType in :ofType
+    order by e.createdAt desc
   """,
   )
-  fun findAllCheckinEvents(checkin: OffenderCheckinV2, ofType: Set<uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType>): List<IOffenderCheckinLogEntryV2Dto>
+  fun findAllCheckinEvents(checkin: OffenderCheckinV2, ofType: Set<LogEntryType>): List<IOffenderCheckinLogEntryV2Dto>
+
+  @Query(
+    """
+          select 
+        e.uuid as uuid,
+        e.comment as notes,
+        e.createdAt as createdAt,
+        e.logEntryType as logEntryType,
+        e.practitioner as practitioner,
+        c.uuid as checkin
+    from OffenderEventLogV2 e
+    left join OffenderCheckinV2 c on e.checkin = c.id
+    where e.uuid = :uuid and e.checkin is not null 
+    """,
+  )
+  fun findCheckinLogByUuid(uuid: UUID): Optional<IOffenderCheckinLogEntryV2Dto>
 }
