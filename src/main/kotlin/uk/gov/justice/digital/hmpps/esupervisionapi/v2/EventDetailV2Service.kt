@@ -13,6 +13,7 @@ import java.util.UUID
 class EventDetailV2Service(
   private val offenderRepository: OffenderV2Repository,
   private val checkinRepository: OffenderCheckinV2Repository,
+  private val eventLogRepository: OffenderEventLogV2Repository,
 ) {
 
   fun getEventDetail(detailUrl: String): EventDetailResponse? {
@@ -110,38 +111,56 @@ class EventDetailV2Service(
   }
 
   private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType): String {
-    val lines = mutableListOf<String>()
+    val sb = StringBuilder()
 
-    // Format timestamp with label appropriate to the event type
-    val (timestampLabel, timestamp) = when (eventType) {
-      DomainEventType.V2_CHECKIN_CREATED -> "Check in created" to checkin.createdAt
-      DomainEventType.V2_CHECKIN_SUBMITTED -> "Check in submitted" to (checkin.submittedAt ?: checkin.createdAt)
-      DomainEventType.V2_CHECKIN_REVIEWED -> "Check in reviewed" to (checkin.reviewedAt ?: checkin.createdAt)
-      DomainEventType.V2_CHECKIN_EXPIRED -> "Check in expired" to checkin.createdAt
-      else -> "Check in" to checkin.createdAt
-    }
-    lines.add("$timestampLabel: ${formatHumanReadableDateTime(timestamp)}")
+    when (eventType) {
+      DomainEventType.V2_SETUP_COMPLETED -> {
+        sb.appendLine("Check in: ${formatHumanReadableDateTime(checkin.createdAt)}")
+      }
+      DomainEventType.V2_CHECKIN_CREATED -> {
+        sb.appendLine("Check in created: ${formatHumanReadableDateTime(checkin.createdAt)}")
+      }
+      DomainEventType.V2_CHECKIN_SUBMITTED -> {
+        sb.appendLine("Check in submitted: ${formatHumanReadableDateTime((checkin.submittedAt ?: checkin.createdAt))}")
+        checkin.autoIdCheck?.let {
+          sb.appendLine("Automated ID check: ${formatIdCheckResult(it.name)}")
+        }
+        checkin.surveyResponse?.let { survey ->
+          sb.appendLine()
+          sb.appendLine("Survey response:")
+          formatSurveyResponseHumanReadable(survey).forEach { sb.appendLine(it) }
+        }
+      }
+      DomainEventType.V2_CHECKIN_REVIEWED -> {
+        sb.appendLine("Check in reviewed: ${formatHumanReadableDateTime((checkin.reviewedAt ?: checkin.createdAt))}")
+        checkin.autoIdCheck?.let {
+          sb.appendLine("Automated ID check: ${formatIdCheckResult(it.name)}")
+        }
+        checkin.manualIdCheck?.let {
+          sb.appendLine("Manual ID check: ${formatIdCheckResult(it.name)}")
+        }
+        sb.appendLine()
+        sb.appendLine("Checkin status: Reviewed")
 
-    // Automated ID check
-    checkin.autoIdCheck?.let {
-      lines.add("Automated ID check: ${formatIdCheckResult(it.name)}")
-    }
+        eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED)).lastOrNull()?.let {
+          sb.appendLine("What action are you taking after reviewing this check in: ${it.notes}")
+        }
+      }
+      DomainEventType.V2_CHECKIN_EXPIRED -> {
+        sb.appendLine("Check in expired: ${formatHumanReadableDateTime(checkin.createdAt)}")
+        sb.appendLine()
+        sb.appendLine("Checkin status: Missed")
 
-    // Manual ID check (for reviewed events)
-    if (eventType == DomainEventType.V2_CHECKIN_REVIEWED) {
-      checkin.manualIdCheck?.let {
-        lines.add("Manual ID check: ${formatIdCheckResult(it.name)}")
+        // Note: it's possible we get multiple log entries of that type as the "reviewCheckin" endpoint
+        // might get concurrent requests (and they would write log entries, but only one of them would update the checkin)
+        // We should ensure that does not happen, but if it does, let's return the last (query returns sorted by date asc)
+        eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).lastOrNull()?.let {
+          sb.appendLine("Why did they miss their check in: ${it.notes}")
+        }
       }
     }
 
-    // Survey response in human-readable format
-    checkin.surveyResponse?.let { survey ->
-      lines.add("")
-      lines.add("Survey response:")
-      lines.addAll(formatSurveyResponseHumanReadable(survey))
-    }
-
-    return lines.joinToString("\n")
+    return sb.toString().trimEnd('\n')
   }
 
   private fun formatHumanReadableDateTime(instant: Instant): String {
