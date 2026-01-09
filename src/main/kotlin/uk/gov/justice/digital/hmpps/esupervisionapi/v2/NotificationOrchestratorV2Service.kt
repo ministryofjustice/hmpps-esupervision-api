@@ -230,7 +230,7 @@ class NotificationOrchestratorV2Service(
   /** Send notifications for checkin updated event */
   fun sendCheckinUpdatedNotifications(checkin: OffenderCheckinV2, annotation: OffenderEventLogV2) {
     domainEventService.publishDomainEvent(
-      eventType = DomainEventType.V2_CHECKIN_UPDATED,
+      eventType = DomainEventType.V2_CHECKIN_ANNOTATED,
       uuid = annotation.uuid,
       crn = checkin.offender.crn,
       description = "Check-in updated for ${checkin.offender.crn}",

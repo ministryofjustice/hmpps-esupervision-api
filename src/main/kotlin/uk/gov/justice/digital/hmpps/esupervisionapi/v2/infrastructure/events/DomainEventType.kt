@@ -35,7 +35,7 @@ enum class DomainEventType(
 
   /** In esupervision we talk about "annotating a check-in" rather than "updating it",
    * but external services call it "update". */
-  V2_CHECKIN_UPDATED(
+  V2_CHECKIN_ANNOTATED(
     "$V2_PREFIX.check-in.updated",
     "An e-Supervision V2 remote check-in was annotated",
     "checkin-annotated",
