@@ -237,8 +237,8 @@ class EventDetailV2ServiceTest {
       val uuid = UUID.randomUUID()
       val offender = createOffender(UUID.randomUUID())
       val surveyResponse = mapOf(
-        "someFlag" to true,
-        "anotherFlag" to false,
+        "callback" to true,
+        "callbackDetails" to false,
       )
       val checkin = createCheckin(uuid, offender, surveyResponse = surveyResponse)
       whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
@@ -246,8 +246,8 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Some flag: Yes")
-      assertThat(result.notes).contains("Another flag: No")
+      assertThat(result!!.notes).contains("If they need us to contact them before their next appointment: Yes")
+      assertThat(result.notes).contains("What they want to talk about: No")
     }
 
     @Test
@@ -264,22 +264,6 @@ class EventDetailV2ServiceTest {
 
       assertThat(result).isNotNull
       assertThat(result!!.notes).contains("Anything they need support with: Mental Health, Need Housing")
-    }
-
-    @Test
-    fun `converts camelCase field names to human readable`() {
-      val uuid = UUID.randomUUID()
-      val offender = createOffender(UUID.randomUUID())
-      val surveyResponse = mapOf(
-        "someNewField" to "value",
-      )
-      val checkin = createCheckin(uuid, offender, surveyResponse = surveyResponse)
-      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-
-      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
-
-      assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Some new field: value")
     }
   }
 

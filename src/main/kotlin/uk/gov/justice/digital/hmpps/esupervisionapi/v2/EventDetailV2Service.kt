@@ -165,26 +165,15 @@ class EventDetailV2Service(
 
   /**
    * Format survey response in human-readable format
-   * Schema-agnostic: dynamically processes all fields except telemetry
    */
   private fun formatSurveyResponseHumanReadable(survey: Map<String, Any>): List<String> {
     val lines = mutableListOf<String>()
 
-    // Fields to skip (telemetry/metadata)
-    val skipFields = setOf(
-      "device",
-      "version",
-      "checkinStartedAt",
-      "timestamp",
-      "metadata",
-    )
-
-    // Custom labels for known fields (optional enhancement)
+    // Custom labels for known fields
     val customLabels = mapOf(
       "mentalHealth" to "How they have been feeling",
+      "mentalHealthComment" to "What they want us to know about how they have been feeling",
       "assistance" to "Anything they need support with",
-      "callback" to "If they need us to contact them before their next appointment",
-      "callbackDetails" to "What they want to talk about",
       "mentalHealthSupport" to "What they want us to know about mental health",
       "alcoholSupport" to "What they want us to know about alcohol",
       "drugsSupport" to "What they want us to know about drugs",
@@ -192,28 +181,26 @@ class EventDetailV2Service(
       "housingSupport" to "What they want us to know about housing",
       "supportSystemSupport" to "What they want us to know about their support system",
       "otherSupport" to "What they want us to know about something else",
+      "callback" to "If they need us to contact them before their next appointment",
+      "callbackDetails" to "What they want to talk about",
     )
 
-    for ((key, value) in survey) {
-      // Skip telemetry fields
-      if (key in skipFields) continue
+    for ((key, value) in customLabels) {
+      val surveyValue = survey[key]
 
       // Skip null or empty values
-      if (value == null) continue
-      if (value is String && value.isBlank()) continue
-      if (value is List<*> && value.isEmpty()) continue
-      if (value is Map<*, *> && value.isEmpty()) continue
-
-      // Get label (custom or generated from key)
-      val label = customLabels[key] ?: camelCaseToHumanReadable(key)
+      if (surveyValue == null) continue
+      if (surveyValue is String && surveyValue.isBlank()) continue
+      if (surveyValue is List<*> && surveyValue.isEmpty()) continue
+      if (surveyValue is Map<*, *> && surveyValue.isEmpty()) continue
 
       // Format the value based on its type
-      val formattedValue = formatValue(value)
+      val formattedValue = formatValue(surveyValue)
 
       // Skip if formatted value is empty
       if (formattedValue.isBlank()) continue
 
-      lines.add("$label: $formattedValue")
+      lines.add("$value: $formattedValue")
     }
 
     return lines
@@ -248,9 +235,9 @@ class EventDetailV2Service(
       value.equals("YES", ignoreCase = true) -> "Yes"
       value.equals("NO", ignoreCase = true) -> "No"
       // NO_HELP special case
-      value == "NO_HELP" -> ""
+      value == "NO_HELP" -> "No, I don't need any support"
       // SCREAMING_SNAKE_CASE to Title Case
-      value.contains("_") && value == value.uppercase() -> {
+      value == value.uppercase() -> {
         value.lowercase().split("_").joinToString(" ") { word ->
           word.replaceFirstChar { it.uppercase() }
         }
