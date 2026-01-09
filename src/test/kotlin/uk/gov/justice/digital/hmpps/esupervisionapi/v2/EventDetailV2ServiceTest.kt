@@ -20,12 +20,13 @@ class EventDetailV2ServiceTest {
 
   private val offenderRepository: OffenderV2Repository = mock()
   private val checkinRepository: OffenderCheckinV2Repository = mock()
+  private val eventLogRepository: OffenderEventLogV2Repository = mock()
 
   private lateinit var service: EventDetailV2Service
 
   @BeforeEach
   fun setUp() {
-    service = EventDetailV2Service(offenderRepository, checkinRepository)
+    service = EventDetailV2Service(offenderRepository, checkinRepository, eventLogRepository)
   }
 
   @Nested
