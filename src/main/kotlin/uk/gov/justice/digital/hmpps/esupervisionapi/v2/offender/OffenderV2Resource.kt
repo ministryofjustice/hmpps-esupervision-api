@@ -268,6 +268,15 @@ class OffenderV2Resource(
       updateRequired = true
     }
 
+    if (request.contactPreference != null) {
+      val preferenceUpdate = request.contactPreference
+      if (offender.contactPreference != preferenceUpdate.contactPreference) {
+        offender.contactPreference = preferenceUpdate.contactPreference
+        offender.updatedAt = clock.instant()
+        updateRequired = true
+      }
+    }
+
     if (updateRequired) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
@@ -354,6 +363,13 @@ data class CheckinScheduleUpdateRequest(
   val checkinInterval: CheckinInterval,
 )
 
+/** Request to update offender contact details */
+data class ContactPreferenceUpdateRequest(
+  @Schema(description = "Id of the user requesting the change", required = true)
+  val requestedBy: ExternalUserId,
+  val contactPreference: ContactPreference,
+)
+
 /**
  * Container for various offender details updates.
  *
@@ -362,7 +378,8 @@ data class CheckinScheduleUpdateRequest(
  * make it clear what the semantics of the update is/should be and make validation easier.
  */
 data class OffenderDetailsUpdateRequest(
-  val checkinSchedule: CheckinScheduleUpdateRequest?,
+  val checkinSchedule: CheckinScheduleUpdateRequest? = null,
+  val contactPreference: ContactPreferenceUpdateRequest? = null,
 )
 
 private fun newFirstCheckinDateIsToday(
