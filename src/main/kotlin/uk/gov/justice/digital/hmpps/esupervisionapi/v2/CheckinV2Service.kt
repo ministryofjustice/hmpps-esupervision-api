@@ -343,7 +343,7 @@ class CheckinV2Service(
       )
     }
 
-    offenderEventLogRepository.save(
+    val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = request.notes,
         createdAt = clock.instant(),
@@ -357,8 +357,7 @@ class CheckinV2Service(
 
     LOGGER.info("Checkin annotated: {} by {}", uuid, request.updatedBy)
 
-    // Send notifications - To be implemented
-    // notificationService.sendCheckinUpdatedNotifications(checkin)
+    notificationService.sendCheckinUpdatedNotifications(checkin, annotation)
 
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
     return checkin.dto(personalDetails)
