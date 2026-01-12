@@ -106,7 +106,7 @@ class EventDetailV2Service(
     }
     val checkin = checkinRepository.findByUuid(annotation.checkin).orElse(null)
     if (checkin == null) {
-      LOGGER.warn("Checkin not found for UUID: {}", annotation.checkin)
+      LOGGER.warn("Checkin not found for UUID={}, where annotation UUID={}", annotation.checkin, annotationUuid)
     }
 
     val eventType = DomainEventType.V2_CHECKIN_ANNOTATED
