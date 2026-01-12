@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContextV2
 import java.time.Clock
 import java.util.UUID
 
@@ -50,7 +51,7 @@ class NotificationPersistenceService(
           offender = offender,
           practitionerId = null,
           status = "created",
-          reference = offender.uuid.toString(),
+          reference = NotificationContextV2.generateReference(notificationType, clock),
           createdAt = clock.instant(),
           errorMessage = null,
           templateId = smsTemplateId,
@@ -80,7 +81,7 @@ class NotificationPersistenceService(
           offender = offender,
           practitionerId = null,
           status = "created",
-          reference = offender.uuid.toString(),
+          reference = NotificationContextV2.generateReference(notificationType, clock),
           createdAt = clock.instant(),
           errorMessage = null,
           templateId = emailTemplateId,
@@ -115,7 +116,7 @@ class NotificationPersistenceService(
     }
 
     val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
-    val reference = checkin?.uuid?.toString() ?: offender.uuid.toString()
+    val reference = NotificationContextV2.generateReference(notificationType, clock)
     val notification = GenericNotificationV2(
       notificationId = UUID.randomUUID(),
       eventType = notificationType.name,
