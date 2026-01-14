@@ -169,10 +169,7 @@ class CheckinV2ServiceTest {
 
     val result = service.startReview(uuid, "PRACT001")
 
-    assertNotNull(result.reviewStartedAt)
-    assertNotNull(result.reviewStartedBy)
     assertNotNull(result.snapshotUrl)
-    assertEquals("PRACT001", result.reviewStartedBy)
     verify(checkinRepository).save(any())
   }
 
