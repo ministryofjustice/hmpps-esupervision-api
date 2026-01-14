@@ -103,23 +103,23 @@ data class FacialRecognitionResult(
 
 /** V2 Offender DTO (no PII, only CRN) */
 data class OffenderV2Dto(
-  @Schema(description = "Unique identifier", required = true) val uuid: UUID,
-  @Schema(description = "Case Reference Number", required = true, example = "X123456")
+  @field:Schema(description = "Unique identifier", required = true) val uuid: UUID,
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
   val crn: String,
-  @Schema(description = "Practitioner ID", required = true)
+  @field:Schema(description = "Practitioner ID", required = true)
   val practitionerId: ExternalUserId,
-  @Schema(description = "Offender status", required = true) val status: OffenderStatus,
-  @Schema(description = "Date of first checkin", required = true)
-  @JsonDeserialize(using = LocalDateDeserializer::class)
+  @field:Schema(description = "Offender status", required = true) val status: OffenderStatus,
+  @field:Schema(description = "Date of first checkin", required = true)
+  @field:JsonDeserialize(using = LocalDateDeserializer::class)
   val firstCheckin: LocalDate,
-  @Schema(description = "Interval between checkins", required = true)
+  @field:Schema(description = "Interval between checkins", required = true)
   val checkinInterval: CheckinInterval,
-  @Schema(description = "Created timestamp", required = true) val createdAt: Instant,
-  @Schema(description = "Created by practitioner ID", required = true) val createdBy: String,
-  @Schema(description = "Last updated timestamp", required = true) val updatedAt: Instant,
-  @Schema(description = "Contact preference - phone or email", required = true)
+  @field:Schema(description = "Created timestamp", required = true) val createdAt: Instant,
+  @field:Schema(description = "Created by practitioner ID", required = true) val createdBy: String,
+  @field:Schema(description = "Last updated timestamp", required = true) val updatedAt: Instant,
+  @field:Schema(description = "Contact preference - phone or email", required = true)
   val contactPreference: ContactPreference,
-  @Schema(description = "Personal details from Ndilius (optional)", required = false)
+  @field:Schema(description = "Personal details from Ndilius (optional)", required = false)
   val personalDetails: ContactDetails? = null,
 )
 
@@ -199,44 +199,40 @@ enum class CheckinV2Status {
 
 /** V2 Checkin DTO */
 data class CheckinV2Dto(
-  @Schema(description = "Unique identifier", required = true) val uuid: UUID,
-  @Schema(description = "Case Reference Number", required = true) val crn: String,
-  @Schema(description = "Checkin status", required = true) val status: CheckinV2Status,
-  @Schema(description = "Due date", required = true)
-  @JsonDeserialize(using = LocalDateDeserializer::class)
+  @field:Schema(description = "Unique identifier", required = true) val uuid: UUID,
+  @field:Schema(description = "Case Reference Number", required = true) val crn: String,
+  @field:Schema(description = "Checkin status", required = true) val status: CheckinV2Status,
+  @field:Schema(description = "Due date", required = true)
+  @field:JsonDeserialize(using = LocalDateDeserializer::class)
   val dueDate: LocalDate,
-  @Schema(description = "Created timestamp", required = true) val createdAt: Instant,
-  @Schema(description = "Created by", required = true) val createdBy: String,
-  @Schema(description = "Submitted timestamp", required = false)
+  @field:Schema(description = "Created timestamp", required = true) val createdAt: Instant,
+  @field:Schema(description = "Created by", required = true) val createdBy: String,
+  @field:Schema(description = "Submitted timestamp", required = false)
   val submittedAt: Instant? = null,
-  @Schema(description = "Review started timestamp", required = false)
-  val reviewStartedAt: Instant? = null,
-  @Schema(description = "Review started by", required = false)
-  val reviewStartedBy: String? = null,
-  @Schema(description = "Reviewed timestamp", required = false)
+  @field:Schema(description = "Review started by", required = false)
   val reviewedAt: Instant? = null,
-  @Schema(description = "Reviewed by", required = false) val reviewedBy: String? = null,
-  @Schema(description = "Checkin started timestamp", required = false)
+  @field:Schema(description = "Reviewed by", required = false) val reviewedBy: String? = null,
+  @field:Schema(description = "Checkin started timestamp", required = false)
   val checkinStartedAt: Instant? = null,
-  @Schema(description = "Auto ID check result", required = false)
+  @field:Schema(description = "Auto ID check result", required = false)
   val autoIdCheck: AutomatedIdVerificationResult? = null,
-  @Schema(description = "Manual ID check result", required = false)
+  @field:Schema(description = "Manual ID check result", required = false)
   val manualIdCheck: ManualIdVerificationResult? = null,
-  @Schema(description = "Survey responses (JSONB)", required = false)
+  @field:Schema(description = "Survey responses (JSONB)", required = false)
   val surveyResponse: Map<String, Any>? = null,
-  @Schema(description = "Personal details from Ndilius (optional)", required = false)
+  @field:Schema(description = "Personal details from Ndilius (optional)", required = false)
   val personalDetails: ContactDetails? = null,
-  @Schema(description = "Presigned S3 URL for video playback", required = false)
+  @field:Schema(description = "Presigned S3 URL for video playback", required = false)
   val videoUrl: URL? = null,
-  @Schema(description = "Presigned S3 URL for snapshot image from the video", required = false)
+  @field:Schema(description = "Presigned S3 URL for snapshot image from the video", required = false)
   val snapshotUrl: URL? = null,
-  @Schema(description = "Risk management feedback", required = false)
+  @field:Schema(description = "Risk management feedback", required = false)
   val riskFeedback: Boolean? = null,
-  @Schema(description = "Checkin logs with practitioner notes", required = true)
+  @field:Schema(description = "Checkin logs with practitioner notes", required = true)
   val checkinLogs: CheckinLogsV2Dto,
-  @Schema(description = "Presigned S3 URL for reference photo", required = false)
+  @field:Schema(description = "Presigned S3 URL for reference photo", required = false)
   val photoUrl: URL? = null,
-  @Schema(description = "Notes of further actions to be taken after checkin review", required = false)
+  @field:Schema(description = "Notes of further actions to be taken after checkin review", required = false)
   val furtherActions: String? = null,
 )
 

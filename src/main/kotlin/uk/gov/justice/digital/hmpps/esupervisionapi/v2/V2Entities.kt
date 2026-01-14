@@ -198,8 +198,6 @@ open class OffenderCheckinV2(
     createdAt = createdAt,
     createdBy = createdBy,
     submittedAt = submittedAt,
-    reviewStartedAt = reviewStartedAt,
-    reviewStartedBy = reviewStartedBy,
     reviewedAt = reviewedAt,
     reviewedBy = reviewedBy,
     checkinStartedAt = checkinStartedAt,
