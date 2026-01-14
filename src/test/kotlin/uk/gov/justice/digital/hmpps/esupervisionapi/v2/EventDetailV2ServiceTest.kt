@@ -268,6 +268,29 @@ class EventDetailV2ServiceTest {
     }
   }
 
+  @Test
+  fun `adds annotations`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(UUID.randomUUID())
+    val checkin = createCheckin(uuid, offender, status = CheckinV2Status.SUBMITTED)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    val logEntry = OffenderCheckinLogEntryV2Dto(
+      UUID.randomUUID(),
+      notes = "Some note",
+      createdAt = Instant.now().minusSeconds(10),
+      logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+      practitioner = checkin.offender.practitionerId,
+      checkin = uuid,
+    )
+    whenever(eventLogRepository.findCheckinLogByUuid(logEntry.uuid)).thenReturn(Optional.of(logEntry))
+
+    val result = service.getEventDetail("/v2/events/checkin-annotated/${logEntry.uuid}")
+
+    assertThat(result).isNotNull
+    assertThat(result!!.notes).contains("Some note")
+    assertThat(result.notes).contains("Annotated by: ${checkin.offender.practitionerId}")
+  }
+
   @Nested
   inner class SetupCompletedNotesFormatting {
 

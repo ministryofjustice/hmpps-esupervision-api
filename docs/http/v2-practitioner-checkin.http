@@ -1,0 +1,30 @@
+@checkin_uuid = 71cdfa85-83fd-4a75-ae26-f1315de4eed5
+@practitioner_id = ??
+
+### [PRACTITIONER] Review a checkin
+POST {{HOST}}/v2/offender_checkins/{{checkin_uuid}}/review
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+  "reviewedBy": "{{practitioner_id}}",
+  "manualIdCheck": "MATCH",
+  "notes": "Everything good",
+  "riskManagementFeedback": null
+}
+
+### [PRACTITIONER] Annotate a reviewed (or expired checkin)
+POST {{HOST}}/v2/offender_checkins/{{checkin_uuid}}/annotate
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+  "updatedBy": "{{practitioner_id}}",
+  "notes": "This is an annotation of a checkin"
+}
+
+### [NDILIUS] Get annotation event details
+GET {{HOST}}/v2/events/checkin-updated/298d6607-1731-4f2e-a9ee-60406604a7db
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+

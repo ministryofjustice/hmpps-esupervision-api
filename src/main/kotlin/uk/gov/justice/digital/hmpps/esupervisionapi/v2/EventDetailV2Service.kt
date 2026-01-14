@@ -8,6 +8,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
+import kotlin.jvm.optionals.getOrNull
 
 @Service
 class EventDetailV2Service(
@@ -42,6 +43,7 @@ class EventDetailV2Service(
       DomainEventType.V2_CHECKIN_REVIEWED,
       DomainEventType.V2_CHECKIN_EXPIRED,
       -> getCheckinEventDetail(uuid, domainEventType)
+      DomainEventType.V2_CHECKIN_ANNOTATED -> getCheckinAnnotatedEventDetail(uuid)
       null -> {
         LOGGER.warn("Unknown event type in detail URL: {}", detailUrl)
         null
@@ -96,6 +98,31 @@ class EventDetailV2Service(
     )
   }
 
+  private fun getCheckinAnnotatedEventDetail(annotationUuid: UUID): EventDetailResponse? {
+    val annotation = eventLogRepository.findCheckinLogByUuid(annotationUuid).getOrNull()
+    if (annotation == null) {
+      LOGGER.warn("Checkin annotation not found for UUID: {}", annotationUuid)
+      return null
+    }
+    val checkin = checkinRepository.findByUuid(annotation.checkin).orElse(null)
+    if (checkin == null) {
+      LOGGER.warn("Checkin not found for UUID={}, where annotation UUID={}", annotation.checkin, annotationUuid)
+    }
+
+    val eventType = DomainEventType.V2_CHECKIN_ANNOTATED
+    val notes = formatCheckinNotes(checkin, eventType, annotation)
+
+    return EventDetailResponse(
+      eventReferenceId = "${eventType.eventTypeName}-$annotationUuid",
+      eventType = eventType.eventTypeName,
+      notes = notes,
+      crn = checkin.offender.crn,
+      offenderUuid = checkin.offender.uuid,
+      checkinUuid = annotation.checkin,
+      timestamp = annotation.createdAt,
+    )
+  }
+
   private fun formatSetupCompletedNotes(offender: OffenderV2): String {
     val lines = mutableListOf<String>()
     lines.add("Registration Completed")
@@ -110,7 +137,7 @@ class EventDetailV2Service(
     return lines.joinToString("\n")
   }
 
-  private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType): String {
+  private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType, logEntry: IOffenderCheckinLogEntryV2Dto? = null): String {
     val sb = StringBuilder()
 
     when (eventType) {
@@ -156,6 +183,15 @@ class EventDetailV2Service(
         // We should ensure that does not happen, but if it does, let's return the last (query returns sorted by date asc)
         eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).lastOrNull()?.let {
           sb.appendLine("Why did they miss their check in: ${it.notes}")
+        }
+      }
+      DomainEventType.V2_CHECKIN_ANNOTATED -> {
+        if (logEntry == null) {
+          LOGGER.warn("Checkin annotated event without log entry: {} of type {}", checkin.uuid, eventType)
+        } else {
+          sb.appendLine("Check in updated: ${formatHumanReadableDateTime(logEntry.createdAt)}")
+          sb.appendLine("Annotated by: ${logEntry.practitioner}")
+          sb.appendLine("Notes: ${logEntry.notes}")
         }
       }
     }
