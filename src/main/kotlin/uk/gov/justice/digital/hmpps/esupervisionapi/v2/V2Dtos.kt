@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
@@ -234,7 +235,36 @@ data class CheckinV2Dto(
   val photoUrl: URL? = null,
   @field:Schema(description = "Notes of further actions to be taken after checkin review", required = false)
   val furtherActions: String? = null,
-)
+) {
+  @get:Schema(description = "Flagged keys of the survey")
+  @get:JsonProperty("flaggedResponses")
+  val flaggedResponses: List<String>
+    get() {
+      val survey = surveyResponse
+      if (survey == null) {
+        return emptyList()
+      }
+
+      val result = mutableListOf<String>()
+      val mentalHealth = survey.get("mentalHealth")
+      if (mentalHealth == "NOT_GREAT" || mentalHealth == "STRUGGLING") {
+        result.add("mentalHealth")
+      }
+
+      val assistance = survey.get("assistance")
+      val noAssistanceNeeded = listOf("NO_HELP")
+      if (assistance != null && assistance != noAssistanceNeeded) {
+        result.add("assistance")
+      }
+
+      val callback = survey.get("callback")
+      if (callback == "YES") {
+        result.add("callback")
+      }
+
+      return result.toList()
+    }
+}
 
 /** Submit checkin request */
 data class SubmitCheckinV2Request(
