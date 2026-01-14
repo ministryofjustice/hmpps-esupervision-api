@@ -13,7 +13,7 @@ object NotificationContextV2 {
       NotificationType.OffenderCheckinSubmitted -> "OSUB-$date"
       NotificationType.OffenderCheckinsStopped -> "OSTP-$date"
       NotificationType.RegistrationConfirmation -> "OREG-$date"
-      NotificationType.OffenderCheckinInvite -> "CHK-$date"
+      NotificationType.OffenderCheckinInvite -> "OCHK-$date"
 
       // Practitioner notifications
       NotificationType.PractitionerCheckinSubmitted -> "PSUB-$date"

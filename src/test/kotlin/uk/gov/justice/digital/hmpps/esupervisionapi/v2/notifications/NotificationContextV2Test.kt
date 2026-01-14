@@ -16,7 +16,7 @@ class NotificationContextV2Test {
     assertEquals("OSUB-2025-01-15", NotificationContextV2.generateReference(NotificationType.OffenderCheckinSubmitted, clock))
     assertEquals("OSTP-2025-01-15", NotificationContextV2.generateReference(NotificationType.OffenderCheckinsStopped, clock))
     assertEquals("OREG-2025-01-15", NotificationContextV2.generateReference(NotificationType.RegistrationConfirmation, clock))
-    assertEquals("CHK-2025-01-15", NotificationContextV2.generateReference(NotificationType.OffenderCheckinInvite, clock))
+    assertEquals("OCHK-2025-01-15", NotificationContextV2.generateReference(NotificationType.OffenderCheckinInvite, clock))
     assertEquals("PSUB-2025-01-15", NotificationContextV2.generateReference(NotificationType.PractitionerCheckinSubmitted, clock))
     assertEquals("PEXP-2025-01-15", NotificationContextV2.generateReference(NotificationType.PractitionerCheckinMissed, clock))
     assertEquals("PING-2025-01-15", NotificationContextV2.generateReference(NotificationType.PractitionerInviteIssueGeneric, clock))
