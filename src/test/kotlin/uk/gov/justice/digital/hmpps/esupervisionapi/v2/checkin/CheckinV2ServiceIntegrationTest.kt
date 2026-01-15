@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -165,5 +166,83 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
     assertNotNull(result.personalDetails)
     assertEquals("John", result.personalDetails?.name?.forename)
     assertEquals("Doe", result.personalDetails?.name?.surname)
+  }
+
+  @Test
+  fun `getCheckin - with flagged survey answers - calculates flags correctly`() {
+    val offender = offenderV2Repository.save(
+      OffenderV2(
+        uuid = UUID.randomUUID(),
+        crn = "X234567",
+        practitionerId = "PRACT001",
+        firstCheckin = LocalDate.now(),
+        checkinInterval = Duration.ofDays(7),
+        createdAt = Instant.now(),
+        createdBy = "SYSTEM",
+        updatedAt = Instant.now(),
+        contactPreference = ContactPreference.PHONE,
+      ),
+    )
+
+    val checkin = checkinV2Repository.save(
+      OffenderCheckinV2(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinV2Status.SUBMITTED,
+        dueDate = LocalDate.now(),
+        createdAt = Instant.now(),
+        createdBy = "PRACT001",
+        surveyResponse = mapOf(
+          "mentalHealth" to "STRUGGLING",
+          "callback" to "YES",
+          "assistance" to listOf("HELP"),
+        ),
+      ),
+    )
+
+    val result = checkinV2Service.getCheckin(checkin.uuid, includePersonalDetails = false)
+
+    assertEquals(3, result.flaggedResponses.size)
+    assertTrue(result.flaggedResponses.contains("mentalHealth"))
+    assertTrue(result.flaggedResponses.contains("callback"))
+    assertTrue(result.flaggedResponses.contains("assistance"))
+  }
+
+  @Test
+  fun `getCheckin - with non-flagged survey answers - returns empty flaggedResponses`() {
+    val offender = offenderV2Repository.save(
+      OffenderV2(
+        uuid = UUID.randomUUID(),
+        crn = "X345678",
+        practitionerId = "PRACT001",
+        firstCheckin = LocalDate.now(),
+        checkinInterval = Duration.ofDays(7),
+        createdAt = Instant.now(),
+        createdBy = "SYSTEM",
+        updatedAt = Instant.now(),
+        contactPreference = ContactPreference.PHONE,
+      ),
+    )
+
+    val checkin = checkinV2Repository.save(
+      OffenderCheckinV2(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinV2Status.SUBMITTED,
+        dueDate = LocalDate.now(),
+        createdAt = Instant.now(),
+        createdBy = "PRACT001",
+        surveyResponse = mapOf(
+          "mentalHealth" to "GREAT",
+          "callback" to "NO",
+          "assistance" to listOf("NO_HELP"),
+        ),
+      ),
+    )
+
+    val result = checkinV2Service.getCheckin(checkin.uuid, includePersonalDetails = false)
+
+    assertNotNull(result.flaggedResponses)
+    assertTrue(result.flaggedResponses.isEmpty(), "Expected flaggedResponses to be empty, but found: ${result.flaggedResponses}")
   }
 }
