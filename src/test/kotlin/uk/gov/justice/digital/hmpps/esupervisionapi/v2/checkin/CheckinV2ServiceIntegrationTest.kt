@@ -193,6 +193,7 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
         createdAt = Instant.now(),
         createdBy = "PRACT001",
         surveyResponse = mapOf(
+          "version" to "2025-07-10@pilot",
           "mentalHealth" to "STRUGGLING",
           "callback" to "YES",
           "assistance" to listOf("HELP"),
@@ -233,6 +234,7 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
         createdAt = Instant.now(),
         createdBy = "PRACT001",
         surveyResponse = mapOf(
+          "version" to "2025-07-10@pilot",
           "mentalHealth" to "GREAT",
           "callback" to "NO",
           "assistance" to listOf("NO_HELP"),

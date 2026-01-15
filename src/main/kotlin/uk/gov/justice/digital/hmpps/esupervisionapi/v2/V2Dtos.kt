@@ -236,34 +236,60 @@ data class CheckinV2Dto(
   @field:Schema(description = "Notes of further actions to be taken after checkin review", required = false)
   val furtherActions: String? = null,
 ) {
-  @get:Schema(description = "Flagged keys of the survey")
   @get:JsonProperty("flaggedResponses")
   val flaggedResponses: List<String>
+    @Schema(description = "Flagged keys of the survey")
     get() {
-      val survey = surveyResponse
-      if (survey == null) {
+      if (surveyResponse == null) {
         return emptyList()
       }
 
-      val result = mutableListOf<String>()
-      val mentalHealth = survey.get("mentalHealth")
-      if (mentalHealth == "NOT_GREAT" || mentalHealth == "STRUGGLING") {
-        result.add("mentalHealth")
+      val version = surveyResponse.get("version")
+      if (version != null) {
+        val fn = versionToFlaggingFn.get(version as String)
+        if (fn != null) {
+          return fn(surveyResponse)
+        }
       }
 
-      val assistance = survey.get("assistance")
-      val noAssistanceNeeded = listOf("NO_HELP")
-      if (assistance != null && assistance != noAssistanceNeeded) {
-        result.add("assistance")
-      }
-
-      val callback = survey.get("callback")
-      if (callback == "YES") {
-        result.add("callback")
-      }
-
-      return result.toList()
+      return emptyList()
     }
+}
+
+private typealias SurveyContents = Map<String, Any>
+
+/**
+ * Maps survey versions to flagging functions.
+ * Add new survey versions here as they are created.
+ */
+private val versionToFlaggingFn = mapOf<String, (SurveyContents) -> List<String>>(
+  "2025-07-10@pilot" to { flaggedFor20250710pilot(it) },
+  "2026-0-07@pre" to { flaggedFor20250710pilot(it) },
+)
+
+/**
+ * Flagging logic for the pre-pilot and pilot version of survey
+ */
+private fun flaggedFor20250710pilot(survey: SurveyContents): List<String> {
+  val result = mutableListOf<String>()
+
+  val mentalHealth = survey.get("mentalHealth")
+  if (mentalHealth == "NOT_GREAT" || mentalHealth == "STRUGGLING") {
+    result.add("mentalHealth")
+  }
+
+  val assistance = survey.get("assistance")
+  val noAssistanceNeeded = listOf("NO_HELP")
+  if (assistance != null && assistance != noAssistanceNeeded) {
+    result.add("assistance")
+  }
+
+  val callback = survey.get("callback")
+  if (callback == "YES") {
+    result.add("callback")
+  }
+
+  return result.toList()
 }
 
 /** Submit checkin request */
