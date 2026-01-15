@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationFailureException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -110,14 +111,18 @@ class OffenderSetupV2Service(
    * Complete offender setup Verifies photo, changes status to VERIFIED, sends notifications, and
    * creates first checkin if due
    */
+  @Transactional
   fun completeOffenderSetup(uuid: UUID): OffenderV2Dto {
     val setup =
       offenderSetupRepository.findByUuid(uuid).getOrElse {
         throw BadArgumentException("No setup for given uuid=$uuid")
       }
     val photoUploaded = s3UploadService.isSetupPhotoUploaded(setup)
-    val offender = setup.offender
+    if (!photoUploaded) {
+      throw InvalidOffenderSetupState("No uploaded photo for setup uuid=$uuid", setup)
+    }
 
+    val offender = setup.offender
     val contactDetails =
       try {
         ndiliusApiClient.getContactDetails(offender.crn)
@@ -126,64 +131,42 @@ class OffenderSetupV2Service(
         null
       }
 
-    if (!photoUploaded) {
-      throw InvalidOffenderSetupState("No uploaded photo for setup uuid=$uuid", setup)
-    }
-
     val now = clock.instant()
-    val firstCheckinDate = offender.firstCheckin
-    val shouldCreateFirstCheckin = firstCheckinDate <= LocalDate.now(clock)
+    offender.status = OffenderStatus.VERIFIED
+    offender.updatedAt = now
+    val savedOffender = offenderRepository.save(offender)
 
-    val (savedOffender, savedCheckin) =
-      transactionTemplate.execute {
-        offender.status = OffenderStatus.VERIFIED
-        offender.updatedAt = now
-        val saved = offenderRepository.save(offender)
-
-        val checkin =
-          if (shouldCreateFirstCheckin) {
-            val newCheckin =
-              OffenderCheckinV2(
-                uuid = UUID.randomUUID(),
-                offender = saved,
-                status = CheckinV2Status.CREATED,
-                dueDate = firstCheckinDate,
-                createdAt = now,
-                createdBy = "SYSTEM",
-              )
-            checkinRepository.save(newCheckin)
-          } else {
-            null
-          }
-
-        Pair(saved, checkin)
-      }!!
-
-    LOGGER.info(
-      "Completed V2 offender setup: offender={}, crn={}, setup={}",
-      savedOffender.uuid,
-      savedOffender.crn,
-      uuid,
-    )
-
-    if (savedCheckin != null) {
-      LOGGER.info(
-        "Created first checkin for V2 offender={}, checkin={}",
-        savedOffender.uuid,
-        savedCheckin.uuid,
+    var checkin: OffenderCheckinV2? = null
+    val checkinDueToday = savedOffender.firstCheckin == LocalDate.now(clock)
+    if (checkinDueToday) {
+      checkin = checkinRepository.save(
+        OffenderCheckinV2(
+          uuid = UUID.randomUUID(),
+          offender = savedOffender,
+          status = CheckinV2Status.CREATED,
+          dueDate = savedOffender.firstCheckin,
+          createdAt = now,
+          createdBy = "SYSTEM",
+        ),
       )
     }
 
+    LOGGER.info(
+      "Completed V2 offender setup: offender={}, crn={}, setup={}, checkin={}",
+      savedOffender.uuid,
+      savedOffender.crn,
+      uuid,
+      checkin?.uuid ?: "not due",
+    )
     notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails)
 
-    if (savedCheckin != null) {
-      if (contactDetails != null) {
-        notificationService.sendCheckinCreatedNotifications(savedCheckin, contactDetails)
-      } else {
-        LOGGER.warn(
-          "Skipping checkin created notifications for checkin {}: contact details not found",
-          savedCheckin.uuid,
-        )
+    checkin?.let {
+      try {
+        contactDetails?.let { notificationService.sendCheckinCreatedNotifications(checkin, contactDetails) }
+      } catch (e: NotificationFailureException) {
+        LOGGER.info("Notification failure {}", e.message, e)
+      } catch (e: Exception) {
+        LOGGER.warn("Unknown notification failure {}", checkin.uuid, e)
       }
     }
 

@@ -57,7 +57,7 @@ class GeneratingStubDataProvider : StubDataProvider {
         forename = "Person",
         surname = "Number${parsed.person}",
       ),
-      mobile = "0770090${parsed.person.padStart(4, '0')}",
+      mobile = "0770${parsed.person.padStart(4, '0')}",
       email = "person.number${parsed.person}@example.com",
       practitioner = PractitionerDetails(
         name = Name(

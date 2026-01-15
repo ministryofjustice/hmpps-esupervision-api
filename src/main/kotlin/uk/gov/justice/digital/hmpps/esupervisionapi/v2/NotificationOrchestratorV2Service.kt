@@ -17,6 +17,11 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /**
+ * We don't want the cause here because we 1) log it here, 2) need to sanitize any PII
+ */
+class NotificationFailureException(message: String) : RuntimeException(message)
+
+/**
  * V2 Notification Orchestrator Service Orchestrates notification sending by coordinating between:
  * - NotificationPersistenceService for building and persisting notifications
  * - NotifyGatewayService for GOV.UK Notify API calls
@@ -120,11 +125,12 @@ class NotificationOrchestratorV2Service(
       processAndSendNotifications(notificationsWithRecipients, personalisation)
     } catch (e: Exception) {
       val sanitized = PiiSanitizer.sanitizeException(e, checkin.offender.crn, checkin.offender.uuid)
-      LOGGER.error(
+      LOGGER.warn(
         "Failed to send checkin created notifications for checkin {}: {}",
         checkin.uuid,
         sanitized,
       )
+      throw NotificationFailureException("Failed to send checkin created notification. Checkin uuid=${checkin.uuid}")
     }
   }
 
@@ -290,7 +296,7 @@ class NotificationOrchestratorV2Service(
             notification.offender?.crn,
             notification.offender?.uuid,
           )
-        LOGGER.error(
+        LOGGER.warn(
           "Failed to send {} to {}: {}",
           notification.channel,
           notification.recipientType,
