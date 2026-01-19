@@ -1,0 +1,63 @@
+package uk.gov.justice.digital.hmpps.esupervisionapi.integration.health
+
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.BeforeEach
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType.APPLICATION_JSON
+
+class FeedbackTest : IntegrationTestBase() {
+
+  private lateinit var practitionerRoleAuthHeaders: (HttpHeaders) -> Unit
+
+  @BeforeEach
+  internal fun setUp() {
+    practitionerRoleAuthHeaders = setAuthorisation(roles = listOf("ESUPERVISION__ESUPERVISION_UI"))
+  }
+
+  @Test
+  fun `Feedback endpoints support creation and getting of feedback`() {
+
+    webTestClient.get()
+      .uri("/v2/feedback")
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody()
+      .jsonPath("$.content.length()").isEqualTo(0)
+
+    webTestClient.post()
+      .uri("/v2/feedback")
+      .headers(practitionerRoleAuthHeaders)
+      .contentType(APPLICATION_JSON)
+      .bodyValue(
+        """
+        {
+          "feedback": {
+            "howEasy": "veryEasy",
+            "gettingSupport": "yes",
+            "improvements": [
+              "findingOutAboutCheckIns",
+              "textOrEmailNotifications",
+              "somethingElse"
+            ]
+          }
+        }
+        """.trimIndent()
+      )
+      .exchange()
+      .expectStatus().isCreated
+
+    webTestClient.get()
+      .uri("/v2/feedback")
+      .headers(practitionerRoleAuthHeaders)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody()
+      .jsonPath("$.content[0].feedback.howEasy").isEqualTo("veryEasy")
+      .jsonPath("$.content[0].feedback.gettingSupport").isEqualTo("yes")
+      .jsonPath("$.content[0].feedback.improvements[0]").isEqualTo("findingOutAboutCheckIns")
+      .jsonPath("$.content[0].feedback.improvements[1]").isEqualTo("textOrEmailNotifications")
+      .jsonPath("$.content[0].feedback.improvements[2]").isEqualTo("somethingElse")
+  }
+}
