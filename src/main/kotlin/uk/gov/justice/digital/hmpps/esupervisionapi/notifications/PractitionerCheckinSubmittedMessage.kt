@@ -16,7 +16,6 @@ data class PractitionerCheckinSubmittedMessage(
   val autoIdCheck: AutomatedIdVerificationResult?,
   val contactRequested: Boolean,
 ) : Message {
-
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
     "practitionerName" to practitionerName,
     "name" to "$offenderFirstName $offenderLastName",
