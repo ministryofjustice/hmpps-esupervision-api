@@ -264,7 +264,9 @@ private typealias SurveyContents = Map<String, Any>
  */
 private val versionToFlaggingFn = mapOf<String, (SurveyContents) -> List<String>>(
   "2025-07-10@pilot" to { flaggedFor20250710pilot(it) },
+  // the one below was added to the UI repo with incorrect date formatting. Keeping it here in the mapping in case there are entries in dev that use the incorrect date.
   "2026-0-07@pre" to { flaggedFor20250710pilot(it) },
+  "2026-01-07@pre" to { flaggedFor20250710pilot(it) },
 )
 
 /**
