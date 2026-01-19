@@ -178,7 +178,10 @@ url: "https://checkin.example.com/v2/checkin/{uuid}"
 name: "John Smith"
 practitionerName: "practitioner123"
 number: "2"  // Number of flags
+contactRequestFlag: "yes" // Yes or no values to determine the optional content in notify template
+autoIdFailedFlag: "no" // Yes or no values to determine the optional content in notify template
 dashboardSubmissionUrl: "https://mpop.example.com/review/{uuid}"
+
 ```
 
 **Checkin Expired (Practitioner Alert):**
