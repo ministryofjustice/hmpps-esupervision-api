@@ -1,0 +1,23 @@
+### Get all feedback
+GET {{HOST}}/v2/feedback
+Authorization: Bearer {{hmpps_auth.token}}
+
+> {%
+    console.log("response body", response.body)
+ %}
+
+### Create some feedback
+POST {{HOST}}/v2/feedback
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+    "feedback": {
+      "howEasy": "veryEasy",
+      "gettingSupport": "yes",
+      "improvements": ["findingOutAboutCheckIns", "textOrEmailNotifications", "somethingElse"]
+    }
+}
+> {%
+    console.log("response body", response.body)
+ %}
