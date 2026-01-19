@@ -154,9 +154,9 @@ class NotificationOrchestratorV2Service(
       val autoIdFailed = checkin.autoIdCheck == null ||
         checkin.autoIdCheck != AutomatedIdVerificationResult.MATCH
       val totalFlags = surveyFlags + if (autoIdFailed) 1 else 0
-      // If "callback" is flagged, show the text within notify by sending 'yes'. 
+      // If "callback" is flagged, show the text within notify by sending 'yes'.
       val contactRequestFlag = if (flaggedResponses.contains("callback")) "yes" else "no"
-      // If "autoIdFailedFlag" is flagged, show the text within notify by sending 'yes'. 
+      // If "autoIdFailedFlag" is flagged, show the text within notify by sending 'yes'.
       val autoIdFailedFlag = if (autoIdFailed) "yes" else "no"
       // Include all params needed by both offender and practitioner templates
       val personalisation =
