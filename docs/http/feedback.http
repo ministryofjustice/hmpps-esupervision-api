@@ -13,6 +13,7 @@ Content-Type: application/json
 
 {
     "feedback": {
+      "version": 1,
       "howEasy": "veryEasy",
       "gettingSupport": "yes",
       "improvements": ["findingOutAboutCheckIns", "textOrEmailNotifications", "somethingElse"]
