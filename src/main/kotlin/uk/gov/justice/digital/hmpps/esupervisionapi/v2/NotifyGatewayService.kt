@@ -132,7 +132,7 @@ class NotifyGatewayService(
         PiiSanitizer.sanitizeMessage(message, null, null),
       )
     } else {
-      LOGGER.error(
+      LOGGER.warn(
         "GOV.UK Notify {} failed: reference={}, templateId={}, httpStatus={}, error={}",
         channel,
         reference,

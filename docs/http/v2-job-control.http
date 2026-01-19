@@ -1,0 +1,5 @@
+### Trigger checkin creation job
+POST {{HOST}}/v2/jobs/checkin-creation
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+

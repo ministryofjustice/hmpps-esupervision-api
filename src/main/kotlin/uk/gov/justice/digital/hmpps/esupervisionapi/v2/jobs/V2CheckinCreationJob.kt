@@ -1,24 +1,54 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
+import jakarta.persistence.EntityManager
+import jakarta.persistence.PersistenceContext
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
-import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusBatchFetchException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationFailureException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.BatchCheckinCreationException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.V2CheckinCreationJob.Companion.LOGGER
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
+import kotlin.math.min
 import kotlin.streams.asSequence
+
+private class JobMetrics {
+  var processed = 0
+  var created = 0
+  var errors = 0
+  var notifsSent = 0
+  var chunks = 0
+}
+
+private fun JobMetrics.info(logger: Logger, jobId: Long, duration: Duration) {
+  logger.info(
+    "Checkin Creation Job(id={}) completed: processed={}, created={}, failed={}, notifications={}, chunks={}, took={}",
+    jobId,
+    this.processed,
+    this.created,
+    this.errors,
+    this.notifsSent,
+    this.chunks,
+    duration,
+  )
+}
 
 /**
  * V2 Checkin Creation Job
@@ -34,7 +64,8 @@ class V2CheckinCreationJob(
   private val checkinCreationService: CheckinCreationService,
   private val notificationService: NotificationV2Service,
   private val jobLogRepository: JobLogV2Repository,
-  private val transactionTemplate: TransactionTemplate,
+  @PersistenceContext private val entityManager: EntityManager,
+  @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
 ) {
   @Scheduled(cron = "\${app.scheduling.v2-checkin-creation.cron}")
   @SchedulerLock(
@@ -42,110 +73,83 @@ class V2CheckinCreationJob(
     lockAtLeastFor = "PT5S",
     lockAtMostFor = "PT30M",
   )
+  @Transactional
   fun process() {
     val now = clock.instant()
     val today = LocalDate.now(clock)
-
-    LOGGER.info("V2 Checkin Creation Job started: creating checkins for date={}", today)
-
-    val logEntry = transactionTemplate.execute {
-      val entry = JobLogV2(jobType = "V2_CHECKIN_CREATION", createdAt = now)
-      jobLogRepository.saveAndFlush(entry)
-      entry
-    }!!
-
-    var totalCreated = 0
+    val logEntry = jobLogRepository.saveAndFlush(JobLogV2(jobType = "V2_CHECKIN_CREATION", createdAt = now))
+    LOGGER.info("Checkin Creation Job(id={}) started: creating checkins for date={}", logEntry.id, today)
+    val metrics = JobMetrics()
 
     try {
       val lowerBound = today
       val upperBound = today.plusDays(1)
+      val finalChunkSize = min(chunkSize, NdiliusApiClient.MAX_BATCH_SIZE)
 
-      val offenders = transactionTemplate.execute {
-        offenderRepository.findEligibleForCheckinCreation(lowerBound, upperBound).use { stream ->
-          stream.asSequence().toList()
-        }
-      }!!
+      offenderRepository.findEligibleForCheckinCreation(lowerBound, upperBound).use { stream ->
+        stream.asSequence()
+          .chunked(finalChunkSize)
+          .forEach { chunk ->
+            try {
+              metrics.chunks += 1
+              LOGGER.info("Processing chunk {} with {} offenders", metrics.chunks, chunk.size)
 
-      LOGGER.info("Found {} offenders eligible for checkin creation", offenders.size)
-
-      if (offenders.isNotEmpty()) {
-        // Batch check which offenders already have checkins for today - avoid N+1 queries
-        val existingCheckins = transactionTemplate.execute {
-          checkinRepository.findByOffendersAndDueDate(offenders, today)
-        }!!
-        val offendersWithCheckins = existingCheckins.map { it.offender.uuid }.toSet()
-        LOGGER.info("Found {} offenders with existing checkins for {}", offendersWithCheckins.size, today)
-
-        val crns = offenders.map { it.crn }
-        val offenderMap = offenders.associateBy { it.crn }
-
-        crns.chunked(NdiliusApiClient.MAX_BATCH_SIZE).forEachIndexed { batchIndex, batchCrns ->
-          LOGGER.info("Processing batch {}: {} CRNs", batchIndex + 1, batchCrns.size)
-
-          val contactDetailsMap = ndiliusApiClient.getContactDetailsForMultiple(batchCrns)
-            .associateBy { it.crn }
-
-          LOGGER.info("Fetched contact details for {}/{} CRNs", contactDetailsMap.size, batchCrns.size)
-
-          val missingCrns = batchCrns.filter { it !in contactDetailsMap }
-          if (missingCrns.isNotEmpty()) {
-            LOGGER.warn("Contact details not found for {} CRNs: {}", missingCrns.size, missingCrns.take(10))
-          }
-
-          // Collect checkins to create in batch
-          val checkinsToCreate = mutableListOf<Pair<OffenderCheckinV2, ContactDetails>>()
-
-          batchCrns.forEach { crn ->
-            val offender = offenderMap[crn]
-            val contactDetails = contactDetailsMap[crn]
-
-            if (offender != null && contactDetails != null) {
-              // Skip if offender already has a checkin for today (in-memory check, no DB query)
-              if (offender.uuid !in offendersWithCheckins) {
-                val checkinData = checkinCreationService.prepareCheckinForOffender(offender, today)
-                if (checkinData != null) {
-                  checkinsToCreate.add(checkinData to contactDetails)
-                }
-              } else {
-                LOGGER.debug("Checkin already exists for offender {} on date {}", offender.crn, today)
+              val offendersByCrn = chunk.associateBy { it.crn }
+              val contactDetailsMap = getContactDetailsMap(offendersByCrn.keys.toList(), metrics.chunks)
+              val missing = offendersByCrn.keys.minus(contactDetailsMap.keys)
+              if (missing.isNotEmpty()) {
+                LOGGER.info("Contact details not found for {} CRNs in chunk {}. CRNS: {}", missing.size, metrics.chunks, missing)
               }
-            } else if (offender != null) {
-              LOGGER.warn("Skipping checkin creation for offender {}: contact details not found", crn)
-            }
-          }
 
-          // Batch insert all checkins using CheckinCreationService
-          if (checkinsToCreate.isNotEmpty()) {
-            val savedCheckins = checkinCreationService.batchCreateCheckins(checkinsToCreate.map { it.first })
-            totalCreated += savedCheckins.size
+              val checkinsToCreate = mutableListOf<Pair<OffenderCheckinV2, ContactDetails>>()
+              for (crn in contactDetailsMap.keys) {
+                val checkin = checkinCreationService.prepareCheckinForOffender(offendersByCrn[crn]!!, today)
+                checkinsToCreate.add(Pair(checkin, contactDetailsMap[crn]!!))
+              }
+              metrics.processed += contactDetailsMap.size
 
-            // Send notifications for created checkins
-            savedCheckins.forEachIndexed { index, checkin ->
-              val contactDetails = checkinsToCreate[index].second
-              try {
+              val savedCheckins = checkinCreationService.batchCreateCheckins(checkinsToCreate.map { it.first })
+              metrics.created += savedCheckins.size
+
+              for ((checkin, contactDetails) in checkinsToCreate) {
                 notificationService.sendCheckinCreatedNotifications(checkin, contactDetails)
-              } catch (e: Exception) {
-                LOGGER.error("Failed to send notifications for checkin {}", checkin.uuid, e)
+                metrics.notifsSent += 1
               }
+            } catch (e: NdiliusBatchFetchException) {
+              metrics.errors += e.crns.size // already logged elsewhere
+            } catch (e: BatchCheckinCreationException) {
+              LOGGER.warn("Failed to create {} checkins for chunk {}", e.checkins.size, metrics.chunks, e)
+              metrics.errors += e.checkins.size
+            } catch (e: NotificationFailureException) {
+              LOGGER.warn("Failed to send notifications for chunk {}: {}", metrics.chunks, e.message) // stack logged elsewhere
             }
+
+            entityManager.flush()
+            entityManager.clear()
           }
-        }
       }
     } catch (e: Exception) {
-      LOGGER.error("V2 Checkin Creation Job failed", e)
+      LOGGER.warn("Checkin Creation Job(id={}) failed, metrics={}", logEntry.id, metrics, e)
     }
 
     val endTime = clock.instant()
-    transactionTemplate.execute {
-      logEntry.endedAt = endTime
-      jobLogRepository.saveAndFlush(logEntry)
-    }
+    logEntry.endedAt = endTime
+    jobLogRepository.saveAndFlush(logEntry)
 
-    LOGGER.info(
-      "V2 Checkin Creation Job completed: created={}, took={}",
-      totalCreated,
-      Duration.between(now, endTime),
-    )
+    metrics.info(LOGGER, jobId = logEntry.id, Duration.between(now, endTime))
+  }
+
+  private fun getContactDetailsMap(
+    crns: List<String>,
+    numChunks: Int,
+  ): Map<String, ContactDetails> {
+    val contactDetailsMap = try {
+      ndiliusApiClient.getContactDetailsForMultiple(crns).associateBy { it.crn }
+    } catch (e: NdiliusBatchFetchException) {
+      LOGGER.warn("Failed to fetch contact details for chunk {}", numChunks, e)
+      throw e
+    }
+    return contactDetailsMap
   }
 
   companion object {

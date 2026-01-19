@@ -16,8 +16,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.time.Clock
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 import java.util.UUID
+
+class BatchCheckinCreationException(val checkins: List<OffenderCheckinV2>, cause: Exception) : RuntimeException("Failed to batch create checkins", cause)
 
 /**
  * Checkin Creation Service
@@ -99,7 +100,11 @@ class CheckinCreationService(
       }
 
     if (contactDetails != null) {
-      notificationService.sendCheckinCreatedNotifications(saved, contactDetails)
+      try {
+        notificationService.sendCheckinCreatedNotifications(saved, contactDetails)
+      } catch (e: Exception) {
+        LOGGER.info("Failed to send checkin created notifications for checkin {}", saved.uuid, e)
+      }
     } else {
       LOGGER.warn("Skipping notifications for checkin {}: contact details not found", saved.uuid)
     }
@@ -112,6 +117,7 @@ class CheckinCreationService(
    * Batch create checkins (used by job for efficiency)
    * @param checkins List of checkins to create
    * @return List of saved checkins
+   * @throws BatchCheckinCreationException
    */
   @Transactional
   fun batchCreateCheckins(checkins: List<OffenderCheckinV2>): List<OffenderCheckinV2> {
@@ -132,8 +138,7 @@ class CheckinCreationService(
 
       savedCheckins
     } catch (e: Exception) {
-      LOGGER.error("Failed to batch create {} checkins", checkins.size, e)
-      emptyList()
+      throw BatchCheckinCreationException(checkins, e)
     }
   }
 
@@ -142,31 +147,16 @@ class CheckinCreationService(
    * Does not save to database - call batchCreateCheckins() to persist
    * @param offender Offender entity
    * @param dueDate Due date for checkin
-   * @return Checkin entity ready to save, or null if not eligible
+   * @return Checkin entity ready to save
    */
-  fun prepareCheckinForOffender(offender: OffenderV2, dueDate: LocalDate): OffenderCheckinV2? {
-    try {
-      val daysSinceFirstCheckin = ChronoUnit.DAYS.between(offender.firstCheckin, dueDate)
-      val intervalDays = offender.checkinInterval.toDays()
-
-      if (intervalDays <= 0 || daysSinceFirstCheckin % intervalDays != 0L) {
-        LOGGER.debug("Checkin not due for offender {} on date {}", offender.crn, dueDate)
-        return null
-      }
-
-      return OffenderCheckinV2(
-        uuid = UUID.randomUUID(),
-        offender = offender,
-        status = CheckinV2Status.CREATED,
-        dueDate = dueDate,
-        createdAt = clock.instant(),
-        createdBy = "SYSTEM",
-      )
-    } catch (e: Exception) {
-      LOGGER.error("Failed to prepare checkin for offender {}", offender.crn, e)
-      return null
-    }
-  }
+  fun prepareCheckinForOffender(offender: OffenderV2, dueDate: LocalDate): OffenderCheckinV2 = OffenderCheckinV2(
+    uuid = UUID.randomUUID(),
+    offender = offender,
+    status = CheckinV2Status.CREATED,
+    dueDate = dueDate,
+    createdAt = clock.instant(),
+    createdBy = "SYSTEM",
+  )
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinCreationService::class.java)
