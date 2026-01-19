@@ -1,10 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.health
 
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.BeforeEach
-import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import org.junit.jupiter.api.Test
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType.APPLICATION_JSON
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 
 class FeedbackTest : IntegrationTestBase() {
 
@@ -17,7 +17,6 @@ class FeedbackTest : IntegrationTestBase() {
 
   @Test
   fun `Feedback endpoints support creation and getting of feedback`() {
-
     webTestClient.get()
       .uri("/v2/feedback")
       .headers(practitionerRoleAuthHeaders)
@@ -43,7 +42,7 @@ class FeedbackTest : IntegrationTestBase() {
             ]
           }
         }
-        """.trimIndent()
+        """.trimIndent(),
       )
       .exchange()
       .expectStatus().isCreated
