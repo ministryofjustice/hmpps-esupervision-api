@@ -8,7 +8,10 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
+
+class NdiliusBatchFetchException(val crns: List<CRN>, message: String, cause: Exception) : RuntimeException(message, cause)
 
 interface INdiliusApiClient {
   fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
@@ -59,6 +62,7 @@ class NdiliusApiClient(
   /**
    * Get contact details for multiple people on probation (max 500 CRNs)
    * POST /cases
+   * @throws NdiliusBatchFetchException
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
   @Retry(name = "ndiliusApi")
@@ -83,8 +87,8 @@ class NdiliusApiClient(
         .collectList()
         .block() ?: emptyList()
     } catch (e: Exception) {
-      LOGGER.error("Error fetching contact details for batch: {}", PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null) + " [batchSize=${batchCrns.size}]")
-      throw e
+      LOGGER.warn("Error fetching contact details for batch: {}", PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null) + " [batchSize=${batchCrns.size}]")
+      throw NdiliusBatchFetchException(crns, "Error fetching contact details", e)
     }
   }
 

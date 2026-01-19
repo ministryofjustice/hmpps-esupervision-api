@@ -32,6 +32,8 @@ app:
     # V2 Scheduled Jobs (core features - always enabled)
     v2-checkin-creation:
       cron: "0 0 9 * * *"  # Every day at 9 AM (matches V1 timing)
+      # we process offender records in chunks
+      chunk-size: 100
     v2-checkin-expiry:
       cron: "0 15 9 * * *"  # Every day at 9:15 AM (matches V1 timing)
       grace-period-days: 3
