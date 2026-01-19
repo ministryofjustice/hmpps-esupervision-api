@@ -33,6 +33,7 @@ class FeedbackTest : IntegrationTestBase() {
         """
         {
           "feedback": {
+            "version": 1,
             "howEasy": "veryEasy",
             "gettingSupport": "yes",
             "improvements": [
@@ -53,10 +54,36 @@ class FeedbackTest : IntegrationTestBase() {
       .exchange()
       .expectStatus().isOk
       .expectBody()
+      .jsonPath("$.content.length()").isEqualTo(1)
       .jsonPath("$.content[0].feedback.howEasy").isEqualTo("veryEasy")
       .jsonPath("$.content[0].feedback.gettingSupport").isEqualTo("yes")
       .jsonPath("$.content[0].feedback.improvements[0]").isEqualTo("findingOutAboutCheckIns")
       .jsonPath("$.content[0].feedback.improvements[1]").isEqualTo("textOrEmailNotifications")
       .jsonPath("$.content[0].feedback.improvements[2]").isEqualTo("somethingElse")
+  }
+
+  @Test
+  fun `Create feedback endpoint gives 400 if no version is provided in payload`() {
+    webTestClient.post()
+      .uri("/v2/feedback")
+      .headers(practitionerRoleAuthHeaders)
+      .contentType(APPLICATION_JSON)
+      .bodyValue(
+        """
+        {
+          "feedback": {
+            "howEasy": "veryEasy",
+            "gettingSupport": "yes",
+            "improvements": [
+              "findingOutAboutCheckIns",
+              "textOrEmailNotifications",
+              "somethingElse"
+            ]
+          }
+        }
+        """.trimIndent(),
+      )
+      .exchange()
+      .expectStatus().isBadRequest
   }
 }

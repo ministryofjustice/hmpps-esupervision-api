@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.security.access.AccessDeniedException
+import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -27,6 +28,21 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.InvalidOffenderSetu
 
 @RestControllerAdvice
 class HmppsESupervisionExceptionHandler {
+
+  @ExceptionHandler(MethodArgumentNotValidException::class)
+  fun handleMethodArgumentNotValid(e: MethodArgumentNotValidException): ResponseEntity<ErrorResponse> {
+    val messages = e.bindingResult.fieldErrors
+      .joinToString("; ") { "${it.field}: ${it.defaultMessage}" }
+
+    return ResponseEntity.badRequest().body(
+      ErrorResponse(
+        status = BAD_REQUEST,
+        userMessage = messages,
+        developerMessage = messages,
+        moreInfo = null,
+      ),
+    )
+  }
 
   @ExceptionHandler(ResourceNotFoundException::class)
   fun resourceNotFoundException(e: ResourceNotFoundException): ResponseEntity<ErrorResponse> = ResponseEntity

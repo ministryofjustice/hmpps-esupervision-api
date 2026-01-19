@@ -3,8 +3,11 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.feedback
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Constraint
+import jakarta.validation.Payload
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotEmpty
+import jakarta.validation.constraints.NotNull
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Feedback
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.feedback.FeedbackService
 import java.time.Instant
+import kotlin.reflect.KClass
 
 @RestController
 @RequestMapping("/v2/feedback", produces = ["application/json"])
@@ -33,6 +37,7 @@ class FeedbackResource(private val service: FeedbackService) {
     description = "Create a new feedback row. Expects JSON with the feedback questions.",
   )
   @ApiResponse(responseCode = "201", description = "Feedback saved successfully")
+  @ApiResponse(responseCode = "400", description = "Invalid request: feedback payload is missing the required 'version' field or contains invalid values")
   @PostMapping
   fun submitFeedback(@Valid @RequestBody request: FeedbackRequest): ResponseEntity<FeedbackResponse> {
     val saved = service.createFeedback(request.feedback)
@@ -51,8 +56,22 @@ class FeedbackResource(private val service: FeedbackService) {
   }
 }
 
+@Target(AnnotationTarget.FIELD)
+@Retention(AnnotationRetention.RUNTIME)
+@Constraint(validatedBy = [FeedbackVersionValidator::class])
+annotation class RequiresVersion(
+  val message: String = "feedback must contain a version field",
+  val groups: Array<KClass<*>> = [],
+  val payload: Array<KClass<out Payload>> = [],
+)
+
 /** Request DTO for creating feedback */
-data class FeedbackRequest(@field:NotEmpty val feedback: Map<String, Any>)
+data class FeedbackRequest(
+  @field:NotNull
+  @field:NotEmpty
+  @field:RequiresVersion
+  val feedback: Map<String, Any>,
+)
 
 /** Response DTO for feedback */
 data class FeedbackResponse(val id: Long, val feedback: Map<String, Any>, val createdAt: Instant)
