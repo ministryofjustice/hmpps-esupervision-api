@@ -148,7 +148,7 @@ class NotificationOrchestratorV2Service(
 
     try {
       // Calculate flags (survey flags + 1 if auto ID check failed/missing)
-      val surveyFlags = countSurveyFlags(checkin.surveyResponse)
+      val surveyFlags = checkin.dto(details).flaggedResponses.size
       val autoIdFailed = checkin.autoIdCheck == null ||
         checkin.autoIdCheck != AutomatedIdVerificationResult.MATCH
       val totalFlags = surveyFlags + if (autoIdFailed) 1 else 0
@@ -325,33 +325,6 @@ class NotificationOrchestratorV2Service(
       CheckinInterval.TWO_WEEKS -> "two weeks"
       CheckinInterval.FOUR_WEEKS -> "four weeks"
       CheckinInterval.EIGHT_WEEKS -> "eight weeks"
-    }
-
-    /** Count flagged survey responses - matches V1 flagging logic */
-    private fun countSurveyFlags(surveyResponse: Map<String, Any>?): Int {
-      if (surveyResponse == null) return 0
-
-      var count = 0
-
-      // Mental health flags
-      val mentalHealth = surveyResponse["mentalHealth"]
-      if (mentalHealth == "NOT_GREAT" || mentalHealth == "STRUGGLING") {
-        count++
-      }
-
-      // Assistance flags (anything other than NO_HELP)
-      val assistance = surveyResponse["assistance"]
-      if (assistance != null && assistance != listOf("NO_HELP")) {
-        count++
-      }
-
-      // Callback flag
-      val callback = surveyResponse["callback"]
-      if (callback == "YES") {
-        count++
-      }
-
-      return count
     }
   }
 }
