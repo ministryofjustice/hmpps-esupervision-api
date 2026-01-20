@@ -405,3 +405,16 @@ open class OffenderEventLogV2(
   @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true)
   open var offender: OffenderV2? = null,
 ) : V2BaseEntity()
+
+/**
+ * Feedback table
+ */
+@Entity
+@Table(name = "feedback")
+open class Feedback(
+  @Column(nullable = false)
+  open var feedback: Map<String, Any>,
+
+  @Column(name = "created_at", nullable = false)
+  open var createdAt: Instant,
+) : V2BaseEntity()
