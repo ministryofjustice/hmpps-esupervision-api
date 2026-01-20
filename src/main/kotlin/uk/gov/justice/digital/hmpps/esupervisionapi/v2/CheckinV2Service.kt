@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -75,7 +74,16 @@ class CheckinV2Service(
 
     val furtherActions = events.firstOrNull { it.logEntryType == LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED }?.notes
 
-    return checkin.dto(personalDetails, videoUrl, snapshotUrl, checkinLogs, photoUrl, furtherActions)
+    return checkin.dto(
+      personalDetails,
+      videoUrl,
+      snapshotUrl,
+      checkinLogs,
+      photoUrl,
+      furtherActions,
+      clock = clock,
+      checkinWindow = checkinWindowPeriod,
+    )
   }
 
   /**
@@ -209,7 +217,7 @@ class CheckinV2Service(
 
     eventAuditService.recordCheckinSubmitted(checkin, contactDetails)
 
-    return checkin.dto(contactDetails)
+    return checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
   /**
@@ -288,7 +296,7 @@ class CheckinV2Service(
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
-    return checkin.dto(personalDetails, videoUrl, snapshotUrl)
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
   /** Complete checkin review */
@@ -331,7 +339,7 @@ class CheckinV2Service(
 
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
-    return checkin.dto(contactDetails, videoUrl, snapshotUrl)
+    return checkin.dto(contactDetails, videoUrl, snapshotUrl, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
   /** Annotate a checkin */
@@ -366,7 +374,7 @@ class CheckinV2Service(
     notificationService.sendCheckinUpdatedNotifications(checkin, annotation)
 
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails)
+    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
   /** Get proxy URL for checkin video */
@@ -471,7 +479,7 @@ class CheckinV2Service(
 
     // Fetch personal details for response
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails)
+    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
   @Transactional
@@ -496,7 +504,7 @@ class CheckinV2Service(
 
     // Fetch personal details for response
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails)
+    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
   @Transactional
@@ -522,7 +530,7 @@ class CheckinV2Service(
       LOGGER.warn("Skipping manual notification for checkin {}: contact details not found", uuid)
     }
 
-    return checkin.dto(contactDetails)
+    return checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
   @Transactional
@@ -587,7 +595,7 @@ class CheckinV2Service(
           )
       }
 
-    val checkins = page.content.map { it.dto(null) }
+    val checkins = page.content.map { it.dto(null, clock = clock, checkinWindow = checkinWindowPeriod) }
     return CheckinCollectionV2Response(
       pagination =
       PaginationV2(
@@ -637,15 +645,4 @@ fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewI
 
   assert(checkin.status.canTransitionTo(newStatus))
   return CheckinReviewInfo(newStatus, comment, logEntryType)
-}
-
-fun OffenderCheckinV2.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
-  assert(checkinWindow.days > 1)
-  val submissionDate = clock.today()
-  val finalCheckinDate = if (checkinWindow.days <= 1) {
-    this.dueDate
-  } else {
-    this.dueDate.plus(checkinWindow.minusDays(1))
-  }
-  return finalCheckinDate < submissionDate
 }

@@ -81,6 +81,25 @@ class CheckinV2ServiceTest {
   }
 
   @Test
+  fun `getCheckin - returns EXPIRED checkin when past due date`() {
+    // this is safeguard against the case when for some reason the checkin has not yet been
+    // marked as EXPIRED, but the due date has passed
+    val dueDate = LocalDate.now(clock).minusDays(4)
+    val checkin = OffenderCheckinV2(
+      uuid = UUID.randomUUID(),
+      offender = createOffender(),
+      status = CheckinV2Status.CREATED,
+      dueDate = dueDate.minusDays(4),
+      createdAt = dueDate.minusDays(4).atStartOfDay(clock.zone).toInstant(),
+      createdBy = "SYSTEM",
+    )
+
+    whenever(checkinRepository.findByUuid(checkin.uuid)).thenReturn(Optional.of(checkin))
+    val result = service.getCheckin(checkin.uuid)
+    assertEquals(CheckinV2Status.EXPIRED, result.status)
+  }
+
+  @Test
   fun `submitCheckin - happy path - updates status to SUBMITTED`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender()

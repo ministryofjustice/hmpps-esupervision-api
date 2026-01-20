@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -19,9 +20,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificati
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.persistence.V2BaseEntity
 import java.math.BigDecimal
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
 
 /**
@@ -190,28 +193,47 @@ open class OffenderCheckinV2(
     checkinLogs: CheckinLogsV2Dto = CheckinLogsV2Dto(CheckinLogsHintV2.OMITTED, emptyList()),
     photoUrl: java.net.URL? = null,
     furtherActions: String? = null,
-  ): CheckinV2Dto = CheckinV2Dto(
-    uuid = uuid,
-    crn = offender.crn,
-    status = status,
-    dueDate = dueDate,
-    createdAt = createdAt,
-    createdBy = createdBy,
-    submittedAt = submittedAt,
-    reviewedAt = reviewedAt,
-    reviewedBy = reviewedBy,
-    checkinStartedAt = checkinStartedAt,
-    autoIdCheck = autoIdCheck,
-    manualIdCheck = manualIdCheck,
-    riskFeedback = riskFeedback,
-    surveyResponse = surveyResponse,
-    personalDetails = personalDetails,
-    videoUrl = videoUrl,
-    snapshotUrl = snapshotUrl,
-    checkinLogs = checkinLogs,
-    photoUrl = photoUrl,
-    furtherActions = furtherActions,
-  )
+    clock: Clock? = null,
+    checkinWindow: Period = Period.ofDays(3),
+  ): CheckinV2Dto {
+    var checkinStatus = status
+    if (clock != null && status == CheckinV2Status.CREATED && isPastSubmissionDate(clock, checkinWindow)) {
+      checkinStatus = CheckinV2Status.EXPIRED
+    }
+
+    return CheckinV2Dto(
+      uuid = uuid,
+      crn = offender.crn,
+      status = checkinStatus,
+      dueDate = dueDate,
+      createdAt = createdAt,
+      createdBy = createdBy,
+      submittedAt = submittedAt,
+      reviewedAt = reviewedAt,
+      reviewedBy = reviewedBy,
+      checkinStartedAt = checkinStartedAt,
+      autoIdCheck = autoIdCheck,
+      manualIdCheck = manualIdCheck,
+      riskFeedback = riskFeedback,
+      surveyResponse = surveyResponse,
+      personalDetails = personalDetails,
+      videoUrl = videoUrl,
+      snapshotUrl = snapshotUrl,
+      checkinLogs = checkinLogs,
+      photoUrl = photoUrl,
+      furtherActions = furtherActions,
+    )
+  }
+}
+
+fun OffenderCheckinV2.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
+  val submissionDate = clock.today()
+  val finalCheckinDate = if (checkinWindow.days <= 1) {
+    this.dueDate
+  } else {
+    this.dueDate.plus(checkinWindow.minusDays(1))
+  }
+  return finalCheckinDate < submissionDate
 }
 
 /**
