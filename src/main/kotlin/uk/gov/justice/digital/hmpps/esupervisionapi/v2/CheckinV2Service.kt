@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -17,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
+import java.time.Period
 import java.util.UUID
 
 /** V2 Checkin Service Handles all checkin business logic for V2 */
@@ -35,7 +37,12 @@ class CheckinV2Service(
   @Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
   private val eventAuditService: EventAuditV2Service,
+  @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
+  private val gracePeriodDays: Int,
 ) {
+
+  private val checkinWindowPeriod = Period.ofDays(gracePeriodDays)
+
   /** Get checkin by UUID Optionally includes personal details from Ndilius */
   fun getCheckin(uuid: UUID, includePersonalDetails: Boolean = false): CheckinV2Dto {
     val checkin =
@@ -134,13 +141,12 @@ class CheckinV2Service(
         "Cannot upload to checkin with status: ${checkin.status}",
       )
     }
+    if (checkin.isPastSubmissionDate(clock, checkinWindowPeriod)) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin is past submission date")
+    }
 
     val ttl = Duration.ofMinutes(uploadTtlMinutes)
-
-    // Generate video upload location
     val videoUrl = s3UploadService.generatePresignedUploadUrl(checkin, videoContentType, ttl)
-
-    // Generate snapshot upload locations
     val snapshotUrls =
       snapshotContentTypes.mapIndexed { index, contentType ->
         val url = s3UploadService.generatePresignedUploadUrl(checkin, contentType, index, ttl)
@@ -174,8 +180,8 @@ class CheckinV2Service(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't submit checkin with status: ${checkin.status}")
     }
 
-    if (checkin.checkinStartedAt == null) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Identity must be verified before submission")
+    if (checkin.isPastSubmissionDate(clock, checkinWindowPeriod)) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin is past submission date")
     }
 
     // Verify video exists
@@ -193,7 +199,7 @@ class CheckinV2Service(
     checkin.status = CheckinV2Status.SUBMITTED
     checkinRepository.save(checkin)
 
-    LOGGER.info("Checkin submitted: {}", uuid)
+    LOGGER.info("Checkin submitted: {}, submission started at {}", uuid, checkin.checkinStartedAt)
 
     // Send notifications
     val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
@@ -631,4 +637,15 @@ fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewI
 
   assert(checkin.status.canTransitionTo(newStatus))
   return CheckinReviewInfo(newStatus, comment, logEntryType)
+}
+
+fun OffenderCheckinV2.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
+  assert(checkinWindow.days > 1)
+  val submissionDate = clock.today()
+  val finalCheckinDate = if (checkinWindow.days <= 1) {
+    this.dueDate
+  } else {
+    this.dueDate.plus(checkinWindow.minusDays(1))
+  }
+  return finalCheckinDate < submissionDate
 }
