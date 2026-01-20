@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.integration.health
+package uk.gov.justice.digital.hmpps.esupervisionapi.integration.feedback
 
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
