@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
@@ -72,6 +73,7 @@ class CheckinV2ServiceTest {
       uploadTtlMinutes,
       faceSimilarityThreshold,
       eventAuditService,
+      3,
     )
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())
@@ -147,6 +149,33 @@ class CheckinV2ServiceTest {
     }
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+  }
+
+  @Test
+  fun `submitCheckin - unhappy path - checkin past due date`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val dueDate = LocalDate.now(clock)
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.CREATED, // e.g., expiry job failed and has not updated it to EXPIRED
+      dueDate = dueDate.minusDays(4),
+      createdAt = dueDate.atStartOfDay(clock.zone).toInstant(),
+      createdBy = "SYSTEM",
+      submittedAt = null,
+    )
+
+    val request = SubmitCheckinV2Request(survey = emptyMap())
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.submitCheckin(uuid, request)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertTrue(exception.message!!.contains("past submission date"))
   }
 
   @Test
