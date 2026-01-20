@@ -288,3 +288,9 @@ interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long>
   )
   fun findCheckinLogByUuid(uuid: UUID): Optional<IOffenderCheckinLogEntryV2Dto>
 }
+
+/**
+ * Repository for Feedback
+ */
+@Repository
+interface FeedbackRepository : JpaRepository<Feedback, Long>
