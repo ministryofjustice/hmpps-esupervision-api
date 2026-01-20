@@ -73,9 +73,7 @@ class CheckinV2Service(
     )
     val checkinLogs = CheckinLogsV2Dto(hint = CheckinLogsHintV2.SUBSET, logs = events)
 
-    val furtherActions = events.firstOrNull { it.logEntryType == LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED }?.notes
-
-    return checkin.dto(personalDetails, videoUrl, snapshotUrl, checkinLogs, photoUrl, furtherActions)
+    return checkin.dto(personalDetails, videoUrl, snapshotUrl, checkinLogs, photoUrl)
   }
 
   /**
