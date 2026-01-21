@@ -147,18 +147,22 @@ class NotificationOrchestratorV2Service(
     )
 
     try {
+      val checkinDto = checkin.dto(details)
+      val flaggedResponses = checkinDto.flaggedResponses
       // Calculate flags (survey flags + 1 if auto ID check failed/missing)
-      val surveyFlags = checkin.dto(details).flaggedResponses.size
+      val surveyFlags = flaggedResponses.size
       val autoIdFailed = checkin.autoIdCheck == null ||
         checkin.autoIdCheck != AutomatedIdVerificationResult.MATCH
       val totalFlags = surveyFlags + if (autoIdFailed) 1 else 0
-
+      // If "callback" is flagged, show the text within notify by sending 'yes'.
+      val contactRequestFlag = if (flaggedResponses.contains("callback")) "yes" else "no"
       // Include all params needed by both offender and practitioner templates
       val personalisation =
         mapOf(
           "name" to "${details.name.forename} ${details.name.surname}",
           "practitionerName" to checkin.offender.practitionerId,
           "number" to totalFlags.toString(),
+          "contactRequestFlag" to contactRequestFlag,
           "dashboardSubmissionUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
         )
 

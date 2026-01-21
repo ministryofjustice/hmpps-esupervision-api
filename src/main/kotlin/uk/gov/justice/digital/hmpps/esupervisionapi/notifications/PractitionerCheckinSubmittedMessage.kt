@@ -14,12 +14,14 @@ data class PractitionerCheckinSubmittedMessage(
   val numFlags: Int,
   val checkinUuid: UUID,
   val autoIdCheck: AutomatedIdVerificationResult?,
+  val contactRequested: Boolean,
 ) : Message {
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
     "practitionerName" to practitionerName,
     "name" to "$offenderFirstName $offenderLastName",
     "number" to totalFlags().toString(),
     "dashboardSubmissionUrl" to appConfig.checkinDashboardUrl(checkinUuid).toString(),
+    "contactRequestFlag" to if (contactRequested) "yes" else "no",
   )
 
   // we count a failed/missing automated ID check as a flag
@@ -39,6 +41,7 @@ data class PractitionerCheckinSubmittedMessage(
         numFlags = flags.size,
         checkinUuid = checkin.uuid,
         autoIdCheck = checkin.autoIdCheck,
+        contactRequested = flags.contains("callback"),
       )
     }
   }
