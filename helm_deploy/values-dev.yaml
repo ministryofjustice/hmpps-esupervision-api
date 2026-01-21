@@ -24,3 +24,9 @@ generic-service:
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
 generic-prometheus-alerts:
   alertSeverity: hmpps_esupervision_alerts_nonprod
+
+app:
+  scheduling:
+    v2-checkin-creation:
+      cron: "*/30 * * * *"
+      chunk-size: 100
