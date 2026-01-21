@@ -28,5 +28,5 @@ generic-prometheus-alerts:
 app:
   scheduling:
     v2-checkin-creation:
-      cron: "*/30 * * * *"
+      cron: "0,30 * * * *"
       chunk-size: 100
