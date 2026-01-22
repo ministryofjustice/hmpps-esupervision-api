@@ -1,6 +1,6 @@
 # Local Development
 
-The application relies on a number external services (e.g. NDilius, AWS Rekognition) to function. 
+The application relies on a number external services (e.g. NDelius, AWS Rekognition) to function. 
 But it's possible to configure it to use stubbed or containerised versions of them.
 
 Localstack is used for stubbing AWS services (execept AWS Rekognition). For other's please read on.
@@ -41,7 +41,7 @@ API_CLIENT_SECRET=secret
 
 Add `stubndilius` Spring profile - replaces Ndilius client with one generating data based on the CRN in `src/test/resources/ndilius-responses/default.json`
 
-The data generated for `stubndilius` profile uses the CRN to generate offender and practitioner data (see `MultiSampleStubDataProvider` docs
+The data generated for `stubNDelius` profile uses the CRN to generate offender and practitioner data (see `MultiSampleStubDataProvider` docs
 for details). The data generator can reload the JSON file at runtime, so you can add/remove items without restarting the application.
 
 **Note**: the date of birth is not required on our side, so if CRN is in the stub JSON file, any date of birth will be accepted on the

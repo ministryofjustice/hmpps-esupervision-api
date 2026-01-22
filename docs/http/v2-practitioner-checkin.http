@@ -23,7 +23,7 @@ Content-Type: application/json
   "notes": "This is an annotation of a checkin"
 }
 
-### [NDILIUS] Get annotation event details
+### [NDelius] Get annotation event details
 GET {{HOST}}/v2/events/checkin-updated/298d6607-1731-4f2e-a9ee-60406604a7db
 Authorization: Bearer {{hmpps_auth.token}}
 Content-Type: application/json
