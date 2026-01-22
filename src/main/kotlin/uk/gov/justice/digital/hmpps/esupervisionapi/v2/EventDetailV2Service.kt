@@ -75,7 +75,7 @@ class EventDetailV2Service(
   private fun getCheckinEventDetail(checkinUuid: UUID, eventType: DomainEventType): EventDetailResponse? {
     val checkin = checkinRepository.findByUuid(checkinUuid).orElse(null)
     if (checkin == null) {
-      LOGGER.warn("Checkin not found for UUID: {}", checkinUuid)
+      LOGGER.warn("Check in not found for UUID: {}", checkinUuid)
       return null
     }
 
@@ -101,12 +101,12 @@ class EventDetailV2Service(
   private fun getCheckinAnnotatedEventDetail(annotationUuid: UUID): EventDetailResponse? {
     val annotation = eventLogRepository.findCheckinLogByUuid(annotationUuid).getOrNull()
     if (annotation == null) {
-      LOGGER.warn("Checkin annotation not found for UUID: {}", annotationUuid)
+      LOGGER.warn("Check in annotation not found for UUID: {}", annotationUuid)
       return null
     }
     val checkin = checkinRepository.findByUuid(annotation.checkin).orElse(null)
     if (checkin == null) {
-      LOGGER.warn("Checkin not found for UUID={}, where annotation UUID={}", annotation.checkin, annotationUuid)
+      LOGGER.warn("Check in not found for UUID={}, where annotation UUID={}", annotation.checkin, annotationUuid)
     }
 
     val eventType = DomainEventType.V2_CHECKIN_ANNOTATED
@@ -139,7 +139,7 @@ class EventDetailV2Service(
 
   private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType, logEntry: IOffenderCheckinLogEntryV2Dto? = null): String {
     val sb = StringBuilder()
-
+    // val offenderName = personalDetails.name
     when (eventType) {
       DomainEventType.V2_SETUP_COMPLETED -> {
         sb.appendLine("Check in: ${formatHumanReadableDateTime(checkin.createdAt)}")
@@ -148,47 +148,50 @@ class EventDetailV2Service(
         sb.appendLine("Check in created: ${formatHumanReadableDateTime(checkin.createdAt)}")
       }
       DomainEventType.V2_CHECKIN_SUBMITTED -> {
-        sb.appendLine("Check in submitted: ${formatHumanReadableDateTime((checkin.submittedAt ?: checkin.createdAt))}")
+        sb.appendLine("Check in status: Submitted")
+        sb.appendLine()
         checkin.autoIdCheck?.let {
-          sb.appendLine("Automated ID check: ${formatIdCheckResult(it.name)}")
+          sb.appendLine("System ID check result: ${formatAutoIdCheckResult(it.name)}")
         }
         checkin.surveyResponse?.let { survey ->
           sb.appendLine()
-          sb.appendLine("Survey response:")
-          formatSurveyResponseHumanReadable(survey).forEach { sb.appendLine(it) }
+          sb.appendLine("Check in answers:")
+          formatSurveyResponseHumanReadable(survey).forEach {
+            sb.appendLine(it)
+            sb.appendLine()
+          }
         }
       }
       DomainEventType.V2_CHECKIN_REVIEWED -> {
-        sb.appendLine("Check in reviewed: ${formatHumanReadableDateTime((checkin.reviewedAt ?: checkin.createdAt))}")
+        sb.appendLine("Check in status: Reviewed")
+        sb.appendLine()
         checkin.manualIdCheck?.let {
-          sb.appendLine("Manual ID check: ${formatIdCheckResult(it.name)}")
+          // it should say 'is the person in the video ${offenderName}:
+          sb.appendLine("Is the person in the video: ${formatManualIdCheckResult(it.name)}")
         }
         sb.appendLine()
-        sb.appendLine("Checkin status: Reviewed")
 
         eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED)).lastOrNull()?.let {
           sb.appendLine("What action are you taking after reviewing this check in: ${it.notes}")
         }
       }
       DomainEventType.V2_CHECKIN_EXPIRED -> {
-        sb.appendLine("Check in expired: ${formatHumanReadableDateTime(checkin.createdAt)}")
-        sb.appendLine()
-        sb.appendLine("Checkin status: Missed")
+        sb.appendLine("Check in status: Missed")
 
         // Note: it's possible we get multiple log entries of that type as the "reviewCheckin" endpoint
         // might get concurrent requests (and they would write log entries, but only one of them would update the checkin)
         // We should ensure that does not happen, but if it does, let's return the last (query returns sorted by date asc)
         eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).lastOrNull()?.let {
-          sb.appendLine("Why did they miss their check in: ${it.notes}")
+          sb.appendLine()
+          // it should say 'why did ${offenderName} not complete...'
+          sb.appendLine("Why did they not complete their check in: ${it.notes}")
         }
       }
       DomainEventType.V2_CHECKIN_ANNOTATED -> {
         if (logEntry == null) {
-          LOGGER.warn("Checkin annotated event without log entry: {} of type {}", checkin.uuid, eventType)
+          LOGGER.warn("Check in annotated event without log entry: {} of type {}", checkin.uuid, eventType)
         } else {
-          sb.appendLine("Check in updated: ${formatHumanReadableDateTime(logEntry.createdAt)}")
-          sb.appendLine("Annotated by: ${logEntry.practitioner}")
-          sb.appendLine("Notes: ${logEntry.notes}")
+          sb.appendLine("${logEntry.notes}")
         }
       }
     }
@@ -205,13 +208,17 @@ class EventDetailV2Service(
       .replace("PM", "pm")
   }
 
-  private fun formatIdCheckResult(result: String): String = when (result) {
-    "MATCH" -> "Match"
-    "NO_MATCH" -> "No match"
-    "NO_FACE_DETECTED" -> "No face detected"
-    "ERROR" -> "Error"
-    "CONFIRMED" -> "Confirmed"
-    "REJECTED" -> "Rejected"
+  private fun formatAutoIdCheckResult(result: String): String = when (result) {
+    "MATCH" -> "Pass"
+    "NO_MATCH" -> "Fail"
+    "NO_FACE_DETECTED" -> "Fail"
+    "ERROR" -> "Fail"
+    else -> result
+  }
+
+private fun formatManualIdCheckResult(result: String): String = when (result) {
+    "MATCH", "CONFIRMED" -> "Yes"
+    "NO_MATCH", "REJECTED" -> "No"
     else -> result
   }
 
@@ -225,14 +232,14 @@ class EventDetailV2Service(
     val customLabels = mapOf(
       "mentalHealth" to "How they have been feeling",
       "mentalHealthComment" to "What they want us to know about how they have been feeling",
-      "assistance" to "Anything they need support with",
+      "assistance" to "Anything they need support with or to let us know",
       "mentalHealthSupport" to "What they want us to know about mental health",
       "alcoholSupport" to "What they want us to know about alcohol",
       "drugsSupport" to "What they want us to know about drugs",
       "moneySupport" to "What they want us to know about money",
       "housingSupport" to "What they want us to know about housing",
       "supportSystemSupport" to "What they want us to know about their support system",
-      "otherSupport" to "What they want us to know about something else",
+      "otherSupport" to "What they want us to know about (something else)",
       "callback" to "If they need us to contact them before their next appointment",
       "callbackDetails" to "What they want to talk about",
     )
