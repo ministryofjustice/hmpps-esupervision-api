@@ -29,19 +29,20 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
    * - Next checkin due date is today or earlier
    */
   @Query(
-    """
-    SELECT o FROM OffenderV2 o
+    value = """
+    SELECT o.* FROM offender_v2 o
     WHERE o.status = 'VERIFIED'
-      AND o.firstCheckin IS NOT NULL
-      AND o.checkinInterval IS NOT NULL
+      AND o.first_checkin <= :lowerBoundInclusive
+      AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
       AND NOT EXISTS (
-        SELECT 1 FROM OffenderCheckinV2 c
-        WHERE c.offender = o
-          AND :lowerBoundInclusive <= c.dueDate
-          AND c.dueDate < :upperBoundExclusive
+        SELECT 1 FROM offender_checkin_v2 c
+        WHERE c.offender_id = o.id
+          AND :lowerBoundInclusive <= c.due_date
+          AND c.due_date < :upperBoundExclusive
           AND c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
       )
     """,
+    nativeQuery = true,
   )
   fun findEligibleForCheckinCreation(
     lowerBoundInclusive: LocalDate,

@@ -160,9 +160,6 @@ class EventDetailV2Service(
       }
       DomainEventType.V2_CHECKIN_REVIEWED -> {
         sb.appendLine("Check in reviewed: ${formatHumanReadableDateTime((checkin.reviewedAt ?: checkin.createdAt))}")
-        checkin.autoIdCheck?.let {
-          sb.appendLine("Automated ID check: ${formatIdCheckResult(it.name)}")
-        }
         checkin.manualIdCheck?.let {
           sb.appendLine("Manual ID check: ${formatIdCheckResult(it.name)}")
         }
