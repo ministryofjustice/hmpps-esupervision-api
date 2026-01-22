@@ -50,14 +50,12 @@ SELECT
     o.total_signed_up,
     o.active_users,
     o.inactive_users,
-
     c.completed_checkins,
     c.not_completed_on_time,
     ROUND(c.avg_hours_to_complete, 2) AS avg_hours_to_complete,
-
     cpp.avg_completed_checkins_per_person
 FROM offenders o
 CROSS JOIN checkins c
 CROSS JOIN checkins_per_person cpp;
 
-CREATE UNIQUE INDEX IF NOT EXISTS stats_summary_v1_singleton ON stats_summary_v1 ((1));
+CREATE UNIQUE INDEX stats_summary_v1_singleton ON stats_summary_v1(singleton);
