@@ -1,0 +1,56 @@
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
+
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.tags.Tag
+import org.slf4j.LoggerFactory
+import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+import java.math.BigDecimal
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummary
+
+@RestController
+@RequestMapping("/v2/stats", produces = ["application/json"])
+@Tag(name = "Stats", description = "Aggregated statistics for dashboards and reporting")
+class StatsResourceV2(private val service: StatsServiceV2) {
+
+  private val logger = LoggerFactory.getLogger(StatsResourceV2::class.java)
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Get system statistics",
+    description = "Returns aggregated system statistics from a precomputed materialised view.",
+  )
+  @ApiResponse(responseCode = "200", description = "Stats returned successfully")
+  @GetMapping
+  fun getStats(): ResponseEntity<StatsResponse> {
+    val stats = service.getStats()
+    logger.info("Retrieved system stats")
+    return ResponseEntity.ok(stats.toResponse())
+  }
+}
+
+/** Response DTO for feedback */
+data class StatsResponse(
+  val totalSignedUp: Long,
+  val activeUsers: Long,
+  val inactiveUsers: Long,
+  val completedCheckins: Long,
+  val notCompletedOnTime: Long,
+  val avgHoursToComplete: BigDecimal?,
+  val avgCompletedCheckinsPerPerson: BigDecimal?,
+)
+
+private fun StatsSummary.toResponse() = StatsResponse(
+  totalSignedUp = totalSignedUp,
+  activeUsers = activeUsers,
+  inactiveUsers = inactiveUsers,
+  completedCheckins = completedCheckins,
+  notCompletedOnTime = notCompletedOnTime,
+  avgHoursToComplete = avgHoursToComplete,
+  avgCompletedCheckinsPerPerson = avgCompletedCheckinsPerPerson,
+)
