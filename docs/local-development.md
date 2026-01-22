@@ -39,7 +39,7 @@ API_CLIENT_SECRET=secret
 
 ### Stub NDelius API
 
-Add `stubndilius` Spring profile - replaces Ndilius client with one generating data based on the CRN in `src/test/resources/ndilius-responses/default.json`
+Add `stubNDelius` Spring profile - replaces NDelius client with one generating data based on the CRN in `src/test/resources/ndelius-responses/default.json`
 
 The data generated for `stubNDelius` profile uses the CRN to generate offender and practitioner data (see `MultiSampleStubDataProvider` docs
 for details). The data generator can reload the JSON file at runtime, so you can add/remove items without restarting the application.
