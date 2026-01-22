@@ -33,7 +33,7 @@ class StatsMaterializedViewRefreshJob(
 
     try {
       jdbcTemplate.execute(
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName"
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName",
       )
 
       val end = clock.instant()
