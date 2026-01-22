@@ -187,7 +187,7 @@ Analytics and reporting table for all events.
 | occurred_at | TIMESTAMP | When event occurred |
 | crn | VARCHAR(7) | Offender CRN |
 | practitioner_id | VARCHAR(255) | Practitioner ID |
-| local_admin_unit_code | VARCHAR(50) | LAU code (from Ndilius) |
+| local_admin_unit_code | VARCHAR(50) | LAU code (from NDelius) |
 | pdu_code | VARCHAR(50) | PDU code |
 | provider_code | VARCHAR(50) | Provider code |
 | checkin_uuid | UUID | Related checkin if applicable |

@@ -12,9 +12,9 @@ The API has been refactored to **V2** with significant architectural improvement
 
 | Feature | Description |
 |---------|-------------|
-| **No PII Storage** | Personal data fetched on-demand from Ndilius (source of truth) |
+| **No PII Storage** | Personal data fetched on-demand from NDelius (source of truth) |
 | **Complete Isolation** | V2 code in separate `v2` package with `_v2` database tables |
-| **Domain Events** | Full integration with AWS SQS for event publishing to Ndilius |
+| **Domain Events** | Full integration with AWS SQS for event publishing to NDelius |
 | **Performance** | Batch operations, fetch joins, lazy loading for S3 URLs |
 
 ### Documentation
@@ -23,7 +23,7 @@ The API has been refactored to **V2** with significant architectural improvement
 |----------|-------------|
 | **[V2 Overview](docs/v2/README.md)** | Architecture overview and package structure |
 | **[User Journeys](docs/v2/USER_JOURNEYS.md)** | Setup, checkin, and review flows |
-| **[Domain Events](docs/v2/DOMAIN_EVENTS.md)** | Event publishing and Ndilius integration |
+| **[Domain Events](docs/v2/DOMAIN_EVENTS.md)** | Event publishing and NDelius integration |
 | **[Notifications](docs/v2/NOTIFICATIONS.md)** | SMS/Email notification system |
 | **[Background Jobs](docs/v2/BACKGROUND_JOBS.md)** | Scheduled jobs |
 | **[Data Model](docs/v2/DATA_MODEL.md)** | Entity relationships and schema |
@@ -36,7 +36,7 @@ The API has been refactored to **V2** with significant architectural improvement
 |----------|-----------|-------------|
 | Setup | `/v2/offender_setup` | Offender registration flow |
 | Checkins | `/v2/offender_checkins` | Check-in CRUD and lifecycle |
-| Events | `/v2/events` | Domain event callback endpoints for Ndilius |
+| Events | `/v2/events` | Domain event callback endpoints for NDelius |
 
 ### V2 Flows Overview
 
@@ -59,7 +59,7 @@ flowchart LR
 
     subgraph Events
         E -->|Publish| H[SQS]
-        H -->|Callback| I[Ndilius]
+        H -->|Callback| I[NDelius]
         I -->|Get Details| J[/v2/events]
     end
 ```
