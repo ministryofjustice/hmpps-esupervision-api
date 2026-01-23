@@ -5,7 +5,7 @@
 CREATE MATERIALIZED VIEW stats_summary_v1 AS
 WITH offenders AS (
     SELECT
-        COUNT(*) AS total_signed_up,
+        COUNT(*) FILTER (WHERE status <> 'INITIAL') AS total_signed_up,
         COUNT(*) FILTER (WHERE status = 'VERIFIED') AS active_users,
         COUNT(*) FILTER (WHERE status = 'INACTIVE') AS inactive_users
     FROM offender_v2

@@ -38,7 +38,7 @@ app:
       cron: "0 15 9 * * *"  # Every day at 9:15 AM (matches V1 timing)
       grace-period-days: 3
     stats-refresh:
-      cron: "0 0 * * * *"  # On the hour, every hour
+      cron: "0 0 1 * * *"  # Every day at 1:00 AM
       view-name: stats_summary_v1
 
 spring:
