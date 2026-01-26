@@ -107,9 +107,9 @@ class EventDetailV2ServiceTest {
         createdAt = Instant.now(),
         logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
         practitioner = "PRACT001",
-        checkin = uuid
+        checkin = uuid,
       )
-      
+
       whenever(eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)))
         .thenReturn(listOf(logEntry))
 
@@ -119,7 +119,6 @@ class EventDetailV2ServiceTest {
       assertThat(result!!.notes).contains("Check in status: Missed")
       assertThat(result.notes).contains("Why did they not complete their check in: Technical error")
     }
-
 
     @Test
     fun `formats automated ID check result`() {
