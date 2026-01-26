@@ -297,7 +297,7 @@ class OffenderV2Resource(
   }
 
   private fun getOffenderPhotoUrl(offender: OffenderV2): String? {
-    if (offender.status != OffenderStatus.VERIFIED && offender.status != OffenderStatus.INACTIVE) {
+    if (offender.status == OffenderStatus.INITIAL) {
       return null
     }
     val url = s3UploadService.getOffenderPhoto(offender)
