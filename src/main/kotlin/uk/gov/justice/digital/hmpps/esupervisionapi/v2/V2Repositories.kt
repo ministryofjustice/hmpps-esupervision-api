@@ -78,7 +78,7 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
     SELECT c FROM OffenderCheckinV2 c
     JOIN FETCH c.offender
     WHERE c.status = 'CREATED'
-      AND c.dueDate < :expiryDate
+      AND c.dueDate <= :expiryDate
     """,
   )
   fun findEligibleForExpiry(expiryDate: LocalDate): Stream<OffenderCheckinV2>

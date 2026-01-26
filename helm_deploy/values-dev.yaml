@@ -30,3 +30,5 @@ app:
     v2-checkin-creation:
       cron: "0 0,30 * * * *"
       chunk-size: 100
+    v2-checkin-expiry:
+      cron: "0 15 9,15,16 * * *"
