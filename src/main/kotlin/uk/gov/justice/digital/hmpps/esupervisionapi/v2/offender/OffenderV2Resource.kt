@@ -176,7 +176,7 @@ class OffenderV2Resource(
     offender.status = OffenderStatus.INACTIVE
     offender.updatedAt = clock.instant()
     val saved = offenderRepository.save(offender)
-
+    val photoUrl = getOffenderPhotoUrl(saved)
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
       uuid,
@@ -185,7 +185,7 @@ class OffenderV2Resource(
       request.reason,
     )
 
-    return ResponseEntity.ok(saved.toSummaryDto())
+    return ResponseEntity.ok(saved.toSummaryDto(photoUrl))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -297,7 +297,7 @@ class OffenderV2Resource(
   }
 
   private fun getOffenderPhotoUrl(offender: OffenderV2): String? {
-    if (offender.status != OffenderStatus.VERIFIED) {
+    if (offender.status != OffenderStatus.VERIFIED && offender.status != OffenderStatus.INACTIVE) {
       return null
     }
     val url = s3UploadService.getOffenderPhoto(offender)
