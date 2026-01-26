@@ -95,6 +95,33 @@ class EventDetailV2ServiceTest {
     }
 
     @Test
+    fun `formats checkin notes for missed checkin event`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(uuid, offender, status = CheckinV2Status.EXPIRED)
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val logEntry = OffenderCheckinLogEntryV2Dto(
+        UUID.randomUUID(),
+        notes = "Technical error",
+        createdAt = Instant.now(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+        practitioner = "PRACT001",
+        checkin = uuid
+      )
+      
+      whenever(eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)))
+        .thenReturn(listOf(logEntry))
+
+      val result = service.getEventDetail("/v2/events/checkin-expired/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("Check in status: Missed")
+      assertThat(result.notes).contains("Why did they not complete their check in: Technical error")
+    }
+
+
+    @Test
     fun `formats automated ID check result`() {
       val uuid = UUID.randomUUID()
       val offender = createOffender(UUID.randomUUID())
@@ -136,7 +163,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Is the person in the video: Yes") 
+      assertThat(result!!.notes).contains("Is the person in the video the correct person: Yes")
     }
 
     @Test
@@ -155,7 +182,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).doesNotContain("Is the person in the video")
+      assertThat(result!!.notes).doesNotContain("Is the person in the video the correct person")
     }
   }
 

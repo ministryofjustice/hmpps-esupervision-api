@@ -139,7 +139,6 @@ class EventDetailV2Service(
 
   private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType, logEntry: IOffenderCheckinLogEntryV2Dto? = null): String {
     val sb = StringBuilder()
-    // val offenderName = personalDetails.name
     when (eventType) {
       DomainEventType.V2_SETUP_COMPLETED -> {
         sb.appendLine("Check in: ${formatHumanReadableDateTime(checkin.createdAt)}")
@@ -166,8 +165,7 @@ class EventDetailV2Service(
         sb.appendLine("Check in status: Reviewed")
         sb.appendLine()
         checkin.manualIdCheck?.let {
-          // it should say 'is the person in the video ${offenderName}:
-          sb.appendLine("Is the person in the video: ${formatManualIdCheckResult(it.name)}")
+          sb.appendLine("Is the person in the video the correct person: ${formatManualIdCheckResult(it.name)}")
         }
         sb.appendLine()
 
@@ -183,7 +181,6 @@ class EventDetailV2Service(
         // We should ensure that does not happen, but if it does, let's return the last (query returns sorted by date asc)
         eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)).lastOrNull()?.let {
           sb.appendLine()
-          // it should say 'why did ${offenderName} not complete...'
           sb.appendLine("Why did they not complete their check in: ${it.notes}")
         }
       }
@@ -216,7 +213,7 @@ class EventDetailV2Service(
     else -> result
   }
 
-private fun formatManualIdCheckResult(result: String): String = when (result) {
+  private fun formatManualIdCheckResult(result: String): String = when (result) {
     "MATCH", "CONFIRMED" -> "Yes"
     "NO_MATCH", "REJECTED" -> "No"
     else -> result
