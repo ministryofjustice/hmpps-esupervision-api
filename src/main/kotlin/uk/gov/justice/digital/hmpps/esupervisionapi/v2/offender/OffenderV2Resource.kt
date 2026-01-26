@@ -20,8 +20,12 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -43,6 +47,8 @@ class OffenderV2Resource(
   private val s3UploadService: S3UploadService,
   private val clock: Clock,
   private val checkinCreationService: CheckinCreationService,
+  private val eventAuditService: EventAuditV2Service,
+  private val ndiliusApiClient: NdiliusApiClient,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -177,6 +183,8 @@ class OffenderV2Resource(
     offender.updatedAt = clock.instant()
     val saved = offenderRepository.save(offender)
 
+    recordOffenderAuditEvent("OFFENDER_DEACTIVATED", offender, request.reason)
+
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
       uuid,
@@ -217,6 +225,8 @@ class OffenderV2Resource(
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = clock.instant()
     val saved = offenderRepository.save(offender)
+
+    recordOffenderAuditEvent("OFFENDER_REACTIVATED", offender, request.reason)
 
     LOGGER.info(
       "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
@@ -287,6 +297,21 @@ class OffenderV2Resource(
       return ResponseEntity.ok(offenderAfter)
     } else {
       return ResponseEntity.noContent().build()
+    }
+  }
+
+  private fun recordOffenderAuditEvent(eventType: String, offender: OffenderV2, reason: String) {
+    assert(eventType in listOf("OFFENDER_DEACTIVATED", "OFFENDER_REACTIVATED"))
+    var contactDetails: ContactDetails? = null
+    try {
+      contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
+    } catch (e: Exception) {
+      // exception already logged and sanitised elswhere
+      LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
+    }
+    when (eventType) {
+      "OFFENDER_DEACTIVATED" -> eventAuditService.recordOffenderDeactivated(offender, contactDetails ?: missingDetails(offender.crn), reason)
+      "OFFENDER_REACTIVATED" -> eventAuditService.recordOffenderReactivated(offender, contactDetails ?: missingDetails(offender.crn), reason)
     }
   }
 
@@ -387,3 +412,9 @@ private fun newFirstCheckinDateIsToday(
   afterChange: OffenderSummaryDto,
   today: LocalDate,
 ): Boolean = beforeChange.firstCheckin != afterChange.firstCheckin && afterChange.firstCheckin == today
+
+/**
+ * Used only for audit events. We should log audit events if we have the CRN, but were unable
+ * to get the full details from Ndelius for some reason
+ */
+private fun missingDetails(crn: String) = ContactDetails(crn, Name(forename = "missing", surname = "missing"))
