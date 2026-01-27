@@ -545,7 +545,7 @@ SELECT'CHECKIN_REVIEWED',
       c.due_date,
       null,
       EXTRACT(EPOCH FROM (c.review_started_at - c.submitted_at)) / 3600,
-      EXTRACT(EPOCH FROM (c.reviewed_at - c.review_started_by)) / 3600,
+      EXTRACT(EPOCH FROM (c.reviewed_at - c.review_started_at)) / 3600,
       c.auto_id_check,
       c.manual_id_check,
       'Created by migration from V1'
