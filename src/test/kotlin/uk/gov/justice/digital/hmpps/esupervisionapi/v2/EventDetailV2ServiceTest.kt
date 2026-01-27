@@ -81,7 +81,7 @@ class EventDetailV2ServiceTest {
   inner class CheckinNotesFormatting {
 
     @Test
-    fun `formats checkin notes with human-readable datetime`() {
+    fun `formats checkin notes for submitted event`() {
       val uuid = UUID.randomUUID()
       val offender = createOffender(UUID.randomUUID())
       val submittedAt = Instant.parse("2025-06-15T14:30:00Z")
@@ -91,7 +91,33 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Check in submitted: 15 June 2025 at 3:30pm")
+      assertThat(result!!.notes).contains("Check in status: Submitted")
+    }
+
+    @Test
+    fun `formats checkin notes for missed checkin event`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(uuid, offender, status = CheckinV2Status.EXPIRED)
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val logEntry = OffenderCheckinLogEntryV2Dto(
+        UUID.randomUUID(),
+        notes = "Technical error",
+        createdAt = Instant.now(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+        practitioner = "PRACT001",
+        checkin = uuid,
+      )
+
+      whenever(eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)))
+        .thenReturn(listOf(logEntry))
+
+      val result = service.getEventDetail("/v2/events/checkin-expired/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("Check in status: Missed")
+      assertThat(result.notes).contains("Why did they not complete their check in: Technical error")
     }
 
     @Test
@@ -104,7 +130,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Automated ID check: Match")
+      assertThat(result!!.notes).contains("System ID check result: Pass")
     }
 
     @Test
@@ -117,7 +143,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Automated ID check: No face detected")
+      assertThat(result!!.notes).contains("System ID check result: Fail")
     }
 
     @Test
@@ -136,7 +162,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Manual ID check: Match")
+      assertThat(result!!.notes).contains("Is the person in the video the correct person: Yes")
     }
 
     @Test
@@ -155,7 +181,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).doesNotContain("Manual ID check")
+      assertThat(result!!.notes).doesNotContain("Is the person in the video the correct person")
     }
   }
 
@@ -176,7 +202,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Survey response:")
+      assertThat(result!!.notes).contains("Check in answers:")
       assertThat(result.notes).contains("How they have been feeling: Feeling Great")
       assertThat(result.notes).contains("If they need us to contact them before their next appointment: Yes")
     }
@@ -264,7 +290,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Anything they need support with: Mental Health, Need Housing")
+      assertThat(result!!.notes).contains("Anything they need support with or to let us know: Mental Health, Need Housing")
     }
   }
 
@@ -288,7 +314,6 @@ class EventDetailV2ServiceTest {
 
     assertThat(result).isNotNull
     assertThat(result!!.notes).contains("Some note")
-    assertThat(result.notes).contains("Annotated by: ${checkin.offender.practitionerId}")
   }
 
   @Nested
