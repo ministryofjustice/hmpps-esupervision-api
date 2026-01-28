@@ -9,9 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummary
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
-import java.math.BigDecimal
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsWithPercentages
 
 @RestController
 @RequestMapping("/v2/stats", produces = ["application/json"])
@@ -23,7 +21,8 @@ class StatsResourceV2(private val service: StatsServiceV2) {
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Get system statistics",
-    description = "Returns aggregated system statistics from a precomputed materialised view.",
+    description =
+    "Returns aggregated system statistics from a precomputed materialised view.",
   )
   @ApiResponse(responseCode = "200", description = "Stats returned successfully")
   @GetMapping
@@ -34,18 +33,24 @@ class StatsResourceV2(private val service: StatsServiceV2) {
   }
 }
 
-/** Response DTO for feedback */
+/** Response DTO with percentages as decimals (0.0–1.0) */
 data class StatsResponse(
   val totalSignedUp: Long,
   val activeUsers: Long,
   val inactiveUsers: Long,
   val completedCheckins: Long,
   val notCompletedOnTime: Long,
-  val avgHoursToComplete: BigDecimal?,
-  val avgCompletedCheckinsPerPerson: BigDecimal?,
+  val avgHoursToComplete: Double,
+  val avgCompletedCheckinsPerPerson: Double,
+  val pctActiveUsers: Double,
+  val pctInactiveUsers: Double,
+  val pctCompletedCheckins: Double,
+  val pctExpiredCheckins: Double,
+  val updatedAt: String,
 )
 
-private fun StatsSummary.toResponse() = StatsResponse(
+/** Map StatsWithPercentages from service to response DTO */
+private fun StatsWithPercentages.toResponse() = StatsResponse(
   totalSignedUp = totalSignedUp,
   activeUsers = activeUsers,
   inactiveUsers = inactiveUsers,
@@ -53,4 +58,9 @@ private fun StatsSummary.toResponse() = StatsResponse(
   notCompletedOnTime = notCompletedOnTime,
   avgHoursToComplete = avgHoursToComplete,
   avgCompletedCheckinsPerPerson = avgCompletedCheckinsPerPerson,
+  pctActiveUsers = pctActiveUsers,
+  pctInactiveUsers = pctInactiveUsers,
+  pctCompletedCheckins = pctCompletedCheckins,
+  pctExpiredCheckins = pctExpiredCheckins,
+  updatedAt = updatedAt.toString(),
 )

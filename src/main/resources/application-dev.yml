@@ -7,10 +7,10 @@ app:
     offender-checkin-expiry:
       cron: "0 */17 * * * *"  # Development schedule (every 17 minutes)
       # cron: "*/40 * * * * *"  # Local development schedule (every 40 seconds)
-    stats-refresh:
-      cron: "0 0 * * * *" # Development schedule (every hour, on the hour)
+    monthly-stats-refresh:
+      # cron: "0 0 * * * *" # Development schedule (every hour, on the hour)
       view-name: stats_summary_v1
-      # cron: "0 */2 * * * *"  # Local development schedule (every 2 minutes)
+      cron: "0 */2 * * * *"  # Local development schedule (every 2 minutes)
 
 hmpps-auth:
   url: "http://localhost:8090/auth"

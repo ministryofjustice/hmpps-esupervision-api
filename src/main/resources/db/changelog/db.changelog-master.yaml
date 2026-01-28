@@ -38,4 +38,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/19_create_feedback_table.sql
   - include:
-      file: db/changelog/changesets/20_create_stats_summary_v1.sql
+      file: db/changelog/changesets/20_create_monthly_stats_table.sql
+  - include:
+      file: db/changelog/changesets/21_create_refresh_monthly_stats_function.sql
+  - include:
+      file: db/changelog/changesets/22_create_stats_summary_mv.sql

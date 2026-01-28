@@ -475,4 +475,7 @@ open class StatsSummary(
 
   @Column(name = "avg_completed_checkins_per_person")
   open val avgCompletedCheckinsPerPerson: BigDecimal?,
+
+  @Column(name = "updated_at", nullable = false)
+  open var updatedAt: Instant,
 )

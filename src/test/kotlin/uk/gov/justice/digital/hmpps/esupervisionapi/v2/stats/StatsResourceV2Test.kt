@@ -7,7 +7,8 @@ import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsResourceV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
-import java.math.BigDecimal
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsWithPercentages
+import java.time.Instant
 
 class StatsResourceV2Test {
 
@@ -16,29 +17,39 @@ class StatsResourceV2Test {
 
   @Test
   fun `getStats returns expected StatsResponse`() {
-    val summary = StatsSummary(
-      singleton = 1,
+    val statsWithPercentages = StatsWithPercentages(
       totalSignedUp = 10,
       activeUsers = 7,
       inactiveUsers = 3,
       completedCheckins = 20,
       notCompletedOnTime = 2,
-      avgHoursToComplete = BigDecimal.valueOf(5.5),
-      avgCompletedCheckinsPerPerson = BigDecimal.valueOf(2.86),
+      avgHoursToComplete = 5.5,
+      avgCompletedCheckinsPerPerson = 2.86,
+      updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
+      pctActiveUsers = 0.7,
+      pctInactiveUsers = 0.3,
+      pctCompletedCheckins = 1.0,
+      pctExpiredCheckins = 0.1,
     )
 
-    whenever(service.getStats()).thenReturn(summary)
+    whenever(service.getStats()).thenReturn(statsWithPercentages)
 
     val response = resource.getStats()
+    val body = response.body!!
 
     assertEquals(HttpStatus.OK, response.statusCode)
-    val body = response.body!!
+
     assertEquals(10, body.totalSignedUp)
     assertEquals(7, body.activeUsers)
     assertEquals(3, body.inactiveUsers)
     assertEquals(20, body.completedCheckins)
     assertEquals(2, body.notCompletedOnTime)
-    assertEquals(BigDecimal.valueOf(5.5), body.avgHoursToComplete)
-    assertEquals(BigDecimal.valueOf(2.86), body.avgCompletedCheckinsPerPerson)
+    assertEquals(5.5, body.avgHoursToComplete)
+    assertEquals(2.86, body.avgCompletedCheckinsPerPerson)
+    assertEquals("2026-01-28T12:02:00.020175Z", body.updatedAt)
+    assertEquals(0.7, body.pctActiveUsers)
+    assertEquals(0.3, body.pctInactiveUsers)
+    assertEquals(1.0, body.pctCompletedCheckins)
+    assertEquals(0.1, body.pctExpiredCheckins)
   }
 }
