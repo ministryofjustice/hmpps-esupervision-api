@@ -134,6 +134,37 @@ class NotificationOrchestratorV2Service(
     }
   }
 
+  /** Send reminder notifications for checkin */
+  fun sendReminderCheckinNotifications(
+    checkin: OffenderCheckinV2,
+    contactDetails: ContactDetails,
+  ) {
+    try {
+      val personalisation =
+        mapOf(
+          "firstName" to contactDetails.name.forename,
+          "lastName" to contactDetails.name.surname,
+          "url" to appConfig.checkinSubmitUrlV2(checkin.uuid).toString(),
+        )
+
+      val notificationsWithRecipients =
+        notificationPersistence.buildOffenderNotifications(
+          offender = checkin.offender,
+          contactDetails = contactDetails,
+          notificationType = NotificationType.OffenderCheckinReminder,
+        )
+
+      processAndSendNotifications(notificationsWithRecipients, personalisation)
+    } catch (e: Exception) {
+      val sanitized = PiiSanitizer.sanitizeException(e, checkin.offender.crn, checkin.offender.uuid)
+      LOGGER.warn(
+        "Failed to send checkin REMINDER notifications for checkin {}: {}",
+        checkin.uuid,
+        sanitized,
+      )
+    }
+  }
+
   /** Send notifications for checkin submitted event */
   fun sendCheckinSubmittedNotifications(
     checkin: OffenderCheckinV2,

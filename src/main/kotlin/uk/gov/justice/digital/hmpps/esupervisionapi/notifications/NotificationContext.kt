@@ -45,6 +45,9 @@ data class SingleNotificationContext(val ref: String) : NotificationContext(ref,
       NotificationType.RegistrationConfirmation -> {
         SingleNotificationContext("OREG-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
       }
+      NotificationType.OffenderCheckinReminder -> {
+        SingleNotificationContext("OREM-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+      }
       NotificationType.PractitionerCheckinSubmitted -> {
         SingleNotificationContext("PSUB-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
       }

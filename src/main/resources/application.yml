@@ -34,6 +34,9 @@ app:
       cron: "0 0 9 * * *"  # Every day at 9 AM (matches V1 timing)
       # we process offender records in chunks
       chunk-size: 100
+    v2-checkin-reminder:
+      cron: "0 0 9 * * *"  # Same time as initial checkin notification
+      chunk-size: 100
     v2-checkin-expiry:
       cron: "0 15 9 * * *"  # Every day at 9:15 AM (matches V1 timing)
       grace-period-days: 3
@@ -160,6 +163,7 @@ notify:
     POP_REGISTRATION_CONFIRMATION: 35274201-ecef-493b-b4e1-86e60d071142
     POP_SUBMISSION_CONFIRMATION: 80695bae-3917-436a-824b-c61ce04ca4a3
     POP_CHECKINS_STOPPED: f1280bf6-4434-48e4-b827-9164b54bc6b8
+    POP_CHECKIN_REMINDER: a7040af3-07b5-493b-b409-88daf081d6cb
   email-templates:
     POP_CHECKIN_INVITE: 3806414e-083e-410e-825a-76e2c72bbd8b
     PRACTITIONER_CHECKIN_SUBMITTED: fa88ba73-81c0-48b4-a8d6-8357dc1e5de8
@@ -168,6 +172,7 @@ notify:
     POP_REGISTRATION_CONFIRMATION: 7e63c01c-05df-4b2c-a77c-57d2412793a1
     POP_SUBMISSION_CONFIRMATION: 8558a963-0d76-4ad5-82d3-3eb536c76563
     POP_CHECKINS_STOPPED: 5ea87cee-4772-4496-87d3-099327bd7dee
+    POP_CHECKIN_REMINDER: 0c5a71ef-fb57-4814-a106-1606d831d903
 
 rekognition:
   face-similarity:

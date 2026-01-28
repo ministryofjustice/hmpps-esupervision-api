@@ -86,6 +86,16 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
   @Query(
     """
     SELECT c FROM OffenderCheckinV2 c
+    JOIN FETCH c.offender
+    WHERE c.status = 'CREATED'
+      AND c.dueDate = :reminderDate
+    """,
+  )
+  fun findEligibleForReminder(reminderDate: LocalDate): Stream<OffenderCheckinV2>
+
+  @Query(
+    """
+    SELECT c FROM OffenderCheckinV2 c
     WHERE c.offender = :offender
       AND c.dueDate = :dueDate
     """,

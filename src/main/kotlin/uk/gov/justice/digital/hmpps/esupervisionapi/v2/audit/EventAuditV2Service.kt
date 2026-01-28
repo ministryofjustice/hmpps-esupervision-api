@@ -177,6 +177,41 @@ class EventAuditV2Service(
     }
   }
 
+  /**
+   * Record checkin reminder event
+   */
+  fun recordCheckinReminded(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) {
+    try {
+      val audits = mutableListOf<EventAuditV2>()
+      for ((checkin, contactDetails) in checkins) {
+        if (contactDetails == null) {
+          LOGGER.warn("Cannot record audit for checkin {}: contact details not found", checkin.uuid)
+          continue
+        }
+
+        audits.add(
+          buildAudit(
+            "CHECKIN_REMINDER",
+            checkin.offender,
+            contactDetails,
+            checkin,
+            notes = "Reminder sent by scheduled job",
+          ),
+        )
+      }
+
+      if (audits.isNotEmpty()) {
+        transactionTemplate.execute { auditRepository.saveAll(audits) }
+        LOGGER.info("Recorded CHECKIN_REMINDER audit events for {} checkins", audits.size)
+      } else {
+        LOGGER.info("No CHECKIN_REMINDER audits to record")
+      }
+    } catch (e: Exception) {
+      val ids = checkins.map { "${it.first.offender.crn}:${it.first.uuid}" }.toTypedArray()
+      LOGGER.error("Failed to record checkin reminder audits: {}  {}", ids, PiiSanitizer.sanitizeException(e, null, null))
+    }
+  }
+
   private fun buildAudit(
     eventType: String,
     offender: OffenderV2,
