@@ -76,6 +76,9 @@ sonar-project.properties
 **/Chart.lock
 .DS_Store
 
+# local cors config
+cors-config.json
+
 # local environment settings
 .env
 

@@ -1,0 +1,7 @@
+### Get stats
+GET {{HOST}}/v2/stats
+Authorization: Bearer {{hmpps_auth.token}}
+
+> {%
+    console.log("response body", response.body)
+ %}
