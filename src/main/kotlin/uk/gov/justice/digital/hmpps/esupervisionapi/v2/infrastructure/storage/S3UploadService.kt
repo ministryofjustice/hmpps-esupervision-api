@@ -229,7 +229,7 @@ class S3UploadService(
    * V2 Offender - gets presigned download URL for offender photo
    */
   fun getOffenderPhoto(offender: OffenderV2): URL? {
-    if (offender.status == OffenderStatus.VERIFIED) {
+    if (offender.status != OffenderStatus.INITIAL) {
       val photoKey = SetupPhotoKey(offender.uuid)
       return presignedGetUrlFor(photoKey)
     } else {

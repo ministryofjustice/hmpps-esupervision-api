@@ -15,8 +15,10 @@ import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -37,12 +39,21 @@ class OffenderV2ResourceTest {
   private val offenderRepository: OffenderV2Repository = mock()
   private val s3UploadService: S3UploadService = mock()
   private val checkinCreationService: CheckinCreationService = mock()
+  private val eventAuditV2Service: EventAuditV2Service = mock()
+  private val ndiliusApiClient: NdiliusApiClient = mock()
 
   private lateinit var resource: OffenderV2Resource
 
   @BeforeEach
   fun setUp() {
-    resource = OffenderV2Resource(offenderRepository, s3UploadService, clock, checkinCreationService)
+    resource = OffenderV2Resource(
+      offenderRepository,
+      s3UploadService,
+      clock,
+      checkinCreationService,
+      eventAuditV2Service,
+      ndiliusApiClient,
+    )
   }
 
   // ========================================
@@ -120,6 +131,29 @@ class OffenderV2ResourceTest {
     }
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+  }
+
+  @Test
+  fun `deactivateOffender - happy path - returns photo URL for INACTIVE offender`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val request = DeactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "No longer on supervision",
+    )
+
+    val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    // mock s3
+    whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
+
+    val result = resource.deactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(OffenderStatus.INACTIVE, result.body?.status)
+    assertEquals(uuid, result.body?.uuid)
+    assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
   }
 
   // ========================================
