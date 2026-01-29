@@ -13,7 +13,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusBatchFetchException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationFailureException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
@@ -84,7 +83,7 @@ class V2CheckinCreationJob(
     try {
       val lowerBound = today
       val upperBound = today.plusDays(1)
-      val finalChunkSize = min(chunkSize, NdiliusApiClient.MAX_BATCH_SIZE)
+      val finalChunkSize = min(chunkSize, INdiliusApiClient.MAX_BATCH_SIZE)
 
       offenderRepository.findEligibleForCheckinCreation(lowerBound, upperBound).use { stream ->
         stream.asSequence()
