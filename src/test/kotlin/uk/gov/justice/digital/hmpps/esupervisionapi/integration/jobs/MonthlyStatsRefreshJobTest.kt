@@ -1,7 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doThrow
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -14,7 +16,8 @@ import java.time.ZoneOffset
 class MonthlyStatsRefreshJobTest {
 
   private val jdbcTemplate: JdbcTemplate = mock()
-  private val fixedClock: Clock = Clock.fixed(Instant.parse("2026-01-22T12:00:00Z"), ZoneOffset.UTC)
+  private val fixedClock: Clock =
+    Clock.fixed(Instant.parse("2026-01-22T12:00:00Z"), ZoneOffset.UTC)
   private val viewName = "stats_summary_v1"
   private val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock, viewName)
 
@@ -23,22 +26,36 @@ class MonthlyStatsRefreshJobTest {
     job.refresh()
 
     val order = inOrder(jdbcTemplate)
-    order.verify(jdbcTemplate).execute(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL)
-    order.verify(jdbcTemplate).execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName")
+
+    order.verify(jdbcTemplate).update(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+      any(),
+      any(),
+      any(),
+    )
+
+    order.verify(jdbcTemplate)
+      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName")
   }
 
   @Test
   fun `refresh logs and does not throw when JdbcTemplate throws`() {
-    doThrow(RuntimeException("DB error")).whenever(jdbcTemplate).execute(
-      """
-      SELECT refresh_monthly_stats(
-          date_trunc('month', current_date)::date
+    doThrow(RuntimeException("DB error"))
+      .whenever(jdbcTemplate)
+      .update(
+        eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+        any(),
+        any(),
+        any(),
       )
-      """.trimIndent(),
-    )
 
     job.refresh()
 
-    verify(jdbcTemplate).execute(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL)
+    verify(jdbcTemplate).update(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+      any(),
+      any(),
+      any(),
+    )
   }
 }

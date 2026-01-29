@@ -28,9 +28,34 @@ class MonthlyStatsRefreshJob(
     LOGGER.info("Stats Refresh Job started")
 
     try {
+      val now = clock.instant()
+      val zone = clock.zone
+
+      val monthStart =
+        now.atZone(zone)
+          .withDayOfMonth(1)
+          .toLocalDate()
+
+      val rangeStart =
+        monthStart
+          .atStartOfDay(zone)
+          .toInstant()
+
+      val rangeEnd =
+        monthStart
+          .plusMonths(1)
+          .atStartOfDay(zone)
+          .toInstant()
+
       val monthlyStart = clock.instant()
-      jdbcTemplate.execute(REFRESH_MONTHLY_STATS_SQL)
+      jdbcTemplate.update(
+        REFRESH_MONTHLY_STATS_SQL,
+        monthStart,
+        rangeStart,
+        rangeEnd,
+      )
       val monthlyEnd = clock.instant()
+
       LOGGER.info(
         "Monthly stats table refreshed successfully, took={}",
         Duration.between(monthlyStart, monthlyEnd),
@@ -39,16 +64,16 @@ class MonthlyStatsRefreshJob(
       val mvStart = clock.instant()
       jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName")
       val mvEnd = clock.instant()
+
       LOGGER.info(
         "Materialized view refreshed successfully: view={}, took={}",
         viewName,
         Duration.between(mvStart, mvEnd),
       )
 
-      val overallEnd = clock.instant()
       LOGGER.info(
         "Stats Refresh Job completed successfully, total duration={}",
-        Duration.between(overallStart, overallEnd),
+        Duration.between(overallStart, clock.instant()),
       )
     } catch (e: Exception) {
       LOGGER.error("Stats Refresh Job failed", e)
@@ -56,12 +81,11 @@ class MonthlyStatsRefreshJob(
   }
 
   companion object {
-    private val LOGGER = LoggerFactory.getLogger(MonthlyStatsRefreshJob::class.java)
+    private val LOGGER =
+      LoggerFactory.getLogger(MonthlyStatsRefreshJob::class.java)
 
     val REFRESH_MONTHLY_STATS_SQL = """
-        SELECT refresh_monthly_stats(
-            date_trunc('month', current_date)::date
-        )
-    """.trimIndent()
+      SELECT refresh_monthly_stats(?, ?, ?)
+    """
   }
 }

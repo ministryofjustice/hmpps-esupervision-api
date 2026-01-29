@@ -6,13 +6,13 @@ SELECT
     1 AS singleton,
 
     -- totals
-    SUM(total_signed_up)::BIGINT AS total_signed_up,
-    SUM(active_users)::BIGINT AS active_users,
+    MAX(active_users)::BIGINT AS active_users,
+    MAX(inactive_users)::BIGINT AS inactive_users,
+    (MAX(active_users) + MAX(inactive_users))::BIGINT AS total_signed_up,
+
+    -- monthly totals summed across months
     SUM(completed_checkins)::BIGINT AS completed_checkins,
     SUM(not_completed_on_time)::BIGINT AS not_completed_on_time,
-
-    -- derived
-    (SUM(total_signed_up) - SUM(active_users))::BIGINT AS inactive_users,
 
     -- averages
     CASE
@@ -24,16 +24,15 @@ SELECT
     END AS avg_hours_to_complete,
 
     CASE
-        WHEN SUM(active_users) = 0 THEN 0
+        WHEN (MAX(active_users) + MAX(inactive_users)) = 0 THEN 0
         ELSE ROUND(
-            SUM(total_completed_checkins_per_offender)::NUMERIC / SUM(active_users),
+            (SUM(total_completed_checkins_per_offender)::NUMERIC /
+             (MAX(active_users) + MAX(inactive_users)))::NUMERIC,
             2
         )
     END AS avg_completed_checkins_per_person,
 
-    now() AS updated_at
+    MAX(updated_at) AS updated_at
 FROM monthly_stats;
 
 CREATE UNIQUE INDEX stats_summary_v1_singleton ON stats_summary_v1(singleton);
-
-

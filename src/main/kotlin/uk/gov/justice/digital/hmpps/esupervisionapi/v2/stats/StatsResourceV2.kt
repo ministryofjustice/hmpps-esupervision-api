@@ -22,7 +22,7 @@ class StatsResourceV2(private val service: StatsServiceV2) {
   @Operation(
     summary = "Get system statistics",
     description =
-    "Returns aggregated system statistics from a precomputed materialised view.",
+    "Returns aggregated system statistics, for example number of active offenders, number of late checkins etc.",
   )
   @ApiResponse(responseCode = "200", description = "Stats returned successfully")
   @GetMapping
