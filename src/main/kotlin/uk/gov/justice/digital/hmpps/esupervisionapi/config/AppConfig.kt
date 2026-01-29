@@ -36,4 +36,8 @@ class AppConfig(
   fun checkinReviewUrlV2(checkinUuid: UUID, crn: String): URI = URI(
     "$mpopUrl/case/$crn/appointments/$checkinUuid/check-in/review/identity?back=/case/$crn/activity-log",
   )
+
+  fun feedbackUrl(): URI = URI(
+    "$hostedAt/feedback",
+  )
 }
