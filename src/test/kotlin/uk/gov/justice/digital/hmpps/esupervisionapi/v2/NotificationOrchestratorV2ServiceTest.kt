@@ -103,6 +103,22 @@ class NotificationOrchestratorV2ServiceTest {
   }
 
   @Test
+  fun `sendReminderCheckinNotifications - happy path - sends to offender only`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender)
+    val contactDetails = createContactDetails()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+    
+    service.sendReminderCheckinNotifications(checkin, contactDetails)
+
+    verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinReminder))
+    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any())
+    verify(ndiliusApiClient, never()).getContactDetails(any())
+  }
+
+  @Test
   fun `sendCheckinSubmittedNotifications - sends with correct personalisation`() {
     val offender = createOffender()
     val checkin = createCheckin(offender, status = CheckinV2Status.SUBMITTED)
