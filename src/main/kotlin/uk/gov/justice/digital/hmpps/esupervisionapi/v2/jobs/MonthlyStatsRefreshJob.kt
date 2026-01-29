@@ -6,8 +6,11 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import java.sql.Date
 import java.time.Clock
 import java.time.Duration
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 @Component
 class MonthlyStatsRefreshJob(
@@ -48,12 +51,12 @@ class MonthlyStatsRefreshJob(
           .toInstant()
 
       val monthlyStart = clock.instant()
-      jdbcTemplate.update(
-        REFRESH_MONTHLY_STATS_SQL,
-        monthStart,
-        rangeStart,
-        rangeEnd,
-      )
+      jdbcTemplate.execute(REFRESH_MONTHLY_STATS_SQL) { ps ->
+        ps.setDate(1, Date.valueOf(monthStart))
+        ps.setObject(2, OffsetDateTime.ofInstant(rangeStart, ZoneOffset.UTC))
+        ps.setObject(3, OffsetDateTime.ofInstant(rangeEnd, ZoneOffset.UTC))
+        ps.execute()
+      }
       val monthlyEnd = clock.instant()
 
       LOGGER.info(
@@ -84,8 +87,6 @@ class MonthlyStatsRefreshJob(
     private val LOGGER =
       LoggerFactory.getLogger(MonthlyStatsRefreshJob::class.java)
 
-    val REFRESH_MONTHLY_STATS_SQL = """
-      SELECT refresh_monthly_stats(?, ?, ?)
-    """
+    val REFRESH_MONTHLY_STATS_SQL = "SELECT refresh_monthly_stats(?, ?, ?)"
   }
 }
