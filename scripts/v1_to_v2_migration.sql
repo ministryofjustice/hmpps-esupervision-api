@@ -265,7 +265,7 @@ INSERT INTO offender_event_log_v2 (
     offender_id
 )
 SELECT
-    concat(e.comment, '\n', 'Created by migration from V1'),
+    concat(e.comment, E'\n', 'Created by migration from V1'),
     e.created_at,
     e.log_entry_type::log_entry_type_v2,
     e.practitioner,
