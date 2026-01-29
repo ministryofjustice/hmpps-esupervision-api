@@ -100,6 +100,29 @@ class CheckinV2ServiceTest {
   }
 
   @Test
+  fun `sendReminder - happy path - triggers notification`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+    )
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      email = "john@example.com",
+    )
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    service.sendReminder(uuid)
+    verify(notificationService).sendCheckinReminderNotifications(checkin, contactDetails)
+  }
+
+  @Test
   fun `submitCheckin - happy path - updates status to SUBMITTED`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender()

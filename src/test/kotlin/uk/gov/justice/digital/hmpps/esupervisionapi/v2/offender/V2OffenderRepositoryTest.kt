@@ -87,6 +87,61 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
     assertEquals("V200002", resultNoOffender1.first().crn)
   }
 
+  @Test
+  @Transactional
+  fun `findEligibleForReminder - returns only CREATED checkins due today`() {
+    val today = LocalDate.now()
+    val tomorrow = today.plusDays(1)
+
+    // Due today and has not submitted (should match)
+    val targetOffender = createOffenderV2("V200001", today, Duration.ofDays(7))
+    offenderV2Repository.save(targetOffender)
+
+    val targetCheckin = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2(
+      uuid = UUID.randomUUID(),
+      offender = targetOffender,
+      status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status.CREATED,
+      dueDate = today,
+      createdAt = Instant.now(),
+      createdBy = "SYSTEM",
+    )
+    checkinV2Repository.save(targetCheckin)
+
+    // Due today but PoP has submitted (should not match)
+    val submittedOffender = createOffenderV2("V200002", today, Duration.ofDays(7))
+    offenderV2Repository.save(submittedOffender)
+
+    val submittedCheckin = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2(
+      uuid = UUID.randomUUID(),
+      offender = submittedOffender,
+      status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status.SUBMITTED,
+      dueDate = today,
+      createdAt = Instant.now(),
+      createdBy = "SYSTEM",
+    )
+    checkinV2Repository.save(submittedCheckin)
+
+    // Due tomorrow and has not submitted (should not match)
+    val tomorrowOffender = createOffenderV2("V200003", tomorrow, Duration.ofDays(7))
+    offenderV2Repository.save(tomorrowOffender)
+
+    val tomorrowCheckin = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2(
+      uuid = UUID.randomUUID(),
+      offender = tomorrowOffender,
+      status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status.CREATED,
+      dueDate = tomorrow,
+      createdAt = Instant.now(),
+      createdBy = "SYSTEM",
+    )
+    checkinV2Repository.save(tomorrowCheckin)
+
+    val results = checkinV2Repository.findEligibleForReminder(today).toList()
+
+    assertEquals(1, results.size)
+    assertEquals(targetCheckin.uuid, results[0].uuid)
+    assertEquals("V200001", results[0].offender.crn)
+  }
+
   private fun createOffenderV2(
     crn: String,
     firstCheckin: LocalDate,

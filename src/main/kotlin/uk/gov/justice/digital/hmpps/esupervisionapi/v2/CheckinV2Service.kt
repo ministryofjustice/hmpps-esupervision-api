@@ -534,6 +534,31 @@ class CheckinV2Service(
   }
 
   @Transactional
+  fun sendReminder(uuid: UUID): CheckinV2Dto {
+    val checkin =
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
+
+    LOGGER.info("DEBUG: Manually triggering REMINDER for checkin {}", uuid)
+    val contactDetails =
+      try {
+        ndiliusApiClient.getContactDetails(checkin.offender.crn)
+      } catch (e: Exception) {
+        LOGGER.warn("Failed to fetch contact details for CRN={}", checkin.offender.crn, e)
+        null
+      }
+
+    if (contactDetails != null) {
+      notificationService.sendCheckinReminderNotifications(checkin, contactDetails)
+    } else {
+      LOGGER.warn("Skipping manual reminder notification for checkin {}: contact details not found", uuid)
+    }
+
+    return checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+  }
+
+  @Transactional
   fun logCheckinEvent(uuid: UUID, request: LogCheckinEventV2Request): UUID {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
