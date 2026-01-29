@@ -110,7 +110,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
-    
+
     service.sendReminderCheckinNotifications(checkin, contactDetails)
 
     verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinReminder))
