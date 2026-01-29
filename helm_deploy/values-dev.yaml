@@ -32,3 +32,5 @@ app:
       chunk-size: 100
     v2-checkin-expiry:
       cron: "0 15 9,15,16 * * *"
+    v2-checkin-reminder:
+      cron: "0 15 9,15,16 * * *"

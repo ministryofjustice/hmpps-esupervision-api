@@ -5,7 +5,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
@@ -16,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.streams.asSequence
 
 /** V2 Checkin Reminder Job Sends notifications for checkins due tomorrow */
@@ -28,6 +31,7 @@ class V2CheckinReminderJob(
   private val jobLogRepository: JobLogV2Repository,
   private val transactionTemplate: TransactionTemplate,
   private val eventAuditService: EventAuditV2Service,
+  private val genericNotificationV2Repository: GenericNotificationV2Repository,
 ) {
 
   @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
@@ -40,6 +44,7 @@ class V2CheckinReminderJob(
     val now = clock.instant()
     val today = LocalDate.now(clock)
     val checkinDueDate = today
+    val startOfDay = today.atStartOfDay(ZoneId.of("Europe/London")).toInstant()
 
     LOGGER.info(
       "V2 Checkin Reminder Job started: processing checkins due on {}",
@@ -56,11 +61,21 @@ class V2CheckinReminderJob(
     var totalReminded = 0
 
     try {
-      // Find checkins eligible for reminder - separate transaction
+      // Find checkins eligible for reminder (if they were already sent one today, don't send again)
+      // the prod job should only run once a day but local/dev environments could be sending duplicate reminders if they're set more frequently
       val checkins =
         transactionTemplate.execute {
           checkinRepository.findEligibleForReminder(checkinDueDate).use { stream ->
-            stream.asSequence().toList()
+            stream.asSequence()
+              .filter { checkin ->
+                val alreadySent = genericNotificationV2Repository.wasReminderSentToday(
+                  offender = checkin.offender,
+                  eventType = NotificationType.OffenderCheckinReminder.name,
+                  cutoffTime = startOfDay,
+                )
+                !alreadySent
+              }
+              .toList()
           }
         }!!
 

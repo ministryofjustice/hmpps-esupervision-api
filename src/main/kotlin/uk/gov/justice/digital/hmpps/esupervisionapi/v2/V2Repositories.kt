@@ -200,6 +200,21 @@ interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2,
     """,
   )
   fun findByOffenderAndEventType(offender: OffenderV2, eventType: String): List<GenericNotificationV2>
+
+  @Query(
+    """
+      SELECT COUNT(n) > 0 
+      FROM GenericNotificationV2 n 
+      WHERE n.offender = :offender 
+        AND n.eventType = :eventType 
+        AND n.createdAt >= :cutoffTime
+  """,
+  )
+  fun wasReminderSentToday(
+    offender: OffenderV2,
+    eventType: String,
+    cutoffTime: Instant,
+  ): Boolean
 }
 
 /**
