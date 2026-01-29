@@ -212,6 +212,29 @@ class EventAuditV2Service(
     }
   }
 
+  private fun recordOffenderStatusEvent(eventType: String, offender: OffenderV2, contactDetails: ContactDetails, notes: String) {
+    assert(eventType in listOf("OFFENDER_VERIFIED", "OFFENDER_UNVERIFIED"))
+    try {
+      val audit = buildAudit(
+        eventType,
+        offender,
+        contactDetails,
+        notes = notes,
+      )
+      transactionTemplate.execute { auditRepository.save(audit) }
+    } catch (e: Exception) {
+      LOGGER.error("Failed to record {} audit event for CRN={}: {}", eventType, offender.crn, PiiSanitizer.sanitizeException(e, offender.crn))
+    }
+  }
+
+  fun recordOffenderDeactivated(offender: OffenderV2, contactDetails: ContactDetails, notes: String) {
+    recordOffenderStatusEvent("OFFENDER_DEACTIVATED", offender, contactDetails, notes)
+  }
+
+  fun recordOffenderReactivated(offender: OffenderV2, contactDetails: ContactDetails, notes: String) {
+    recordOffenderStatusEvent("OFFENDER_REACTIVATED", offender, contactDetails, notes)
+  }
+
   private fun buildAudit(
     eventType: String,
     offender: OffenderV2,

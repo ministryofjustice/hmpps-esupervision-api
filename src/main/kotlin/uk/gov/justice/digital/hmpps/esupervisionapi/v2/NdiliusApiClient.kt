@@ -18,7 +18,9 @@ interface INdiliusApiClient {
   fun getContactDetails(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
 
-  // ?MAX_BATCH_SIZE
+  companion object {
+    const val MAX_BATCH_SIZE = 500
+  }
 }
 
 /**
@@ -71,11 +73,11 @@ class NdiliusApiClient(
       return emptyList()
     }
 
-    if (crns.size > MAX_BATCH_SIZE) {
-      LOGGER.warn("Batch size {} exceeds maximum of {}, truncating", crns.size, MAX_BATCH_SIZE)
+    if (crns.size > INdiliusApiClient.MAX_BATCH_SIZE) {
+      LOGGER.warn("Batch size {} exceeds maximum of {}, truncating", crns.size, INdiliusApiClient.MAX_BATCH_SIZE)
     }
 
-    val batchCrns = crns.take(MAX_BATCH_SIZE)
+    val batchCrns = crns.take(INdiliusApiClient.MAX_BATCH_SIZE)
     LOGGER.info("Fetching contact details for {} CRNs in batch", batchCrns.size)
 
     return try {
@@ -105,9 +107,9 @@ class NdiliusApiClient(
       return emptyList()
     }
 
-    LOGGER.info("Fetching contact details for {} CRNs in batches of {}", crns.size, MAX_BATCH_SIZE)
+    LOGGER.info("Fetching contact details for {} CRNs in batches of {}", crns.size, INdiliusApiClient.MAX_BATCH_SIZE)
 
-    return crns.chunked(MAX_BATCH_SIZE).flatMap { batch ->
+    return crns.chunked(INdiliusApiClient.MAX_BATCH_SIZE).flatMap { batch ->
       getContactDetailsForMultiple(batch)
     }
   }
@@ -150,6 +152,5 @@ class NdiliusApiClient(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(this::class.java)
-    const val MAX_BATCH_SIZE = 500
   }
 }

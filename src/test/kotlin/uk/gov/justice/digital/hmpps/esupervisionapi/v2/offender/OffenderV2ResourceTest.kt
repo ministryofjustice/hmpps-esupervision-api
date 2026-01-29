@@ -15,8 +15,10 @@ import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -37,12 +39,21 @@ class OffenderV2ResourceTest {
   private val offenderRepository: OffenderV2Repository = mock()
   private val s3UploadService: S3UploadService = mock()
   private val checkinCreationService: CheckinCreationService = mock()
+  private val eventAuditV2Service: EventAuditV2Service = mock()
+  private val ndiliusApiClient: INdiliusApiClient = mock()
 
   private lateinit var resource: OffenderV2Resource
 
   @BeforeEach
   fun setUp() {
-    resource = OffenderV2Resource(offenderRepository, s3UploadService, clock, checkinCreationService)
+    resource = OffenderV2Resource(
+      offenderRepository,
+      s3UploadService,
+      clock,
+      checkinCreationService,
+      eventAuditV2Service,
+      ndiliusApiClient,
+    )
   }
 
   // ========================================

@@ -30,7 +30,7 @@ class NotificationOrchestratorV2ServiceTest {
   private val domainEventService: DomainEventService = mock()
   private val eventAuditService: EventAuditV2Service = mock()
   private val eventDetailService: EventDetailV2Service = mock()
-  private val ndiliusApiClient: NdiliusApiClient = mock()
+  private val ndiliusApiClient: INdiliusApiClient = mock()
   private val appConfig: AppConfig = mock()
 
   private lateinit var service: NotificationOrchestratorV2Service

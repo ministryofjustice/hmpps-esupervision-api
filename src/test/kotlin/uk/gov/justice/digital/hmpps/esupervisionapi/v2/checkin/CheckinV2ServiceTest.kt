@@ -16,7 +16,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -46,7 +46,7 @@ class CheckinV2ServiceTest {
   private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val offenderRepository: OffenderV2Repository = mock()
   private val offenderEventLogRepository: OffenderEventLogV2Repository = mock()
-  private val ndiliusApiClient: NdiliusApiClient = mock()
+  private val ndiliusApiClient: INdiliusApiClient = mock()
   private val notificationService: NotificationV2Service = mock()
   private val checkinCreationService: CheckinCreationService = mock()
   private val s3UploadService: S3UploadService = mock()

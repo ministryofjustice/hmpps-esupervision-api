@@ -15,8 +15,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestB
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -48,7 +48,7 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
   private lateinit var offenderEventLogV2Repository: OffenderEventLogV2Repository
 
   @MockitoBean
-  private lateinit var ndiliusApiClient: NdiliusApiClient
+  private lateinit var ndiliusApiClient: INdiliusApiClient
 
   @MockitoBean
   private lateinit var notificationV2Service: NotificationV2Service
