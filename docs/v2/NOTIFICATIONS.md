@@ -227,8 +227,8 @@ notify:
       sms: "41f78d9f-95d1-45c4-bad2-ec53fcddc017"
       email: "3806414e-083e-410e-825a-76e2c72bbd8b"
     checkin-submitted-offender:
-      sms: "80695bae-3917-436a-824b-c61ce04ca4a3"
-      email: "8558a963-0d76-4ad5-82d3-3eb536c76563"
+      sms: "30e5881a-f7f5-427b-a46e-980f3089aec4"
+      email: "df4b43f5-767b-4f0f-b248-615554431384"
     checkin-submitted-practitioner:
       email: "${PRACTITIONER_CHECKIN_SUBMITTED_TEMPLATE_ID}"
     checkin-expired-practitioner:
