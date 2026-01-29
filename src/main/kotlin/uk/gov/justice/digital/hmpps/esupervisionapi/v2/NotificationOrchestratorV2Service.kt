@@ -164,6 +164,7 @@ class NotificationOrchestratorV2Service(
           "number" to totalFlags.toString(),
           "contactRequestFlag" to contactRequestFlag,
           "dashboardSubmissionUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
+          "feedbackUrl" to appConfig.feedbackUrl().toString(),
         )
 
       val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
