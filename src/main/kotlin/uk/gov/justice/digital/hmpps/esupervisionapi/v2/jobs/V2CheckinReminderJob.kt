@@ -9,7 +9,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -74,7 +73,7 @@ class V2CheckinReminderJob(
         val crns = checkins.map { it.offender.crn }.distinct()
         val contactDetailsMap = mutableMapOf<String, ContactDetails>()
 
-        crns.chunked(NdiliusApiClient.MAX_BATCH_SIZE).forEachIndexed { batchIndex, batchCrns ->
+        crns.chunked(INdiliusApiClient.MAX_BATCH_SIZE).forEachIndexed { batchIndex, batchCrns ->
           LOGGER.info("Fetching contact details batch {}: {} CRNs", batchIndex + 1, batchCrns.size)
           try {
             val batchDetails =
