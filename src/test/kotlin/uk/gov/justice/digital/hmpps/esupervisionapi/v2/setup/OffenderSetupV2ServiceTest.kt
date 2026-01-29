@@ -10,7 +10,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
@@ -44,7 +44,7 @@ class OffenderSetupV2ServiceTest {
   private val s3UploadService: S3UploadService = mock()
   private val notificationService: NotificationV2Service = mock()
   private val eventAuditService: EventAuditV2Service = mock()
-  private val ndiliusApiClient: NdiliusApiClient = mock()
+  private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
 
   private lateinit var service: OffenderSetupV2Service
