@@ -51,6 +51,19 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
 
   @Query("SELECT o.crn FROM OffenderV2 o WHERE o IN :offenders")
   fun getCrnsForOffenders(offenders: List<OffenderV2>): List<String>
+
+  @Query(
+    """
+    SELECT o FROM OffenderV2 o
+    JOIN MigrationControl mc ON mc.crn = o.crn
+    WHERE EXISTS (
+        SELECT 1 FROM EventAuditV2 a
+        WHERE a.crn = o.crn AND a.eventType = 'SETUP_COMPLETED'
+        AND a.notes like '%Created by migration from V1%'
+    )
+""",
+  )
+  fun findMigratedWithoutAudit(pageable: Pageable): List<OffenderV2>
 }
 
 /**
@@ -169,6 +182,21 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
     offenderUuid: UUID?,
     pageable: Pageable,
   ): Page<OffenderCheckinV2>
+
+  @Query(
+    """
+    SELECT c FROM OffenderCheckinV2 c
+    JOIN OffenderV2 o ON o = c.offender
+    JOIN MigrationControl mc ON mc.crn = o.crn
+    WHERE c.status = :status
+    AND EXISTS (
+        SELECT 1 FROM EventAuditV2 a
+        WHERE a.checkinUuid = c.uuid
+        AND a.notes like '%Created by migration from V1%'
+    )
+""",
+  )
+  fun findMigratedByStatus(status: CheckinV2Status, pageable: Pageable): List<OffenderCheckinV2>
 }
 
 /**
@@ -295,3 +323,6 @@ interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long>
  */
 @Repository
 interface FeedbackRepository : JpaRepository<Feedback, Long>
+
+@Repository
+interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
