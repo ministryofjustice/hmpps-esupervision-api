@@ -20,9 +20,11 @@ WITH latest_user_state AS (
 
 users AS (
     SELECT
-        COUNT(*) FILTER (WHERE event_type = 'SETUP_COMPLETED') AS active_users,
-        COUNT(*) FILTER (WHERE event_type = 'OFFENDER_DEACTIVATED') AS inactive_users
-    FROM latest_user_state
+        COUNT(*) FILTER (WHERE event_type = 'SETUP_COMPLETED')       AS users_activated,
+        COUNT(*) FILTER (WHERE event_type = 'OFFENDER_DEACTIVATED')  AS users_deactivated
+    FROM event_audit_log_v2
+    WHERE occurred_at >= p_start AND occurred_at < p_end
+      AND event_type IN ('SETUP_COMPLETED', 'OFFENDER_DEACTIVATED')
 ),
 
 checkins AS (
@@ -48,8 +50,8 @@ checkins_per_person AS (
 
 INSERT INTO monthly_stats (
     month,
-    active_users,
-    inactive_users,
+    users_activated,
+    users_deactivated,
     completed_checkins,
     not_completed_on_time,
     total_hours_to_complete,
@@ -58,8 +60,8 @@ INSERT INTO monthly_stats (
 )
 SELECT
     p_month,
-    u.active_users,
-    u.inactive_users,
+    u.users_activated,
+    u.users_deactivated,
     c.completed_checkins,
     c.not_completed_on_time,
     c.total_hours_to_complete,
@@ -70,8 +72,8 @@ CROSS JOIN checkins c
 CROSS JOIN checkins_per_person cpp
 ON CONFLICT (month)
 DO UPDATE SET
-    active_users = EXCLUDED.active_users,
-    inactive_users = EXCLUDED.inactive_users,
+    users_activated = EXCLUDED.users_activated,
+    users_deactivated = EXCLUDED.users_deactivated,
     completed_checkins = EXCLUDED.completed_checkins,
     not_completed_on_time = EXCLUDED.not_completed_on_time,
     total_hours_to_complete = EXCLUDED.total_hours_to_complete,

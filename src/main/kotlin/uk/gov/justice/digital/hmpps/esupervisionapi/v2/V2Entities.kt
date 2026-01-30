@@ -458,10 +458,10 @@ open class StatsSummary(
   @Column(name = "total_signed_up", nullable = false)
   open val totalSignedUp: Long,
 
-  @Column(name = "active_users", nullable = false)
+  @Column(name = "users_activated", nullable = false)
   open val activeUsers: Long,
 
-  @Column(name = "inactive_users", nullable = false)
+  @Column(name = "users_deactivated", nullable = false)
   open val inactiveUsers: Long,
 
   @Column(name = "completed_checkins", nullable = false)
