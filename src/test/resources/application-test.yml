@@ -3,6 +3,9 @@ app:
   mpopUrl: "http://localhost-mpop:3000"
   checkinUrl: "http://localhost-checkin:3000"
   apiBaseUrl: "http://localhost:8080"
+  scheduling:
+    checkin-notification:
+      cron: "-"
 server:
   shutdown: immediate
 
