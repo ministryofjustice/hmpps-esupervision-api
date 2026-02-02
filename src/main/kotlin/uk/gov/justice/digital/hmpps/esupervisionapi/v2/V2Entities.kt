@@ -440,3 +440,20 @@ open class Feedback(
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
 ) : V2BaseEntity()
+
+@Entity
+@Table(name = "migration_control")
+open class MigrationControl(
+  @Column(nullable = false)
+  open var crn: String,
+  @Column(name = "offender_events", nullable = false)
+  open var offenderEvents: Boolean = false,
+  @Column(name = "checkin_created", nullable = false)
+  open var checkinCreated: Boolean = false,
+  @Column(name = "checkin_submitted", nullable = false)
+  open var checkinSubmitted: Boolean = false,
+  @Column(name = "checkin_reviewed", nullable = false)
+  open var checkinReviewed: Boolean = false,
+  @Column(name = "checkin_expired", nullable = false)
+  open var checkinExpired: Boolean = false,
+) : V2BaseEntity()

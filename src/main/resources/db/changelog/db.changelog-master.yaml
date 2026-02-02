@@ -38,4 +38,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/19_create_feedback_table.sql
   - include:
-      file: db/changelog/changesets/20_add_reminder_job_enum.sql
+      file: db/changelog/changesets/20_add_migration_event_replay_to_job_type_v2.sql
+  - include:
+      file: db/changelog/changesets/21_add_migration_control_tables.sql  
+  - include:
+      file: db/changelog/changesets/22_add_reminder_job_enum.sql
