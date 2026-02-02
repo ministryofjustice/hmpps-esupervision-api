@@ -2,7 +2,7 @@ app:
   hostedAt: http://localhost:3000
   scheduling:
     checkin-notification:
-      cron: "0 */15 * * * *"  # Development schedule (every 15 minutes)
+      cron: "-"
       # cron: "*/30 * * * * *"  # Local development schedule (every 30 seconds)
     offender-checkin-expiry:
       cron: "0 */17 * * * *"  # Development schedule (every 17 minutes)

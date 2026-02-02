@@ -40,6 +40,9 @@ app:
     monthly-stats-refresh:
       cron: "0 0 1 * * *"  # Every day at 1:00 AM
       view-name: stats_summary_v1
+    migration-event-replay:
+      cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
+      batch-size: 50
 
 spring:
   application:

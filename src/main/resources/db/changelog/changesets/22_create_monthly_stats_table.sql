@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:20_create_monthly_stats_table
+--changeset rob.catton:22_create_monthly_stats_table
 CREATE TABLE monthly_stats (
   month DATE PRIMARY KEY,
   users_activated BIGINT NOT NULL,
