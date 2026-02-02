@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:22_create_stats_summary_mv splitStatements:false
+--changeset rob.catton:24_create_stats_summary_mv splitStatements:false
 CREATE MATERIALIZED VIEW stats_summary_v1 AS
 WITH running AS (
   SELECT

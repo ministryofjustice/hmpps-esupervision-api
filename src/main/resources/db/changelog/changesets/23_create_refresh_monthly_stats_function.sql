@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:21_create_refresh_monthly_stats_function splitStatements:false
+--changeset rob.catton:23_create_refresh_monthly_stats_function splitStatements:false
 CREATE OR REPLACE FUNCTION refresh_monthly_stats(
     p_month DATE,
     p_start TIMESTAMPTZ,
