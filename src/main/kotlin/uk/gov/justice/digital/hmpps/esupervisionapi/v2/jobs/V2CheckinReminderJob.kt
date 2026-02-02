@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -17,11 +18,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Reposito
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import java.time.Clock
 import java.time.Duration
-import java.time.LocalDate
-import java.time.ZoneId
-import kotlin.streams.asSequence
 
-/** V2 Checkin Reminder Job Sends notifications for checkins due tomorrow */
+/** V2 Checkin Reminder Job Sends notifications for check ins that will expire today (day 3 of 3) */
 @Component
 class V2CheckinReminderJob(
   private val clock: Clock,
@@ -42,13 +40,15 @@ class V2CheckinReminderJob(
   )
   fun process() {
     val now = clock.instant()
-    val today = LocalDate.now(clock)
-    val checkinDueDate = today
-    val startOfDay = today.atStartOfDay(ZoneId.of("Europe/London")).toInstant()
+    val today = clock.today()
+    // date for checkins that started 2 days ago (day 1 out of 3)
+    val checkinStartDate = today.minusDays(2)
+    //  instant of the check in start date used to check if any reminder notifications have been sent since that date
+    val checkinWindowStart = checkinStartDate.atStartOfDay(clock.zone).toInstant()
 
     LOGGER.info(
-      "V2 Checkin Reminder Job started: processing checkins due on {}",
-      checkinDueDate,
+      "V2 Checkin Reminder Job started: processing checkins due on {} (check in expiring at the end of today)",
+      checkinStartDate,
     )
 
     val logEntry =
@@ -60,24 +60,18 @@ class V2CheckinReminderJob(
 
     var totalReminded = 0
 
+    // Find checkins eligible for reminder (if they were already sent one today, don't send again)
+    // the prod job should only run once a day but local/dev environments could be sending duplicate reminders if they're set more frequently
     try {
-      // Find checkins eligible for reminder (if they were already sent one today, don't send again)
-      // the prod job should only run once a day but local/dev environments could be sending duplicate reminders if they're set more frequently
-      val checkins =
-        transactionTemplate.execute {
-          checkinRepository.findEligibleForReminder(checkinDueDate).use { stream ->
-            stream.asSequence()
-              .filter { checkin ->
-                val alreadySent = genericNotificationV2Repository.wasReminderSentToday(
-                  offender = checkin.offender,
-                  eventType = NotificationType.OffenderCheckinReminder.name,
-                  cutoffTime = startOfDay,
-                )
-                !alreadySent
-              }
-              .toList()
-          }
-        }!!
+      val checkins = transactionTemplate.execute {
+        checkinRepository.findEligibleForReminder(
+          checkinStartDate = checkinStartDate,
+          notificationType = NotificationType.OffenderCheckinReminder.name,
+          checkinWindowStart = checkinWindowStart,
+        ).use { stream ->
+          stream.toList()
+        }
+      }!!
 
       LOGGER.info("Found {} checkins eligible for reminder", checkins.size)
 

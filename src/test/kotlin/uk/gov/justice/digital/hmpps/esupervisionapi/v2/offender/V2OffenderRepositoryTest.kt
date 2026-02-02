@@ -6,11 +6,17 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -21,6 +27,12 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
   @Autowired lateinit var offenderV2Repository: OffenderV2Repository
 
   @Autowired lateinit var checkinV2Repository: OffenderCheckinV2Repository
+
+  @Autowired
+  private lateinit var genericNotificationV2Repository: GenericNotificationV2Repository
+
+  @Autowired
+  private lateinit var clock: Clock
 
   @AfterEach
   fun cleanUp() {
@@ -90,52 +102,84 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
   @Test
   @Transactional
   fun `findEligibleForReminder - returns only CREATED checkins due today`() {
-    val today = LocalDate.now()
-    val tomorrow = today.plusDays(1)
+    val today = clock.today()
+    // the check in due date was 2 days ago, meaning today is day 3 and also the day it will expire at 23:59
+    val checkinDueDate = today.minusDays(2)
+    val checkinWindowStart = checkinDueDate.atStartOfDay(clock.zone).toInstant()
 
-    // Due today and has not submitted (should match)
+    // It is day 3, check in will expire tonight and PoP has not submitted (should match)
     val targetOffender = createOffenderV2("V200001", today, Duration.ofDays(7))
     offenderV2Repository.save(targetOffender)
 
-    val targetCheckin = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2(
+    val targetCheckin = OffenderCheckinV2(
       uuid = UUID.randomUUID(),
       offender = targetOffender,
-      status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status.CREATED,
-      dueDate = today,
+      status = CheckinV2Status.CREATED,
+      dueDate = checkinDueDate,
       createdAt = Instant.now(),
       createdBy = "SYSTEM",
     )
     checkinV2Repository.save(targetCheckin)
 
-    // Due today but PoP has submitted (should not match)
+    // It is day 3, check in will expire tonight but PoP has submitted (should not match)
     val submittedOffender = createOffenderV2("V200002", today, Duration.ofDays(7))
     offenderV2Repository.save(submittedOffender)
 
-    val submittedCheckin = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2(
+    val submittedCheckin = OffenderCheckinV2(
       uuid = UUID.randomUUID(),
       offender = submittedOffender,
-      status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status.SUBMITTED,
-      dueDate = today,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = checkinDueDate,
       createdAt = Instant.now(),
       createdBy = "SYSTEM",
     )
     checkinV2Repository.save(submittedCheckin)
 
-    // Due tomorrow and has not submitted (should not match)
-    val tomorrowOffender = createOffenderV2("V200003", tomorrow, Duration.ofDays(7))
+    // It is day 2, not day 3 and PoP has not submitted (should not match)
+    val tomorrowOffender = createOffenderV2("V200003", today.plusDays(1), Duration.ofDays(7))
     offenderV2Repository.save(tomorrowOffender)
 
-    val tomorrowCheckin = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2(
+    val tomorrowCheckin = OffenderCheckinV2(
       uuid = UUID.randomUUID(),
       offender = tomorrowOffender,
-      status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status.CREATED,
-      dueDate = tomorrow,
+      status = CheckinV2Status.CREATED,
+      dueDate = today.plusDays(1),
       createdAt = Instant.now(),
       createdBy = "SYSTEM",
     )
     checkinV2Repository.save(tomorrowCheckin)
 
-    val results = checkinV2Repository.findEligibleForReminder(today).toList()
+    // It is day 3 pop is eligible, BUT notification already sent today (should not match)
+    val notifiedOffender = createOffenderV2("V200004", today, Duration.ofDays(7))
+    offenderV2Repository.save(notifiedOffender)
+
+    val notifiedCheckin = OffenderCheckinV2(
+      uuid = UUID.randomUUID(),
+      offender = notifiedOffender,
+      status = CheckinV2Status.CREATED,
+      dueDate = checkinDueDate,
+      createdAt = Instant.now(),
+      createdBy = "SYSTEM",
+    )
+    checkinV2Repository.save(notifiedCheckin)
+
+    val notification = uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2(
+      notificationId = UUID.randomUUID(),
+      offender = notifiedOffender,
+      eventType = NotificationType.OffenderCheckinReminder.name,
+      createdAt = Instant.now(),
+      reference = "REF123",
+      templateId = "TEMPLATE_ID",
+      recipientType = "OFFENDER",
+      channel = "EMAIL",
+    )
+    genericNotificationV2Repository.save(notification)
+
+    val results = checkinV2Repository.findEligibleForReminder(
+      checkinStartDate = checkinDueDate,
+      notificationType = NotificationType.OffenderCheckinReminder.name,
+      checkinWindowStart = checkinWindowStart,
+    ).toList()
 
     assertEquals(1, results.size)
     assertEquals(targetCheckin.uuid, results[0].uuid)

@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -86,12 +87,22 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
   @Query(
     """
     SELECT c FROM OffenderCheckinV2 c
-    JOIN FETCH c.offender
+    JOIN FETCH c.offender o
     WHERE c.status = 'CREATED'
-      AND c.dueDate = :reminderDate
+      AND c.dueDate = :checkinStartDate
+      AND NOT EXISTS (
+          SELECT n FROM GenericNotificationV2 n
+          WHERE n.offender = o
+            AND n.eventType = :notificationType
+            AND n.createdAt >= :checkinWindowStart
+      )
     """,
   )
-  fun findEligibleForReminder(reminderDate: LocalDate): Stream<OffenderCheckinV2>
+  fun findEligibleForReminder(
+    @Param("checkinStartDate") checkinStartDate: LocalDate,
+    @Param("notificationType") notificationType: String,
+    @Param("checkinWindowStart") checkinWindowStart: Instant,
+  ): Stream<OffenderCheckinV2>
 
   @Query(
     """
