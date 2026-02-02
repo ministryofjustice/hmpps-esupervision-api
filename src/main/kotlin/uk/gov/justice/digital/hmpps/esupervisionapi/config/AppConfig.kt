@@ -38,6 +38,6 @@ class AppConfig(
   )
 
   fun feedbackUrl(): URI = URI(
-    "$hostedAt/feedback",
+    "$checkinUrl/feedback",
   )
 }
