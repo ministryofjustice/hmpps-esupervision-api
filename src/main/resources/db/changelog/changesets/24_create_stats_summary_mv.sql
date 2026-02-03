@@ -24,7 +24,7 @@ totals AS (
     COALESCE(SUM(completed_checkins), 0)::BIGINT AS completed_checkins,
     COALESCE(SUM(not_completed_on_time), 0)::BIGINT AS not_completed_on_time,
     COALESCE(SUM(total_hours_to_complete), 0)::NUMERIC AS total_hours_to_complete,
-    COALESCE(SUM(total_completed_checkins_per_offender), 0)::NUMERIC AS total_completed_checkins_per_offender,
+    COALESCE(SUM(unique_checkin_crns), 0)::BIGINT AS unique_checkin_crns,
     COALESCE(MAX(updated_at), 'epoch'::timestamptz) AS updated_at
   FROM monthly_stats
 )
@@ -44,8 +44,8 @@ SELECT
   END AS avg_hours_to_complete,
 
   CASE
-    WHEN COALESCE(l.total_activated_to_date, 0) = 0 THEN 0
-    ELSE ROUND(t.total_completed_checkins_per_offender / l.total_activated_to_date::NUMERIC, 2)
+    WHEN t.unique_checkin_crns = 0 THEN 0
+    ELSE ROUND(t.completed_checkins::NUMERIC / t.unique_checkin_crns::NUMERIC, 2)
   END AS avg_completed_checkins_per_person,
 
   GREATEST(t.updated_at, COALESCE(l.updated_at, 'epoch'::timestamptz)) AS updated_at

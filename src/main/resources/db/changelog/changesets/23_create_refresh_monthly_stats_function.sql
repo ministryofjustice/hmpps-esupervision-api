@@ -9,16 +9,7 @@ CREATE OR REPLACE FUNCTION refresh_monthly_stats(
 RETURNS void
 LANGUAGE sql
 AS $$
-WITH latest_user_state AS (
-    SELECT DISTINCT ON (crn)
-        crn,
-        event_type
-    FROM event_audit_log_v2
-    WHERE event_type IN ('SETUP_COMPLETED', 'OFFENDER_DEACTIVATED')
-    ORDER BY crn, occurred_at DESC
-),
-
-users AS (
+WITH users AS (
     SELECT
         COUNT(*) FILTER (WHERE event_type = 'SETUP_COMPLETED')       AS users_activated,
         COUNT(*) FILTER (WHERE event_type = 'OFFENDER_DEACTIVATED')  AS users_deactivated
@@ -37,15 +28,10 @@ checkins AS (
 ),
 
 checkins_per_person AS (
-    SELECT SUM(completed_count) AS total_completed_checkins_per_offender
-    FROM (
-        SELECT
-            crn,
-            COUNT(*) FILTER (WHERE event_type IN ('CHECKIN_SUBMITTED', 'CHECKIN_REVIEWED')) AS completed_count
-        FROM event_audit_log_v2
-        WHERE occurred_at >= p_start AND occurred_at <  p_end
-        GROUP BY crn
-    ) t
+    SELECT
+        COUNT(DISTINCT crn) FILTER (WHERE event_type IN ('CHECKIN_SUBMITTED', 'CHECKIN_REVIEWED')) AS unique_checkin_crns
+    FROM event_audit_log_v2
+    WHERE occurred_at >= p_start AND occurred_at < p_end
 )
 
 INSERT INTO monthly_stats (
@@ -55,7 +41,7 @@ INSERT INTO monthly_stats (
     completed_checkins,
     not_completed_on_time,
     total_hours_to_complete,
-    total_completed_checkins_per_offender,
+    unique_checkin_crns,
     updated_at
 )
 SELECT
@@ -65,7 +51,7 @@ SELECT
     c.completed_checkins,
     c.not_completed_on_time,
     c.total_hours_to_complete,
-    cpp.total_completed_checkins_per_offender,
+    cpp.unique_checkin_crns,
     now()
 FROM users u
 CROSS JOIN checkins c
@@ -77,6 +63,5 @@ DO UPDATE SET
     completed_checkins = EXCLUDED.completed_checkins,
     not_completed_on_time = EXCLUDED.not_completed_on_time,
     total_hours_to_complete = EXCLUDED.total_hours_to_complete,
-    total_completed_checkins_per_offender = EXCLUDED.total_completed_checkins_per_offender,
     updated_at = now();
 $$;
