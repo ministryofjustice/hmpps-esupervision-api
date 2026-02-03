@@ -229,6 +229,7 @@ class OffenderV2Resource(
     val saved = offenderRepository.save(offender)
 
     recordOffenderAuditEvent("OFFENDER_REACTIVATED", offender, request.reason)
+    val photoUrl = getOffenderPhotoUrl(saved)
 
     LOGGER.info(
       "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
@@ -237,7 +238,7 @@ class OffenderV2Resource(
       request.requestedBy,
       request.reason,
     )
-    return ResponseEntity.ok(saved.toSummaryDto())
+    return ResponseEntity.ok(saved.toSummaryDto(photoUrl))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
