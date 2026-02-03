@@ -29,6 +29,7 @@ app:
   scheduling:
     checkin-notification:
       cron: "-"
+      enabled: false
     v2-checkin-creation:
       cron: "0 0,30 * * * *"
       chunk-size: 100
