@@ -61,34 +61,67 @@ HAVING COUNT(*) > 1;
 -- These will be fetched from Ndilius on-demand
 
 -- Create temporary mapping table to track V1 ID → V2 ID relationship
-CREATE TEMP TABLE offender_id_mapping (
+CREATE TABLE offender_id_mapping (
                                           v1_id BIGINT PRIMARY KEY,
                                           v2_id BIGINT NOT NULL,
                                           v1_uuid UUID NOT NULL,
                                           crn VARCHAR(7) NOT NULL
 );
 
-CREATE TEMP TABLE offender_crn_mapping (
+CREATE TABLE offender_crn_mapping (
                                            crn VARCHAR(7) PRIMARY KEY UNIQUE NOT NULL,
                                            v1_id BIGINT NOT NULL);
 
 
-CREATE TEMP TABLE checkin_id_mapping (
+CREATE TABLE checkin_id_mapping (
                                          v1_id BIGINT PRIMARY KEY,
                                          v2_id BIGINT NOT NULL,
                                          v1_uuid UUID NOT NULL,
                                          v2_uuid UUID NOT NULL
 );
 
-CREATE TEMP TABLE migration_counts (
+CREATE TABLE migration_counts (
                                        label VARCHAR(255),
                                        record_count BIGINT
 );
+
+CREATE TABLE offender_migration_status (
+    v1_id BIGINT PRIMARY KEY,
+    status VARCHAR(255) not null
+);
+
+\set START '2026-02-02';
+\set MIG_STATUS 'BEFORE'
 
 BEGIN;
 
 insert into migration_counts(label, record_count)
 values ('offenders_v2_before', (select count(*) offenders_v2_to_migrate from offender_v2));
+
+-- we split offenders into two sets: with no checkins in flight, and those with checkins in flight
+with offenders_before as (
+    select distinct(offender_id) as offender_id from offender_checkin where created_at < :'START'::date order by offender_id
+),
+     offenders_ongoing as (
+         select distinct(offender_id) as offender_id from offender_checkin where created_at >= :'START'::date order by offender_id
+     ),
+     offenders_mig_status as (
+         select
+             b.offender_id,
+             CASE WHEN o.offender_id is null THEN 'BEFORE' ELSE 'ONGOING' END as status
+         from offenders_before b
+                  left join offenders_ongoing o on b.offender_id = o.offender_id
+     ),
+     offenders_sanitised as (
+         select id
+         from offender o
+         where o.status in ('VERIFIED', 'INACTIVE') AND o.crn IS NOT NULL AND o.crn != '' and (o.crn !~* '^X' and o.crn != 'A123456')
+     )
+insert into offender_migration_status (v1_id, status)
+select os.id, COALESCE(om.status, 'BEFORE')
+from offenders_sanitised os
+         left join offenders_mig_status om on os.id = om.offender_id
+order by offender_id;
 
 -- Insert one row per CRN (keep the last by offender.created_at)
 WITH ranked_offenders AS (
@@ -101,10 +134,12 @@ WITH ranked_offenders AS (
             ORDER BY created_at DESC, id DESC
             ) AS rn
     FROM offender
+    JOIN offender_migration_status m ON m.v1_id = offender.id
     WHERE
-        status IN ('VERIFIED', 'INACTIVE')
+        offender.status IN ('VERIFIED', 'INACTIVE')
       AND crn IS NOT NULL AND TRIM(crn) != ''
       AND (crn !~* '^X' AND crn != 'A123456')
+      AND m.status = :'MIG_STATUS'::text
 )
 INSERT INTO offender_crn_mapping (v1_id, crn)
 SELECT
@@ -133,7 +168,7 @@ WITH inserted_offenders AS (
             UPPER(TRIM(o.crn)),
             o.practitioner,
             offender_status_v2(o.status),
-            COALESCE(o.first_checkin, CURRENT_DATE),  -- Default if null
+            COALESCE(o.first_checkin, CURRENT_DATE),  -- Default if null, only deactivated offenders have null first_checkin
             o.checkin_interval,
             o.created_at,
             o.practitioner,  -- created_by = practitioner
@@ -164,6 +199,16 @@ SELECT 'Unique CRNs migrated' as step, COUNT(*) as record_count FROM offender_cr
 SELECT 'Offenders migrated' as step, COUNT(*) as record_count FROM offender_id_mapping;
 SELECT label, record_count FROM migration_counts;
 COMMIT;
+
+-- report if there are any active offenders with null first_checkin
+select o.id,o.crn,o.status,o.first_checkin from offender o join offender_migration_status m on o.id = m.v1_id;
+
+-- report on offender ids and CRNs - note CRNs are not unique in the V1 offenders table, so "io.crn" can have nulls
+-- which means offender with the given CRN was deactivated and then activated
+select oi.v1_id as "id mapping", m.v1_id as "mig. status", oi.crn as "oi.crn", o.status, o.crn as "o.crn"
+from offender_migration_status m
+left join offender_id_mapping oi on oi.v1_id = m.v1_id
+join offender o on m.v1_id = o.id;
 
 -- ============================================================================
 -- STEP 2: Migrate Checkins (V1 → V2)
@@ -217,6 +262,7 @@ WITH inserted_checkins AS (
                  join offender_id_mapping m on m.crn = cm.crn
                  join offender_checkin c on c.offender_id = o.id
         where o.status not in ('INITIAL')
+          and c.due_date < :'START'::date
           and NOT EXISTS (
             SELECT 1 FROM offender_checkin_v2 v2 WHERE v2.uuid = c.uuid
         )
@@ -270,11 +316,13 @@ SELECT
     e.log_entry_type::log_entry_type_v2,
     e.practitioner,
     e.uuid,
-    cm.v2_id,  -- Link to V2 checkin
+    ci.v2_id,  -- Link to V2 checkin
     om.v2_id   -- Link to V2 offender
 FROM offender_event_log e
-         LEFT JOIN checkin_id_mapping cm ON e.checkin = cm.v1_id
-         LEFT JOIN offender_id_mapping om ON e.offender_id = om.v1_id
+JOIN offender o on e.offender_id = o.id
+JOIN offender_crn_mapping cm on o.crn = cm.crn
+JOIN offender_id_mapping om ON om.crn = cm.crn
+LEFT JOIN checkin_id_mapping ci ON e.checkin = ci.v1_id
 WHERE NOT EXISTS (
     SELECT 1 FROM offender_event_log_v2 v2 WHERE v2.uuid = e.uuid
 );
@@ -332,7 +380,7 @@ INSERT INTO event_audit_log_v2 (
     notes)
 SELECT
     'SETUP_COMPLETED',
-    o.created_at,
+    (select min(o.created_at) from offender o where o.crn ilike cm.crn),
     o.crn,
     o.practitioner_id,
     null,
