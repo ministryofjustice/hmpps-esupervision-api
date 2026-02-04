@@ -233,6 +233,29 @@ class OffenderV2ResourceTest {
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
   }
 
+  @Test
+  fun `reactivateOffender - happy path - returns photo URL for VERIFIED offender`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
+    val request = ReactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Restarting supervision",
+    )
+
+    val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    // mock s3
+    whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
+
+    val result = resource.reactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(OffenderStatus.VERIFIED, result.body?.status)
+    assertEquals(uuid, result.body?.uuid)
+    assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
+  }
+
   // ========================================
   // Upload Location Tests
   // ========================================
