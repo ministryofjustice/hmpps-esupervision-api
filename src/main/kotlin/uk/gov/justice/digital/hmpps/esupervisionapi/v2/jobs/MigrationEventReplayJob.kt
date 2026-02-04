@@ -7,10 +7,13 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MigrationEventReplayService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControl
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControlRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import java.time.Clock
 
 @Component
@@ -19,6 +22,9 @@ class MigrationEventReplayJob(
   private val migrationEventReplayService: MigrationEventReplayService,
   private val jobLogRepository: JobLogV2Repository,
   private val migrationControlRepository: MigrationControlRepository,
+  private val eventAuditService: EventAuditV2Service,
+  private val eventAuditRepository: EventAuditV2Repository,
+  private val ndiliusApiClient: INdiliusApiClient,
   @Value("\${app.scheduling.migration-event-replay.batch-size}") private val batchSize: Int,
 ) {
   @Scheduled(cron = "\${app.scheduling.migration-event-replay.cron}")
@@ -39,6 +45,7 @@ class MigrationEventReplayJob(
       LOGGER.info("Migration control: crns: ({})", crns.map { it.crn }.joinToString(", "))
     } catch (e: Exception) {
       LOGGER.warn("Migration Event Replay Job(id={}) failed: {}", logEntry.id, e.message)
+      return
     }
 
     val crnToMigrationControl = crns.associateBy { it.crn }
@@ -55,10 +62,39 @@ class MigrationEventReplayJob(
       }
     }
 
+    try {
+      fillAuditEventDetails(crnToMigrationControl.keys)
+    } catch (e: Exception) {
+      LOGGER.warn("failed fillAuditEventDetails", e)
+    }
+
     val endTime = clock.instant()
     logEntry.endedAt = endTime
     jobLogRepository.saveAndFlush(logEntry)
     LOGGER.info("Migration Event Replay Job(id={}) completed", logEntry.id)
+  }
+
+  fun fillAuditEventDetails(crns: Set<String>) {
+    LOGGER.info("Fetching contact details for {} CRNs", crns.size)
+    // NOTE: we don't have more than 500 in prod, so we take the easy way out
+    val contacts = ndiliusApiClient.getContactDetailsForMultiple(crns.toList())
+    val contactsByCrn = contacts.associateBy { it.crn }
+    val entries = eventAuditRepository.findByCrnOrderByOccurredAt(crns)
+    LOGGER.info("fillAuditEventDetails: found {} audit entries, contact details for {} CRNs", entries.size, contactsByCrn.size)
+    var numUpdated = 0
+    for (entry in entries) {
+      val contactDetails = contactsByCrn[entry.crn] ?: continue
+      entry.localAdminUnitCode = contactDetails.practitioner?.localAdminUnit?.code
+      entry.localAdminUnitDescription = contactDetails.practitioner?.localAdminUnit?.description
+      entry.pduCode = contactDetails.practitioner?.probationDeliveryUnit?.code
+      entry.pduDescription = contactDetails.practitioner?.probationDeliveryUnit?.description
+      entry.providerCode = contactDetails.practitioner?.provider?.code
+      entry.providerDescription = contactDetails.practitioner?.provider?.description
+      ++numUpdated
+    }
+
+    eventAuditRepository.saveAll(entries)
+    LOGGER.info("fillAuditEventDetails: updated {} audit entries", numUpdated)
   }
 
   companion object {
