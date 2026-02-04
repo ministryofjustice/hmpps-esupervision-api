@@ -9,6 +9,7 @@ data class OffenderCheckinSubmittedMessage(
 ) : Message {
   override fun personalisationData(appConfig: AppConfig): Map<String, String> = mapOf(
     "name" to "$firstName $lastName",
+    "feedbackUrl" to appConfig.feedbackUrl().toString(),
   )
 
   override val messageType: NotificationType
