@@ -311,6 +311,22 @@ class CheckinV2Resource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/reminder")
+  @Operation(
+    summary = "DEBUG: Manual reminder trigger",
+    description =
+    "DEBUG ONLY - Manually trigger a reminder notification for a checkin. Use for testing purposes.",
+  )
+  @ApiResponse(responseCode = "200", description = "Reminder sent")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun sendReminder(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<CheckinV2Dto> {
+    val checkin = checkinService.sendReminder(uuid)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/log-event")
   @Operation(
     summary = "Log checkin audit event",

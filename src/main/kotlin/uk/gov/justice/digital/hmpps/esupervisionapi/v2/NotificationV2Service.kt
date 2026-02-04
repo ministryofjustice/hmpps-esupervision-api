@@ -48,6 +48,13 @@ class NotificationV2Service(
   }
 
   /**
+   * Send reminder notifications for checkin event
+   */
+  fun sendCheckinReminderNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
+    orchestrator.sendReminderCheckinNotifications(checkin, contactDetails)
+  }
+
+  /**
    * Send notifications for checkin updated event
    */
   fun sendCheckinUpdatedNotifications(checkin: OffenderCheckinV2, annotation: OffenderEventLogV2) {
