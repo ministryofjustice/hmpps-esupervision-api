@@ -30,3 +30,4 @@ app:
   scheduling:
     checkin-notification:
       cron: "-"
+      enabled: false
