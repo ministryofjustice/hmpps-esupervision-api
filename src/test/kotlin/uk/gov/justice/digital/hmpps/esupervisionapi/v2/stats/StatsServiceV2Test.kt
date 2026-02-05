@@ -28,6 +28,10 @@ class StatsServiceV2Test {
         avgHoursToComplete = BigDecimal.valueOf(5.5),
         avgCompletedCheckinsPerPerson = BigDecimal.valueOf(2.86),
         updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
+        pctActiveUsers = BigDecimal.valueOf(0.7),
+        pctInactiveUsers = BigDecimal.valueOf(0.3),
+        pctCompletedCheckins = BigDecimal.valueOf(0.9091),
+        pctExpiredCheckins = BigDecimal.valueOf(0.0909),
       )
 
     val expectedResult = StatsWithPercentages(

@@ -476,6 +476,18 @@ open class StatsSummary(
   @Column(name = "avg_completed_checkins_per_person")
   open val avgCompletedCheckinsPerPerson: BigDecimal?,
 
+  @Column(name = "pct_active_users", nullable = false)
+  open val pctActiveUsers: BigDecimal,
+
+  @Column(name = "pct_inactive_users", nullable = false)
+  open val pctInactiveUsers: BigDecimal,
+
+  @Column(name = "pct_completed_checkins", nullable = false)
+  open val pctCompletedCheckins: BigDecimal,
+
+  @Column(name = "pct_expired_checkins", nullable = false)
+  open val pctExpiredCheckins: BigDecimal,
+
   @Column(name = "updated_at", nullable = false)
   open var updatedAt: Instant,
 )

@@ -48,6 +48,26 @@ SELECT
     ELSE ROUND(t.completed_checkins::NUMERIC / t.unique_checkin_crns::NUMERIC, 2)
   END AS avg_completed_checkins_per_person,
 
+  CASE
+    WHEN COALESCE(l.total_activated_to_date, 0) = 0 THEN 0
+    ELSE ROUND(l.active_users_to_date::NUMERIC / l.total_activated_to_date::NUMERIC, 4)
+  END AS pct_active_users,
+
+  CASE
+    WHEN COALESCE(l.total_activated_to_date, 0) = 0 THEN 0
+    ELSE ROUND(l.total_deactivated_to_date::NUMERIC / l.total_activated_to_date::NUMERIC, 4)
+  END AS pct_inactive_users,
+
+  CASE
+    WHEN (t.completed_checkins + t.not_completed_on_time) = 0 THEN 0
+    ELSE ROUND(t.completed_checkins::NUMERIC / (t.completed_checkins + t.not_completed_on_time)::NUMERIC, 4)
+  END AS pct_completed_checkins,
+
+  CASE
+    WHEN (t.completed_checkins + t.not_completed_on_time) = 0 THEN 0
+    ELSE ROUND(t.not_completed_on_time::NUMERIC / (t.completed_checkins + t.not_completed_on_time)::NUMERIC, 4)
+  END AS pct_expired_checkins,
+
   GREATEST(t.updated_at, COALESCE(l.updated_at, 'epoch'::timestamptz)) AS updated_at
 FROM totals t
 CROSS JOIN latest l;

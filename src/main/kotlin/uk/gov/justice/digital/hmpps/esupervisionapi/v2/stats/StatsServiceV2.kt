@@ -3,8 +3,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
-import java.math.BigDecimal
-import java.math.RoundingMode
 
 data class StatsWithPercentages(
   val totalSignedUp: Long,
@@ -31,10 +29,7 @@ class StatsServiceV2(
     val stats = repository.findBySingleton(1)
       ?: throw IllegalStateException("Stats summary not found – materialised view stats_summary_v1 is empty")
 
-    val totalUsers = stats.totalSignedUp.toDouble().takeIf { it > 0 } ?: 1.0
-    val totalCheckins = (stats.completedCheckins + stats.notCompletedOnTime).toDouble().takeIf { it > 0 } ?: 1.0
-
-    fun fourDecimals(value: Double) = BigDecimal(value).setScale(4, RoundingMode.HALF_UP).toDouble()
+    fun bdToDouble(value: java.math.BigDecimal?) = value?.toDouble() ?: 0.0
 
     return StatsWithPercentages(
       totalSignedUp = stats.totalSignedUp,
@@ -42,13 +37,13 @@ class StatsServiceV2(
       inactiveUsers = stats.inactiveUsers,
       completedCheckins = stats.completedCheckins,
       notCompletedOnTime = stats.notCompletedOnTime,
-      avgHoursToComplete = fourDecimals(stats.avgHoursToComplete?.toDouble() ?: 0.0),
-      avgCompletedCheckinsPerPerson = fourDecimals(stats.avgCompletedCheckinsPerPerson?.toDouble() ?: 0.0),
+      avgHoursToComplete = bdToDouble(stats.avgHoursToComplete),
+      avgCompletedCheckinsPerPerson = bdToDouble(stats.avgCompletedCheckinsPerPerson),
       updatedAt = stats.updatedAt,
-      pctActiveUsers = fourDecimals(stats.activeUsers / totalUsers),
-      pctInactiveUsers = fourDecimals(stats.inactiveUsers / totalUsers),
-      pctCompletedCheckins = fourDecimals(stats.completedCheckins / totalCheckins),
-      pctExpiredCheckins = fourDecimals(stats.notCompletedOnTime / totalCheckins),
+      pctActiveUsers = bdToDouble(stats.pctActiveUsers),
+      pctInactiveUsers = bdToDouble(stats.pctInactiveUsers),
+      pctCompletedCheckins = bdToDouble(stats.pctCompletedCheckins),
+      pctExpiredCheckins = bdToDouble(stats.pctExpiredCheckins),
     )
   }
 }
