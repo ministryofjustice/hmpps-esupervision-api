@@ -5,10 +5,12 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
+import org.hibernate.annotations.Immutable
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -440,6 +442,55 @@ open class Feedback(
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
 ) : V2BaseEntity()
+
+/**
+ * Aggregated statistics materialised view (singleton row)
+ */
+@Immutable
+@Entity
+@Table(name = "stats_summary_v1")
+open class StatsSummary(
+
+  @Id
+  @Column(name = "singleton", nullable = false)
+  open val singleton: Int = 1,
+
+  @Column(name = "total_signed_up", nullable = false)
+  open val totalSignedUp: Long,
+
+  @Column(name = "users_activated", nullable = false)
+  open val activeUsers: Long,
+
+  @Column(name = "users_deactivated", nullable = false)
+  open val inactiveUsers: Long,
+
+  @Column(name = "completed_checkins", nullable = false)
+  open val completedCheckins: Long,
+
+  @Column(name = "not_completed_on_time", nullable = false)
+  open val notCompletedOnTime: Long,
+
+  @Column(name = "avg_hours_to_complete")
+  open val avgHoursToComplete: BigDecimal?,
+
+  @Column(name = "avg_completed_checkins_per_person")
+  open val avgCompletedCheckinsPerPerson: BigDecimal?,
+
+  @Column(name = "pct_active_users", nullable = false)
+  open val pctActiveUsers: BigDecimal,
+
+  @Column(name = "pct_inactive_users", nullable = false)
+  open val pctInactiveUsers: BigDecimal,
+
+  @Column(name = "pct_completed_checkins", nullable = false)
+  open val pctCompletedCheckins: BigDecimal,
+
+  @Column(name = "pct_expired_checkins", nullable = false)
+  open val pctExpiredCheckins: BigDecimal,
+
+  @Column(name = "updated_at", nullable = false)
+  open var updatedAt: Instant,
+)
 
 @Entity
 @Table(name = "migration_control")

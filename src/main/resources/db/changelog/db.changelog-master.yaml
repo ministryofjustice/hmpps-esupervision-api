@@ -41,3 +41,9 @@ databaseChangeLog:
       file: db/changelog/changesets/20_add_migration_event_replay_to_job_type_v2.sql
   - include:
       file: db/changelog/changesets/21_add_migration_control_tables.sql
+  - include: 
+      file: db/changelog/changesets/22_create_monthly_stats_table.sql
+  - include:
+      file: db/changelog/changesets/23_create_refresh_monthly_stats_function.sql
+  - include:
+      file: db/changelog/changesets/24_create_stats_summary_mv.sql

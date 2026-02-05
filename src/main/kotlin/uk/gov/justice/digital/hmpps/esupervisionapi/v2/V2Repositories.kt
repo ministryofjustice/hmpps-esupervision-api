@@ -324,5 +324,13 @@ interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long>
 @Repository
 interface FeedbackRepository : JpaRepository<Feedback, Long>
 
+/**
+ * Repository for Stats
+ */
+@Repository
+interface StatsSummaryRepository : JpaRepository<StatsSummary, Int> {
+  fun findBySingleton(singleton: Int = 1): StatsSummary?
+}
+
 @Repository
 interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
