@@ -249,7 +249,7 @@ interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2,
         AND n.createdAt >= :cutoffTime
   """,
   )
-  fun wasReminderSentToday(
+  fun hasNotificationBeenSent(
     offender: OffenderV2,
     eventType: String,
     cutoffTime: Instant,

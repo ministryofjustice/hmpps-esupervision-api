@@ -8,14 +8,17 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
@@ -46,6 +49,7 @@ class CheckinV2ServiceTest {
   private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val offenderRepository: OffenderV2Repository = mock()
   private val offenderEventLogRepository: OffenderEventLogV2Repository = mock()
+  private val genericNotificationV2Repository: GenericNotificationV2Repository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val notificationService: NotificationV2Service = mock()
   private val checkinCreationService: CheckinCreationService = mock()
@@ -64,6 +68,7 @@ class CheckinV2ServiceTest {
       clock,
       checkinRepository,
       offenderRepository,
+      genericNotificationV2Repository,
       offenderEventLogRepository,
       ndiliusApiClient,
       notificationService,
@@ -120,6 +125,35 @@ class CheckinV2ServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     service.sendReminder(uuid)
     verify(notificationService).sendCheckinReminderNotifications(checkin, contactDetails)
+  }
+
+  @Test
+  fun `sendReminder - unhappy path - throws 429 when throttled by 30 min restriction to stop reminders being sent again`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+    )
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(
+      genericNotificationV2Repository.hasNotificationBeenSent(
+        eq(offender),
+        eq(NotificationType.OffenderCheckinReminder.name),
+        any(),
+      ),
+    ).thenReturn(true)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.sendReminder(uuid)
+    }
+
+    assertEquals(HttpStatus.TOO_MANY_REQUESTS, exception.statusCode)
+    assertTrue(exception.reason!!.contains("wait 30 minutes"))
   }
 
   @Test

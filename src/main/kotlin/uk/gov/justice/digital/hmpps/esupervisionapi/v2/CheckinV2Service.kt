@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -26,6 +28,7 @@ class CheckinV2Service(
   private val clock: Clock,
   private val checkinRepository: OffenderCheckinV2Repository,
   private val offenderRepository: OffenderV2Repository,
+  private val genericNotificationV2Repository: GenericNotificationV2Repository,
   private val offenderEventLogRepository: OffenderEventLogV2Repository,
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationService: NotificationV2Service,
@@ -539,6 +542,18 @@ class CheckinV2Service(
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
+    // check to see if a reminder has been sent in the last 30 mins
+    val notificationThrottleWindow = clock.instant().minus(Duration.ofMinutes(30))
+    val notificationAlreadySent = genericNotificationV2Repository.hasNotificationBeenSent(
+      offender = checkin.offender,
+      eventType = NotificationType.OffenderCheckinReminder.name,
+      cutoffTime = notificationThrottleWindow,
+    )
+
+    if (notificationAlreadySent) {
+      LOGGER.info("Throttling manual reminder for checkin {}: notification was sent in the last 30 minutes", uuid)
+      throw ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "A reminder was sent recently. Please wait 30 minutes.")
+    }
 
     LOGGER.info("DEBUG: Manually triggering REMINDER for checkin {}", uuid)
     val contactDetails =
