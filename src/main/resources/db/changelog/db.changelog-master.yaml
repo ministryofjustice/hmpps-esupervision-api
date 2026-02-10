@@ -47,3 +47,5 @@ databaseChangeLog:
       file: db/changelog/changesets/23_create_refresh_monthly_stats_function.sql
   - include:
       file: db/changelog/changesets/24_create_stats_summary_mv.sql
+  - include:
+      file: db/changelog/changesets/25_add_reminder_job_enum.sql
