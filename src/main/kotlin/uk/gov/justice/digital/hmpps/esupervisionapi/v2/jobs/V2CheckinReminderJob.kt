@@ -1,8 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
-import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
@@ -32,12 +30,12 @@ class V2CheckinReminderJob(
   private val genericNotificationV2Repository: GenericNotificationV2Repository,
 ) {
 
-  @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
-  @SchedulerLock(
-    name = "V2 Checkin Reminder Job",
-    lockAtLeastFor = "PT5S",
-    lockAtMostFor = "PT30M",
-  )
+//  @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
+//  @SchedulerLock(
+//    name = "V2 Checkin Reminder Job",
+//    lockAtLeastFor = "PT5S",
+//    lockAtMostFor = "PT30M",
+//  )
   fun process() {
     val now = clock.instant()
     val today = clock.today()
