@@ -94,7 +94,7 @@ class MigrationEventReplayService(
 
     val reviewed = processCheckinBatch(CheckinV2Status.REVIEWED, batchSize) { checkin ->
       val control = crns[checkin.offender.crn]
-      if (control == null || control.checkinSubmitted) return@processCheckinBatch
+      if (control == null || control.checkinReviewed) return@processCheckinBatch
       sendAndMark(control, CheckinV2Status.CREATED, checkin)
       sendAndMark(control, CheckinV2Status.SUBMITTED, checkin)
       sendAndMark(control, CheckinV2Status.REVIEWED, checkin)
@@ -104,7 +104,7 @@ class MigrationEventReplayService(
 
     val expired = processCheckinBatch(CheckinV2Status.EXPIRED, batchSize) { checkin ->
       val control = crns[checkin.offender.crn]
-      if (control == null || control.checkinSubmitted) return@processCheckinBatch
+      if (control == null || control.checkinExpired) return@processCheckinBatch
       sendAndMark(control, CheckinV2Status.CREATED, checkin)
       sendAndMark(control, CheckinV2Status.EXPIRED, checkin)
       if (checkin.reviewedAt != null) {
