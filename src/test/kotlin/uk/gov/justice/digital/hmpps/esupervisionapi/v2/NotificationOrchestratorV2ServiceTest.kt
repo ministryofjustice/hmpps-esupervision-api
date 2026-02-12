@@ -131,7 +131,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     service.sendCheckinSubmittedNotifications(checkin, contactDetails)
 
-    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(),eq(null))
+    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null))
     verify(eventAuditService, never()).recordCheckinSubmitted(checkin, contactDetails)
   }
 
