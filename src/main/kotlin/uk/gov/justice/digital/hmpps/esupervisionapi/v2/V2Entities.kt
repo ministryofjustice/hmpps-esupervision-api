@@ -28,6 +28,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.util.UUID
+import com.fasterxml.jackson.databind.JsonNode
 
 /**
  * V2 Offender Entity (no PII, only CRN)
@@ -487,6 +488,33 @@ open class StatsSummary(
 
   @Column(name = "pct_expired_checkins", nullable = false)
   open val pctExpiredCheckins: BigDecimal,
+
+  @Column(name = "feedback_total", nullable = false)
+  open val feedbackTotal: Long,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "how_easy_counts", nullable = false, columnDefinition = "jsonb")
+  open val howEasyCounts: JsonNode,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "how_easy_pct", nullable = false, columnDefinition = "jsonb")
+  open val howEasyPct: JsonNode,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "getting_support_counts", nullable = false, columnDefinition = "jsonb")
+  open val gettingSupportCounts: JsonNode,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "getting_support_pct", nullable = false, columnDefinition = "jsonb")
+  open val gettingSupportPct: JsonNode,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "improvements_counts", nullable = false, columnDefinition = "jsonb")
+  open val improvementsCounts: JsonNode,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "improvements_pct", nullable = false, columnDefinition = "jsonb")
+  open val improvementsPct: JsonNode,
 
   @Column(name = "updated_at", nullable = false)
   open var updatedAt: Instant,

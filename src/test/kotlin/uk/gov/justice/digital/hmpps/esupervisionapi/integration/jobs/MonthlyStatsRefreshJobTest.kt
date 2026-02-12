@@ -24,13 +24,18 @@ class MonthlyStatsRefreshJobTest {
   private val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock, viewName)
 
   @Test
-  fun `refresh calls monthly stats function and materialized view in order`() {
+  fun `refresh calls monthly stats function, monthly feedback stats function, and materialized view in order`() {
     job.refresh()
 
     val order = inOrder(jdbcTemplate)
 
     order.verify(jdbcTemplate).execute(
       eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+      any<PreparedStatementCallback<*>>(),
+    )
+
+    order.verify(jdbcTemplate).execute(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
       any<PreparedStatementCallback<*>>(),
     )
 
@@ -51,6 +56,28 @@ class MonthlyStatsRefreshJobTest {
 
     verify(jdbcTemplate).execute(
       eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+      any<PreparedStatementCallback<*>>(),
+    )
+  }
+
+  @Test
+  fun `refresh logs and does not throw when monthly feedback stats function throws`() {
+    doThrow(RuntimeException("DB error"))
+      .whenever(jdbcTemplate)
+      .execute(
+        eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
+        any<PreparedStatementCallback<*>>(),
+      )
+
+    job.refresh()
+
+    verify(jdbcTemplate).execute(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+      any<PreparedStatementCallback<*>>(),
+    )
+
+    verify(jdbcTemplate).execute(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
       any<PreparedStatementCallback<*>>(),
     )
   }
