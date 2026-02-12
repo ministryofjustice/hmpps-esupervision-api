@@ -34,9 +34,7 @@ app:
       cron: "0 0 9 * * *"  # Every day at 9 AM (matches V1 timing)
       # we process offender records in chunks
       chunk-size: 100
-    v2-checkin-reminder:
-      cron: "0 0 9 * * *"  # Same time as initial checkin notification
-      chunk-size: 100
+    v2-checkin-reminder: ${APP_SCHEDULING_CHECKIN_REMINDER_NOTIFICATION_CRON}
     v2-checkin-expiry:
       cron: "0 15 9 * * *"  # Every day at 9:15 AM (matches V1 timing)
       grace-period-days: 3

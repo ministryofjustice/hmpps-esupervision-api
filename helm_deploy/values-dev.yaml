@@ -22,6 +22,7 @@ generic-service:
     APP_SCHEDULING_CHECKIN_NOTIFICATION_ENABLED: "false"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_CRON: "-"
     APP_SCHEDULING_OFFENDER_CHECKIN_EXPIRY_CRON: "0 15 9,12,13,15,16 * * *"
+    APP_SCHEDULING_CHECKIN_REMINDER_NOTIFICATION_CRON: "0 15 9,15,16 * * *"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
@@ -32,5 +33,5 @@ app:
   scheduling:
     v2-checkin-expiry:
       cron: "0 15 9,15,16 * * *"
-    v2-checkin-reminder:
-      cron: "0 15 9,15,16 * * *"
+    # v2-checkin-reminder:
+    #   cron: "0 15 9,15,16 * * *"

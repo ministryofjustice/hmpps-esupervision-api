@@ -20,6 +20,7 @@ generic-service:
     #APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_ENABLED: "false"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_CRON: "-"
+    APP_SCHEDULING_CHECKIN_REMINDER_NOTIFICATION_CRON: "-"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
