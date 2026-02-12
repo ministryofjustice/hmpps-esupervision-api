@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:25_create_monthly_feedback_stats_table splitStatements:false
+--changeset rob.catton:26_create_monthly_feedback_stats_table splitStatements:false
 CREATE TABLE monthly_feedback_stats (
   month DATE NOT NULL REFERENCES monthly_stats(month) ON DELETE CASCADE,
 
