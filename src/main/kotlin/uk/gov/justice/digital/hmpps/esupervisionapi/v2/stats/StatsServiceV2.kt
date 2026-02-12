@@ -1,9 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
+import com.fasterxml.jackson.databind.JsonNode
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
-import com.fasterxml.jackson.databind.JsonNode
 
 data class StatsWithPercentages(
   val totalSignedUp: Long,

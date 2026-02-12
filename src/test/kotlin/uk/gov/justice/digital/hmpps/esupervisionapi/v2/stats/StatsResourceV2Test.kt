@@ -20,7 +20,6 @@ class StatsResourceV2Test {
 
   @Test
   fun `getStats returns expected StatsResponse`() {
-
     val howEasyCounts: JsonNode =
       mapper.valueToTree(
         mapOf(

@@ -20,7 +20,6 @@ class StatsServiceV2Test {
 
   @Test
   fun `getStats returns stats when repository has data`() {
-
     val howEasyCounts: JsonNode =
       mapper.valueToTree(
         mapOf(

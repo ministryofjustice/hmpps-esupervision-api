@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import com.fasterxml.jackson.databind.JsonNode
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -28,7 +29,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.util.UUID
-import com.fasterxml.jackson.databind.JsonNode
 
 /**
  * V2 Offender Entity (no PII, only CRN)
