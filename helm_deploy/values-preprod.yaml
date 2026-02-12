@@ -22,7 +22,8 @@ generic-service:
     NDILIUS_API_URL: "https://esupervision-and-delius-preprod.hmpps.service.justice.gov.uk"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_ENABLED: "false"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_CRON: "-"
-    APP_SCHEDULING_CHECKIN_REMINDER_NOTIFICATION_CRON: "-"
+    APP_SCHEDULING_V2_CHECKIN_REMINDER_CRON: "0 15 9,15,16 * * *"
+    APP_SCHEDULING_V2_CHECKIN_REMINDER_ENABLED: "false"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
