@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -49,6 +50,7 @@ class OffenderV2Resource(
   private val checkinCreationService: CheckinCreationService,
   private val eventAuditService: EventAuditV2Service,
   private val ndiliusApiClient: INdiliusApiClient,
+  private val notificationV2Service: NotificationV2Service,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -184,6 +186,7 @@ class OffenderV2Resource(
     val saved = offenderRepository.save(offender)
 
     recordOffenderAuditEvent("OFFENDER_DEACTIVATED", offender, request.reason)
+    // should we add something here to ensure there aren't any checkins in a created state still around?? TODO
 
     val photoUrl = getOffenderPhotoUrl(saved)
 
@@ -204,6 +207,12 @@ class OffenderV2Resource(
     description = """Reactivates an INACTIVE offender, changing their status back to VERIFIED.
       This allows check-ins to be created and submitted again.
       Only INACTIVE offenders can be reactivated.
+      This endpoint performs the following actions:
+      1. Updates the offender's status to VERIFIED.
+      2. Optionally updates the check in schedule (frequency and start date).
+      3. Optionally updates contact preferences.
+      4. If the first check-in date is set to TODAY, it automatically creates the check-in record.
+      5. Sends a 'Setup Completed' welcome notification to the offender.
       Note: V1 does not support reactivation, but V2 requires it due to unique CRN constraint.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender reactivated")
@@ -218,27 +227,40 @@ class OffenderV2Resource(
       ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
 
     if (offender.status != OffenderStatus.INACTIVE) {
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Cannot reactivate offender with status ${offender.status}. Only INACTIVE offenders can be reactivated.",
-      )
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only INACTIVE offenders can be reactivated.")
     }
-
+    request.checkinSchedule?.let { schedule ->
+      validate(schedule)
+      offender.firstCheckin = schedule.firstCheckin
+      offender.checkinInterval = schedule.checkinInterval.duration
+    }
+    request.contactPreference?.let { pref ->
+      offender.contactPreference = pref.contactPreference
+    }
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = clock.instant()
-    val saved = offenderRepository.save(offender)
+    val savedOffender = offenderRepository.save(offender)
 
-    recordOffenderAuditEvent("OFFENDER_REACTIVATED", offender, request.reason)
-    val photoUrl = getOffenderPhotoUrl(saved)
+    val contactDetails = try {
+      ndiliusApiClient.getContactDetails(savedOffender.crn)
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to fetch contact details for reactivation: ${savedOffender.crn}")
+      null
+    }
 
-    LOGGER.info(
-      "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
-      uuid,
-      offender.crn,
-      request.requestedBy,
-      request.reason,
+    if (contactDetails != null) {
+      notificationV2Service.sendSetupCompletedNotifications(savedOffender, contactDetails)
+    }
+
+    checkinCreationService.createCheckin(
+      offenderUuid = savedOffender.uuid,
+      dueDate = savedOffender.firstCheckin,
+      createdBy = request.requestedBy,
     )
-    return ResponseEntity.ok(saved.toSummaryDto(photoUrl))
+
+    recordOffenderAuditEvent("OFFENDER_REACTIVATED", savedOffender, request.reason)
+
+    return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -381,6 +403,9 @@ data class ReactivateOffenderRequest(
   @Schema(description = "Reason for reactivation", required = true)
   @field:NotBlank
   val reason: String,
+
+  val checkinSchedule: CheckinScheduleUpdateRequest? = null,
+  val contactPreference: ContactPreferenceUpdateRequest? = null,
 )
 
 /** Request to update offender check in schedule */

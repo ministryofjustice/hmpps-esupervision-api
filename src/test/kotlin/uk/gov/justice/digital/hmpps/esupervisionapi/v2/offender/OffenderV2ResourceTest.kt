@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -41,6 +42,7 @@ class OffenderV2ResourceTest {
   private val checkinCreationService: CheckinCreationService = mock()
   private val eventAuditV2Service: EventAuditV2Service = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
+  private val notificationV2Service: NotificationV2Service = mock()
 
   private lateinit var resource: OffenderV2Resource
 
@@ -53,6 +55,7 @@ class OffenderV2ResourceTest {
       checkinCreationService,
       eventAuditV2Service,
       ndiliusApiClient,
+      notificationV2Service,
     )
   }
 
@@ -161,23 +164,60 @@ class OffenderV2ResourceTest {
   // ========================================
 
   @Test
-  fun `reactivateOffender - happy path - changes INACTIVE to VERIFIED`() {
+  fun `reactivateOffender - happy path - changes INACTIVE to VERIFIED, creates check in and sends notification`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.INACTIVE)
     val request = ReactivateOffenderRequest(
       requestedBy = "PRACT001",
       reason = "Back on supervision",
     )
+    val checkin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinCreationService.createCheckin(any(), any(), any())).thenReturn(checkin)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
 
     val result = resource.reactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
-    assertEquals(uuid, result.body?.uuid)
+
     verify(offenderRepository).save(any())
+    verify(checkinCreationService).createCheckin(eq(uuid), eq(offender.firstCheckin), eq("PRACT001"))
+    verify(notificationV2Service).sendSetupCompletedNotifications(eq(offender), eq(contactDetails))
+  }
+
+  @Test
+  fun `reactivateOffender - with schedule update - applies new schedule before creating check in`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
+    val newDate = LocalDate.now(clock).plusDays(7)
+    val request = ReactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Restart with new schedule",
+      checkinSchedule = CheckinScheduleUpdateRequest(
+        requestedBy = "PRACT001",
+        firstCheckin = newDate,
+        checkinInterval = CheckinInterval.TWO_WEEKS,
+      ),
+    )
+    val checkin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinCreationService.createCheckin(any(), any(), any())).thenReturn(checkin)
+
+    val result = resource.reactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(newDate, result.body?.firstCheckin)
+    assertEquals(CheckinInterval.TWO_WEEKS, result.body?.checkinInterval)
+    verify(checkinCreationService).createCheckin(eq(uuid), eq(newDate), eq("PRACT001"))
   }
 
   @Test
