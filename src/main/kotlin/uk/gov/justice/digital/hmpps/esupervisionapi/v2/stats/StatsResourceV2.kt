@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
-import com.fasterxml.jackson.databind.JsonNode
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -11,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsWithPercentages
+import java.math.BigDecimal
 
 @RestController
 @RequestMapping("/v2/stats", produces = ["application/json"])
@@ -48,12 +48,12 @@ data class StatsResponse(
   val pctCompletedCheckins: Double,
   val pctExpiredCheckins: Double,
   val feedbackTotal: Long,
-  val howEasyCounts: JsonNode,
-  val howEasyPct: JsonNode,
-  val gettingSupportCounts: JsonNode,
-  val gettingSupportPct: JsonNode,
-  val improvementsCounts: JsonNode,
-  val improvementsPct: JsonNode,
+  val howEasyCounts: Map<String, Long>,
+  val howEasyPct: Map<String, BigDecimal>,
+  val gettingSupportCounts: Map<String, Long>,
+  val gettingSupportPct: Map<String, BigDecimal>,
+  val improvementsCounts: Map<String, Long>,
+  val improvementsPct: Map<String, BigDecimal>,
   val updatedAt: String,
 )
 

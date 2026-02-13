@@ -1,7 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -16,59 +14,47 @@ class StatsServiceV2Test {
 
   private val repository: StatsSummaryRepository = mock()
   private val service = StatsServiceV2(repository)
-  private val mapper = ObjectMapper()
 
   @Test
   fun `getStats returns stats when repository has data`() {
-    val howEasyCounts: JsonNode =
-      mapper.valueToTree(
-        mapOf(
-          "veryEasy" to 1L,
-          "difficult" to 1L,
-          "notAnswered" to 2L,
-        ),
+
+    val howEasyCounts: Map<String, Long> =
+      mapOf(
+        "veryEasy" to 1L,
+        "difficult" to 1L,
+        "notAnswered" to 2L,
       )
 
-    val howEasyPct: JsonNode =
-      mapper.valueToTree(
-        mapOf(
-          "veryEasy" to 0.5,
-          "difficult" to 0.5,
-        ),
+    val howEasyPct: Map<String, BigDecimal> =
+      mapOf(
+        "veryEasy" to BigDecimal("0.5"),
+        "difficult" to BigDecimal("0.5"),
       )
 
-    val gettingSupportCounts: JsonNode =
-      mapper.valueToTree(
-        mapOf(
-          "yes" to 2L,
-          "no" to 1L,
-          "notAnswered" to 1L,
-        ),
+    val gettingSupportCounts: Map<String, Long> =
+      mapOf(
+        "yes" to 2L,
+        "no" to 1L,
+        "notAnswered" to 1L,
       )
 
-    val gettingSupportPct: JsonNode =
-      mapper.valueToTree(
-        mapOf(
-          "yes" to 0.6667,
-          "no" to 0.3333,
-        ),
+    val gettingSupportPct: Map<String, BigDecimal> =
+      mapOf(
+        "yes" to BigDecimal("0.6667"),
+        "no" to BigDecimal("0.3333"),
       )
 
-    val improvementsCounts: JsonNode =
-      mapper.valueToTree(
-        mapOf(
-          "gettingHelp" to 1L,
-          "checkInQuestions" to 2L,
-          "notAnswered" to 1L,
-        ),
+    val improvementsCounts: Map<String, Long> =
+      mapOf(
+        "gettingHelp" to 1L,
+        "checkInQuestions" to 2L,
+        "notAnswered" to 1L,
       )
 
-    val improvementsPct: JsonNode =
-      mapper.valueToTree(
-        mapOf(
-          "gettingHelp" to 0.5,
-          "checkInQuestions" to 1.0,
-        ),
+    val improvementsPct: Map<String, BigDecimal> =
+      mapOf(
+        "gettingHelp" to BigDecimal("0.5"),
+        "checkInQuestions" to BigDecimal("1.0"),
       )
 
     val summary =
@@ -81,11 +67,12 @@ class StatsServiceV2Test {
         notCompletedOnTime = 2,
         avgHoursToComplete = BigDecimal.valueOf(5.5),
         avgCompletedCheckinsPerPerson = BigDecimal.valueOf(2.86),
-        pctActiveUsers = BigDecimal.valueOf(0.7),
-        pctInactiveUsers = BigDecimal.valueOf(0.3),
-        pctCompletedCheckins = BigDecimal.valueOf(0.9091),
-        pctExpiredCheckins = BigDecimal.valueOf(0.0909),
-        updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
+
+        pctActiveUsers = BigDecimal("0.7"),
+        pctInactiveUsers = BigDecimal("0.3"),
+        pctCompletedCheckins = BigDecimal("0.9091"),
+        pctExpiredCheckins = BigDecimal("0.0909"),
+
         feedbackTotal = 4,
         howEasyCounts = howEasyCounts,
         howEasyPct = howEasyPct,
@@ -93,6 +80,8 @@ class StatsServiceV2Test {
         gettingSupportPct = gettingSupportPct,
         improvementsCounts = improvementsCounts,
         improvementsPct = improvementsPct,
+
+        updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
       )
 
     val expectedResult =
@@ -104,11 +93,12 @@ class StatsServiceV2Test {
         notCompletedOnTime = 2,
         avgHoursToComplete = 5.5,
         avgCompletedCheckinsPerPerson = 2.86,
-        updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
+
         pctActiveUsers = 0.7,
         pctInactiveUsers = 0.3,
         pctCompletedCheckins = 0.9091,
         pctExpiredCheckins = 0.0909,
+
         feedbackTotal = 4,
         howEasyCounts = howEasyCounts,
         howEasyPct = howEasyPct,
@@ -116,6 +106,8 @@ class StatsServiceV2Test {
         gettingSupportPct = gettingSupportPct,
         improvementsCounts = improvementsCounts,
         improvementsPct = improvementsPct,
+
+        updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
       )
 
     whenever(repository.findBySingleton(1)).thenReturn(summary)

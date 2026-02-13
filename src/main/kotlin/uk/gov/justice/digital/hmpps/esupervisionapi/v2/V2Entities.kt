@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
-import com.fasterxml.jackson.databind.JsonNode
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -494,27 +493,27 @@ open class StatsSummary(
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "how_easy_counts", nullable = false, columnDefinition = "jsonb")
-  open val howEasyCounts: JsonNode,
+  open val howEasyCounts: Map<String, Long>,
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "how_easy_pct", nullable = false, columnDefinition = "jsonb")
-  open val howEasyPct: JsonNode,
+  open val howEasyPct: Map<String, BigDecimal>,
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "getting_support_counts", nullable = false, columnDefinition = "jsonb")
-  open val gettingSupportCounts: JsonNode,
+  open val gettingSupportCounts: Map<String, Long>,
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "getting_support_pct", nullable = false, columnDefinition = "jsonb")
-  open val gettingSupportPct: JsonNode,
+  open val gettingSupportPct: Map<String, BigDecimal>,
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "improvements_counts", nullable = false, columnDefinition = "jsonb")
-  open val improvementsCounts: JsonNode,
+  open val improvementsCounts: Map<String, Long>,
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "improvements_pct", nullable = false, columnDefinition = "jsonb")
-  open val improvementsPct: JsonNode,
+  open val improvementsPct: Map<String, BigDecimal>,
 
   @Column(name = "updated_at", nullable = false)
   open var updatedAt: Instant,

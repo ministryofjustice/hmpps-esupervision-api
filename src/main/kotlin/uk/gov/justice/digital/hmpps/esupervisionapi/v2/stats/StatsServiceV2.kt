@@ -1,9 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
-import com.fasterxml.jackson.databind.JsonNode
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
+import java.math.BigDecimal
 
 data class StatsWithPercentages(
   val totalSignedUp: Long,
@@ -19,12 +19,12 @@ data class StatsWithPercentages(
   val pctCompletedCheckins: Double,
   val pctExpiredCheckins: Double,
   val feedbackTotal: Long,
-  val howEasyCounts: JsonNode,
-  val howEasyPct: JsonNode,
-  val gettingSupportCounts: JsonNode,
-  val gettingSupportPct: JsonNode,
-  val improvementsCounts: JsonNode,
-  val improvementsPct: JsonNode,
+  val howEasyCounts: Map<String, Long>,
+  val howEasyPct: Map<String, BigDecimal>,
+  val gettingSupportCounts: Map<String, Long>,
+  val gettingSupportPct: Map<String, BigDecimal>,
+  val improvementsCounts: Map<String, Long>,
+  val improvementsPct: Map<String, BigDecimal>,
 )
 
 @Service
