@@ -1,3 +1,5 @@
+import org.gradle.kotlin.dsl.implementation
+
 plugins {
   id("uk.gov.justice.hmpps.gradle-spring-boot") version "8.2.0"
   kotlin("plugin.jpa") version "2.1.21"
@@ -48,7 +50,6 @@ dependencies {
 
   implementation(platform("org.testcontainers:testcontainers-bom:2.0.2"))
   testImplementation("org.testcontainers:testcontainers-postgresql")
-  //testImplementation("org.testcontainers:postgresql")
   testImplementation("org.junit.platform:junit-platform-launcher:1.12.2")
 }
 
