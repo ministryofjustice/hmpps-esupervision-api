@@ -370,3 +370,6 @@ interface StatsSummaryRepository : JpaRepository<StatsSummary, Int> {
 
 @Repository
 interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
+
+@Repository
+interface MigrationCheckinsUuidsRepository : JpaRepository<MigrationEventsToSend, Long>

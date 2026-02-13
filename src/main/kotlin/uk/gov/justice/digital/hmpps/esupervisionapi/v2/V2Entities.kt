@@ -508,3 +508,14 @@ open class MigrationControl(
   @Column(name = "checkin_expired", nullable = false)
   open var checkinExpired: Boolean = false,
 ) : V2BaseEntity()
+
+@Entity
+@Table(name = "migration_events_to_send")
+open class MigrationEventsToSend(
+  @Column()
+  open var checkin: UUID,
+  @Column(name = "sent_at")
+  open var sentAt: Instant? = null,
+  @Column
+  open var notes: String? = null,
+) : V2BaseEntity()

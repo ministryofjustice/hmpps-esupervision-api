@@ -49,3 +49,5 @@ databaseChangeLog:
       file: db/changelog/changesets/24_create_stats_summary_mv.sql
   - include:
       file: db/changelog/changesets/25_add_reminder_job_enum.sql
+  - include:
+      file: db/changelog/changesets/26_add_migration_checkin_events_table.sql
