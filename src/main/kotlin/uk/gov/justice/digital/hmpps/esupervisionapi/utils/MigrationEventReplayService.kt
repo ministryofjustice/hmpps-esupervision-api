@@ -6,7 +6,9 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControl
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationEventsToSend
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
@@ -18,6 +20,7 @@ class MigrationEventReplayService(
   private val checkinRepository: OffenderCheckinV2Repository,
   private val offenderRepository: OffenderV2Repository,
   private val domainEventService: DomainEventService,
+  private val eventAuditLogRepository: EventAuditV2Repository,
   private val clock: Clock,
 ) {
   private val logger = LoggerFactory.getLogger(javaClass)
@@ -29,6 +32,8 @@ class MigrationEventReplayService(
   fun replayOffenderEvents(crns: Map<String, MigrationControl>, batchSize: Int = 50, eventsPerSecond: Double = 10.0): Set<String> {
     logger.info("Starting offender event replay")
     val rateLimiter = RateLimiter.create(eventsPerSecond)
+
+    val auditEvents = eventAuditLogRepository.findAllByEventType("SETUP_COMPLETED").associateBy { it.crn }
 
     var page = 0
     var totalProcessed = 0
@@ -49,6 +54,7 @@ class MigrationEventReplayService(
             uuid = offender.uuid,
             crn = offender.crn,
             description = "[MIGRATION] completed setup for offender ${offender.crn}",
+            occurredAt = auditEvents[offender.crn]?.occurredAt?.atZone(clock.zone) ?: offender.createdAt.atZone(clock.zone),
           )
           processedCrns.add(offender.crn)
           crns[offender.crn]?.let { control -> control.offenderEvents = true }
@@ -64,6 +70,49 @@ class MigrationEventReplayService(
 
     logger.info("Offender event replay complete: {} events published", totalProcessed)
     return processedCrns
+  }
+
+  fun replaySelectedCheckinEvents(checkins: List<MigrationEventsToSend>, eventsPerSecond: Double = 10.0) {
+    logger.info("Starting checkin event replay for {} checkins", checkins.size)
+    val rateLimiter = RateLimiter.create(eventsPerSecond)
+
+    val uuids = checkins.associateBy { it.checkin }
+
+    val checkinsSubmitted = checkinRepository
+      .findMigratedByStatus(CheckinV2Status.SUBMITTED, PageRequest.of(0, 1000))
+      .filter { uuids.contains(it.uuid) }
+    val checkinsReviewed = checkinRepository
+      .findMigratedByStatus(CheckinV2Status.REVIEWED, PageRequest.of(0, 1000))
+      .filter { uuids.contains(it.uuid) }
+    val checkinsExpired = checkinRepository
+      .findMigratedByStatus(CheckinV2Status.EXPIRED, PageRequest.of(0, 1000))
+      .filter { uuids.contains(it.uuid) }
+
+    // turns out ndelius doesn't listen to "checkin-created' events, so we can skip those
+    for (checkin in checkinsSubmitted + checkinsReviewed) {
+      rateLimiter.acquire()
+      CheckinV2Status.SUBMITTED.publishEvent(checkin)
+      uuids[checkin.uuid]?.let {
+        it.sentAt = clock.instant()
+        it.notes = "SUBMITTED"
+      }
+    }
+    for (checkin in checkinsReviewed) {
+      rateLimiter.acquire()
+      CheckinV2Status.REVIEWED.publishEvent(checkin)
+      uuids[checkin.uuid]?.let {
+        it.sentAt = clock.instant()
+        it.notes += "REVIEWED "
+      }
+    }
+    for (checkin in checkinsExpired) {
+      rateLimiter.acquire()
+      CheckinV2Status.EXPIRED.publishEvent(checkin)
+      uuids[checkin.uuid]?.let {
+        it.sentAt = clock.instant()
+        it.notes = "EXPIRED"
+      }
+    }
   }
 
   /**
@@ -174,6 +223,7 @@ class MigrationEventReplayService(
       uuid = checkin.uuid,
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in created for ${checkin.offender.crn}",
+      occurredAt = checkin.createdAt.atZone(clock.zone),
     )
   }
 
@@ -183,6 +233,7 @@ class MigrationEventReplayService(
       uuid = checkin.uuid,
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in submitted for ${checkin.offender.crn}",
+      occurredAt = checkin.submittedAt?.atZone(clock.zone),
     )
   }
 
@@ -192,6 +243,7 @@ class MigrationEventReplayService(
       uuid = checkin.uuid,
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in reviewed for ${checkin.offender.crn}",
+      occurredAt = checkin.reviewedAt?.atZone(clock.zone),
     )
   }
 
@@ -201,6 +253,7 @@ class MigrationEventReplayService(
       uuid = checkin.uuid,
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in expired for ${checkin.offender.crn}",
+      occurredAt = checkin.dueDate.plusDays(3).atStartOfDay(clock.zone),
     )
   }
 }
