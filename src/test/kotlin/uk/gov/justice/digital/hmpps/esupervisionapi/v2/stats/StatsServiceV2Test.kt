@@ -17,7 +17,6 @@ class StatsServiceV2Test {
 
   @Test
   fun `getStats returns stats when repository has data`() {
-
     val howEasyCounts: Map<String, Long> =
       mapOf(
         "veryEasy" to 1L,
