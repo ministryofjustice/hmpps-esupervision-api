@@ -1,3 +1,4 @@
+import org.gradle.internal.classpath.Instrumented.systemProperty
 import org.gradle.kotlin.dsl.implementation
 
 plugins {
@@ -60,5 +61,9 @@ kotlin {
 tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+  }
+  withType<Test> {
+    systemProperty("com.github.dockerjava.api.version", "1.44")
+    useJUnitPlatform()
   }
 }
