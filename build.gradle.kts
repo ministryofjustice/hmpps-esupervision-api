@@ -63,6 +63,7 @@ tasks {
     compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
   }
   withType<Test> {
+    environment("DOCKER_API_VERSION", "1.44")
     systemProperty("com.github.dockerjava.api.version", "1.44")
     useJUnitPlatform()
   }
