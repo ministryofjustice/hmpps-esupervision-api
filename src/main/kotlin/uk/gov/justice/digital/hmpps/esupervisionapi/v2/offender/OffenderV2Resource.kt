@@ -20,10 +20,12 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -51,6 +53,7 @@ class OffenderV2Resource(
   private val eventAuditService: EventAuditV2Service,
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationV2Service: NotificationV2Service,
+  private val checkinRepository: OffenderCheckinV2Repository,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -185,8 +188,17 @@ class OffenderV2Resource(
     offender.updatedAt = clock.instant()
     val saved = offenderRepository.save(offender)
 
+    // set any pending check ins to cancelled
+    val pendingCheckins = checkinRepository.findAllByOffenderAndStatus(saved, CheckinV2Status.CREATED)
+    if (pendingCheckins.isNotEmpty()) {
+      pendingCheckins.forEach {
+        it.status = CheckinV2Status.CANCELLED
+      }
+      checkinRepository.saveAll(pendingCheckins)
+      LOGGER.info("Cancelled ${pendingCheckins.size} created/pending check ins for CRN ${saved.crn} due to offender deactivation")
+    }
+
     recordOffenderAuditEvent("OFFENDER_DEACTIVATED", offender, request.reason)
-    // should we add something here to ensure there aren't any checkins in a created state still around?? TODO
 
     val photoUrl = getOffenderPhotoUrl(saved)
 
@@ -205,14 +217,15 @@ class OffenderV2Resource(
   @Operation(
     summary = "Reactivate offender",
     description = """Reactivates an INACTIVE offender, changing their status back to VERIFIED.
-      This allows check-ins to be created and submitted again.
+      This allows check ins to be created and submitted again.
       Only INACTIVE offenders can be reactivated.
       This endpoint performs the following actions:
       1. Updates the offender's status to VERIFIED.
-      2. Optionally updates the check in schedule (frequency and start date).
-      3. Optionally updates contact preferences.
-      4. If the first check-in date is set to TODAY, it automatically creates the check-in record.
-      5. Sends a 'Setup Completed' welcome notification to the offender.
+      2. Optionally updates the check in schedule (frequency and start date) and contact preferences.
+      3. Sends a registration notification to the offender
+      4. Automatically creates a check in record for the 'firstCheckin' date. 
+         - If a check in  for that date already exists, it will skip creation to prevent duplicates.
+         - If the date is in the future, the record is created in a 'CREATED' state for the background job to process later.
       Note: V1 does not support reactivation, but V2 requires it due to unique CRN constraint.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender reactivated")
@@ -252,14 +265,20 @@ class OffenderV2Resource(
       notificationV2Service.sendSetupCompletedNotifications(savedOffender, contactDetails)
     }
 
-    checkinCreationService.createCheckin(
-      offenderUuid = savedOffender.uuid,
-      dueDate = savedOffender.firstCheckin,
-      createdBy = request.requestedBy,
-    )
+    // only create if one doesn't already exist for this date
+    val checkinExists = checkinRepository.existsByOffenderAndDueDate(savedOffender, savedOffender.firstCheckin)
+
+    if (!checkinExists) {
+      checkinCreationService.createCheckin(
+        offenderUuid = savedOffender.uuid,
+        dueDate = savedOffender.firstCheckin,
+        createdBy = request.requestedBy,
+      )
+    } else {
+      LOGGER.info("Skipping check-in creation for CRN ${savedOffender.crn}; record already exists for ${savedOffender.firstCheckin}")
+    }
 
     recordOffenderAuditEvent("OFFENDER_REACTIVATED", savedOffender, request.reason)
-
     return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
   }
 
