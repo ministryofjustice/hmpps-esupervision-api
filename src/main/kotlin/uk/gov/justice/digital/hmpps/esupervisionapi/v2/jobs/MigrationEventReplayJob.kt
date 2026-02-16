@@ -11,8 +11,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationCheckinsUuidsRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControl
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControlRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationEventsToSend
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import java.time.Clock
 
@@ -22,6 +24,7 @@ class MigrationEventReplayJob(
   private val migrationEventReplayService: MigrationEventReplayService,
   private val jobLogRepository: JobLogV2Repository,
   private val migrationControlRepository: MigrationControlRepository,
+  private val migrationCheckinsUuidsRepository: MigrationCheckinsUuidsRepository,
   private val eventAuditService: EventAuditV2Service,
   private val eventAuditRepository: EventAuditV2Repository,
   private val ndiliusApiClient: INdiliusApiClient,
@@ -48,10 +51,10 @@ class MigrationEventReplayJob(
       return
     }
 
-    val crnToMigrationControl = crns.associateBy { it.crn }
-
-    val processedOffenderEvents = mutableSetOf<String>()
     if (crns.isNotEmpty()) {
+      val crnToMigrationControl = crns.associateBy { it.crn }
+
+      val processedOffenderEvents = mutableSetOf<String>()
       try {
         processedOffenderEvents.addAll(migrationEventReplayService.replayOffenderEvents(crnToMigrationControl, batchSize = batchSize))
         migrationEventReplayService.replayCheckinEvents(crnToMigrationControl, batchSize = batchSize)
@@ -60,18 +63,32 @@ class MigrationEventReplayJob(
       } finally {
         migrationControlRepository.saveAllAndFlush(crns)
       }
+
+      try {
+        fillAuditEventDetails(crnToMigrationControl.keys)
+      } catch (e: Exception) {
+        LOGGER.warn("failed fillAuditEventDetails", e)
+      }
     }
 
-    try {
-      fillAuditEventDetails(crnToMigrationControl.keys)
-    } catch (e: Exception) {
-      LOGGER.warn("failed fillAuditEventDetails", e)
+    val checkinUuids = migrationCheckinsUuidsRepository.findAll()
+    LOGGER.info("Migration Event Replay Job(id={}) found {} checkins to replay events for", logEntry.id, checkinUuids.size)
+    if (checkinUuids.isNotEmpty()) {
+      replaySelectedCheckinEvents(checkinUuids)
     }
 
     val endTime = clock.instant()
     logEntry.endedAt = endTime
     jobLogRepository.saveAndFlush(logEntry)
     LOGGER.info("Migration Event Replay Job(id={}) completed", logEntry.id)
+  }
+
+  fun replaySelectedCheckinEvents(checkins: List<MigrationEventsToSend>) {
+    try {
+      migrationEventReplayService.replaySelectedCheckinEvents(checkins)
+    } catch (e: Exception) {
+      LOGGER.warn("Migration Event Replay Job failed", e)
+    }
   }
 
   fun fillAuditEventDetails(crns: Set<String>) {

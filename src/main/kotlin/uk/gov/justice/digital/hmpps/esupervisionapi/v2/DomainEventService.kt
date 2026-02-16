@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.Dom
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.PersonReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.Clock
+import java.time.ZonedDateTime
 import java.util.UUID
 
 /**
@@ -29,6 +30,7 @@ class DomainEventService(
     uuid: UUID,
     crn: String,
     description: String,
+    occurredAt: ZonedDateTime? = null,
   ) {
     LOGGER.debug(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
     val detailUrl = "$apiBaseUrl/v2/events/${eventType.pathSegment}/$uuid"
@@ -37,7 +39,7 @@ class DomainEventService(
       val event = DomainEvent(
         eventType = eventType.type,
         detailUrl = detailUrl,
-        occurredAt = clock.instant().atZone(clock.zone),
+        occurredAt = occurredAt ?: clock.instant().atZone(clock.zone),
         description = description,
         personReference = PersonReference(listOf(PersonReference.PersonIdentifier("CRN", crn))),
       )

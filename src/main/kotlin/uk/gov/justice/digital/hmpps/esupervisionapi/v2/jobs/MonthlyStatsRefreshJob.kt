@@ -64,6 +64,20 @@ class MonthlyStatsRefreshJob(
         Duration.between(monthlyStart, monthlyEnd),
       )
 
+      val monthlyFeedbackStart = clock.instant()
+      jdbcTemplate.execute(REFRESH_MONTHLY_FEEDBACK_STATS_SQL) { ps ->
+        ps.setDate(1, Date.valueOf(monthStart))
+        ps.setObject(2, OffsetDateTime.ofInstant(rangeStart, ZoneOffset.UTC))
+        ps.setObject(3, OffsetDateTime.ofInstant(rangeEnd, ZoneOffset.UTC))
+        ps.execute()
+      }
+      val monthlyFeedbackEnd = clock.instant()
+
+      LOGGER.info(
+        "Monthly feedback stats table refreshed successfully, took={}",
+        Duration.between(monthlyFeedbackStart, monthlyFeedbackEnd),
+      )
+
       val mvStart = clock.instant()
       jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName")
       val mvEnd = clock.instant()
@@ -88,5 +102,7 @@ class MonthlyStatsRefreshJob(
       LoggerFactory.getLogger(MonthlyStatsRefreshJob::class.java)
 
     val REFRESH_MONTHLY_STATS_SQL = "SELECT refresh_monthly_stats(?, ?, ?)"
+
+    val REFRESH_MONTHLY_FEEDBACK_STATS_SQL = "SELECT refresh_monthly_feedback_stats(?, ?, ?)"
   }
 }

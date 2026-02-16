@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsResourceV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsWithPercentages
+import java.math.BigDecimal
 import java.time.Instant
 
 class StatsResourceV2Test {
@@ -17,20 +18,67 @@ class StatsResourceV2Test {
 
   @Test
   fun `getStats returns expected StatsResponse`() {
-    val statsWithPercentages = StatsWithPercentages(
-      totalSignedUp = 10,
-      activeUsers = 7,
-      inactiveUsers = 3,
-      completedCheckins = 20,
-      notCompletedOnTime = 2,
-      avgHoursToComplete = 5.5,
-      avgCompletedCheckinsPerPerson = 2.86,
-      updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
-      pctActiveUsers = 0.7,
-      pctInactiveUsers = 0.3,
-      pctCompletedCheckins = 1.0,
-      pctExpiredCheckins = 0.1,
-    )
+    val howEasyCounts: Map<String, Long> =
+      mapOf(
+        "veryEasy" to 1L,
+        "difficult" to 1L,
+        "notAnswered" to 2L,
+      )
+
+    val howEasyPct: Map<String, BigDecimal> =
+      mapOf(
+        "veryEasy" to BigDecimal("0.25"),
+        "difficult" to BigDecimal("0.25"),
+      )
+
+    val gettingSupportCounts: Map<String, Long> =
+      mapOf(
+        "no" to 1L,
+        "yes" to 2L,
+        "notAnswered" to 1L,
+      )
+
+    val gettingSupportPct: Map<String, BigDecimal> =
+      mapOf(
+        "no" to BigDecimal("0.3333"),
+        "yes" to BigDecimal("0.6667"),
+      )
+
+    val improvementsCounts: Map<String, Long> =
+      mapOf(
+        "gettingHelp" to 1L,
+        "checkInQuestions" to 2L,
+        "notAnswered" to 1L,
+      )
+
+    val improvementsPct: Map<String, BigDecimal> =
+      mapOf(
+        "gettingHelp" to BigDecimal("0.5"),
+        "checkInQuestions" to BigDecimal("1.0"),
+      )
+
+    val statsWithPercentages =
+      StatsWithPercentages(
+        totalSignedUp = 10,
+        activeUsers = 7,
+        inactiveUsers = 3,
+        completedCheckins = 20,
+        notCompletedOnTime = 2,
+        avgHoursToComplete = 5.5,
+        avgCompletedCheckinsPerPerson = 2.86,
+        updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
+        pctActiveUsers = 0.7,
+        pctInactiveUsers = 0.3,
+        pctCompletedCheckins = 1.0,
+        pctExpiredCheckins = 0.1,
+        feedbackTotal = 10,
+        howEasyCounts = howEasyCounts,
+        howEasyPct = howEasyPct,
+        gettingSupportCounts = gettingSupportCounts,
+        gettingSupportPct = gettingSupportPct,
+        improvementsCounts = improvementsCounts,
+        improvementsPct = improvementsPct,
+      )
 
     whenever(service.getStats()).thenReturn(statsWithPercentages)
 
@@ -51,5 +99,29 @@ class StatsResourceV2Test {
     assertEquals(0.3, body.pctInactiveUsers)
     assertEquals(1.0, body.pctCompletedCheckins)
     assertEquals(0.1, body.pctExpiredCheckins)
+
+    // Feedback stats
+    assertEquals(10, body.feedbackTotal)
+
+    assertEquals(1L, body.howEasyCounts["veryEasy"])
+    assertEquals(1L, body.howEasyCounts["difficult"])
+    assertEquals(2L, body.howEasyCounts["notAnswered"])
+    assertEquals(BigDecimal("0.25"), body.howEasyPct["veryEasy"])
+    assertEquals(BigDecimal("0.25"), body.howEasyPct["difficult"])
+    assertEquals(true, body.howEasyPct["notAnswered"] == null)
+
+    assertEquals(2L, body.gettingSupportCounts["yes"])
+    assertEquals(1L, body.gettingSupportCounts["no"])
+    assertEquals(1L, body.gettingSupportCounts["notAnswered"])
+    assertEquals(BigDecimal("0.6667"), body.gettingSupportPct["yes"])
+    assertEquals(BigDecimal("0.3333"), body.gettingSupportPct["no"])
+    assertEquals(true, body.gettingSupportPct["notAnswered"] == null)
+
+    assertEquals(2L, body.improvementsCounts["checkInQuestions"])
+    assertEquals(1L, body.improvementsCounts["gettingHelp"])
+    assertEquals(1L, body.improvementsCounts["notAnswered"])
+    assertEquals(BigDecimal("1.0"), body.improvementsPct["checkInQuestions"])
+    assertEquals(BigDecimal("0.5"), body.improvementsPct["gettingHelp"])
+    assertEquals(true, body.improvementsPct["notAnswered"] == null)
   }
 }
