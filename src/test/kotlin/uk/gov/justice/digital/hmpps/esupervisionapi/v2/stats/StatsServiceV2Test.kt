@@ -17,6 +17,45 @@ class StatsServiceV2Test {
 
   @Test
   fun `getStats returns stats when repository has data`() {
+    val howEasyCounts: Map<String, Long> =
+      mapOf(
+        "veryEasy" to 1L,
+        "difficult" to 1L,
+        "notAnswered" to 2L,
+      )
+
+    val howEasyPct: Map<String, BigDecimal> =
+      mapOf(
+        "veryEasy" to BigDecimal("0.5"),
+        "difficult" to BigDecimal("0.5"),
+      )
+
+    val gettingSupportCounts: Map<String, Long> =
+      mapOf(
+        "yes" to 2L,
+        "no" to 1L,
+        "notAnswered" to 1L,
+      )
+
+    val gettingSupportPct: Map<String, BigDecimal> =
+      mapOf(
+        "yes" to BigDecimal("0.6667"),
+        "no" to BigDecimal("0.3333"),
+      )
+
+    val improvementsCounts: Map<String, Long> =
+      mapOf(
+        "gettingHelp" to 1L,
+        "checkInQuestions" to 2L,
+        "notAnswered" to 1L,
+      )
+
+    val improvementsPct: Map<String, BigDecimal> =
+      mapOf(
+        "gettingHelp" to BigDecimal("0.5"),
+        "checkInQuestions" to BigDecimal("1.0"),
+      )
+
     val summary =
       StatsSummary(
         singleton = 1,
@@ -27,27 +66,48 @@ class StatsServiceV2Test {
         notCompletedOnTime = 2,
         avgHoursToComplete = BigDecimal.valueOf(5.5),
         avgCompletedCheckinsPerPerson = BigDecimal.valueOf(2.86),
+
+        pctActiveUsers = BigDecimal("0.7"),
+        pctInactiveUsers = BigDecimal("0.3"),
+        pctCompletedCheckins = BigDecimal("0.9091"),
+        pctExpiredCheckins = BigDecimal("0.0909"),
+
+        feedbackTotal = 4,
+        howEasyCounts = howEasyCounts,
+        howEasyPct = howEasyPct,
+        gettingSupportCounts = gettingSupportCounts,
+        gettingSupportPct = gettingSupportPct,
+        improvementsCounts = improvementsCounts,
+        improvementsPct = improvementsPct,
+
         updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
-        pctActiveUsers = BigDecimal.valueOf(0.7),
-        pctInactiveUsers = BigDecimal.valueOf(0.3),
-        pctCompletedCheckins = BigDecimal.valueOf(0.9091),
-        pctExpiredCheckins = BigDecimal.valueOf(0.0909),
       )
 
-    val expectedResult = StatsWithPercentages(
-      totalSignedUp = 10,
-      activeUsers = 7,
-      inactiveUsers = 3,
-      completedCheckins = 20,
-      notCompletedOnTime = 2,
-      avgHoursToComplete = 5.5,
-      avgCompletedCheckinsPerPerson = 2.86,
-      updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
-      pctActiveUsers = 0.7,
-      pctInactiveUsers = 0.3,
-      pctCompletedCheckins = 0.9091,
-      pctExpiredCheckins = 0.0909,
-    )
+    val expectedResult =
+      StatsWithPercentages(
+        totalSignedUp = 10,
+        activeUsers = 7,
+        inactiveUsers = 3,
+        completedCheckins = 20,
+        notCompletedOnTime = 2,
+        avgHoursToComplete = 5.5,
+        avgCompletedCheckinsPerPerson = 2.86,
+
+        pctActiveUsers = 0.7,
+        pctInactiveUsers = 0.3,
+        pctCompletedCheckins = 0.9091,
+        pctExpiredCheckins = 0.0909,
+
+        feedbackTotal = 4,
+        howEasyCounts = howEasyCounts,
+        howEasyPct = howEasyPct,
+        gettingSupportCounts = gettingSupportCounts,
+        gettingSupportPct = gettingSupportPct,
+        improvementsCounts = improvementsCounts,
+        improvementsPct = improvementsPct,
+
+        updatedAt = Instant.parse("2026-01-28T12:02:00.020175Z"),
+      )
 
     whenever(repository.findBySingleton(1)).thenReturn(summary)
 
