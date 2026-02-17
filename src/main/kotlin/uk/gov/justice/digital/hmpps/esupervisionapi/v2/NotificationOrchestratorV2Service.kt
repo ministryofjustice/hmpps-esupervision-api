@@ -90,6 +90,47 @@ class NotificationOrchestratorV2Service(
     }
   }
 
+  /** Send notifications for reactivation completed event */
+  fun sendReactivationCompletedNotifications(
+    offender: OffenderV2,
+    contactDetails: ContactDetails? = null,
+  ) {
+    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+    eventAuditService.recordSetupCompleted(offender, details)
+
+    if (details != null) {
+      try {
+        val personalisation =
+          mapOf(
+            "name" to "${details.name.forename} ${details.name.surname}",
+            "date" to offender.firstCheckin.format(DATE_FORMATTER),
+            "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
+          )
+
+        val notificationsWithRecipients =
+          notificationPersistence.buildOffenderNotifications(
+            offender = offender,
+            contactDetails = details,
+            notificationType = NotificationType.RegistrationConfirmation,
+          )
+
+        processAndSendNotifications(notificationsWithRecipients, personalisation)
+      } catch (e: Exception) {
+        val sanitized = PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid)
+        LOGGER.warn(
+          "Failed to send setup completed notifications for offender {}: {}",
+          offender.crn,
+          sanitized,
+        )
+      }
+    } else {
+      LOGGER.warn(
+        "Recording audit without contact details for offender {}: contact details not found",
+        offender.crn,
+      )
+    }
+  }
+
   /** Send notifications for checkin created event */
   fun sendCheckinCreatedNotifications(
     checkin: OffenderCheckinV2,

@@ -262,7 +262,7 @@ class OffenderV2Resource(
     }
 
     if (contactDetails != null) {
-      notificationV2Service.sendSetupCompletedNotifications(savedOffender, contactDetails)
+      notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails)
     }
 
     // only create if one doesn't already exist for this date

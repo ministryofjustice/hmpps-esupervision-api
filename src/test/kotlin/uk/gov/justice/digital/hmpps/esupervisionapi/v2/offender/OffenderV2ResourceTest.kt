@@ -227,7 +227,7 @@ class OffenderV2ResourceTest {
 
     verify(offenderRepository).save(any())
     verify(checkinCreationService).createCheckin(eq(uuid), eq(offender.firstCheckin), eq("PRACT001"))
-    verify(notificationV2Service).sendSetupCompletedNotifications(eq(offender), eq(contactDetails))
+    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails))
   }
 
   @Test
