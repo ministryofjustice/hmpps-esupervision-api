@@ -1,6 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
@@ -19,6 +22,12 @@ import java.time.Duration
 
 /** V2 Checkin Reminder Job Sends notifications for check ins that will expire today (day 3 of 3) */
 @Component
+@ConditionalOnProperty(
+  prefix = "app.scheduling.v2-checkin-reminder",
+  name = ["enabled"],
+  havingValue = "true",
+  matchIfMissing = true,
+)
 class V2CheckinReminderJob(
   private val clock: Clock,
   private val checkinRepository: OffenderCheckinV2Repository,
@@ -30,12 +39,12 @@ class V2CheckinReminderJob(
   private val genericNotificationV2Repository: GenericNotificationV2Repository,
 ) {
 
-//  @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
-//  @SchedulerLock(
-//    name = "V2 Checkin Reminder Job",
-//    lockAtLeastFor = "PT5S",
-//    lockAtMostFor = "PT30M",
-//  )
+  @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
+  @SchedulerLock(
+    name = "V2 Checkin Reminder Job",
+    lockAtLeastFor = "PT5S",
+    lockAtMostFor = "PT30M",
+  )
   fun process() {
     val now = clock.instant()
     val today = clock.today()
