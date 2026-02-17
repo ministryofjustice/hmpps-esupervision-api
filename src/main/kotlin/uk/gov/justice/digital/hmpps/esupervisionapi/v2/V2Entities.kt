@@ -488,6 +488,33 @@ open class StatsSummary(
   @Column(name = "pct_expired_checkins", nullable = false)
   open val pctExpiredCheckins: BigDecimal,
 
+  @Column(name = "feedback_total", nullable = false)
+  open val feedbackTotal: Long,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "how_easy_counts", nullable = false, columnDefinition = "jsonb")
+  open val howEasyCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "how_easy_pct", nullable = false, columnDefinition = "jsonb")
+  open val howEasyPct: Map<String, BigDecimal>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "getting_support_counts", nullable = false, columnDefinition = "jsonb")
+  open val gettingSupportCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "getting_support_pct", nullable = false, columnDefinition = "jsonb")
+  open val gettingSupportPct: Map<String, BigDecimal>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "improvements_counts", nullable = false, columnDefinition = "jsonb")
+  open val improvementsCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "improvements_pct", nullable = false, columnDefinition = "jsonb")
+  open val improvementsPct: Map<String, BigDecimal>,
+
   @Column(name = "updated_at", nullable = false)
   open var updatedAt: Instant,
 )
@@ -507,4 +534,15 @@ open class MigrationControl(
   open var checkinReviewed: Boolean = false,
   @Column(name = "checkin_expired", nullable = false)
   open var checkinExpired: Boolean = false,
+) : V2BaseEntity()
+
+@Entity
+@Table(name = "migration_events_to_send")
+open class MigrationEventsToSend(
+  @Column()
+  open var checkin: UUID,
+  @Column(name = "sent_at")
+  open var sentAt: Instant? = null,
+  @Column
+  open var notes: String? = null,
 ) : V2BaseEntity()

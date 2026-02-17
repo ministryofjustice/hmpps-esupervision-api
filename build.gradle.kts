@@ -1,3 +1,6 @@
+import org.gradle.internal.classpath.Instrumented.systemProperty
+import org.gradle.kotlin.dsl.implementation
+
 plugins {
   id("uk.gov.justice.hmpps.gradle-spring-boot") version "8.2.0"
   kotlin("plugin.jpa") version "2.1.21"
@@ -45,7 +48,9 @@ dependencies {
   testImplementation("io.swagger.parser.v3:swagger-parser:2.1.29") {
     exclude(group = "io.swagger.core.v3")
   }
-  testImplementation("org.testcontainers:postgresql")
+
+  implementation(platform("org.testcontainers:testcontainers-bom:2.0.2"))
+  testImplementation("org.testcontainers:testcontainers-postgresql")
   testImplementation("org.junit.platform:junit-platform-launcher:1.12.2")
 }
 
@@ -56,5 +61,10 @@ kotlin {
 tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+  }
+  withType<Test> {
+    environment("DOCKER_API_VERSION", "1.44")
+    systemProperty("com.github.dockerjava.api.version", "1.44")
+    useJUnitPlatform()
   }
 }

@@ -64,7 +64,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     service.sendSetupCompletedNotifications(offender, contactDetails)
 
-    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any())
+    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null))
     verify(eventAuditService).recordSetupCompleted(offender, contactDetails)
   }
 
@@ -77,7 +77,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendSetupCompletedNotifications(offender, null)
 
     // Domain event ALWAYS published (even without contact details)
-    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any())
+    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null))
     // Audit event ALWAYS recorded (even with null contact details)
     verify(eventAuditService).recordSetupCompleted(offender, null)
     // Notifications NOT sent (because contact details missing)
@@ -98,7 +98,7 @@ class NotificationOrchestratorV2ServiceTest {
     // V1 only notifies offender for checkin invite (no practitioner template)
     verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinInvite))
     verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any())
-    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any())
+    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null))
     verify(ndiliusApiClient, never()).getContactDetails(any())
   }
 
@@ -131,7 +131,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     service.sendCheckinSubmittedNotifications(checkin, contactDetails)
 
-    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any())
+    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null))
     verify(eventAuditService, never()).recordCheckinSubmitted(checkin, contactDetails)
   }
 
@@ -149,7 +149,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     verify(notificationPersistence, never()).buildOffenderNotifications(any(), any(), any())
     verify(notificationPersistence).buildPractitionerNotifications(any(), any(), eq(checkin), eq(NotificationType.PractitionerCheckinMissed))
-    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any())
+    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null))
   }
 
   @Test
@@ -162,7 +162,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     service.sendCheckinReviewedNotifications(checkin, contactDetails)
 
-    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any())
+    verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null))
     verify(eventAuditService, never()).recordCheckinReviewed(checkin, contactDetails)
   }
 
@@ -190,7 +190,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     service.sendSetupCompletedNotifications(offender, contactDetails)
 
-    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any())
+    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null))
   }
 
   private fun createOffender(status: OffenderStatus = OffenderStatus.VERIFIED) = OffenderV2(
