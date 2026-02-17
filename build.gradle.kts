@@ -52,6 +52,7 @@ dependencies {
   implementation(platform("org.testcontainers:testcontainers-bom:2.0.2"))
   testImplementation("org.testcontainers:testcontainers-postgresql")
   testImplementation("org.junit.platform:junit-platform-launcher:1.12.2")
+  testImplementation("org.testcontainers:junit-jupiter")
 }
 
 kotlin {

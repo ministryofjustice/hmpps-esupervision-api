@@ -57,3 +57,5 @@ databaseChangeLog:
       file: db/changelog/changesets/28_create_refresh_monthly_feedback_stats_function.sql
   - include:
       file: db/changelog/changesets/29_update_stats_summary_mv_for_feedback_table.sql
+  - include: 
+      file: db/changelog/changesets/30_update_refresh_monthly_feedback_stats_fn.sql
