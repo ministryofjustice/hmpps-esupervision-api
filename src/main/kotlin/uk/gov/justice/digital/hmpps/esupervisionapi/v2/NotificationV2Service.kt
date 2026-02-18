@@ -20,6 +20,13 @@ class NotificationV2Service(
   }
 
   /**
+   * Send notifications for reactivation completed event
+   */
+  fun sendReactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null) {
+    orchestrator.sendReactivationCompletedNotifications(offender, contactDetails)
+  }
+
+  /**
    * Send notifications for checkin created event
    */
   fun sendCheckinCreatedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
