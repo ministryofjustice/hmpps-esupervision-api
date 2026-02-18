@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset Maddie-Williams:30_update_refresh_monthly_stats_function_include_reactivations splitStatements:false
+--changeset Maddie-Williams:31_update_refresh_monthly_stats_function_include_reactivations splitStatements:false
 CREATE OR REPLACE FUNCTION refresh_monthly_stats(
     p_month DATE,
     p_start TIMESTAMPTZ,
