@@ -202,9 +202,10 @@ class OffenderV2ResourceTest {
   // ========================================
 
   @Test
-  fun `reactivateOffender - happy path - changes INACTIVE to VERIFIED, creates check in and sends notification`() {
+  fun `reactivateOffender - happy path - changes INACTIVE to VERIFIED, creates check in for today and sends notification`() {
     val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
+    val today = LocalDate.now(clock)
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { firstCheckin = today }
     val request = ReactivateOffenderRequest(
       requestedBy = "PRACT001",
       reason = "Back on supervision",
@@ -225,37 +226,37 @@ class OffenderV2ResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
-    verify(offenderRepository).save(any())
-    verify(checkinCreationService).createCheckin(eq(uuid), eq(offender.firstCheckin), eq("PRACT001"))
+    verify(offenderRepository).save(offender)
+    verify(checkinCreationService).createCheckin(eq(uuid), eq(today), eq("PRACT001"))
     verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails))
+    verify(eventAuditV2Service).recordOffenderReactivated(eq(offender), any(), eq("Back on supervision"))
   }
 
   @Test
-  fun `reactivateOffender - with schedule update - applies new schedule before creating check in`() {
+  fun `reactivateOffender - with schedule update - applies new schedule but does not create check in`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.INACTIVE)
-    val newDate = LocalDate.now(clock).plusDays(7)
+    val futureDate = LocalDate.now(clock).plusDays(7)
     val request = ReactivateOffenderRequest(
       requestedBy = "PRACT001",
       reason = "Restart with new schedule",
       checkinSchedule = CheckinScheduleUpdateRequest(
         requestedBy = "PRACT001",
-        firstCheckin = newDate,
+        firstCheckin = futureDate,
         checkinInterval = CheckinInterval.TWO_WEEKS,
       ),
     )
-    val checkin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(checkinCreationService.createCheckin(any(), any(), any())).thenReturn(checkin)
 
     val result = resource.reactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
-    assertEquals(newDate, result.body?.firstCheckin)
+    assertEquals(futureDate, result.body?.firstCheckin)
     assertEquals(CheckinInterval.TWO_WEEKS, result.body?.checkinInterval)
-    verify(checkinCreationService).createCheckin(eq(uuid), eq(newDate), eq("PRACT001"))
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    verify(offenderRepository).save(offender)
   }
 
   @Test

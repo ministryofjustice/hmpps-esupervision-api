@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -265,17 +266,21 @@ class OffenderV2Resource(
       notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails)
     }
 
-    // only create if one doesn't already exist for this date
-    val checkinExists = checkinRepository.existsByOffenderAndDueDate(savedOffender, savedOffender.firstCheckin)
+    // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
+    val today = clock.today()
+    if (savedOffender.firstCheckin == today) {
+      // edge case to check if they checked in earlier today before being deactivated
+      val checkinExists = checkinRepository.existsByOffenderAndDueDate(savedOffender, today)
 
-    if (!checkinExists) {
-      checkinCreationService.createCheckin(
-        offenderUuid = savedOffender.uuid,
-        dueDate = savedOffender.firstCheckin,
-        createdBy = request.requestedBy,
-      )
-    } else {
-      LOGGER.info("Skipping check-in creation for CRN ${savedOffender.crn}; record already exists for ${savedOffender.firstCheckin}")
+      if (!checkinExists) {
+        checkinCreationService.createCheckin(
+          offenderUuid = savedOffender.uuid,
+          dueDate = today,
+          createdBy = request.requestedBy,
+        )
+      } else {
+        LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
+      }
     }
 
     recordOffenderAuditEvent("OFFENDER_REACTIVATED", savedOffender, request.reason)

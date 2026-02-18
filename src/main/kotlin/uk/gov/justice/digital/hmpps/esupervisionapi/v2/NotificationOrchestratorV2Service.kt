@@ -96,7 +96,6 @@ class NotificationOrchestratorV2Service(
     contactDetails: ContactDetails? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
-    eventAuditService.recordSetupCompleted(offender, details)
 
     if (details != null) {
       try {
@@ -118,7 +117,7 @@ class NotificationOrchestratorV2Service(
       } catch (e: Exception) {
         val sanitized = PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid)
         LOGGER.warn(
-          "Failed to send setup completed notifications for offender {}: {}",
+          "Failed to send reactivation setup completed notifications for offender {}: {}",
           offender.crn,
           sanitized,
         )
