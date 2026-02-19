@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -38,26 +38,21 @@ class OffenderSetupV2Resource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Start V2 offender setup process",
-    description =
-    """Start the setup (registration) process for a V2 offender.
+    description = """Start the onboarding process for a V2 offender.
       Practitioner initiates setup by providing CRN and schedule details.
       V2 does not store PII - only CRN is stored.
       Once photo is uploaded, practitioner can complete the setup to enable check-ins.""",
   )
-  @PostMapping
-  fun startSetup(
-    @RequestBody @Valid offenderInfo: OffenderInfoV2,
+  @PostMapping()
+  fun startSetupByCrn(
+    @RequestBody @Valid offenderInfo: OffenderInfoInitial,
     bindingResult: BindingResult,
   ): ResponseEntity<OffenderSetupV2Dto> {
     if (bindingResult.hasErrors()) {
       val errors = bindingResult.fieldErrors.associateBy({ it.field }, { it.defaultMessage })
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, errors.toString())
     }
-
-    val setup = offenderSetupService.startOffenderSetup(offenderInfo)
-    LOGGER.info("Started V2 setup: setupUuid={}, crn={}", setup.uuid, offenderInfo.crn)
-
-    return ResponseEntity.ok(setup)
+    return ResponseEntity.ok(offenderSetupService.startOffenderSetup(offenderInfo))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")

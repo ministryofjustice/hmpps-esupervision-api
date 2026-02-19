@@ -75,6 +75,16 @@ interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
   fun findByUuid(uuid: UUID): Optional<OffenderSetupV2>
   fun findByOffender(offender: OffenderV2): Optional<OffenderSetupV2>
   fun findAllByPractitionerId(practitionerId: ExternalUserId): List<OffenderSetupV2>
+
+  @Query(
+    """
+    SELECT s FROM OffenderSetupV2 s
+    JOIN FETCH s.offender o
+    WHERE o.crn = :crn
+    ORDER BY s.createdAt DESC
+  """,
+  )
+  fun findByCrn(crn: String): Optional<OffenderSetupV2>
 }
 
 /**
