@@ -15,7 +15,11 @@ import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -41,6 +45,8 @@ class OffenderV2ResourceTest {
   private val checkinCreationService: CheckinCreationService = mock()
   private val eventAuditV2Service: EventAuditV2Service = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
+  private val notificationV2Service: NotificationV2Service = mock()
+  private val checkinRepository: OffenderCheckinV2Repository = mock()
 
   private lateinit var resource: OffenderV2Resource
 
@@ -53,6 +59,8 @@ class OffenderV2ResourceTest {
       checkinCreationService,
       eventAuditV2Service,
       ndiliusApiClient,
+      notificationV2Service,
+      checkinRepository,
     )
   }
 
@@ -156,17 +164,87 @@ class OffenderV2ResourceTest {
     assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
   }
 
+  @Test
+  fun `deactivateOffender - happy path - changes any pending check ins to CANCELLED`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val request = DeactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "No longer on supervision",
+    )
+
+    val pendingCheckin = OffenderCheckinV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinV2Status.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "PRACT001",
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any<OffenderV2>())).thenAnswer { it.getArgument(0) }
+
+    whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinV2Status.CREATED))
+      .thenReturn(listOf(pendingCheckin))
+
+    val result = resource.deactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(OffenderStatus.INACTIVE, result.body?.status)
+    assertEquals(CheckinV2Status.CANCELLED, pendingCheckin.status)
+
+    verify(offenderRepository).save(offender)
+  }
+
   // ========================================
   // Reactivate Tests
   // ========================================
 
   @Test
-  fun `reactivateOffender - happy path - changes INACTIVE to VERIFIED`() {
+  fun `reactivateOffender - happy path - changes INACTIVE to VERIFIED, creates check in for today and sends notification`() {
     val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
+    val today = LocalDate.now(clock)
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { firstCheckin = today }
     val request = ReactivateOffenderRequest(
       requestedBy = "PRACT001",
       reason = "Back on supervision",
+    )
+    val checkin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinCreationService.createCheckin(any(), any(), any())).thenReturn(checkin)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val result = resource.reactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(OffenderStatus.VERIFIED, result.body?.status)
+
+    verify(offenderRepository).save(offender)
+    verify(checkinCreationService).createCheckin(eq(uuid), eq(today), eq("PRACT001"))
+    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails))
+    verify(eventAuditV2Service).recordOffenderReactivated(eq(offender), any(), eq("Back on supervision"))
+  }
+
+  @Test
+  fun `reactivateOffender - with schedule update - applies new schedule but does not create check in`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
+    val futureDate = LocalDate.now(clock).plusDays(7)
+    val request = ReactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Restart with new schedule",
+      checkinSchedule = CheckinScheduleUpdateRequest(
+        requestedBy = "PRACT001",
+        firstCheckin = futureDate,
+        checkinInterval = CheckinInterval.TWO_WEEKS,
+      ),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -175,9 +253,10 @@ class OffenderV2ResourceTest {
     val result = resource.reactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
-    assertEquals(OffenderStatus.VERIFIED, result.body?.status)
-    assertEquals(uuid, result.body?.uuid)
-    verify(offenderRepository).save(any())
+    assertEquals(futureDate, result.body?.firstCheckin)
+    assertEquals(CheckinInterval.TWO_WEEKS, result.body?.checkinInterval)
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    verify(offenderRepository).save(offender)
   }
 
   @Test
