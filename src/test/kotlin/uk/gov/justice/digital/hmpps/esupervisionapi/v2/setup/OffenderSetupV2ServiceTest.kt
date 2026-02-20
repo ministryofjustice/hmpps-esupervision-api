@@ -13,7 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
@@ -67,13 +67,11 @@ class OffenderSetupV2ServiceTest {
   @Test
   fun `startOffenderSetup - happy path - creates offender and setup`() {
     // Given
-    val setupUuid = UUID.randomUUID()
     val crn = "X123456"
     val practitionerId = "PRACT001"
     val firstCheckin = LocalDate.now(clock).plusDays(7)
 
-    val offenderInfo = OffenderInfoV2(
-      setupUuid = setupUuid,
+    val offenderInfo = OffenderInfoInitial(
       practitionerId = practitionerId,
       crn = crn,
       firstCheckin = firstCheckin,
@@ -95,7 +93,7 @@ class OffenderSetupV2ServiceTest {
     )
 
     val savedSetup = OffenderSetupV2(
-      uuid = setupUuid,
+      uuid = UUID.randomUUID(),
       offender = savedOffender,
       practitionerId = practitionerId,
       createdAt = clock.instant(),
@@ -110,7 +108,7 @@ class OffenderSetupV2ServiceTest {
 
     // Then
     assertNotNull(result)
-    assertEquals(setupUuid, result.uuid)
+    assertEquals(savedSetup.uuid, result.uuid)
     assertEquals(practitionerId, result.practitionerId)
     assertEquals(savedOffender.uuid, result.offenderUuid)
 
@@ -121,7 +119,6 @@ class OffenderSetupV2ServiceTest {
   @Test
   fun `completeOffenderSetup - happy path with photo uploaded - completes setup`() {
     // Given
-    val setupUuid = UUID.randomUUID()
     val offender = OffenderV2(
       uuid = UUID.randomUUID(),
       crn = "X123456",
@@ -136,14 +133,14 @@ class OffenderSetupV2ServiceTest {
     )
 
     val setup = OffenderSetupV2(
-      uuid = setupUuid,
+      uuid = UUID.randomUUID(),
       offender = offender,
       practitionerId = "PRACT001",
       createdAt = clock.instant(),
       startedAt = null,
     )
 
-    whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.of(setup))
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<OffenderV2, Any?>>(any())).thenAnswer {
@@ -153,7 +150,7 @@ class OffenderSetupV2ServiceTest {
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
 
     // When
-    val result = service.completeOffenderSetup(setupUuid)
+    val result = service.completeOffenderSetup(setup.uuid)
 
     // Then
     assertNotNull(result)
@@ -257,9 +254,57 @@ class OffenderSetupV2ServiceTest {
     val setupUuid = UUID.randomUUID()
     whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.empty())
 
-    // When / Then
     assertThrows(BadArgumentException::class.java) {
       service.terminateOffenderSetup(setupUuid)
     }
   }
+
+  @Test
+  fun `re-starting a setup for a CRN`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByCrn(offender.crn)).thenReturn(Optional.of(setup))
+
+    val first = service.startOffenderSetup(
+      OffenderInfoInitial(
+        crn = offender.crn,
+        practitionerId = "PRACT001",
+        firstCheckin = offender.firstCheckin,
+        checkinInterval = CheckinInterval.WEEKLY,
+        contactPreference = offender.contactPreference,
+      ),
+    )
+
+    val second = service.startOffenderSetup(
+      OffenderInfoInitial(
+        crn = offender.crn,
+        practitionerId = "PRACT001",
+        firstCheckin = offender.firstCheckin,
+        checkinInterval = CheckinInterval.WEEKLY,
+        contactPreference = offender.contactPreference,
+      ),
+    )
+
+    assertEquals(first.uuid, second.uuid)
+  }
 }
+
+fun makeOffender(clock: Clock, firstCheckin: LocalDate) = OffenderV2(
+  uuid = UUID.randomUUID(),
+  crn = "X123456",
+  practitionerId = "PRACT001",
+  status = OffenderStatus.INITIAL,
+  firstCheckin = firstCheckin,
+  checkinInterval = CheckinInterval.WEEKLY.duration,
+  createdAt = clock.instant(),
+  createdBy = "PRACT001",
+  updatedAt = clock.instant(),
+  contactPreference = ContactPreference.EMAIL,
+)

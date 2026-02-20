@@ -165,6 +165,28 @@ data class OffenderInfoV2(
   val startedAt: Instant? = null,
 )
 
+/**
+ * Offender information required to start/resume the offender setup process.
+ */
+data class OffenderInfoInitial(
+  @field:Schema(description = "Practitioner ID", required = true)
+  @field:NotBlank
+  val practitionerId: ExternalUserId,
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
+  @field:NotBlank
+  @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
+  val crn: String,
+  @field:Schema(description = "Date of first checkin", required = true)
+  @field:JsonDeserialize(using = LocalDateDeserializer::class)
+  val firstCheckin: LocalDate,
+  @field:Schema(description = "Interval between checkins", required = true)
+  val checkinInterval: CheckinInterval,
+  @field:Schema(description = "POP contact preference", required = true)
+  val contactPreference: ContactPreference,
+  @field:Schema(description = "Setup start timestamp (optional)", required = false)
+  val startedAt: Instant? = null,
+)
+
 /** V2 Offender setup DTO (response) */
 data class OffenderSetupV2Dto(
   @Schema(description = "Setup unique identifier", required = true) val uuid: UUID,
