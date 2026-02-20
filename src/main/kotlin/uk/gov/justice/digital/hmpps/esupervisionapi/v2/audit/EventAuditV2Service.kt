@@ -72,8 +72,8 @@ class EventAuditV2Service(
         return
       }
 
-      val timeToSubmitHours = if (checkin.submittedAt != null) {
-        val duration = Duration.between(checkin.createdAt, checkin.submittedAt)
+      val timeToSubmitHours = if (checkin.checkinStartedAt != null && checkin.submittedAt != null) {
+        val duration = Duration.between(checkin.checkinStartedAt, checkin.submittedAt)
         BigDecimal.valueOf(duration.toMinutes()).divide(BigDecimal.valueOf(60), 2, java.math.RoundingMode.HALF_UP)
       } else {
         null
