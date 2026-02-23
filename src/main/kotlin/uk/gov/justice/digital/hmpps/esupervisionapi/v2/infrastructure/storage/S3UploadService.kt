@@ -167,7 +167,7 @@ class S3UploadService(
   private fun presignedGetUrlFor(key: S3Keyable): URL {
     val getRequest = getObjectRequestFor(key)
     val presignRequest = GetObjectPresignRequest.builder()
-      .signatureDuration(Duration.ofMinutes(5))
+      .signatureDuration(Duration.ofSeconds(30))
       .getObjectRequest(getRequest)
       .build()
     val presigned = this.s3Presigner.presignGetObject(presignRequest)
