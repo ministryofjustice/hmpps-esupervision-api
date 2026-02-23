@@ -114,6 +114,6 @@ class MonthlyStatsRefreshJob(
 
     val TOTAL_VIEW_NAME = "stats_summary_v1"
 
-    val MONTHLY_VIEW_NAME = "stats_summary_pdu_month_v1"
+    val MONTHLY_VIEW_NAME = "stats_summary_provider_month_v1"
   }
 }

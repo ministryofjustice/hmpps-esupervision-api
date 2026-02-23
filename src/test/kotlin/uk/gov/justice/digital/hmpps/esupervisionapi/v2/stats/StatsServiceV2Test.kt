@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsDashboardDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsPduDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsTotalsDto
 import java.math.BigDecimal
@@ -18,7 +18,7 @@ class StatsServiceV2Test {
   private val service = StatsServiceV2(repository)
 
   @Test
-  fun `getStats returns stats when repository has ALL row and PDU rows`() {
+  fun `getStats returns stats when repository has ALL row and PROVIDER rows`() {
     val howEasyCounts =
       mapOf(
         "veryEasy" to 1L,
@@ -62,8 +62,8 @@ class StatsServiceV2Test {
 
     val overall =
       StatsSummary(
-        id = StatsSummaryId(rowType = "ALL", pduCode = null),
-        pduDescription = null,
+        id = StatsSummaryId(rowType = "ALL", providerCode = null),
+        providerDescription = null,
 
         totalSignedUp = 10,
         activeUsers = 7,
@@ -90,10 +90,10 @@ class StatsServiceV2Test {
         updatedAt = updatedAt,
       )
 
-    val pdu1 =
+    val provider1 =
       StatsSummary(
-        id = StatsSummaryId(rowType = "PDU", pduCode = "WPTNWS"),
-        pduDescription = "North Wales",
+        id = StatsSummaryId(rowType = "PROVIDER", providerCode = "WPTNWS"),
+        providerDescription = "North Wales",
 
         totalSignedUp = 4,
         activeUsers = 3,
@@ -108,7 +108,7 @@ class StatsServiceV2Test {
         pctCompletedCheckins = BigDecimal("0.8889"),
         pctExpiredCheckins = BigDecimal("0.1111"),
 
-        // feedback fields exist but are irrelevant for PDU rows; MV sets defaults
+        // feedback fields exist but are irrelevant for PROVIDER rows; MV sets defaults
         feedbackTotal = 0,
         howEasyCounts = emptyMap(),
         howEasyPct = emptyMap(),
@@ -121,10 +121,10 @@ class StatsServiceV2Test {
         updatedAt = updatedAt,
       )
 
-    val pdu2 =
+    val provider2 =
       StatsSummary(
-        id = StatsSummaryId(rowType = "PDU", pduCode = "N07ALL"),
-        pduDescription = "All London",
+        id = StatsSummaryId(rowType = "PROVIDER", providerCode = "N07ALL"),
+        providerDescription = "All London",
 
         totalSignedUp = 6,
         activeUsers = 4,
@@ -152,7 +152,7 @@ class StatsServiceV2Test {
       )
 
     whenever(repository.findOverallRow()).thenReturn(overall)
-    whenever(repository.findPduRows()).thenReturn(listOf(pdu1, pdu2))
+    whenever(repository.findProviderRows()).thenReturn(listOf(provider1, provider2))
 
     val result = service.getStats()
 
@@ -181,11 +181,11 @@ class StatsServiceV2Test {
             pctSignedUpOfTotal = 1.0,
             updatedAt = updatedAt,
           ),
-        pdus =
+        providers =
           listOf(
-            StatsPduDto(
-              pduCode = "WPTNWS",
-              pduDescription = "North Wales",
+            StatsProviderDto(
+              providerCode = "WPTNWS",
+              providerDescription = "North Wales",
               totalSignedUp = 4,
               activeUsers = 3,
               inactiveUsers = 1,
@@ -200,9 +200,9 @@ class StatsServiceV2Test {
               pctSignedUpOfTotal = 0.4,
               updatedAt = updatedAt,
             ),
-            StatsPduDto(
-              pduCode = "N07ALL",
-              pduDescription = "All London",
+            StatsProviderDto(
+              providerCode = "N07ALL",
+              providerDescription = "All London",
               totalSignedUp = 6,
               activeUsers = 4,
               inactiveUsers = 2,

@@ -449,8 +449,8 @@ data class StatsSummaryId(
   @Column(name = "row_type")
   val rowType: String,
 
-  @Column(name = "pdu_code")
-  val pduCode: String?,
+  @Column(name = "provider_code")
+  val providerCode: String?,
 )
 
 @Immutable
@@ -461,8 +461,8 @@ open class StatsSummary(
   @EmbeddedId
   open val id: StatsSummaryId,
 
-  @Column(name = "pdu_description")
-  open val pduDescription: String?, // null for ALL row
+  @Column(name = "provider_description")
+  open val providerDescription: String?, // null for ALL row
 
   @Column(name = "total_signed_up", nullable = false)
   open val totalSignedUp: Long,
@@ -500,7 +500,7 @@ open class StatsSummary(
   @Column(name = "pct_expired_checkins", nullable = false)
   open val pctExpiredCheckins: BigDecimal,
 
-  // feedback only exists for ALL row, MV sets default {} for PDU rows
+  // feedback only exists for ALL row, MV sets default {} for PROVIDER rows
   @Column(name = "feedback_total", nullable = false)
   open val feedbackTotal: Long,
 

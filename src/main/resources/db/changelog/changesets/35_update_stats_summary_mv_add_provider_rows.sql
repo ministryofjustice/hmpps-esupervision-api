@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:35_update_stats_summary_mv_add_pdu_rows splitStatements:false
+--changeset rob.catton:35_update_stats_summary_mv_add_provider_rows splitStatements:false
 DROP MATERIALIZED VIEW IF EXISTS stats_summary_v1;
 
 CREATE MATERIALIZED VIEW stats_summary_v1 AS
@@ -54,12 +54,12 @@ totals_all AS (
   FROM monthly_stats_by_month
 ),
 
-/* --------- per-PDU rollup to 1 row per (month, pdu_code) ---------- */
-monthly_stats_by_month_pdu AS (
+/* --------- per-provider rollup to 1 row per (month, provider_code) ---------- */
+monthly_stats_by_month_provider AS (
   SELECT
     month,
-    pdu_code,
-    MIN(pdu_description) AS pdu_description,
+    provider_code,
+    MIN(provider_description) AS provider_description,
     SUM(users_activated)::BIGINT AS users_activated,
     SUM(users_deactivated)::BIGINT AS users_deactivated,
     SUM(completed_checkins)::BIGINT AS completed_checkins,
@@ -68,44 +68,44 @@ monthly_stats_by_month_pdu AS (
     SUM(COALESCE(unique_checkin_crns, 0))::BIGINT AS unique_checkin_crns,
     MAX(updated_at) AS updated_at
   FROM monthly_stats
-  GROUP BY month, pdu_code
+  GROUP BY month, provider_code
 ),
 
-running_pdu AS (
+running_provider AS (
   SELECT
     month,
-    pdu_code,
-    pdu_description,
+    provider_code,
+    provider_description,
     users_activated,
     users_deactivated,
     updated_at,
-    SUM(users_activated) OVER (PARTITION BY pdu_code ORDER BY month ASC) AS total_activated_to_date,
-    SUM(users_deactivated) OVER (PARTITION BY pdu_code ORDER BY month ASC) AS total_deactivated_to_date,
-    SUM(users_activated - users_deactivated) OVER (PARTITION BY pdu_code ORDER BY month ASC) AS active_users_to_date
-  FROM monthly_stats_by_month_pdu
+    SUM(users_activated) OVER (PARTITION BY provider_code ORDER BY month ASC) AS total_activated_to_date,
+    SUM(users_deactivated) OVER (PARTITION BY provider_code ORDER BY month ASC) AS total_deactivated_to_date,
+    SUM(users_activated - users_deactivated) OVER (PARTITION BY provider_code ORDER BY month ASC) AS active_users_to_date
+  FROM monthly_stats_by_month_provider
 ),
 
 latest_month AS (
   SELECT MAX(month) AS month
-  FROM monthly_stats_by_month_pdu
+  FROM monthly_stats_by_month_provider
 ),
 
-latest_pdu AS (
+latest_provider AS (
   SELECT rp.*
-  FROM running_pdu rp
+  FROM running_provider rp
   JOIN latest_month lm ON lm.month = rp.month
 ),
 
-totals_pdu AS (
+totals_provider AS (
   SELECT
-    pdu_code,
+    provider_code,
     COALESCE(SUM(completed_checkins), 0)::BIGINT AS completed_checkins,
     COALESCE(SUM(not_completed_on_time), 0)::BIGINT AS not_completed_on_time,
     COALESCE(SUM(total_hours_to_complete), 0)::NUMERIC AS total_hours_to_complete,
     COALESCE(SUM(unique_checkin_crns), 0)::BIGINT AS unique_checkin_crns,
     COALESCE(MAX(updated_at), 'epoch'::timestamptz) AS updated_at
-  FROM monthly_stats_by_month_pdu
-  GROUP BY pdu_code
+  FROM monthly_stats_by_month_provider
+  GROUP BY provider_code
 ),
 
 /* --------- feedback (overall only, unchanged) ---------- */
@@ -230,12 +230,12 @@ improvements_pct AS (
 )
 
 /* ===========================
-   FINAL: overall row + per-PDU rows
+   FINAL: overall row + per-provider rows
    =========================== */
 SELECT
   'ALL'::text AS row_type,
-  ''::varchar(10) AS pdu_code,
-  NULL::varchar(255) AS pdu_description,
+  ''::varchar(10) AS provider_code,
+  NULL::varchar(255) AS provider_description,
   1.0::NUMERIC AS pct_signed_up_of_total,
 
   COALESCE(l.active_users_to_date, 0)::BIGINT AS users_activated,
@@ -290,9 +290,9 @@ CROSS JOIN latest_all l
 UNION ALL
 
 SELECT
-  'PDU'::text AS row_type,
-  lp.pdu_code,
-  lp.pdu_description,
+  'PROVIDER'::text AS row_type,
+  lp.provider_code,
+  lp.provider_description,
   
   ROUND(
     COALESCE(lp.total_activated_to_date, 0)::NUMERIC
@@ -337,7 +337,7 @@ SELECT
     ELSE ROUND(tp.not_completed_on_time::NUMERIC / (tp.completed_checkins + tp.not_completed_on_time)::NUMERIC, 4)
   END AS pct_expired_checkins,
 
-  /* feedback is NOT PDU scoped */
+  /* feedback is NOT provider scoped */
   0::BIGINT AS feedback_total,
   '{}'::jsonb AS how_easy_counts,
   '{}'::jsonb AS how_easy_pct,
@@ -347,10 +347,10 @@ SELECT
   '{}'::jsonb AS improvements_pct,
 
   GREATEST(tp.updated_at, COALESCE(lp.updated_at, 'epoch'::timestamptz)) AS updated_at
-FROM latest_pdu lp
-JOIN totals_pdu tp ON tp.pdu_code = lp.pdu_code
+FROM latest_provider lp
+JOIN totals_provider tp ON tp.provider_code = lp.provider_code
 ;
 
 /* Indexes (must include a UNIQUE index with NO WHERE clause for CONCURRENT refresh) */
 CREATE UNIQUE INDEX stats_summary_v1_unique_row
-  ON stats_summary_v1 (row_type, pdu_code);
+  ON stats_summary_v1 (row_type, provider_code);

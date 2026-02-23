@@ -369,8 +369,8 @@ interface StatsSummaryRepository : JpaRepository<StatsSummary, StatsSummaryId> {
   @Query("select s from StatsSummary s where s.id.rowType = 'ALL'")
   fun findOverallRow(): StatsSummary?
 
-  @Query("select s from StatsSummary s where s.id.rowType = 'PDU' order by s.id.pduCode asc")
-  fun findPduRows(): List<StatsSummary>
+  @Query("select s from StatsSummary s where s.id.rowType = 'PROVIDER' order by s.id.providerCode asc")
+  fun findProviderRows(): List<StatsSummary>
 }
 
 @Repository

@@ -30,9 +30,9 @@ data class StatsTotalsDto(
   val updatedAt: Instant,
 )
 
-data class StatsPduDto(
-  val pduCode: String,
-  val pduDescription: String,
+data class StatsProviderDto(
+  val providerCode: String,
+  val providerDescription: String,
   val totalSignedUp: Long,
   val activeUsers: Long,
   val inactiveUsers: Long,
@@ -50,7 +50,7 @@ data class StatsPduDto(
 
 data class StatsDashboardDto(
   val total: StatsTotalsDto,
-  val pdus: List<StatsPduDto>,
+  val providers: List<StatsProviderDto>,
 )
 
 @Service
@@ -63,11 +63,11 @@ class StatsServiceV2(
     val overall = repository.findOverallRow()
       ?: throw IllegalStateException("Stats summary not found – materialised view stats_summary_v1 has no ALL row")
 
-    val pdus = repository.findPduRows()
+    val providers = repository.findProviderRows()
 
     return StatsDashboardDto(
       total = overall.toTotalsDto(),
-      pdus = pdus.map { it.toPduDto() },
+      providers = providers.map { it.toProviderDto() },
     )
   }
 
@@ -96,9 +96,9 @@ class StatsServiceV2(
     updatedAt = updatedAt,
   )
 
-  private fun StatsSummary.toPduDto() = StatsPduDto(
-    pduCode = requireNotNull(id.pduCode) { "PDU row missing pduCode" },
-    pduDescription = requireNotNull(pduDescription) { "PDU row missing pduDescription" },
+  private fun StatsSummary.toProviderDto() = StatsProviderDto(
+    providerCode = requireNotNull(id.providerCode) { "PROVIDER row missing providerCode" },
+    providerDescription = requireNotNull(providerDescription) { "PROVIDER row missing providerDescription" },
     totalSignedUp = totalSignedUp,
     activeUsers = activeUsers,
     inactiveUsers = inactiveUsers,

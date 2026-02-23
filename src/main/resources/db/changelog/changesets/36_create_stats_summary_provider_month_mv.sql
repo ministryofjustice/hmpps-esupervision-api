@@ -1,19 +1,19 @@
 --liquibase formatted sql
 
---changeset rob.catton:36_create_stats_summary_pdu_month_mv splitStatements:false
-DROP MATERIALIZED VIEW IF EXISTS stats_summary_pdu_month_v1;
+--changeset rob.catton:36_create_stats_summary_provider_month_mv splitStatements:false
+DROP MATERIALIZED VIEW IF EXISTS stats_summary_provider_month_v1;
 
 -- Rows:
---  - one per (month, pdu_code) with row_type='PDU'
+--  - one per (month, provider_code) with row_type='PROVIDER'
 --  - one per month with row_type='ALL' (monthly totals, correctly weighted averages)
-CREATE MATERIALIZED VIEW stats_summary_pdu_month_v1 AS
+CREATE MATERIALIZED VIEW stats_summary_provider_month_v1 AS
 WITH
-/* -------- per-PDU/month base (monthly_stats is already per month+pdu, but SUM is harmless) -------- */
-pdu_base AS (
+/* -------- per-provider/month base (monthly_stats is already per month+provider, but SUM is harmless) -------- */
+provider_base AS (
   SELECT
     month,
-    pdu_code,
-    MIN(pdu_description) AS pdu_description,
+    provider_code,
+    MIN(provider_description) AS provider_description,
 
     SUM(users_activated)::BIGINT AS users_activated,
     SUM(users_deactivated)::BIGINT AS users_deactivated,
@@ -24,19 +24,19 @@ pdu_base AS (
 
     MAX(updated_at) AS updated_at
   FROM monthly_stats
-  GROUP BY month, pdu_code
+  GROUP BY month, provider_code
 ),
 
-pdu_running AS (
+provider_running AS (
   SELECT
     *,
-    SUM(users_activated) OVER (PARTITION BY pdu_code ORDER BY month ASC) AS total_activated_to_date,
-    SUM(users_deactivated) OVER (PARTITION BY pdu_code ORDER BY month ASC) AS total_deactivated_to_date,
-    SUM(users_activated - users_deactivated) OVER (PARTITION BY pdu_code ORDER BY month ASC) AS active_users_to_date
-  FROM pdu_base
+    SUM(users_activated) OVER (PARTITION BY provider_code ORDER BY month ASC) AS total_activated_to_date,
+    SUM(users_deactivated) OVER (PARTITION BY provider_code ORDER BY month ASC) AS total_deactivated_to_date,
+    SUM(users_activated - users_deactivated) OVER (PARTITION BY provider_code ORDER BY month ASC) AS active_users_to_date
+  FROM provider_base
 ),
 
-/* -------- ALL/month base: sum across PDUs for the month (this gives correct denominators) -------- */
+/* -------- ALL/month base: sum across providers for the month (this gives correct denominators) -------- */
 all_base AS (
   SELECT
     month,
@@ -47,7 +47,7 @@ all_base AS (
     SUM(COALESCE(unique_checkin_crns, 0))::BIGINT AS unique_checkin_crns,
     COALESCE(SUM(total_hours_to_complete), 0)::NUMERIC AS total_hours_to_complete,
     MAX(updated_at) AS updated_at
-  FROM pdu_base
+  FROM provider_base
   GROUP BY month
 ),
 
@@ -60,12 +60,12 @@ all_running AS (
   FROM all_base
 )
 
-/* -------- FINAL: ALL rows + PDU rows -------- */
+/* -------- FINAL: ALL rows + PROVIDER rows -------- */
 SELECT
   'ALL'::text AS row_type,
   ar.month,
-  NULL::varchar(10) AS pdu_code,
-  NULL::varchar(255) AS pdu_description,
+  NULL::varchar(10) AS provider_code,
+  NULL::varchar(255) AS provider_description,
 
   -- snapshot totals "as of this month"
   COALESCE(ar.active_users_to_date, 0)::BIGINT AS active_users,
@@ -123,10 +123,10 @@ FROM all_running ar
 UNION ALL
 
 SELECT
-  'PDU'::text AS row_type,
+  'PROVIDER'::text AS row_type,
   pr.month,
-  pr.pdu_code,
-  pr.pdu_description,
+  pr.provider_code,
+  pr.provider_description,
 
   -- snapshot totals "as of this month"
   COALESCE(pr.active_users_to_date, 0)::BIGINT AS active_users,
@@ -179,18 +179,18 @@ SELECT
   END AS pct_expired_checkins,
 
   pr.updated_at
-FROM pdu_running pr
+FROM provider_running pr
 ;
 
 -- Indexes for range queries + CONCURRENT refresh safety
-CREATE UNIQUE INDEX stats_summary_pdu_month_v1_unique_row
-  ON stats_summary_pdu_month_v1(row_type, month, pdu_code);
+CREATE UNIQUE INDEX stats_summary_provider_month_v1_unique_row
+  ON stats_summary_provider_month_v1(row_type, month, provider_code);
 
-CREATE INDEX stats_summary_pdu_month_v1_month_idx
-  ON stats_summary_pdu_month_v1(month);
+CREATE INDEX stats_summary_provider_month_v1_month_idx
+  ON stats_summary_provider_month_v1(month);
 
-CREATE INDEX stats_summary_pdu_month_v1_pdu_idx
-  ON stats_summary_pdu_month_v1(pdu_code);
+CREATE INDEX stats_summary_provider_month_v1_provider_idx
+  ON stats_summary_provider_month_v1(provider_code);
 
-CREATE INDEX stats_summary_pdu_month_v1_row_type_idx
-  ON stats_summary_pdu_month_v1(row_type);
+CREATE INDEX stats_summary_provider_month_v1_row_type_idx
+  ON stats_summary_provider_month_v1(row_type);

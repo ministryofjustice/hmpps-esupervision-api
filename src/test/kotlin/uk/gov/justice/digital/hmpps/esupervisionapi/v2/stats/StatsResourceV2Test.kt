@@ -7,7 +7,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsDashboardDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsPduDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsResourceV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsTotalsDto
@@ -20,7 +20,7 @@ class StatsResourceV2Test {
   private val resource = StatsResourceV2(service)
 
   @Test
-  fun `getStats returns expected StatsResponse with totals and pdus`() {
+  fun `getStats returns expected StatsResponse with totals and providers`() {
     val howEasyCounts =
       mapOf(
         "veryEasy" to 1L,
@@ -86,12 +86,12 @@ class StatsResourceV2Test {
         updatedAt = totalsUpdatedAt,
       )
 
-    val pduUpdatedAt = Instant.parse("2026-01-28T12:02:00.000000Z")
+    val providerUpdatedAt = Instant.parse("2026-01-28T12:02:00.000000Z")
 
-    val pdu1 =
-      StatsPduDto(
-        pduCode = "WPTNWS",
-        pduDescription = "North Wales",
+    val provider1 =
+      StatsProviderDto(
+        providerCode = "WPTNWS",
+        providerDescription = "North Wales",
         totalSignedUp = 4,
         activeUsers = 3,
         inactiveUsers = 1,
@@ -104,13 +104,13 @@ class StatsResourceV2Test {
         pctCompletedCheckins = 0.8889,
         pctExpiredCheckins = 0.1111,
         pctSignedUpOfTotal = 0.4, // 4/10
-        updatedAt = pduUpdatedAt,
+        updatedAt = providerUpdatedAt,
       )
 
-    val pdu2 =
-      StatsPduDto(
-        pduCode = "N07ALL",
-        pduDescription = "All London",
+    val provider2 =
+      StatsProviderDto(
+        providerCode = "N07ALL",
+        providerDescription = "All London",
         totalSignedUp = 6,
         activeUsers = 4,
         inactiveUsers = 2,
@@ -123,14 +123,14 @@ class StatsResourceV2Test {
         pctCompletedCheckins = 0.9231,
         pctExpiredCheckins = 0.0769,
         pctSignedUpOfTotal = 0.6, // 6/10
-        updatedAt = pduUpdatedAt,
+        updatedAt = providerUpdatedAt,
       )
 
     whenever(service.getStats())
       .thenReturn(
         StatsDashboardDto(
           total = totals,
-          pdus = listOf(pdu1, pdu2),
+          providers = listOf(provider1, provider2),
         ),
       )
 
@@ -177,11 +177,11 @@ class StatsResourceV2Test {
     assertEquals(BigDecimal("0.5"), total.improvementsPct["gettingHelp"])
     assertNull(total.improvementsPct["notAnswered"])
 
-    assertEquals(2, body.pdus.size)
+    assertEquals(2, body.providers.size)
 
-    val first = body.pdus[0]
-    assertEquals("WPTNWS", first.pduCode)
-    assertEquals("North Wales", first.pduDescription)
+    val first = body.providers[0]
+    assertEquals("WPTNWS", first.providerCode)
+    assertEquals("North Wales", first.providerDescription)
     assertEquals(4, first.totalSignedUp)
     assertEquals(3, first.activeUsers)
     assertEquals(1, first.inactiveUsers)
@@ -194,11 +194,11 @@ class StatsResourceV2Test {
     assertEquals(0.8889, first.pctCompletedCheckins)
     assertEquals(0.1111, first.pctExpiredCheckins)
     assertEquals(0.4, first.pctSignedUpOfTotal)
-    assertEquals(pduUpdatedAt.toString(), first.updatedAt)
+    assertEquals(providerUpdatedAt.toString(), first.updatedAt)
 
-    val second = body.pdus[1]
-    assertEquals("N07ALL", second.pduCode)
-    assertEquals("All London", second.pduDescription)
+    val second = body.providers[1]
+    assertEquals("N07ALL", second.providerCode)
+    assertEquals("All London", second.providerDescription)
     assertEquals(6, second.totalSignedUp)
     assertEquals(4, second.activeUsers)
     assertEquals(2, second.inactiveUsers)
@@ -211,6 +211,6 @@ class StatsResourceV2Test {
     assertEquals(0.9231, second.pctCompletedCheckins)
     assertEquals(0.0769, second.pctExpiredCheckins)
     assertEquals(0.6, second.pctSignedUpOfTotal)
-    assertEquals(pduUpdatedAt.toString(), second.updatedAt)
+    assertEquals(providerUpdatedAt.toString(), second.updatedAt)
   }
 }

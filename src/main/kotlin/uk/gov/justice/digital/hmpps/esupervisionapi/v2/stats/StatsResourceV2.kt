@@ -34,7 +34,7 @@ class StatsResourceV2(private val service: StatsServiceV2) {
     return ResponseEntity.ok(
       StatsResponse(
         total = result.total.toStatsBlock(),
-        pdus = result.pdus.map { it.toPduBlock() },
+        providers = result.providers.map { it.toProviderBlock() },
       ),
     )
   }
@@ -42,7 +42,7 @@ class StatsResourceV2(private val service: StatsServiceV2) {
 
 data class StatsResponse(
   val total: StatsBlock,
-  val pdus: List<PduStatsBlock>,
+  val providers: List<ProviderStatsBlock>,
 )
 
 data class StatsBlock(
@@ -68,9 +68,9 @@ data class StatsBlock(
   val updatedAt: String,
 )
 
-data class PduStatsBlock(
-  val pduCode: String,
-  val pduDescription: String?,
+data class ProviderStatsBlock(
+  val providerCode: String,
+  val providerDescription: String?,
   val totalSignedUp: Long,
   val activeUsers: Long,
   val inactiveUsers: Long,
@@ -109,9 +109,9 @@ private fun StatsTotalsDto.toStatsBlock() = StatsBlock(
   updatedAt = updatedAt.toString(),
 )
 
-private fun StatsPduDto.toPduBlock() = PduStatsBlock(
-  pduCode = pduCode,
-  pduDescription = pduDescription,
+private fun StatsProviderDto.toProviderBlock() = ProviderStatsBlock(
+  providerCode = providerCode,
+  providerDescription = providerDescription,
   totalSignedUp = totalSignedUp,
   activeUsers = activeUsers,
   inactiveUsers = inactiveUsers,

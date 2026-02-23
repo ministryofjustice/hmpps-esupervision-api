@@ -20,7 +20,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
   @Test
   fun `refresh populates monthly tables and MV`() {
 
-    // Insert audit events for 3 different PDUs
+    // Insert audit events for 3 different providers
     jdbcTemplate.update(
       """
       INSERT INTO event_audit_log_v2 (
@@ -83,16 +83,16 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         Long::class.java,
       )
 
-    // WPTNWS, N04ALL, N07ALL
+    // N03, N04, N07
     assertEquals(3L, monthlyStatsCount)
 
-    // Assert one specific PDU row
+    // Assert one specific PROVIDER row
     val northWales =
       jdbcTemplate.queryForMap(
         """
         SELECT * FROM monthly_stats
         WHERE month = '2026-01-01'
-          AND pdu_code = 'WPTNWS'
+          AND provider_code = 'N03'
         """
       )
 
@@ -111,7 +111,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       )
     assertEquals(3L, feedbackRows) // still 3 rows here for January, even though improvements has no answers
 
-    // stats_summary_v1 now has 1 ALL row and 3 PDU rows
+    // stats_summary_v1 now has 1 ALL row and 3 PROVIDER rows
     val mvCount =
       jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM stats_summary_v1",
@@ -129,16 +129,16 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
 
     assertEquals(2L, allRow["feedback_total"])
 
-    val pduRowCount =
+    val providerRowCount =
       jdbcTemplate.queryForObject(
         """
         SELECT COUNT(*)
         FROM stats_summary_v1
-        WHERE row_type = 'PDU'
+        WHERE row_type = 'PROVIDER'
         """,
         Long::class.java,
       )
 
-    assertEquals(3L, pduRowCount)
+    assertEquals(3L, providerRowCount)
   }
 }
