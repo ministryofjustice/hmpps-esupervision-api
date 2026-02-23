@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:35_create_stats_summary_pdu_month_mv splitStatements:false
+--changeset rob.catton:36_create_stats_summary_pdu_month_mv splitStatements:false
 DROP MATERIALIZED VIEW IF EXISTS stats_summary_pdu_month_v1;
 
 -- Rows:

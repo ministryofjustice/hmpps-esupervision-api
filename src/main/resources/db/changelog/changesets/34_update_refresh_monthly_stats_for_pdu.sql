@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:33_update_refresh_monthly_stats_for_pdu splitStatements:false
+--changeset rob.catton:34_update_refresh_monthly_stats_for_pdu splitStatements:false
 CREATE OR REPLACE FUNCTION refresh_monthly_stats(
     p_month DATE,
     p_start TIMESTAMPTZ,
@@ -23,12 +23,12 @@ WITH pdus_in_month AS (
 users_by_pdu AS (
   SELECT
     pdu_code,
-    COUNT(*) FILTER (WHERE event_type = 'SETUP_COMPLETED')      ::BIGINT AS users_activated,
+    COUNT(*) FILTER (WHERE event_type IN ('SETUP_COMPLETED', 'OFFENDER_REACTIVATED')) AS users_activated,
     COUNT(*) FILTER (WHERE event_type = 'OFFENDER_DEACTIVATED') ::BIGINT AS users_deactivated
   FROM event_audit_log_v2
   WHERE occurred_at >= p_start
     AND occurred_at <  p_end
-    AND event_type IN ('SETUP_COMPLETED', 'OFFENDER_DEACTIVATED')
+    AND event_type IN ('SETUP_COMPLETED', 'OFFENDER_REACTIVATED', 'OFFENDER_DEACTIVATED')
   GROUP BY pdu_code
 ),
 

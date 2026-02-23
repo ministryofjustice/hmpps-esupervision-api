@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:32_add_pdu_to_monthly_stats splitStatements:false
+--changeset rob.catton:33_add_pdu_to_monthly_stats splitStatements:false
 
 -- Add columns
 ALTER TABLE monthly_stats

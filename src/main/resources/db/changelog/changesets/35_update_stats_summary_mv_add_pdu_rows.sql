@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:34_update_stats_summary_mv_add_pdu_rows splitStatements:false
+--changeset rob.catton:35_update_stats_summary_mv_add_pdu_rows splitStatements:false
 DROP MATERIALIZED VIEW IF EXISTS stats_summary_v1;
 
 CREATE MATERIALIZED VIEW stats_summary_v1 AS

@@ -59,13 +59,15 @@ databaseChangeLog:
       file: db/changelog/changesets/29_update_stats_summary_mv_for_feedback_table.sql
   - include: 
       file: db/changelog/changesets/30_update_refresh_monthly_feedback_stats_fn.sql
+  - include:
+      file: db/changelog/changesets/31_update_refresh_monthly_stats_function_include_reactivations.sql
   - include: 
-      file: db/changelog/changesets/31_drop_monthly_feedback_fk.sql
+      file: db/changelog/changesets/32_drop_monthly_feedback_fk.sql
   - include: 
-      file: db/changelog/changesets/32_add_pdu_to_monthly_stats.sql
+      file: db/changelog/changesets/33_add_pdu_to_monthly_stats.sql
   - include: 
-      file: db/changelog/changesets/33_update_refresh_monthly_stats_for_pdu.sql
+      file: db/changelog/changesets/34_update_refresh_monthly_stats_for_pdu.sql
   - include: 
-      file: db/changelog/changesets/34_update_stats_summary_mv_add_pdu_rows.sql
+      file: db/changelog/changesets/35_update_stats_summary_mv_add_pdu_rows.sql
   - include: 
-      file: db/changelog/changesets/35_create_stats_summary_pdu_month_mv.sql
+      file: db/changelog/changesets/36_create_stats_summary_pdu_month_mv.sql
