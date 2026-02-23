@@ -9,7 +9,6 @@ import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsWithPercentages
 import java.math.BigDecimal
 
 @RestController
@@ -28,14 +27,25 @@ class StatsResourceV2(private val service: StatsServiceV2) {
   @ApiResponse(responseCode = "200", description = "Stats returned successfully")
   @GetMapping
   fun getStats(): ResponseEntity<StatsResponse> {
-    val stats = service.getStats()
+    val result = service.getStats()
+
     logger.info("Retrieved system stats")
-    return ResponseEntity.ok(stats.toResponse())
+
+    return ResponseEntity.ok(
+      StatsResponse(
+        total = result.total.toStatsBlock(),
+        pdus = result.pdus.map { it.toPduBlock() },
+      ),
+    )
   }
 }
 
-/** Response DTO with percentages as decimals (0.0–1.0) */
 data class StatsResponse(
+  val total: StatsBlock,
+  val pdus: List<PduStatsBlock>,
+)
+
+data class StatsBlock(
   val totalSignedUp: Long,
   val activeUsers: Long,
   val inactiveUsers: Long,
@@ -54,11 +64,29 @@ data class StatsResponse(
   val gettingSupportPct: Map<String, BigDecimal>,
   val improvementsCounts: Map<String, Long>,
   val improvementsPct: Map<String, BigDecimal>,
+  val pctSignedUpOfTotal: Double,
   val updatedAt: String,
 )
 
-/** Map StatsWithPercentages from service to response DTO */
-private fun StatsWithPercentages.toResponse() = StatsResponse(
+data class PduStatsBlock(
+  val pduCode: String,
+  val pduDescription: String?,
+  val totalSignedUp: Long,
+  val activeUsers: Long,
+  val inactiveUsers: Long,
+  val completedCheckins: Long,
+  val notCompletedOnTime: Long,
+  val avgHoursToComplete: Double,
+  val avgCompletedCheckinsPerPerson: Double,
+  val pctActiveUsers: Double,
+  val pctInactiveUsers: Double,
+  val pctCompletedCheckins: Double,
+  val pctExpiredCheckins: Double,
+  val pctSignedUpOfTotal: Double,
+  val updatedAt: String,
+)
+
+private fun StatsTotalsDto.toStatsBlock() = StatsBlock(
   totalSignedUp = totalSignedUp,
   activeUsers = activeUsers,
   inactiveUsers = inactiveUsers,
@@ -77,5 +105,24 @@ private fun StatsWithPercentages.toResponse() = StatsResponse(
   gettingSupportPct = gettingSupportPct,
   improvementsCounts = improvementsCounts,
   improvementsPct = improvementsPct,
+  pctSignedUpOfTotal = pctSignedUpOfTotal,
+  updatedAt = updatedAt.toString(),
+)
+
+private fun StatsPduDto.toPduBlock() = PduStatsBlock(
+  pduCode = pduCode,
+  pduDescription = pduDescription,
+  totalSignedUp = totalSignedUp,
+  activeUsers = activeUsers,
+  inactiveUsers = inactiveUsers,
+  completedCheckins = completedCheckins,
+  notCompletedOnTime = notCompletedOnTime,
+  avgHoursToComplete = avgHoursToComplete,
+  avgCompletedCheckinsPerPerson = avgCompletedCheckinsPerPerson,
+  pctActiveUsers = pctActiveUsers,
+  pctInactiveUsers = pctInactiveUsers,
+  pctCompletedCheckins = pctCompletedCheckins,
+  pctExpiredCheckins = pctExpiredCheckins,
+  pctSignedUpOfTotal = pctSignedUpOfTotal,
   updatedAt = updatedAt.toString(),
 )

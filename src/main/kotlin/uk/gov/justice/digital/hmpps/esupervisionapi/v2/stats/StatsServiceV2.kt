@@ -2,10 +2,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummary
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
 import java.math.BigDecimal
+import java.time.Instant
 
-data class StatsWithPercentages(
+data class StatsTotalsDto(
   val totalSignedUp: Long,
   val activeUsers: Long,
   val inactiveUsers: Long,
@@ -13,7 +15,6 @@ data class StatsWithPercentages(
   val notCompletedOnTime: Long,
   val avgHoursToComplete: Double,
   val avgCompletedCheckinsPerPerson: Double,
-  val updatedAt: java.time.Instant,
   val pctActiveUsers: Double,
   val pctInactiveUsers: Double,
   val pctCompletedCheckins: Double,
@@ -25,6 +26,31 @@ data class StatsWithPercentages(
   val gettingSupportPct: Map<String, BigDecimal>,
   val improvementsCounts: Map<String, Long>,
   val improvementsPct: Map<String, BigDecimal>,
+  val pctSignedUpOfTotal: Double,
+  val updatedAt: Instant,
+)
+
+data class StatsPduDto(
+  val pduCode: String,
+  val pduDescription: String,
+  val totalSignedUp: Long,
+  val activeUsers: Long,
+  val inactiveUsers: Long,
+  val completedCheckins: Long,
+  val notCompletedOnTime: Long,
+  val avgHoursToComplete: Double,
+  val avgCompletedCheckinsPerPerson: Double,
+  val pctActiveUsers: Double,
+  val pctInactiveUsers: Double,
+  val pctCompletedCheckins: Double,
+  val pctExpiredCheckins: Double,
+  val pctSignedUpOfTotal: Double,
+  val updatedAt: Instant,
+)
+
+data class StatsDashboardDto(
+  val total: StatsTotalsDto,
+  val pdus: List<StatsPduDto>,
 )
 
 @Service
@@ -33,32 +59,58 @@ class StatsServiceV2(
 ) {
 
   @Transactional(readOnly = true)
-  fun getStats(): StatsWithPercentages {
-    val stats = repository.findBySingleton(1)
-      ?: throw IllegalStateException("Stats summary not found – materialised view stats_summary_v1 is empty")
+  fun getStats(): StatsDashboardDto {
+    val overall = repository.findOverallRow()
+      ?: throw IllegalStateException("Stats summary not found – materialised view stats_summary_v1 has no ALL row")
 
-    fun bdToDouble(value: java.math.BigDecimal?) = value?.toDouble() ?: 0.0
+    val pdus = repository.findPduRows()
 
-    return StatsWithPercentages(
-      totalSignedUp = stats.totalSignedUp,
-      activeUsers = stats.activeUsers,
-      inactiveUsers = stats.inactiveUsers,
-      completedCheckins = stats.completedCheckins,
-      notCompletedOnTime = stats.notCompletedOnTime,
-      avgHoursToComplete = bdToDouble(stats.avgHoursToComplete),
-      avgCompletedCheckinsPerPerson = bdToDouble(stats.avgCompletedCheckinsPerPerson),
-      updatedAt = stats.updatedAt,
-      pctActiveUsers = bdToDouble(stats.pctActiveUsers),
-      pctInactiveUsers = bdToDouble(stats.pctInactiveUsers),
-      pctCompletedCheckins = bdToDouble(stats.pctCompletedCheckins),
-      pctExpiredCheckins = bdToDouble(stats.pctExpiredCheckins),
-      feedbackTotal = stats.feedbackTotal,
-      howEasyCounts = stats.howEasyCounts,
-      howEasyPct = stats.howEasyPct,
-      gettingSupportCounts = stats.gettingSupportCounts,
-      gettingSupportPct = stats.gettingSupportPct,
-      improvementsCounts = stats.improvementsCounts,
-      improvementsPct = stats.improvementsPct,
+    return StatsDashboardDto(
+      total = overall.toTotalsDto(),
+      pdus = pdus.map { it.toPduDto() },
     )
   }
+
+  private fun bdToDouble(value: java.math.BigDecimal?) = value?.toDouble() ?: 0.0
+
+  private fun StatsSummary.toTotalsDto() = StatsTotalsDto(
+    totalSignedUp = totalSignedUp,
+    activeUsers = activeUsers,
+    inactiveUsers = inactiveUsers,
+    completedCheckins = completedCheckins,
+    notCompletedOnTime = notCompletedOnTime,
+    avgHoursToComplete = bdToDouble(avgHoursToComplete),
+    avgCompletedCheckinsPerPerson = bdToDouble(avgCompletedCheckinsPerPerson),
+    pctActiveUsers = bdToDouble(pctActiveUsers),
+    pctInactiveUsers = bdToDouble(pctInactiveUsers),
+    pctCompletedCheckins = bdToDouble(pctCompletedCheckins),
+    pctExpiredCheckins = bdToDouble(pctExpiredCheckins),
+    feedbackTotal = feedbackTotal,
+    howEasyCounts = howEasyCounts,
+    howEasyPct = howEasyPct,
+    gettingSupportCounts = gettingSupportCounts,
+    gettingSupportPct = gettingSupportPct,
+    improvementsCounts = improvementsCounts,
+    improvementsPct = improvementsPct,
+    pctSignedUpOfTotal = bdToDouble(pctSignedUpOfTotal),
+    updatedAt = updatedAt,
+  )
+
+  private fun StatsSummary.toPduDto() = StatsPduDto(
+    pduCode = requireNotNull(id.pduCode) { "PDU row missing pduCode" },
+    pduDescription = requireNotNull(pduDescription) { "PDU row missing pduDescription" },
+    totalSignedUp = totalSignedUp,
+    activeUsers = activeUsers,
+    inactiveUsers = inactiveUsers,
+    completedCheckins = completedCheckins,
+    notCompletedOnTime = notCompletedOnTime,
+    avgHoursToComplete = bdToDouble(avgHoursToComplete),
+    avgCompletedCheckinsPerPerson = bdToDouble(avgCompletedCheckinsPerPerson),
+    pctActiveUsers = bdToDouble(pctActiveUsers),
+    pctInactiveUsers = bdToDouble(pctInactiveUsers),
+    pctCompletedCheckins = bdToDouble(pctCompletedCheckins),
+    pctExpiredCheckins = bdToDouble(pctExpiredCheckins),
+    pctSignedUpOfTotal = bdToDouble(pctSignedUpOfTotal),
+    updatedAt = updatedAt,
+  )
 }

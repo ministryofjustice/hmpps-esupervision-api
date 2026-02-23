@@ -2,10 +2,11 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
+import jakarta.persistence.Embeddable
+import jakarta.persistence.EmbeddedId
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
-import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
@@ -443,17 +444,25 @@ open class Feedback(
   open var createdAt: Instant,
 ) : V2BaseEntity()
 
-/**
- * Aggregated statistics materialised view (singleton row)
- */
+@Embeddable
+data class StatsSummaryId(
+  @Column(name = "row_type")
+  val rowType: String,
+
+  @Column(name = "pdu_code")
+  val pduCode: String?,
+)
+
 @Immutable
 @Entity
 @Table(name = "stats_summary_v1")
 open class StatsSummary(
 
-  @Id
-  @Column(name = "singleton", nullable = false)
-  open val singleton: Int = 1,
+  @EmbeddedId
+  open val id: StatsSummaryId,
+
+  @Column(name = "pdu_description")
+  open val pduDescription: String?, // null for ALL row
 
   @Column(name = "total_signed_up", nullable = false)
   open val totalSignedUp: Long,
@@ -476,6 +485,9 @@ open class StatsSummary(
   @Column(name = "avg_completed_checkins_per_person")
   open val avgCompletedCheckinsPerPerson: BigDecimal?,
 
+  @Column(name = "pct_signed_up_of_total")
+  open val pctSignedUpOfTotal: BigDecimal?,
+
   @Column(name = "pct_active_users", nullable = false)
   open val pctActiveUsers: BigDecimal,
 
@@ -488,6 +500,7 @@ open class StatsSummary(
   @Column(name = "pct_expired_checkins", nullable = false)
   open val pctExpiredCheckins: BigDecimal,
 
+  // feedback only exists for ALL row, MV sets default {} for PDU rows
   @Column(name = "feedback_total", nullable = false)
   open val feedbackTotal: Long,
 
@@ -516,7 +529,7 @@ open class StatsSummary(
   open val improvementsPct: Map<String, BigDecimal>,
 
   @Column(name = "updated_at", nullable = false)
-  open var updatedAt: Instant,
+  open val updatedAt: Instant,
 )
 
 @Entity

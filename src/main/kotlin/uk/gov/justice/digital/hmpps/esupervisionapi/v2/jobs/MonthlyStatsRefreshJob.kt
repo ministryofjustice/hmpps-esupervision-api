@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -16,8 +15,6 @@ import java.time.ZoneOffset
 class MonthlyStatsRefreshJob(
   private val jdbcTemplate: JdbcTemplate,
   private val clock: Clock,
-  @Value("\${app.scheduling.monthly-stats-refresh.view-name:stats_summary_v1}")
-  private val viewName: String,
 ) {
 
   @Scheduled(cron = "\${app.scheduling.monthly-stats-refresh.cron}")
@@ -78,14 +75,24 @@ class MonthlyStatsRefreshJob(
         Duration.between(monthlyFeedbackStart, monthlyFeedbackEnd),
       )
 
-      val mvStart = clock.instant()
-      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName")
-      val mvEnd = clock.instant()
+      val totalMvStart = clock.instant()
+      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $TOTAL_VIEW_NAME")
+      val totalMvEnd = clock.instant()
 
       LOGGER.info(
         "Materialized view refreshed successfully: view={}, took={}",
-        viewName,
-        Duration.between(mvStart, mvEnd),
+        TOTAL_VIEW_NAME,
+        Duration.between(totalMvStart, totalMvEnd),
+      )
+
+      val monthlyMvStart = clock.instant()
+      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $MONTHLY_VIEW_NAME")
+      val monthlyMvEnd = clock.instant()
+
+      LOGGER.info(
+        "Materialized view refreshed successfully: view={}, took={}",
+        MONTHLY_VIEW_NAME,
+        Duration.between(monthlyMvStart, monthlyMvEnd),
       )
 
       LOGGER.info(
@@ -104,5 +111,9 @@ class MonthlyStatsRefreshJob(
     val REFRESH_MONTHLY_STATS_SQL = "SELECT refresh_monthly_stats(?, ?, ?)"
 
     val REFRESH_MONTHLY_FEEDBACK_STATS_SQL = "SELECT refresh_monthly_feedback_stats(?, ?, ?)"
+
+    val TOTAL_VIEW_NAME = "stats_summary_v1"
+
+    val MONTHLY_VIEW_NAME = "stats_summary_pdu_month_v1"
   }
 }
