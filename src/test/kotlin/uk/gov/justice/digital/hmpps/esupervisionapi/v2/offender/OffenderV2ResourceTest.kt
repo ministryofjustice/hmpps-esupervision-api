@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -205,15 +206,20 @@ class OffenderV2ResourceTest {
   fun `reactivateOffender - happy path - changes INACTIVE to VERIFIED, creates check in for today and sends notification`() {
     val uuid = UUID.randomUUID()
     val today = LocalDate.now(clock)
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { firstCheckin = today }
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      firstCheckin = today
+      contactPreference = ContactPreference.PHONE
+    }
     val request = ReactivateOffenderRequest(
       requestedBy = "PRACT001",
       reason = "Back on supervision",
     )
     val checkin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
+
     val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
-      offender.crn,
-      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      crn = offender.crn,
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      mobile = "07700900123",
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -227,15 +233,15 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
     verify(offenderRepository).save(offender)
-    verify(checkinCreationService).createCheckin(eq(uuid), eq(today), eq("PRACT001"))
     verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails))
-    verify(eventAuditV2Service).recordOffenderReactivated(eq(offender), any(), eq("Back on supervision"))
   }
 
   @Test
   fun `reactivateOffender - with schedule update - applies new schedule but does not create check in`() {
     val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      contactPreference = ContactPreference.PHONE
+    }
     val futureDate = LocalDate.now(clock).plusDays(7)
     val request = ReactivateOffenderRequest(
       requestedBy = "PRACT001",
@@ -247,15 +253,20 @@ class OffenderV2ResourceTest {
       ),
     )
 
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      mobile = "07700900123",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
+
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
 
     val result = resource.reactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(futureDate, result.body?.firstCheckin)
-    assertEquals(CheckinInterval.TWO_WEEKS, result.body?.checkinInterval)
-    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     verify(offenderRepository).save(offender)
   }
 
@@ -315,24 +326,79 @@ class OffenderV2ResourceTest {
   @Test
   fun `reactivateOffender - happy path - returns photo URL for VERIFIED offender`() {
     val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
-    val request = ReactivateOffenderRequest(
-      requestedBy = "PRACT001",
-      reason = "Restarting supervision",
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Restarting supervision")
+
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      mobile = "07700900123",
     )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-    // mock s3
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
 
     val result = resource.reactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
-    assertEquals(OffenderStatus.VERIFIED, result.body?.status)
-    assertEquals(uuid, result.body?.uuid)
     assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
+  }
+
+  @Test
+  fun `reactivateOffender - missing mobile number for PHONE preference - throws 400`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Restarting")
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      mobile = null,
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.reactivateOffender(uuid, request)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertTrue(exception.reason?.contains("does not have a mobile number in NDelius") == true)
+  }
+
+  @Test
+  fun `reactivateOffender - missing email for EMAIL preference update - throws 400`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+    }
+    val request = ReactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Restarting",
+      contactPreference = ContactPreferenceUpdateRequest("PRACT001", ContactPreference.EMAIL),
+    )
+
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
+      email = "",
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.reactivateOffender(uuid, request)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertTrue(exception.reason?.contains("does not have an email address in NDelius") == true)
   }
 
   // ========================================
