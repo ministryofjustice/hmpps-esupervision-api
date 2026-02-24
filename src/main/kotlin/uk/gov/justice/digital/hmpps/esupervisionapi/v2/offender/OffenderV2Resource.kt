@@ -243,6 +243,33 @@ class OffenderV2Resource(
     if (offender.status != OffenderStatus.INACTIVE) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only INACTIVE offenders can be reactivated.")
     }
+
+    val contactDetails = try {
+      ndiliusApiClient.getContactDetails(offender.crn)
+        ?: throw Exception("NDelius returned null contact details")
+    } catch (e: Exception) {
+      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Could not verify contact details in NDelius for ${offender.crn}.",
+      )
+    }
+
+    val requestedPreference = request.contactPreference?.contactPreference ?: offender.contactPreference
+
+    when (requestedPreference) {
+      ContactPreference.PHONE -> {
+        if (contactDetails.mobile.isNullOrBlank()) {
+          throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reactivate: ${offender.crn} does not have a mobile number in NDelius.")
+        }
+      }
+      ContactPreference.EMAIL -> {
+        if (contactDetails.email.isNullOrBlank()) {
+          throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reactivate: {offender.crn} does not have an email address in NDelius.")
+        }
+      }
+    }
+
     request.checkinSchedule?.let { schedule ->
       validate(schedule)
       offender.firstCheckin = schedule.firstCheckin
@@ -251,20 +278,12 @@ class OffenderV2Resource(
     request.contactPreference?.let { pref ->
       offender.contactPreference = pref.contactPreference
     }
+
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = clock.instant()
     val savedOffender = offenderRepository.save(offender)
 
-    val contactDetails = try {
-      ndiliusApiClient.getContactDetails(savedOffender.crn)
-    } catch (e: Exception) {
-      LOGGER.warn("Failed to fetch contact details for reactivation: ${savedOffender.crn}")
-      null
-    }
-
-    if (contactDetails != null) {
-      notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails)
-    }
+    notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails)
 
     // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
     val today = clock.today()
