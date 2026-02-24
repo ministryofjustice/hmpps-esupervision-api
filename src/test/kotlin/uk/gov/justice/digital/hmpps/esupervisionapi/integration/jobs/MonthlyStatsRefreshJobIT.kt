@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
-import java.math.BigDecimal
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -81,7 +80,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM monthly_stats WHERE month = '2026-01-01'",
         Long::class.java,
-      )
+      )!!
 
     // N03, N04, N07
     assertEquals(3L, monthlyStatsCount)
@@ -108,7 +107,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
           AND feedback_version = 1
         """,
         Long::class.java,
-      )
+      )!!
     assertEquals(3L, feedbackRows) // still 3 rows here for January, even though improvements has no answers
 
     // stats_summary_v1 now has 1 ALL row and 3 PROVIDER rows
@@ -116,7 +115,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM stats_summary_v1",
         Long::class.java,
-      )
+      )!!
     assertEquals(4L, mvCount)
 
     val allRow =
@@ -137,8 +136,66 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         WHERE row_type = 'PROVIDER'
         """,
         Long::class.java,
-      )
+      )!!
 
     assertEquals(3L, providerRowCount)
+  }
+
+  @Test
+  fun `refresh ignores excluded 'ZZ BAST Public Provider 1' provider description`() {
+
+    jdbcTemplate.update("TRUNCATE TABLE monthly_stats RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
+
+    // This provider should be excluded by the refresh_monthly_stats function filter
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (
+        id, event_type, occurred_at, crn, practitioner_id,
+        local_admin_unit_code, local_admin_unit_description,
+        pdu_code, pdu_description,
+        provider_code, provider_description,
+        checkin_uuid, checkin_status, checkin_due_date,
+        time_to_submit_hours,
+        time_to_review_hours, review_duration_hours,
+        auto_id_check_result, manual_id_check_result, notes
+      )
+      VALUES
+        (2001, 'SETUP_COMPLETED', '2026-01-06T10:00:00Z', 'X000001', 'AutomatedTestUser',
+         'ZZZZZZ', 'ZZ Test', 'ZZZZZZ', 'ZZ Test',
+         'ZZ1', 'ZZ BAST Public Provider 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+
+        (2002, 'CHECKIN_SUBMITTED', '2026-01-10T10:00:00Z', 'X000002', 'P99999',
+         'ZZZZZZ', 'ZZ Test', 'ZZZZZZ', 'ZZ Test',
+         'ZZ1', 'ZZ BAST Public Provider 1',
+         '11111111-1111-1111-1111-111111111111'::uuid,
+         'SUBMITTED', '2026-01-22', 2.5,
+         NULL, NULL, 'MATCH', NULL, NULL)
+      """
+    )
+
+    val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
+    job.refresh()
+
+    // Should NOT create a row for the excluded provider
+    val excludedProviderRows =
+      jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*)
+        FROM monthly_stats
+        WHERE month = '2026-01-01'
+          AND provider_code = 'ZZ1'
+        """,
+        Long::class.java,
+      )!!
+    assertEquals(0L, excludedProviderRows)
+
+    // January should still be empty
+    val monthlyStatsCount =
+      jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM monthly_stats WHERE month = '2026-01-01'",
+        Long::class.java,
+      )!!
+    assertEquals(0L, monthlyStatsCount)
   }
 }
