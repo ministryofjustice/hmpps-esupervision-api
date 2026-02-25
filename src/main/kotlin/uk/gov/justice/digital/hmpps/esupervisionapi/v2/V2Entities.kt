@@ -117,7 +117,15 @@ open class OffenderSetupV2(
 
   @Column(name = "started_at", nullable = true)
   open var startedAt: Instant? = null,
-) : V2BaseEntity()
+) : V2BaseEntity() {
+  fun dto(): OffenderSetupV2Dto = OffenderSetupV2Dto(
+    uuid = uuid,
+    practitionerId = practitionerId,
+    offenderUuid = offender.uuid,
+    createdAt = createdAt,
+    startedAt = startedAt,
+  )
+}
 
 /**
  * V2 Checkin Entity
