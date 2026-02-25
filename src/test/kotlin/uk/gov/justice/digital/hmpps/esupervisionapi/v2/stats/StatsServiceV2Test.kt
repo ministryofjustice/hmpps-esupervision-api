@@ -62,7 +62,7 @@ class StatsServiceV2Test {
 
     val overall =
       StatsSummary(
-        id = StatsSummaryId(rowType = "ALL", providerCode = null),
+        id = StatsSummaryId(rowType = "ALL", providerCode = ""),
         providerDescription = null,
 
         totalSignedUp = 10,
