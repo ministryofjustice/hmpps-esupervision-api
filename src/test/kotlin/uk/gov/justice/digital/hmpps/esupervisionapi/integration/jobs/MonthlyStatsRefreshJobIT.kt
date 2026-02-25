@@ -142,7 +142,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `refresh ignores excluded 'ZZ BAST Public Provider 1' provider description`() {
+  fun `refresh ignores excluded 'XXX' provider code`() {
 
     jdbcTemplate.update("TRUNCATE TABLE monthly_stats RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
@@ -163,11 +163,11 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       VALUES
         (2001, 'SETUP_COMPLETED', '2026-01-06T10:00:00Z', 'X000001', 'AutomatedTestUser',
          'ZZZZZZ', 'ZZ Test', 'ZZZZZZ', 'ZZ Test',
-         'ZZ1', 'ZZ BAST Public Provider 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+         'XXX', 'ZZ BAST Public Provider 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
         (2002, 'CHECKIN_SUBMITTED', '2026-01-10T10:00:00Z', 'X000002', 'P99999',
          'ZZZZZZ', 'ZZ Test', 'ZZZZZZ', 'ZZ Test',
-         'ZZ1', 'ZZ BAST Public Provider 1',
+         'XXX', 'ZZ BAST Public Provider 1',
          '11111111-1111-1111-1111-111111111111'::uuid,
          'SUBMITTED', '2026-01-22', 2.5,
          NULL, NULL, 'MATCH', NULL, NULL)
@@ -184,7 +184,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         SELECT COUNT(*)
         FROM monthly_stats
         WHERE month = '2026-01-01'
-          AND provider_code = 'ZZ1'
+          AND provider_code = 'XXX'
         """,
         Long::class.java,
       )!!
