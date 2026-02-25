@@ -374,8 +374,13 @@ interface FeedbackRepository : JpaRepository<Feedback, Long>
  * Repository for Stats
  */
 @Repository
-interface StatsSummaryRepository : JpaRepository<StatsSummary, Int> {
-  fun findBySingleton(singleton: Int = 1): StatsSummary?
+interface StatsSummaryRepository : JpaRepository<StatsSummary, StatsSummaryId> {
+
+  @Query("select s from StatsSummary s where s.id.rowType = 'ALL'")
+  fun findOverallRow(): StatsSummary?
+
+  @Query("select s from StatsSummary s where s.id.rowType = 'PROVIDER' order by s.id.providerCode asc")
+  fun findProviderRows(): List<StatsSummary>
 }
 
 @Repository

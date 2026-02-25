@@ -21,7 +21,7 @@ class MonthlyStatsRefreshJobTest {
     Clock.fixed(Instant.parse("2026-01-22T12:00:00Z"), ZoneOffset.UTC)
 
   private val viewName = "stats_summary_v1"
-  private val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock, viewName)
+  private val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
 
   @Test
   fun `refresh calls monthly stats function, monthly feedback stats function, and materialized view in order`() {
