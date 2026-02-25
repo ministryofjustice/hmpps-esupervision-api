@@ -7,8 +7,12 @@ CREATE OR REPLACE FUNCTION refresh_monthly_stats(
     p_end   TIMESTAMPTZ
 )
 RETURNS void
-LANGUAGE sql
+LANGUAGE plpgsql
 AS $$
+DECLARE
+  excluded_provider_code text := 'XXX';
+BEGIN
+
 WITH providers_in_month AS (
   SELECT DISTINCT
     provider_code,
@@ -18,7 +22,7 @@ WITH providers_in_month AS (
     AND occurred_at <  p_end
     AND provider_code IS NOT NULL
     AND provider_description IS NOT NULL
-    AND provider_code <> 'XXX'
+    AND provider_code <> excluded_provider_code
 ),
 
 users_by_provider AS (
@@ -30,7 +34,7 @@ users_by_provider AS (
   WHERE occurred_at >= p_start
     AND occurred_at <  p_end
     AND event_type IN ('SETUP_COMPLETED', 'OFFENDER_REACTIVATED', 'OFFENDER_DEACTIVATED')
-    AND provider_code <> 'XXX'
+    AND provider_code <> excluded_provider_code
   GROUP BY provider_code
 ),
 
@@ -43,7 +47,7 @@ checkins_by_provider AS (
   FROM event_audit_log_v2
   WHERE occurred_at >= p_start
     AND occurred_at <  p_end
-    AND provider_code <> 'XXX'
+    AND provider_code <> excluded_provider_code
   GROUP BY provider_code
 ),
 
@@ -54,7 +58,7 @@ unique_checkins_by_provider AS (
   FROM event_audit_log_v2
   WHERE occurred_at >= p_start
     AND occurred_at <  p_end
-    AND provider_code <> 'XXX'
+    AND provider_code <> excluded_provider_code
   GROUP BY provider_code
 ),
 
@@ -114,4 +118,5 @@ DO UPDATE SET
   total_hours_to_complete = EXCLUDED.total_hours_to_complete,
   updated_at = now();
 
+END;
 $$;
