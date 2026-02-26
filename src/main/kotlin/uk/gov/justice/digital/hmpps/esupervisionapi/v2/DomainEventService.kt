@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -31,6 +32,7 @@ class DomainEventService(
     crn: String,
     description: String,
     occurredAt: ZonedDateTime? = null,
+    additionalInformation: AdditionalInformation? = null,
   ) {
     LOGGER.debug(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
     val detailUrl = "$apiBaseUrl/v2/events/${eventType.pathSegment}/$uuid"
@@ -42,6 +44,7 @@ class DomainEventService(
         occurredAt = occurredAt ?: clock.instant().atZone(clock.zone),
         description = description,
         personReference = PersonReference(listOf(PersonReference.PersonIdentifier("CRN", crn))),
+        additionalInformation = additionalInformation,
       )
 
       eventPublisher.publish(event)

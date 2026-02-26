@@ -74,6 +74,9 @@ open class OffenderV2(
   @Column(name = "contact_preference", nullable = false)
   @Enumerated(EnumType.STRING)
   open var contactPreference: ContactPreference,
+
+  @Column(name = "current_event", nullable = true)
+  open var currentEvent: Long? = null,
 ) : V2BaseEntity() {
   fun dto(personalDetails: ContactDetails? = null): OffenderV2Dto = OffenderV2Dto(
     uuid = uuid,

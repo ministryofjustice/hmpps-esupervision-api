@@ -71,3 +71,5 @@ databaseChangeLog:
       file: db/changelog/changesets/35_update_stats_summary_mv_add_provider_rows.sql
   - include: 
       file: db/changelog/changesets/36_create_stats_summary_provider_month_mv.sql
+  - include:
+      file: db/changelog/changesets/37_offender_v2_add_event_id.sql
