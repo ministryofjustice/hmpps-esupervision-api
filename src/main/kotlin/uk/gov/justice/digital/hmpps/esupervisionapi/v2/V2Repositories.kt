@@ -371,16 +371,43 @@ interface OffenderEventLogV2Repository : JpaRepository<OffenderEventLogV2, Long>
 interface FeedbackRepository : JpaRepository<Feedback, Long>
 
 /**
- * Repository for Stats
+ * Repository for Monthly Feedback Stats
  */
 @Repository
-interface StatsSummaryRepository : JpaRepository<StatsSummary, StatsSummaryId> {
+interface TotalFeedbackMonthlyRepository : JpaRepository<TotalFeedbackMonthly, LocalDate> {
 
-  @Query("select s from StatsSummary s where s.id.rowType = 'ALL'")
-  fun findOverallRow(): StatsSummary?
+  @Query(
+    """
+    select f from TotalFeedbackMonthly f
+    where f.month between :fromMonth and :toMonth
+    order by f.month asc
+  """,
+  )
+  fun findBetween(fromMonth: LocalDate, toMonth: LocalDate): List<TotalFeedbackMonthly>
+}
 
-  @Query("select s from StatsSummary s where s.id.rowType = 'PROVIDER' order by s.id.providerCode asc")
-  fun findProviderRows(): List<StatsSummary>
+@Repository
+interface StatsSummaryProviderMonthRepository : JpaRepository<StatsSummaryProviderMonth, StatsSummaryProviderMonthId> {
+
+  @Query(
+    """
+    select s from StatsSummaryProviderMonth s
+    where s.id.rowType = 'ALL'
+      and s.id.month between :fromMonth and :toMonth
+    order by s.id.month asc
+  """,
+  )
+  fun findAllBetween(fromMonth: LocalDate, toMonth: LocalDate): List<StatsSummaryProviderMonth>
+
+  @Query(
+    """
+    select s from StatsSummaryProviderMonth s
+    where s.id.rowType = 'PROVIDER'
+      and s.id.month between :fromMonth and :toMonth
+    order by s.id.providerCode asc, s.id.month asc
+  """,
+  )
+  fun findProvidersBetween(fromMonth: LocalDate, toMonth: LocalDate): List<StatsSummaryProviderMonth>
 }
 
 @Repository

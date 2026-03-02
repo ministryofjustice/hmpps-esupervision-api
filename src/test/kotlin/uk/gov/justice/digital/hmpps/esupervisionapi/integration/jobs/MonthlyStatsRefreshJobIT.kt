@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
@@ -16,10 +17,16 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
   private val fixedClock: Clock =
     Clock.fixed(Instant.parse("2026-01-22T12:00:00Z"), ZoneOffset.UTC)
 
+  @BeforeEach
+  fun cleanDb() {
+    jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE monthly_stats RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE monthly_feedback_stats RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE feedback RESTART IDENTITY CASCADE")
+  }
+
   @Test
   fun `refresh populates monthly tables and MV`() {
-
-    // Insert audit events for 3 different providers
     jdbcTemplate.update(
       """
       INSERT INTO event_audit_log_v2 (
@@ -32,12 +39,12 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         time_to_review_hours, review_duration_hours,
         auto_id_check_result, manual_id_check_result, notes
       )
-      VALUES 									
+      VALUES
         (1, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X968714', 'AutomatedTestUser',
          'WPTNWS', 'North Wales', 'WPTNWS', 'North Wales',
          'N03', 'Wales', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
-        (32, 'SETUP_COMPLETED', '2026-01-05T15:12:45.906', 'X968714', 'AutomatedTestUser',
+        (32, 'SETUP_COMPLETED', '2026-01-05T15:12:45.906Z', 'X374635', 'AutomatedTestUser2',
          'WPTNWS', 'North Wales', 'WPTNWS', 'North Wales',
          'N03', 'Wales', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
@@ -61,7 +68,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
          '927829aa-d061-4e6d-8cbb-50bbb691a2b3'::uuid,
          'EXPIRED', '2025-12-08',
          NULL, NULL, NULL, NULL, NULL, 'Expired')
-      """
+      """,
     )
 
     jdbcTemplate.update(
@@ -70,7 +77,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       VALUES
         ('{"version":1,"howEasy":"veryEasy","gettingSupport":"yes"}'::jsonb, '2026-01-08T10:00:00Z'),
         ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-01-11T10:00:00Z')
-      """
+      """,
     )
 
     val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
@@ -85,14 +92,13 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     // N03, N04, N07
     assertEquals(3L, monthlyStatsCount)
 
-    // Assert one specific PROVIDER row
     val northWales =
       jdbcTemplate.queryForMap(
         """
         SELECT * FROM monthly_stats
         WHERE month = '2026-01-01'
           AND provider_code = 'N03'
-        """
+        """,
       )
 
     assertEquals(2L, northWales["users_activated"])
@@ -108,32 +114,25 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         """,
         Long::class.java,
       )!!
-    assertEquals(3L, feedbackRows) // still 3 rows here for January, even though improvements has no answers
-
-    // stats_summary_v1 now has 1 ALL row and 3 PROVIDER rows
-    val mvCount =
-      jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM stats_summary_v1",
-        Long::class.java,
-      )!!
-    assertEquals(4L, mvCount)
+    assertEquals(3L, feedbackRows) // still 3 rows for January, even though improvements has no answers
 
     val allRow =
       jdbcTemplate.queryForMap(
         """
-        SELECT * FROM stats_summary_v1
+        SELECT * FROM stats_summary_provider_month
         WHERE row_type = 'ALL'
-        """
+        """,
       )
 
-    assertEquals(2L, allRow["feedback_total"])
+    assertEquals(2L, allRow["active_users"])
 
     val providerRowCount =
       jdbcTemplate.queryForObject(
         """
         SELECT COUNT(*)
-        FROM stats_summary_v1
+        FROM stats_summary_provider_month
         WHERE row_type = 'PROVIDER'
+          AND provider_code IN ('N03', 'N04', 'N07')
         """,
         Long::class.java,
       )!!
@@ -143,10 +142,6 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
 
   @Test
   fun `refresh ignores excluded 'XXX' provider code`() {
-
-    jdbcTemplate.update("TRUNCATE TABLE monthly_stats RESTART IDENTITY CASCADE")
-    jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
-
     // This provider should be excluded by the refresh_monthly_stats function filter
     jdbcTemplate.update(
       """
@@ -171,7 +166,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
          '11111111-1111-1111-1111-111111111111'::uuid,
          'SUBMITTED', '2026-01-22', 2.5,
          NULL, NULL, 'MATCH', NULL, NULL)
-      """
+      """,
     )
 
     val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
@@ -190,7 +185,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       )!!
     assertEquals(0L, excludedProviderRows)
 
-    // January should still be empty
+    // January should still be empty (we inserted only XXX events)
     val monthlyStatsCount =
       jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM monthly_stats WHERE month = '2026-01-01'",

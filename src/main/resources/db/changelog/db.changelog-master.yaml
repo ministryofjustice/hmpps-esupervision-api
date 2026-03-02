@@ -71,3 +71,7 @@ databaseChangeLog:
       file: db/changelog/changesets/35_update_stats_summary_mv_add_provider_rows.sql
   - include: 
       file: db/changelog/changesets/36_create_stats_summary_provider_month_mv.sql
+  - include:
+      file: db/changelog/changesets/37_provider_month_mv_add_rollup_helpers.sql
+  - include:
+      file: db/changelog/changesets/38_drop_stats_summary_and_create_monthly_feedback_mv.sql
