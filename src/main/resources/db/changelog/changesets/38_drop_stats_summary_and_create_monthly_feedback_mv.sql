@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset rob.catton:38_drop_stats_summary_and_create_monthly_feedback_mv splitStatements:false
+--changeset rob.catton:39_drop_stats_summary_and_create_monthly_feedback_mv splitStatements:false
 DROP MATERIALIZED VIEW IF EXISTS stats_summary_v1; -- No longer needed
 DROP MATERIALIZED VIEW IF EXISTS total_feedback_monthly;
 

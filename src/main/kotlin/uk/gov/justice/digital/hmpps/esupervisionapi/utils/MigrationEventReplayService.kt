@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationEventsToSend
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Clock
 
@@ -55,6 +56,7 @@ class MigrationEventReplayService(
             crn = offender.crn,
             description = "[MIGRATION] completed setup for offender ${offender.crn}",
             occurredAt = auditEvents[offender.crn]?.occurredAt?.atZone(clock.zone) ?: offender.createdAt.atZone(clock.zone),
+            additionalInformation = offender.currentEvent?.let { AdditionalInformation(eventNumber = it) },
           )
           processedCrns.add(offender.crn)
           crns[offender.crn]?.let { control -> control.offenderEvents = true }
