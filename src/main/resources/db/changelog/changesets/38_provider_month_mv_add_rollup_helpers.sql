@@ -2,6 +2,7 @@
 
 --changeset rob.catton:38_provider_month_mv_add_rollup_helpers splitStatements:false
 DROP MATERIALIZED VIEW IF EXISTS stats_summary_provider_month_v1;
+DROP MATERIALIZED VIEW IF EXISTS stats_summary_provider_month;
 
 CREATE MATERIALIZED VIEW stats_summary_provider_month AS
 WITH
