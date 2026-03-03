@@ -11,7 +11,16 @@ class AppConfig(
   @Value("\${app.mpopUrl}") private val mpopUrl: String,
   @Value("\${app.hostedAt}") private val hostedAt: String,
   @Value("\${app.scheduling.checkin-notification.cron}") val checkinNotificationCron: String,
+  @Value("\${app.features.esup-1239}") val esup1239ProxyLinks: Boolean,
+  val enabledFeatures: Set<Feature> = listOfNotNull(
+    if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
+  ).toSet(),
 ) {
+
+  init {
+    LOG.info("Enabled features: $enabledFeatures")
+  }
+
   // WARNING: this depends on the routes in the UI!
   fun checkinSubmitUrl(checkinUuid: UUID): URI = URI(
     "$hostedAt/submission/$checkinUuid",
@@ -40,4 +49,10 @@ class AppConfig(
   fun feedbackUrl(): URI = URI(
     "$checkinUrl/feedback",
   )
+
+  fun mediaProxyUrl(): URI = URI("$hostedAt/resolve")
+
+  companion object {
+    val LOG = org.slf4j.LoggerFactory.getLogger(this::class.java)
+  }
 }

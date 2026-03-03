@@ -45,6 +45,9 @@ app:
     migration-event-replay:
       cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
       batch-size: 50
+  features:
+    # publish media proxy links to NDelius
+    esup-1239: false
 
 spring:
   application:
