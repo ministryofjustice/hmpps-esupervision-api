@@ -58,8 +58,21 @@ class OffenderSetupV2Service(
   internal fun startOffenderSetup(offenderInfo: OffenderInfoV2): OffenderSetupV2Dto {
     val now = clock.instant()
 
-    // Create V2 offender (no PII, only CRN)
-    val offender =
+    val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)
+    val offender = if (offenderByCrn.isPresent) {
+      // somebody tried to onboard this CRN in the past, update the record with submitted options
+      val existing = offenderByCrn.get()
+      if (existing.status != OffenderStatus.INITIAL) {
+        throw BadArgumentException("Offender already exists.")
+      }
+      existing.practitionerId = offenderInfo.practitionerId
+      existing.firstCheckin = offenderInfo.firstCheckin
+      existing.checkinInterval = offenderInfo.checkinInterval.duration
+      existing.createdBy = offenderInfo.practitionerId
+      existing.updatedAt = now
+      existing.contactPreference = offenderInfo.contactPreference
+      existing
+    } else {
       OffenderV2(
         uuid = UUID.randomUUID(),
         crn = offenderInfo.crn.trim().uppercase(),
@@ -72,20 +85,19 @@ class OffenderSetupV2Service(
         updatedAt = now,
         contactPreference = offenderInfo.contactPreference,
       )
+    }
 
     raiseOnConstraintViolation("CRN ${offenderInfo.crn} already exists") {
       offenderRepository.save(offender)
     }
 
-    // Create setup record
-    val setup =
-      OffenderSetupV2(
-        uuid = offenderInfo.setupUuid,
-        offender = offender,
-        practitionerId = offenderInfo.practitionerId,
-        createdAt = now,
-        startedAt = offenderInfo.startedAt,
-      )
+    val setup = OffenderSetupV2(
+      uuid = offenderInfo.setupUuid,
+      offender = offender,
+      practitionerId = offenderInfo.practitionerId,
+      createdAt = now,
+      startedAt = offenderInfo.startedAt,
+    )
 
     val saved =
       raiseOnConstraintViolation("Setup with UUID ${offenderInfo.setupUuid} already exists") {

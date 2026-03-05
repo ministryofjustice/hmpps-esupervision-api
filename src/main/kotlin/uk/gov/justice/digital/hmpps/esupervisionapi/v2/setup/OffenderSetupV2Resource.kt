@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -45,7 +45,7 @@ class OffenderSetupV2Resource(
   )
   @PostMapping()
   fun startSetupByCrn(
-    @RequestBody @Valid offenderInfo: OffenderInfoInitial,
+    @RequestBody @Valid offenderInfo: OffenderInfoV2,
     bindingResult: BindingResult,
   ): ResponseEntity<OffenderSetupV2Dto> {
     if (bindingResult.hasErrors()) {
