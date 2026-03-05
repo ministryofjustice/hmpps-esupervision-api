@@ -303,8 +303,7 @@ class OffenderV2Resource(
     if (savedOffender.firstCheckin == today) {
       // it's unlikely that there will be an existing check in because check ins become cancelled when PoPs are deactivated but we check in case
       val existingCheckin = checkinRepository.findByOffenderAndDueDate(savedOffender, today)
-      
-      val checkinExists = existingCheckin.isPresent && existingCheckin.get().status != CheckinV2Status.CREATED
+      val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinV2Status.CREATED
 
       if (!checkinExists) {
         checkinCreationService.createCheckin(
