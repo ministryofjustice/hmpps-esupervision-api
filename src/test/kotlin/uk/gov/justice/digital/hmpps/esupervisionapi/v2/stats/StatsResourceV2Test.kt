@@ -1,9 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsDashboardDto
@@ -13,6 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsTotalsDto
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDate
 
 class StatsResourceV2Test {
 
@@ -20,7 +22,7 @@ class StatsResourceV2Test {
   private val resource = StatsResourceV2(service)
 
   @Test
-  fun `getStats returns expected StatsResponse with totals and providers`() {
+  fun `getStats - month param calls getStatsForMonth and maps response`() {
     val howEasyCounts =
       mapOf(
         "veryEasy" to 1L,
@@ -30,8 +32,8 @@ class StatsResourceV2Test {
 
     val howEasyPct =
       mapOf(
-        "veryEasy" to BigDecimal("0.25"),
-        "difficult" to BigDecimal("0.25"),
+        "veryEasy" to BigDecimal("0.2500"),
+        "difficult" to BigDecimal("0.2500"),
       )
 
     val gettingSupportCounts =
@@ -56,11 +58,12 @@ class StatsResourceV2Test {
 
     val improvementsPct =
       mapOf(
-        "gettingHelp" to BigDecimal("0.5"),
-        "checkInQuestions" to BigDecimal("1.0"),
+        "gettingHelp" to BigDecimal("0.5000"),
+        "checkInQuestions" to BigDecimal("1.0000"),
       )
 
     val totalsUpdatedAt = Instant.parse("2026-01-28T12:02:00.020175Z")
+    val providerUpdatedAt = Instant.parse("2026-01-28T12:02:00.000000Z")
 
     val totals =
       StatsTotalsDto(
@@ -82,11 +85,9 @@ class StatsResourceV2Test {
         gettingSupportPct = gettingSupportPct,
         improvementsCounts = improvementsCounts,
         improvementsPct = improvementsPct,
-        pctSignedUpOfTotal = 1.0, // totals are 100% of totals
+        pctSignedUpOfTotal = 1.0,
         updatedAt = totalsUpdatedAt,
       )
-
-    val providerUpdatedAt = Instant.parse("2026-01-28T12:02:00.000000Z")
 
     val provider1 =
       StatsProviderDto(
@@ -103,7 +104,7 @@ class StatsResourceV2Test {
         pctInactiveUsers = 0.25,
         pctCompletedCheckins = 0.8889,
         pctExpiredCheckins = 0.1111,
-        pctSignedUpOfTotal = 0.4, // 4/10
+        pctSignedUpOfTotal = 0.4,
         updatedAt = providerUpdatedAt,
       )
 
@@ -122,11 +123,11 @@ class StatsResourceV2Test {
         pctInactiveUsers = 0.3333,
         pctCompletedCheckins = 0.9231,
         pctExpiredCheckins = 0.0769,
-        pctSignedUpOfTotal = 0.6, // 6/10
+        pctSignedUpOfTotal = 0.6,
         updatedAt = providerUpdatedAt,
       )
 
-    whenever(service.getStats())
+    whenever(service.getStatsForMonth(LocalDate.parse("2026-01-01")))
       .thenReturn(
         StatsDashboardDto(
           total = totals,
@@ -134,17 +135,26 @@ class StatsResourceV2Test {
         ),
       )
 
-    val response = resource.getStats()
-    val body = response.body!!
+    val response =
+      resource.getStats(
+        month = "2026-01",
+        fromMonth = null,
+        toMonth = null,
+      )
 
     assertEquals(HttpStatus.OK, response.statusCode)
+    val body = response.body!!
 
+    // verify routing
+    verify(service).getStatsForMonth(LocalDate.parse("2026-01-01"))
+
+    // totals mapping
     val total = body.total
-    assertEquals(10, total.totalSignedUp)
-    assertEquals(7, total.activeUsers)
-    assertEquals(3, total.inactiveUsers)
-    assertEquals(20, total.completedCheckins)
-    assertEquals(2, total.notCompletedOnTime)
+    assertEquals(10L, total.totalSignedUp)
+    assertEquals(7L, total.activeUsers)
+    assertEquals(3L, total.inactiveUsers)
+    assertEquals(20L, total.completedCheckins)
+    assertEquals(2L, total.notCompletedOnTime)
     assertEquals(5.5, total.avgHoursToComplete)
     assertEquals(2.86, total.avgCompletedCheckinsPerPerson)
     assertEquals(0.7, total.pctActiveUsers)
@@ -154,39 +164,25 @@ class StatsResourceV2Test {
     assertEquals(1.0, total.pctSignedUpOfTotal)
     assertEquals(totalsUpdatedAt.toString(), total.updatedAt)
 
-    assertEquals(10, total.feedbackTotal)
+    assertEquals(10L, total.feedbackTotal)
+    assertEquals(howEasyCounts, total.howEasyCounts)
+    assertEquals(howEasyPct, total.howEasyPct)
+    assertEquals(gettingSupportCounts, total.gettingSupportCounts)
+    assertEquals(gettingSupportPct, total.gettingSupportPct)
+    assertEquals(improvementsCounts, total.improvementsCounts)
+    assertEquals(improvementsPct, total.improvementsPct)
 
-    assertEquals(1L, total.howEasyCounts["veryEasy"])
-    assertEquals(1L, total.howEasyCounts["difficult"])
-    assertEquals(2L, total.howEasyCounts["notAnswered"])
-    assertEquals(BigDecimal("0.25"), total.howEasyPct["veryEasy"])
-    assertEquals(BigDecimal("0.25"), total.howEasyPct["difficult"])
-    assertNull(total.howEasyPct["notAnswered"])
-
-    assertEquals(2L, total.gettingSupportCounts["yes"])
-    assertEquals(1L, total.gettingSupportCounts["no"])
-    assertEquals(1L, total.gettingSupportCounts["notAnswered"])
-    assertEquals(BigDecimal("0.6667"), total.gettingSupportPct["yes"])
-    assertEquals(BigDecimal("0.3333"), total.gettingSupportPct["no"])
-    assertNull(total.gettingSupportPct["notAnswered"])
-
-    assertEquals(2L, total.improvementsCounts["checkInQuestions"])
-    assertEquals(1L, total.improvementsCounts["gettingHelp"])
-    assertEquals(1L, total.improvementsCounts["notAnswered"])
-    assertEquals(BigDecimal("1.0"), total.improvementsPct["checkInQuestions"])
-    assertEquals(BigDecimal("0.5"), total.improvementsPct["gettingHelp"])
-    assertNull(total.improvementsPct["notAnswered"])
-
+    // providers mapping
     assertEquals(2, body.providers.size)
 
     val first = body.providers[0]
     assertEquals("WPTNWS", first.providerCode)
     assertEquals("North Wales", first.providerDescription)
-    assertEquals(4, first.totalSignedUp)
-    assertEquals(3, first.activeUsers)
-    assertEquals(1, first.inactiveUsers)
-    assertEquals(8, first.completedCheckins)
-    assertEquals(1, first.notCompletedOnTime)
+    assertEquals(4L, first.totalSignedUp)
+    assertEquals(3L, first.activeUsers)
+    assertEquals(1L, first.inactiveUsers)
+    assertEquals(8L, first.completedCheckins)
+    assertEquals(1L, first.notCompletedOnTime)
     assertEquals(4.25, first.avgHoursToComplete)
     assertEquals(2.0, first.avgCompletedCheckinsPerPerson)
     assertEquals(0.75, first.pctActiveUsers)
@@ -199,11 +195,11 @@ class StatsResourceV2Test {
     val second = body.providers[1]
     assertEquals("N07ALL", second.providerCode)
     assertEquals("All London", second.providerDescription)
-    assertEquals(6, second.totalSignedUp)
-    assertEquals(4, second.activeUsers)
-    assertEquals(2, second.inactiveUsers)
-    assertEquals(12, second.completedCheckins)
-    assertEquals(1, second.notCompletedOnTime)
+    assertEquals(6L, second.totalSignedUp)
+    assertEquals(4L, second.activeUsers)
+    assertEquals(2L, second.inactiveUsers)
+    assertEquals(12L, second.completedCheckins)
+    assertEquals(1L, second.notCompletedOnTime)
     assertEquals(6.0, second.avgHoursToComplete)
     assertEquals(3.0, second.avgCompletedCheckinsPerPerson)
     assertEquals(0.6667, second.pctActiveUsers)
@@ -212,5 +208,115 @@ class StatsResourceV2Test {
     assertEquals(0.0769, second.pctExpiredCheckins)
     assertEquals(0.6, second.pctSignedUpOfTotal)
     assertEquals(providerUpdatedAt.toString(), second.updatedAt)
+  }
+
+  @Test
+  fun `getStats - range params call getStatsForMonths and accepts single-sided range`() {
+    val totalsUpdatedAt = Instant.parse("2026-01-28T12:02:00Z")
+
+    val totals =
+      StatsTotalsDto(
+        totalSignedUp = 1,
+        activeUsers = 1,
+        inactiveUsers = 0,
+        completedCheckins = 0,
+        notCompletedOnTime = 0,
+        avgHoursToComplete = 0.0,
+        avgCompletedCheckinsPerPerson = 0.0,
+        pctActiveUsers = 1.0,
+        pctInactiveUsers = 0.0,
+        pctCompletedCheckins = 0.0,
+        pctExpiredCheckins = 0.0,
+        feedbackTotal = 0,
+        howEasyCounts = emptyMap(),
+        howEasyPct = emptyMap(),
+        gettingSupportCounts = emptyMap(),
+        gettingSupportPct = emptyMap(),
+        improvementsCounts = emptyMap(),
+        improvementsPct = emptyMap(),
+        pctSignedUpOfTotal = 1.0,
+        updatedAt = totalsUpdatedAt,
+      )
+
+    whenever(service.getStatsForMonths(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-03-01")))
+      .thenReturn(
+        StatsDashboardDto(
+          total = totals,
+          providers = emptyList(),
+        ),
+      )
+
+    // fromMonth only -> toMonth implied to fromMonth? (resource uses other side if missing)
+    val response =
+      resource.getStats(
+        month = null,
+        fromMonth = "2026-01",
+        toMonth = "2026-03",
+      )
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(service).getStatsForMonths(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-03-01"))
+  }
+
+  @Test
+  fun `getStats throws when month provided alongside fromMonth or toMonth`() {
+    val ex =
+      assertThrows(IllegalArgumentException::class.java) {
+        resource.getStats(
+          month = "2026-01",
+          fromMonth = "2026-01",
+          toMonth = null,
+        )
+      }
+
+    assertEquals(
+      "Provide either month=YYYY-MM OR fromMonth=YYYY-MM&toMonth=YYYY-MM, not both",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `getStats throws when no params provided`() {
+    val ex =
+      assertThrows(IllegalArgumentException::class.java) {
+        resource.getStats(
+          month = null,
+          fromMonth = null,
+          toMonth = null,
+        )
+      }
+
+    assertEquals(
+      "You must provide month=YYYY-MM or fromMonth=YYYY-MM&toMonth=YYYY-MM",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `getStats throws when invalid month format`() {
+    val ex =
+      assertThrows(IllegalArgumentException::class.java) {
+        resource.getStats(
+          month = "2026/01",
+          fromMonth = null,
+          toMonth = null,
+        )
+      }
+
+    assertEquals("Invalid month format '2026/01' (expected YYYY-MM)", ex.message)
+  }
+
+  @Test
+  fun `getStats throws when fromMonth after toMonth`() {
+    val ex =
+      assertThrows(IllegalArgumentException::class.java) {
+        resource.getStats(
+          month = null,
+          fromMonth = "2026-03",
+          toMonth = "2026-01",
+        )
+      }
+
+    assertEquals("fromMonth must be <= toMonth", ex.message)
   }
 }

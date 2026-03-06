@@ -75,23 +75,23 @@ class MonthlyStatsRefreshJob(
         Duration.between(monthlyFeedbackStart, monthlyFeedbackEnd),
       )
 
-      val totalMvStart = clock.instant()
-      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $TOTAL_VIEW_NAME")
-      val totalMvEnd = clock.instant()
+      val feedbackMvStart = clock.instant()
+      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $FEEDBACK_MONTHLY_VIEW_NAME")
+      val feedbackMvEnd = clock.instant()
 
       LOGGER.info(
         "Materialized view refreshed successfully: view={}, took={}",
-        TOTAL_VIEW_NAME,
-        Duration.between(totalMvStart, totalMvEnd),
+        FEEDBACK_MONTHLY_VIEW_NAME,
+        Duration.between(feedbackMvStart, feedbackMvEnd),
       )
 
       val monthlyMvStart = clock.instant()
-      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $MONTHLY_VIEW_NAME")
+      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $PROVIDER_MONTHLY_VIEW_NAME")
       val monthlyMvEnd = clock.instant()
 
       LOGGER.info(
         "Materialized view refreshed successfully: view={}, took={}",
-        MONTHLY_VIEW_NAME,
+        PROVIDER_MONTHLY_VIEW_NAME,
         Duration.between(monthlyMvStart, monthlyMvEnd),
       )
 
@@ -105,15 +105,12 @@ class MonthlyStatsRefreshJob(
   }
 
   companion object {
-    private val LOGGER =
-      LoggerFactory.getLogger(MonthlyStatsRefreshJob::class.java)
+    private val LOGGER = LoggerFactory.getLogger(MonthlyStatsRefreshJob::class.java)
 
-    val REFRESH_MONTHLY_STATS_SQL = "SELECT refresh_monthly_stats(?, ?, ?)"
+    const val REFRESH_MONTHLY_STATS_SQL = "SELECT refresh_monthly_stats(?, ?, ?)"
+    const val REFRESH_MONTHLY_FEEDBACK_STATS_SQL = "SELECT refresh_monthly_feedback_stats(?, ?, ?)"
 
-    val REFRESH_MONTHLY_FEEDBACK_STATS_SQL = "SELECT refresh_monthly_feedback_stats(?, ?, ?)"
-
-    val TOTAL_VIEW_NAME = "stats_summary_v1"
-
-    val MONTHLY_VIEW_NAME = "stats_summary_provider_month_v1"
+    const val FEEDBACK_MONTHLY_VIEW_NAME = "total_feedback_monthly"
+    const val PROVIDER_MONTHLY_VIEW_NAME = "stats_summary_provider_month"
   }
 }
