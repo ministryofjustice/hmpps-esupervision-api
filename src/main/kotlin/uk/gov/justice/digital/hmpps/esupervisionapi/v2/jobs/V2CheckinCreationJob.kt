@@ -6,6 +6,7 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -52,9 +53,9 @@ private fun JobMetrics.info(logger: Logger, jobId: Long, duration: Duration) {
 /**
  * V2 Checkin Creation Job
  * Creates checkins for verified offenders based on their schedule
- * Core feature - always enabled
  */
 @Component
+@ConditionalOnProperty(prefix = "app.scheduling.v2-checkin-creation", name = ["enabled"], havingValue = "true", matchIfMissing = true)
 class V2CheckinCreationJob(
   private val clock: Clock,
   private val offenderRepository: OffenderV2Repository,
