@@ -7,9 +7,12 @@ Localstack is used for stubbing AWS services (execept AWS Rekognition). For othe
 
 ### HMPPS Auth (in a container)
 
-You should have the service running in a container.
+You should have the service running in a container from running docker compose.
 
 Log in at http://localhost:8090/auth/ui
+
+Default username: `AUTH_ADM`
+Default password: `password123456`
 
 In `hmpps-typescript-template` client, under "Authorities" add the following roles:
 - ESUPERVISION__PRACTITIONER__RW

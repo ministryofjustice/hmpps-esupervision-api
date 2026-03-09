@@ -15,9 +15,10 @@ The V2 signup (registration) flow has 3 steps:
 {
   "setupUuid": "550e8400-e29b-41d4-a716-446655440000",
   "practitionerId": "TEST_PRACTITIONER_001",
-  "crn": "X123456",
-  "firstCheckin": "2025-12-06",
-  "checkinInterval": "WEEKLY"
+  "crn": "X000001",
+  "firstCheckin": "2026-03-03",
+  "checkinInterval": "WEEKLY",
+  "contactPreference": "PHONE"
 }
 ```
 
@@ -27,6 +28,7 @@ The V2 signup (registration) flow has 3 steps:
 - `crn` - Must match pattern `X123456` (letter + 6 digits)
 - `firstCheckin` - Date in `YYYY-MM-DD` format (today or future)
 - `checkinInterval` - One of: `WEEKLY`, `TWO_WEEKS`, `FOUR_WEEKS`, `EIGHT_WEEKS`
+- `contactPreference` - One of: `PHONE`, `EMAIL`
 
 **Response:**
 ```json

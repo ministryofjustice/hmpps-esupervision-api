@@ -98,6 +98,28 @@ data class FacialRecognitionResult(
   val result: AutomatedIdVerificationResult,
 )
 
+/** Liveness session creation response */
+data class LivenessSessionResponse(
+  @Schema(description = "AWS Rekognition liveness session ID", required = true)
+  val sessionId: String,
+)
+
+/** Liveness verification request */
+data class LivenessVerifyRequest(
+  @Schema(description = "Liveness session ID to verify", required = true)
+  val sessionId: String,
+)
+
+/** Liveness verification response */
+data class LivenessVerificationResponse(
+  @Schema(description = "Whether the session passed liveness detection", required = true)
+  val isLive: Boolean,
+  @Schema(description = "Liveness confidence score (0-100)", required = true)
+  val livenessConfidence: Float,
+  @Schema(description = "Face comparison result against setup photo", required = true)
+  val result: AutomatedIdVerificationResult,
+)
+
 // ========================================
 // V2 Offender DTOs
 // ========================================

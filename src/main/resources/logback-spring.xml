@@ -6,38 +6,35 @@
 
   <springProperty scope="context" name="app" source="spring.application.name"/>
 
+  <!-- Plain text appender for local dev -->
   <appender name="consoleAppender" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
       <pattern>${LOG_PATTERN}</pattern>
     </encoder>
   </appender>
 
-  <logger name="uk.gov.justice.digital.hmpps.esupervisionapi.AppKt" additivity="false" level="DEBUG">
-    <appender-ref ref="consoleAppender"/>
-  </logger>
+  <!-- JSON appender for non-local environments -->
+  <appender name="jsonConsoleAppender" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+  </appender>
 
-  <logger name="uk.gov.justice.digital.hmpps" additivity="false" level="DEBUG">
-    <appender-ref ref="consoleAppender"/>
-  </logger>
+  <logger name="uk.gov.justice.digital.hmpps.esupervisionapi.AppKt" level="DEBUG"/>
+  <logger name="uk.gov.justice.digital.hmpps" level="DEBUG"/>
+  <logger name="org.springframework" level="INFO"/>
+  <logger name="com.microsoft.applicationinsights" level="INFO"/>
+  <logger name="org.apache.catalina" level="INFO"/>
+  <logger name="org.springframework.boot" level="INFO"/>
 
-  <logger name="org.springframework" additivity="false" level="INFO">
-    <appender-ref ref="consoleAppender"/>
-  </logger>
+  <springProfile name="local">
+    <root level="INFO">
+      <appender-ref ref="consoleAppender"/>
+    </root>
+  </springProfile>
 
-  <logger name="com.microsoft.applicationinsights" additivity="false" level="INFO">
-    <appender-ref ref="consoleAppender"/>
-  </logger>
-
-  <logger name="org.apache.catalina" additivity="false" level="INFO">
-    <appender-ref ref="consoleAppender"/>
-  </logger>
-
-  <logger name="org.springframework.boot" additivity="false" level="INFO">
-    <appender-ref ref="consoleAppender"/>
-  </logger>
-
-  <root level="INFO">
-    <appender-ref ref="consoleAppender"/>
-  </root>
+  <springProfile name="!local">
+    <root level="INFO">
+      <appender-ref ref="jsonConsoleAppender"/>
+    </root>
+  </springProfile>
 
 </configuration>

@@ -14,6 +14,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerific
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.CheckinVerificationImages
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.net.URL
@@ -35,9 +38,13 @@ class CheckinV2Service(
   private val checkinCreationService: CheckinCreationService,
   private val s3UploadService: S3UploadService,
   private val compareFacesService: OffenderIdVerifier,
+  private val livenessSessionService: LivenessSessionService,
+  private val livenessCredentialsService: LivenessCredentialsProvider,
   @Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
   @Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
+  @Value("\${rekognition.liveness.confidence-threshold:90.0}")
+  private val livenessConfidenceThreshold: Float,
   private val eventAuditService: EventAuditV2Service,
   @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
@@ -403,6 +410,109 @@ class CheckinV2Service(
   }
 
   // ========================================
+  // Liveness Methods
+  // ========================================
+
+  /** Create a Rekognition Face Liveness session for the given checkin */
+  fun createLivenessSession(uuid: UUID): LivenessSessionResponse {
+    val checkin =
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
+
+    if (checkin.status != CheckinV2Status.CREATED) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot create liveness session for checkin with status: ${checkin.status}",
+      )
+    }
+
+    val sessionId = livenessSessionService.createSession().join()
+    LOGGER.info("Liveness session created for checkin {}: {}", uuid, sessionId)
+
+    return LivenessSessionResponse(sessionId = sessionId)
+  }
+
+  /** Get scoped temporary AWS credentials for the browser liveness detector */
+  fun getLivenessCredentials(uuid: UUID): LivenessCredentialsResponse {
+    // Validate checkin exists
+    checkinRepository.findByUuid(uuid).orElseThrow {
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    }
+
+    return livenessCredentialsService.getCredentials()
+  }
+
+  /**
+   * Verify liveness session results and perform face comparison.
+   * Gets the liveness result from Rekognition, checks confidence threshold,
+   * then compares the liveness reference image against the offender's setup photo.
+   */
+  @Transactional
+  fun verifyLiveness(uuid: UUID, sessionId: String): LivenessVerificationResponse {
+    val checkin =
+      checkinRepository.findByUuid(uuid).orElseThrow {
+        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+      }
+
+    if (checkin.status != CheckinV2Status.CREATED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin already submitted")
+    }
+
+    if (checkin.offender.status != OffenderStatus.VERIFIED) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Offender setup not completed - cannot perform liveness verification",
+      )
+    }
+
+    // Get liveness session results from Rekognition
+    val livenessResult = livenessSessionService.getSessionResults(sessionId).join()
+    val confidence = livenessResult.confidence()
+    val isLive = confidence >= livenessConfidenceThreshold
+
+    LOGGER.info(
+      "Liveness result for checkin {}: confidence={}, threshold={}, isLive={}",
+      uuid,
+      confidence,
+      livenessConfidenceThreshold,
+      isLive,
+    )
+
+    if (!isLive) {
+      checkin.autoIdCheck = AutomatedIdVerificationResult.NO_MATCH
+      checkinRepository.save(checkin)
+      return LivenessVerificationResponse(
+        isLive = false,
+        livenessConfidence = confidence,
+        result = AutomatedIdVerificationResult.NO_MATCH,
+      )
+    }
+
+    // Liveness passed - now compare the reference image from the session against setup photo
+    val referenceImage = livenessResult.referenceImage()
+    if (referenceImage == null || referenceImage.s3Object() == null) {
+      LOGGER.warn("Liveness session {} has no reference image for face comparison", sessionId)
+      checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
+      checkinRepository.save(checkin)
+      return LivenessVerificationResponse(
+        isLive = true,
+        livenessConfidence = confidence,
+        result = AutomatedIdVerificationResult.ERROR,
+      )
+    }
+
+    // Perform face comparison using existing service
+    val result = performFacialRecognitionInternal(checkin, 1)
+
+    return LivenessVerificationResponse(
+      isLive = true,
+      livenessConfidence = confidence,
+      result = result,
+    )
+  }
+
+  // ========================================
   // Private Helper Methods
   // ========================================
 
@@ -494,6 +604,7 @@ class CheckinV2Service(
     )
 
     val offender = offenderRepository.findByCrn(request.offender).orElseThrow {
+      println("Offender not found: $request.offender")
       ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $request.offender")
     }
 

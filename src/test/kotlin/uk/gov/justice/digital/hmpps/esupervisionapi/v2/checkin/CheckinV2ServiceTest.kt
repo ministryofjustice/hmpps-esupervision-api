@@ -33,6 +33,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.net.URI
@@ -55,8 +57,11 @@ class CheckinV2ServiceTest {
   private val checkinCreationService: CheckinCreationService = mock()
   private val s3UploadService: S3UploadService = mock()
   private val compareFacesService: OffenderIdVerifier = mock()
+  private val livenessSessionService: LivenessSessionService = mock()
+  private val livenessCredentialsProvider: LivenessCredentialsProvider = mock()
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
+  private val livenessConfidenceThreshold = 90.0f
   private val eventAuditService: EventAuditV2Service = mock()
 
   private lateinit var service: CheckinV2Service
@@ -75,8 +80,11 @@ class CheckinV2ServiceTest {
       checkinCreationService,
       s3UploadService,
       compareFacesService,
+      livenessSessionService,
+      livenessCredentialsProvider,
       uploadTtlMinutes,
       faceSimilarityThreshold,
+      livenessConfidenceThreshold,
       eventAuditService,
       3,
     )
