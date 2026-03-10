@@ -185,6 +185,17 @@ class OffenderV2Resource(
       )
     }
 
+    val contactDetails = try {
+      ndiliusApiClient.getContactDetails(offender.crn)
+        ?: throw Exception("NDelius returned null contact details")
+    } catch (e: Exception) {
+      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Could not verify contact details in NDelius for ${offender.crn}.",
+      )
+    }
+
     offender.status = OffenderStatus.INACTIVE
     offender.updatedAt = clock.instant()
     val saved = offenderRepository.save(offender)
@@ -210,6 +221,8 @@ class OffenderV2Resource(
       request.requestedBy,
       request.reason,
     )
+
+    notificationV2Service.sendDeactivationCompletedNotifications(offender, contactDetails)
 
     return ResponseEntity.ok(saved.toSummaryDto(photoUrl))
   }
@@ -288,8 +301,9 @@ class OffenderV2Resource(
     // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
     val today = clock.today()
     if (savedOffender.firstCheckin == today) {
-      // edge case to check if they checked in earlier today before being deactivated
-      val checkinExists = checkinRepository.existsByOffenderAndDueDate(savedOffender, today)
+      // it's unlikely that there will be an existing check in because check ins become cancelled when PoPs are deactivated but we check in case
+      val existingCheckin = checkinRepository.findByOffenderAndDueDate(savedOffender, today)
+      val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinV2Status.CREATED
 
       if (!checkinExists) {
         checkinCreationService.createCheckin(
