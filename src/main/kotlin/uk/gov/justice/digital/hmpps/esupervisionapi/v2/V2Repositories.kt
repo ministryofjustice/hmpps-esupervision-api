@@ -1,13 +1,18 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
+import java.lang.reflect.ParameterizedType
+import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -376,34 +381,136 @@ interface FeedbackRepository : JpaRepository<Feedback, Long>
 @Repository
 interface TotalFeedbackMonthlyRepository : JpaRepository<TotalFeedbackMonthly, LocalDate> {
 
+  /**
+   * @param fromMonth inclusive
+   * @param toMonth exclusive
+   */
   @Query(
     """
     select f from TotalFeedbackMonthly f
-    where f.month between :fromMonth and :toMonth
+    where f.month >= :fromMonth and f.month < :toMonth
     order by f.month asc
   """,
   )
   fun findBetween(fromMonth: LocalDate, toMonth: LocalDate): List<TotalFeedbackMonthly>
 }
 
+@Component
+class StatsSummaryRepository(
+  private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
+  private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
+) {
+  /**
+   * @param fromMonth inclusive
+   * @param toMonth exclusive
+   */
+  fun getFeedbackSummary(fromMonth: LocalDate, toMonth: LocalDate): TotalFeedbackSummary {
+    require(fromMonth.isBefore(toMonth))
+
+    return jdbcTemplate.queryForObject(
+      "select * from get_total_feedback_summary(?, ?)",
+      { rs, _ ->
+        TotalFeedbackSummary(
+          feedbackTotal = rs.getLong("feedback_total"),
+          howEasyCounts = parseJsonMap(rs.getString("how_easy_counts")),
+          howEasyPct = parseJsonBigDecimalMap(rs.getString("how_easy_pct")),
+          gettingSupportCounts = parseJsonMap(rs.getString("getting_support_counts")),
+          gettingSupportPct = parseJsonBigDecimalMap(rs.getString("getting_support_pct")),
+          improvementsCounts = parseJsonMap(rs.getString("improvements_counts")),
+          improvementsPct = parseJsonBigDecimalMap(rs.getString("improvements_pct")),
+        )
+      },
+      fromMonth,
+      toMonth,
+    )!!
+  }
+
+  /**
+   * Guaranteed to always return at least one row.
+   *
+   * When no stats data is available and `rowType` is `PROVIDER`, a catch-all row is returned with provider code `ALL`.
+   *
+   * @param fromMonth inclusive
+   * @param toMonth exclusive
+   */
+  fun getSummary(fromMonth: LocalDate, toMonth: LocalDate, rowType: String): List<StatsProviderDto> {
+    require(rowType == "ALL" || rowType == "PROVIDER")
+    require(fromMonth.isBefore(toMonth))
+    return jdbcTemplate.query(
+      "select * from get_summary(?, ?, ?)",
+      { rs, _ ->
+        StatsProviderDto(
+          providerCode = rs.getString("provider_code"),
+          totalSignedUp = rs.getLong("total_signed_up"),
+          activeUsers = rs.getLong("active_users"),
+          inactiveUsers = rs.getLong("inactive_users"),
+          completedCheckins = rs.getLong("completed_checkins"),
+          notCompletedOnTime = rs.getLong("expired_checkins"),
+          avgHoursToComplete = rs.getBigDecimal("avg_hours_to_complete").toDouble(),
+          avgCompletedCheckinsPerPerson = rs.getBigDecimal("avg_checkins_completed_per_person").toDouble(),
+          pctActiveUsers = rs.getBigDecimal("pct_active_users").toDouble(),
+          pctInactiveUsers = rs.getBigDecimal("pct_inactive_users").toDouble(),
+          pctCompletedCheckins = rs.getBigDecimal("pct_completed_checkins").toDouble(),
+          pctExpiredCheckins = rs.getBigDecimal("pct_expired_checkins").toDouble(),
+          providerDescription = if (rowType == "ALL") "" else rs.getString("provider_description"),
+          pctSignedUpOfTotal = rs.getBigDecimal("pct_signed_up").toDouble(),
+          updatedAt = rs.getTimestamp("updated_at").toInstant(),
+        )
+      },
+      fromMonth,
+      toMonth,
+      rowType,
+    )
+  }
+
+  private fun <T> parseJson(json: String?, typeReference: TypeReference<T>): T {
+    if (json == null || json == "{}" || json == "null") {
+      val type = typeReference.type
+      val isMap = when (type) {
+        is Class<*> -> Map::class.java.isAssignableFrom(type)
+        is ParameterizedType -> Map::class.java.isAssignableFrom(type.rawType as Class<*>)
+        else -> false
+      }
+
+      if (isMap) {
+        return emptyMap<String, Any>() as T
+      }
+      throw IllegalArgumentException("Unsupported type: $type")
+    }
+    return objectMapper.readValue(json, typeReference)
+  }
+
+  private fun parseJsonMap(json: String?): Map<String, Long> = parseJson(json, object : TypeReference<Map<String, Long>>() {})
+
+  private fun parseJsonBigDecimalMap(json: String?): Map<String, BigDecimal> = parseJson(json, object : TypeReference<Map<String, BigDecimal>>() {})
+}
+
 @Repository
 interface StatsSummaryProviderMonthRepository : JpaRepository<StatsSummaryProviderMonth, StatsSummaryProviderMonthId> {
 
+  /**
+   * @param fromMonth inclusive
+   * @param toMonth exclusive
+   */
   @Query(
     """
     select s from StatsSummaryProviderMonth s
     where s.id.rowType = 'ALL'
-      and s.id.month between :fromMonth and :toMonth
+      and s.id.month >= :fromMonth and s.id.month < :toMonth
     order by s.id.month asc
   """,
   )
   fun findAllBetween(fromMonth: LocalDate, toMonth: LocalDate): List<StatsSummaryProviderMonth>
 
+  /**
+   * @param fromMonth inclusive
+   * @param toMonth exclusive
+   */
   @Query(
     """
     select s from StatsSummaryProviderMonth s
     where s.id.rowType = 'PROVIDER'
-      and s.id.month between :fromMonth and :toMonth
+      and s.id.month >= :fromMonth and s.id.month < :toMonth
     order by s.id.providerCode asc, s.id.month asc
   """,
   )

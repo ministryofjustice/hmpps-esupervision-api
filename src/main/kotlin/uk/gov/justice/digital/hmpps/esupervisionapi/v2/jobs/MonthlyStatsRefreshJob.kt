@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component
 import java.sql.Date
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
@@ -36,72 +37,78 @@ class MonthlyStatsRefreshJob(
           .withDayOfMonth(1)
           .toLocalDate()
 
-      val rangeStart =
-        monthStart
-          .atStartOfDay(zone)
-          .toInstant()
-
-      val rangeEnd =
-        monthStart
-          .plusMonths(1)
-          .atStartOfDay(zone)
-          .toInstant()
-
-      val monthlyStart = clock.instant()
-      jdbcTemplate.execute(REFRESH_MONTHLY_STATS_SQL) { ps ->
-        ps.setDate(1, Date.valueOf(monthStart))
-        ps.setObject(2, OffsetDateTime.ofInstant(rangeStart, ZoneOffset.UTC))
-        ps.setObject(3, OffsetDateTime.ofInstant(rangeEnd, ZoneOffset.UTC))
-        ps.execute()
-      }
-      val monthlyEnd = clock.instant()
-
-      LOGGER.info(
-        "Monthly stats table refreshed successfully, took={}",
-        Duration.between(monthlyStart, monthlyEnd),
-      )
-
-      val monthlyFeedbackStart = clock.instant()
-      jdbcTemplate.execute(REFRESH_MONTHLY_FEEDBACK_STATS_SQL) { ps ->
-        ps.setDate(1, Date.valueOf(monthStart))
-        ps.setObject(2, OffsetDateTime.ofInstant(rangeStart, ZoneOffset.UTC))
-        ps.setObject(3, OffsetDateTime.ofInstant(rangeEnd, ZoneOffset.UTC))
-        ps.execute()
-      }
-      val monthlyFeedbackEnd = clock.instant()
-
-      LOGGER.info(
-        "Monthly feedback stats table refreshed successfully, took={}",
-        Duration.between(monthlyFeedbackStart, monthlyFeedbackEnd),
-      )
-
-      val feedbackMvStart = clock.instant()
-      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $FEEDBACK_MONTHLY_VIEW_NAME")
-      val feedbackMvEnd = clock.instant()
-
-      LOGGER.info(
-        "Materialized view refreshed successfully: view={}, took={}",
-        FEEDBACK_MONTHLY_VIEW_NAME,
-        Duration.between(feedbackMvStart, feedbackMvEnd),
-      )
-
-      val monthlyMvStart = clock.instant()
-      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $PROVIDER_MONTHLY_VIEW_NAME")
-      val monthlyMvEnd = clock.instant()
-
-      LOGGER.info(
-        "Materialized view refreshed successfully: view={}, took={}",
-        PROVIDER_MONTHLY_VIEW_NAME,
-        Duration.between(monthlyMvStart, monthlyMvEnd),
-      )
-
-      LOGGER.info(
-        "Stats Refresh Job completed successfully, total duration={}",
-        Duration.between(overallStart, clock.instant()),
-      )
+      refresh(monthStart)
     } catch (e: Exception) {
       LOGGER.error("Stats Refresh Job failed", e)
     }
+  }
+
+  fun refresh(monthStart: LocalDate) {
+    val overallStart = clock.instant()
+
+    val rangeStart =
+      monthStart
+        .atStartOfDay(clock.zone)
+        .toInstant()
+
+    val rangeEnd =
+      monthStart
+        .plusMonths(1)
+        .atStartOfDay(clock.zone)
+        .toInstant()
+
+    val monthlyStart = clock.instant()
+    jdbcTemplate.execute(REFRESH_MONTHLY_STATS_SQL) { ps ->
+      ps.setDate(1, Date.valueOf(monthStart))
+      ps.setObject(2, OffsetDateTime.ofInstant(rangeStart, ZoneOffset.UTC))
+      ps.setObject(3, OffsetDateTime.ofInstant(rangeEnd, ZoneOffset.UTC))
+      ps.execute()
+    }
+    val monthlyEnd = clock.instant()
+
+    LOGGER.info(
+      "Monthly stats table refreshed successfully, took={}",
+      Duration.between(monthlyStart, monthlyEnd),
+    )
+
+    val monthlyFeedbackStart = clock.instant()
+    jdbcTemplate.execute(REFRESH_MONTHLY_FEEDBACK_STATS_SQL) { ps ->
+      ps.setDate(1, Date.valueOf(monthStart))
+      ps.setObject(2, OffsetDateTime.ofInstant(rangeStart, ZoneOffset.UTC))
+      ps.setObject(3, OffsetDateTime.ofInstant(rangeEnd, ZoneOffset.UTC))
+      ps.execute()
+    }
+    val monthlyFeedbackEnd = clock.instant()
+
+    LOGGER.info(
+      "Monthly feedback stats table refreshed successfully, took={}",
+      Duration.between(monthlyFeedbackStart, monthlyFeedbackEnd),
+    )
+
+    val feedbackMvStart = clock.instant()
+    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $FEEDBACK_MONTHLY_VIEW_NAME")
+    val feedbackMvEnd = clock.instant()
+
+    LOGGER.info(
+      "Materialized view refreshed successfully: view={}, took={}",
+      FEEDBACK_MONTHLY_VIEW_NAME,
+      Duration.between(feedbackMvStart, feedbackMvEnd),
+    )
+
+    val monthlyMvStart = clock.instant()
+    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $PROVIDER_MONTHLY_VIEW_NAME")
+    val monthlyMvEnd = clock.instant()
+
+    LOGGER.info(
+      "Materialized view refreshed successfully: view={}, took={}",
+      PROVIDER_MONTHLY_VIEW_NAME,
+      Duration.between(monthlyMvStart, monthlyMvEnd),
+    )
+
+    LOGGER.info(
+      "Stats Refresh Job completed successfully, total duration={}",
+      Duration.between(overallStart, clock.instant()),
+    )
   }
 
   companion object {

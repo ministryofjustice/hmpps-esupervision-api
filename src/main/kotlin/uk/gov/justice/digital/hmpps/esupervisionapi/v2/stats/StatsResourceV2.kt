@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
+import java.lang.invoke.MethodHandles
 import java.math.BigDecimal
 import java.time.YearMonth
 
@@ -17,8 +19,6 @@ import java.time.YearMonth
 @RequestMapping("/v2/stats", produces = ["application/json"])
 @Tag(name = "Stats", description = "Aggregated statistics for dashboards and reporting")
 class StatsResourceV2(private val service: StatsServiceV2) {
-
-  private val logger = LoggerFactory.getLogger(StatsResourceV2::class.java)
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
@@ -34,33 +34,17 @@ class StatsResourceV2(private val service: StatsServiceV2) {
   @ApiResponse(responseCode = "200", description = "Stats returned successfully")
   @GetMapping
   fun getStats(
-    @RequestParam(required = false) month: String?,
-    @RequestParam(required = false) fromMonth: String?,
-    @RequestParam(required = false) toMonth: String?,
+    @RequestParam(required = true) fromMonth: String,
+    @RequestParam(required = true) toMonth: String,
   ): ResponseEntity<StatsResponse> {
-    if (month != null && (fromMonth != null || toMonth != null)) {
-      throw IllegalArgumentException("Provide either month=YYYY-MM OR fromMonth=YYYY-MM&toMonth=YYYY-MM, not both")
+    val from = parseYearMonth(fromMonth).atDay(1)
+    val to = parseYearMonth(toMonth).atDay(1)
+    if (from > to) {
+      throw BadArgumentException("fromMonth must be < toMonth")
     }
+    val result = service.getStatsForMonths(from, to)
 
-    val result = when {
-      month != null -> {
-        val m = parseYearMonth(month).atDay(1)
-        service.getStatsForMonth(m)
-      }
-
-      fromMonth != null || toMonth != null -> {
-        val from = parseYearMonth(fromMonth ?: toMonth!!).atDay(1)
-        val to = parseYearMonth(toMonth ?: fromMonth!!).atDay(1)
-
-        require(!from.isAfter(to)) { "fromMonth must be <= toMonth" }
-
-        service.getStatsForMonths(from, to)
-      }
-
-      else -> throw IllegalArgumentException("You must provide month=YYYY-MM or fromMonth=YYYY-MM&toMonth=YYYY-MM")
-    }
-
-    logger.info("Retrieved system stats")
+    logger.info("Retrieved system stats for month range ({}, {})", from, to)
 
     return ResponseEntity.ok(
       StatsResponse(
@@ -72,8 +56,12 @@ class StatsResourceV2(private val service: StatsServiceV2) {
 
   private fun parseYearMonth(value: String): YearMonth = try {
     YearMonth.parse(value) // expects YYYY-MM
-  } catch (e: Exception) {
-    throw IllegalArgumentException("Invalid month format '$value' (expected YYYY-MM)")
+  } catch (_: Exception) {
+    throw BadArgumentException("Invalid month format '$value' (expected YYYY-MM)")
+  }
+
+  companion object {
+    private val logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
   }
 }
 

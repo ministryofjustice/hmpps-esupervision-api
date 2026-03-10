@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -7,6 +7,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsDashboardDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsResourceV2
@@ -127,7 +128,7 @@ class StatsResourceV2Test {
         updatedAt = providerUpdatedAt,
       )
 
-    whenever(service.getStatsForMonth(LocalDate.parse("2026-01-01")))
+    whenever(service.getStatsForMonths(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-01-01")))
       .thenReturn(
         StatsDashboardDto(
           total = totals,
@@ -135,18 +136,14 @@ class StatsResourceV2Test {
         ),
       )
 
-    val response =
-      resource.getStats(
-        month = "2026-01",
-        fromMonth = null,
-        toMonth = null,
-      )
+    val response = resource.getStats(fromMonth = "2026-01", toMonth = "2026-01")
 
     assertEquals(HttpStatus.OK, response.statusCode)
     val body = response.body!!
 
     // verify routing
-    verify(service).getStatsForMonth(LocalDate.parse("2026-01-01"))
+    val month = LocalDate.parse("2026-01-01")
+    verify(service).getStatsForMonths(month, month)
 
     // totals mapping
     val total = body.total
@@ -246,77 +243,25 @@ class StatsResourceV2Test {
         ),
       )
 
-    // fromMonth only -> toMonth implied to fromMonth? (resource uses other side if missing)
-    val response =
-      resource.getStats(
-        month = null,
-        fromMonth = "2026-01",
-        toMonth = "2026-03",
-      )
+    val response = resource.getStats(fromMonth = "2026-01", toMonth = "2026-03")
 
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(service).getStatsForMonths(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-03-01"))
   }
 
   @Test
-  fun `getStats throws when month provided alongside fromMonth or toMonth`() {
-    val ex =
-      assertThrows(IllegalArgumentException::class.java) {
-        resource.getStats(
-          month = "2026-01",
-          fromMonth = "2026-01",
-          toMonth = null,
-        )
-      }
-
-    assertEquals(
-      "Provide either month=YYYY-MM OR fromMonth=YYYY-MM&toMonth=YYYY-MM, not both",
-      ex.message,
-    )
-  }
-
-  @Test
-  fun `getStats throws when no params provided`() {
-    val ex =
-      assertThrows(IllegalArgumentException::class.java) {
-        resource.getStats(
-          month = null,
-          fromMonth = null,
-          toMonth = null,
-        )
-      }
-
-    assertEquals(
-      "You must provide month=YYYY-MM or fromMonth=YYYY-MM&toMonth=YYYY-MM",
-      ex.message,
-    )
-  }
-
-  @Test
   fun `getStats throws when invalid month format`() {
-    val ex =
-      assertThrows(IllegalArgumentException::class.java) {
-        resource.getStats(
-          month = "2026/01",
-          fromMonth = null,
-          toMonth = null,
-        )
-      }
-
+    val ex = assertThrows(BadArgumentException::class.java) {
+      resource.getStats(fromMonth = "2026/01", toMonth = "2026-01")
+    }
     assertEquals("Invalid month format '2026/01' (expected YYYY-MM)", ex.message)
   }
 
   @Test
   fun `getStats throws when fromMonth after toMonth`() {
-    val ex =
-      assertThrows(IllegalArgumentException::class.java) {
-        resource.getStats(
-          month = null,
-          fromMonth = "2026-03",
-          toMonth = "2026-01",
-        )
-      }
-
+    val ex = assertThrows(IllegalArgumentException::class.java) {
+      resource.getStats(fromMonth = "2026-03", toMonth = "2026-01")
+    }
     assertEquals("fromMonth must be <= toMonth", ex.message)
   }
 }

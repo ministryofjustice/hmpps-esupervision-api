@@ -502,6 +502,16 @@ open class TotalFeedbackMonthly(
   open val improvementsPct: Map<String, BigDecimal>,
 )
 
+data class TotalFeedbackSummary(
+  val feedbackTotal: Long,
+  val howEasyCounts: Map<String, Long>,
+  val howEasyPct: Map<String, BigDecimal>,
+  val gettingSupportCounts: Map<String, Long>,
+  val gettingSupportPct: Map<String, BigDecimal>,
+  val improvementsCounts: Map<String, Long>,
+  val improvementsPct: Map<String, BigDecimal>,
+)
+
 @Embeddable
 data class StatsSummaryProviderMonthId(
   @Column(name = "row_type", nullable = false)

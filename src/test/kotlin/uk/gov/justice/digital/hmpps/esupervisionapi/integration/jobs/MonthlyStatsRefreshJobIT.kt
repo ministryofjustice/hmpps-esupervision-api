@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
+package uk.gov.justice.digital.hmpps.esupervisionapi.integration.jobs
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -6,16 +6,22 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.MonthlyStatsRefreshJob
+import java.math.BigDecimal
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 
 class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
 
   @Autowired lateinit var jdbcTemplate: JdbcTemplate
 
+  @Autowired lateinit var statsSummaryRepository: StatsSummaryRepository
+
   private val fixedClock: Clock =
-    Clock.fixed(Instant.parse("2026-01-22T12:00:00Z"), ZoneOffset.UTC)
+    Clock.fixed(Instant.parse("2026-02-22T12:00:00Z"), ZoneOffset.UTC)
 
   @BeforeEach
   fun cleanDb() {
@@ -23,6 +29,25 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     jdbcTemplate.update("TRUNCATE TABLE monthly_stats RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE monthly_feedback_stats RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE feedback RESTART IDENTITY CASCADE")
+  }
+
+  @Test
+  fun `we get valid ZERO results event when no data is available`() {
+    val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
+    job.refresh()
+
+    val fromMonth = LocalDate.of(2026, 1, 1)
+    val toMonth = LocalDate.of(2026, 4, 1)
+    val allResult = statsSummaryRepository.getSummary(fromMonth, toMonth, "ALL")
+    assertEquals(1, allResult.size)
+    assertEquals(0, allResult.first().totalSignedUp)
+
+    val providerResult = statsSummaryRepository.getSummary(fromMonth, toMonth, "PROVIDER")
+    assertEquals(1, providerResult.size)
+    assertEquals("ALL", providerResult.first().providerCode)
+
+    val feedbackResult = statsSummaryRepository.getFeedbackSummary(fromMonth, toMonth)
+    assertEquals(0, feedbackResult.feedbackTotal)
   }
 
   @Test
@@ -45,6 +70,10 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
          'N03', 'Wales', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
         (32, 'SETUP_COMPLETED', '2026-01-05T15:12:45.906Z', 'X374635', 'AutomatedTestUser2',
+         'WPTNWS', 'North Wales', 'WPTNWS', 'North Wales',
+         'N03', 'Wales', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+        
+        (120, 'SETUP_COMPLETED', '2026-02-03T11:12:45.000Z', 'X000011', 'AutomatedTestUser2',
          'WPTNWS', 'North Wales', 'WPTNWS', 'North Wales',
          'N03', 'Wales', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
@@ -76,12 +105,14 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       INSERT INTO feedback (feedback, created_at)
       VALUES
         ('{"version":1,"howEasy":"veryEasy","gettingSupport":"yes"}'::jsonb, '2026-01-08T10:00:00Z'),
-        ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-01-11T10:00:00Z')
+        ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-01-11T10:00:00Z'),
+        ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-02-01T10:00:00Z')
       """,
     )
 
     val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
-    job.refresh()
+    job.refresh(LocalDate.of(2026, 1, 1))
+    job.refresh(LocalDate.of(2026, 2, 1))
 
     val monthlyStatsCount =
       jdbcTemplate.queryForObject(
@@ -104,6 +135,20 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(2L, northWales["users_activated"])
     assertEquals(0L, northWales["users_deactivated"])
 
+    val fromMonth = LocalDate.parse("2026-01-01")
+    val toMonth = LocalDate.parse("2026-02-01")
+    val feedbackSummary = statsSummaryRepository.getFeedbackSummary(fromMonth, toMonth)
+
+    assertEquals(2L, feedbackSummary.feedbackTotal)
+    assertEquals(1L, feedbackSummary.howEasyCounts["veryEasy"])
+    assertEquals(0, BigDecimal("1.0000").compareTo(feedbackSummary.howEasyPct["veryEasy"]))
+    assertEquals(1L, feedbackSummary.gettingSupportCounts["yes"])
+    assertEquals(1L, feedbackSummary.gettingSupportCounts["no"])
+    assertEquals(0, BigDecimal("0.5000").compareTo(feedbackSummary.gettingSupportPct["yes"]))
+    assertEquals(0, BigDecimal("0.5000").compareTo(feedbackSummary.gettingSupportPct["no"]))
+    assertEquals(2L, feedbackSummary.improvementsCounts["notAnswered"])
+    assertEquals(0, feedbackSummary.improvementsPct.size)
+
     val feedbackRows =
       jdbcTemplate.queryForObject(
         """
@@ -117,14 +162,14 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(3L, feedbackRows) // still 3 rows for January, even though improvements has no answers
 
     val allRow =
-      jdbcTemplate.queryForMap(
+      jdbcTemplate.queryForList(
         """
         SELECT * FROM stats_summary_provider_month
         WHERE row_type = 'ALL'
         """,
       )
 
-    assertEquals(2L, allRow["active_users"])
+    assertEquals(2L, allRow[0]["active_users"])
 
     val providerRowCount =
       jdbcTemplate.queryForObject(
@@ -133,11 +178,30 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         FROM stats_summary_provider_month
         WHERE row_type = 'PROVIDER'
           AND provider_code IN ('N03', 'N04', 'N07')
+          AND month = '2026-01-01'
         """,
         Long::class.java,
       )!!
 
     assertEquals(3L, providerRowCount)
+
+    val allSummary = statsSummaryRepository.getSummary(fromMonth, toMonth, "ALL").first()
+    assertEquals(1, allSummary.completedCheckins)
+    assertEquals(1, allSummary.notCompletedOnTime)
+
+    val providerSummary = statsSummaryRepository.getSummary(fromMonth, toMonth, "PROVIDER")
+    assertEquals(3, providerSummary.size)
+    val midlandsSummary = providerSummary.find { it.providerCode == "N04" }!!
+    assertEquals(1, midlandsSummary.completedCheckins)
+    assertEquals(0, midlandsSummary.notCompletedOnTime)
+    assertEquals(1.0, midlandsSummary.pctCompletedCheckins)
+    assertEquals(0.0, midlandsSummary.pctExpiredCheckins)
+
+    val extendedFeedbackSummary = statsSummaryRepository.getFeedbackSummary(fromMonth, toMonth.plusMonths(1))
+    assertEquals(3, extendedFeedbackSummary.feedbackTotal)
+    assertEquals(1L, extendedFeedbackSummary.gettingSupportCounts["yes"])
+    assertEquals(2L, extendedFeedbackSummary.gettingSupportCounts["no"])
+    assertEquals(BigDecimal("0.6667"), extendedFeedbackSummary.gettingSupportPct["no"])
   }
 
   @Test
