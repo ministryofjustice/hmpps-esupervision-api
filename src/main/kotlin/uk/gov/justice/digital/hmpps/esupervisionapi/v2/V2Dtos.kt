@@ -251,6 +251,8 @@ data class CheckinV2Dto(
   val snapshotUrl: URL? = null,
   @field:Schema(description = "Risk management feedback", required = false)
   val riskFeedback: Boolean? = null,
+  @field:Schema(description = "Sensitive", required = false)
+  val sensitive: Boolean? = false,
   @field:Schema(description = "Checkin logs with practitioner notes", required = true)
   val checkinLogs: CheckinLogsV2Dto,
   @field:Schema(description = "Presigned S3 URL for reference photo", required = false)
@@ -334,6 +336,8 @@ data class ReviewCheckinV2Request(
   val missedCheckinComment: String? = null,
   @Schema(description = "Risk management feedback", required = false)
   val riskManagementFeedback: Boolean? = null,
+  @Schema(description = "Whether the review contains sensitive information", required = false)
+  val sensitive: Boolean? = false,
 )
 
 /** Review started request */
@@ -351,6 +355,8 @@ data class AnnotateCheckinV2Request(
   @Schema(description = "Notes about the checkin", required = true)
   @field:NotBlank
   val notes: String,
+  @Schema(description = "Whether the annotation contains sensitive information", required = false)
+  val sensitive: Boolean? = false,
 )
 
 /** Create checkin request (DEBUG ONLY) */
@@ -542,4 +548,5 @@ data class EventDetailResponse(
   @Schema(description = "Checkin UUID", required = false) val checkinUuid: UUID? = null,
   @Schema(description = "Offender UUID", required = false) val offenderUuid: UUID? = null,
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
+  @Schema(description = "Sensitive", required = false) val sensitive: Boolean? = false,
 )

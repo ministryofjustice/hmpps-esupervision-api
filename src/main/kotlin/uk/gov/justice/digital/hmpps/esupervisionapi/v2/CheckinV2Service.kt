@@ -329,6 +329,7 @@ class CheckinV2Service(
     checkin.reviewedBy = request.reviewedBy
     checkin.manualIdCheck = request.manualIdCheck
     checkin.riskFeedback = request.riskManagementFeedback
+    checkin.sensitive = request.sensitive
     checkinRepository.save(checkin)
 
     LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
@@ -359,7 +360,8 @@ class CheckinV2Service(
         "Checkin must be reviewed before being annotated",
       )
     }
-
+    checkin.sensitive = request.sensitive
+    checkinRepository.save(checkin)
     val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = request.notes,

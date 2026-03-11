@@ -73,3 +73,5 @@ databaseChangeLog:
       file: db/changelog/changesets/36_create_stats_summary_provider_month_mv.sql
   - include:
       file: db/changelog/changesets/37_offender_v2_add_event_id.sql
+  - include:
+      file: db/changelog/changesets/38_add_sensitive_boolean_to_offender_checkin_v2.sql
