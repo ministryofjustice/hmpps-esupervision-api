@@ -85,7 +85,7 @@ class OffenderV2ResourceTest {
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     val result = resource.deactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
@@ -165,6 +165,7 @@ class OffenderV2ResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     // mock s3
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
 
@@ -203,7 +204,7 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any<OffenderV2>())).thenAnswer { it.getArgument(0) }
-
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinV2Status.CREATED))
       .thenReturn(listOf(pendingCheckin))
 
