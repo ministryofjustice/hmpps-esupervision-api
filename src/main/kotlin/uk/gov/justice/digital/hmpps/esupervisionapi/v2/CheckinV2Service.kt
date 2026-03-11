@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -24,6 +25,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Period
 import java.util.UUID
+import java.util.concurrent.CompletionException
 
 /** V2 Checkin Service Handles all checkin business logic for V2 */
 @Service
@@ -427,7 +429,39 @@ class CheckinV2Service(
       )
     }
 
-    val sessionId = livenessSessionService.createSession().join()
+    val sessionId = try {
+      livenessSessionService.createSession().join()
+    } catch (e: CompletionException) {
+      val cause = e.cause
+
+      when (cause) {
+        is RekognitionException -> {
+          LOGGER.error(
+            "Failed to create Rekognition liveness session for checkin {}: awsErrorCode={}, statusCode={}, message={}",
+            uuid,
+            cause.awsErrorDetails()?.errorCode(),
+            cause.statusCode(),
+            cause.message,
+            cause,
+          )
+
+          throw ResponseStatusException(
+            HttpStatus.BAD_GATEWAY,
+            "Unable to create liveness session: ${cause.awsErrorDetails()?.errorMessage() ?: cause.message}",
+            cause,
+          )
+        }
+
+        else -> {
+          LOGGER.error("Unexpected async error creating liveness session for checkin {}", uuid, cause ?: e)
+          throw ResponseStatusException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Unable to create liveness session",
+            cause ?: e,
+          )
+        }
+      }
+    }
     LOGGER.info("Liveness session created for checkin {}: {}", uuid, sessionId)
 
     return LivenessSessionResponse(sessionId = sessionId)

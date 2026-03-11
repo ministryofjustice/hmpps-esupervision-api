@@ -9,7 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.PractitionerRep
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.RestManageUsersApiClient
 
 @Configuration
-@Profile("!local & !test")
+@Profile("!test")
 class PractitionerConfiguration {
   @Bean
   fun practitionerRepository(manageUsersApiWebClient: WebClient): PractitionerRepository {
