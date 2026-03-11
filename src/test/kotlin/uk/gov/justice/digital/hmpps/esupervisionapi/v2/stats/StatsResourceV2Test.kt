@@ -8,11 +8,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsDashboardDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsResourceV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsServiceV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsTotalsDto
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -262,6 +257,6 @@ class StatsResourceV2Test {
     val ex = assertThrows(IllegalArgumentException::class.java) {
       resource.getStats(fromMonth = "2026-03", toMonth = "2026-01")
     }
-    assertEquals("fromMonth must be <= toMonth", ex.message)
+    assertEquals("fromMonth must be < toMonth", ex.message)
   }
 }
