@@ -360,7 +360,10 @@ class CheckinV2Service(
         "Checkin must be reviewed before being annotated",
       )
     }
-    checkin.sensitive = request.sensitive
+    // if check in was already marked as sensitive, it cannot be then marked as not sensitive
+    if (checkin.sensitive != true && request.sensitive == true) {
+      checkin.sensitive = true
+    }
     checkinRepository.save(checkin)
     val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(

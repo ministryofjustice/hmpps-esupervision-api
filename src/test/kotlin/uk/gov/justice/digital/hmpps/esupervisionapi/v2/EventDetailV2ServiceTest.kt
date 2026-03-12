@@ -404,9 +404,9 @@ class EventDetailV2ServiceTest {
       val checkinUuid = UUID.randomUUID()
       val annotationUuid = UUID.randomUUID()
       val offender = createOffender(UUID.randomUUID())
-      
+
       val checkin = createCheckin(checkinUuid, offender, status = CheckinV2Status.REVIEWED)
-      
+
       val logEntry = OffenderCheckinLogEntryV2Dto(
         annotationUuid,
         notes = "Test note",
