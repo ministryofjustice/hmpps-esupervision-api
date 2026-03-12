@@ -12,6 +12,7 @@ object NotificationContextV2 {
       // Offender notifications
       NotificationType.OffenderCheckinSubmitted -> "OSUB-$date"
       NotificationType.OffenderCheckinsStopped -> "OSTP-$date"
+      NotificationType.OffenderCheckinsRestarted -> "ORES-$date"
       NotificationType.RegistrationConfirmation -> "OREG-$date"
       NotificationType.OffenderCheckinInvite -> "OCHK-$date"
       NotificationType.OffenderCheckinReminder -> "OREM-$date"

@@ -110,7 +110,7 @@ class NotificationOrchestratorV2Service(
           notificationPersistence.buildOffenderNotifications(
             offender = offender,
             contactDetails = details,
-            notificationType = NotificationType.RegistrationConfirmation,
+            notificationType = NotificationType.OffenderCheckinsRestarted,
           )
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)
