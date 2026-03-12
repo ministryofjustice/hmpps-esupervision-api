@@ -99,9 +99,6 @@ ORDER BY mt.month;
 CREATE UNIQUE INDEX total_feedback_monthly_month_ux
   ON total_feedback_monthly(month);
 
-CREATE INDEX total_feedback_monthly_month_idx
-  ON total_feedback_monthly(month);
-
 --changeset rob.catton:39_drop_stats_summary_and_create_monthly_feedback_mv-2 splitStatements:false
 
 CREATE OR REPLACE FUNCTION feedback_calc_pct(counts JSONB, total BIGINT, not_answered BIGINT)
