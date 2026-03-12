@@ -20,6 +20,13 @@ class NotificationV2Service(
   }
 
   /**
+   * Send notifications for deactivation completed event
+   */
+  fun sendDeactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null) {
+    orchestrator.sendDeactivationCompletedNotifications(offender, contactDetails)
+  }
+
+  /**
    * Send notifications for reactivation completed event
    */
   fun sendReactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null) {

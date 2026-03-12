@@ -2,6 +2,9 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Instant
 import java.time.ZoneId
@@ -15,6 +18,8 @@ class EventDetailV2Service(
   private val offenderRepository: OffenderV2Repository,
   private val checkinRepository: OffenderCheckinV2Repository,
   private val eventLogRepository: OffenderEventLogV2Repository,
+  private val proxyLinkCreator: ProxyLinkCreator,
+  private val appConfig: AppConfig,
 ) {
 
   fun getEventDetail(detailUrl: String): EventDetailResponse? {
@@ -151,6 +156,11 @@ class EventDetailV2Service(
         sb.appendLine()
         checkin.autoIdCheck?.let {
           sb.appendLine("System ID check result: ${formatAutoIdCheckResult(it.name)}")
+        }
+        if (appConfig.enabledFeatures.contains(Feature.ESUP_1239)) {
+          sb.appendLine("Reference photo: ${proxyLinkCreator.offenderReferencePhoto(checkin.offender)}")
+          sb.appendLine("Checkin snapshot: ${proxyLinkCreator.checkinSnapshot(checkin, 0)}")
+          sb.appendLine("Checkin video: ${proxyLinkCreator.checkinVideo(checkin)}")
         }
         checkin.surveyResponse?.let { survey ->
           sb.appendLine()

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -77,16 +78,21 @@ class OffenderV2ResourceTest {
       requestedBy = "PRACT001",
       reason = "No longer on supervision",
     )
-
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      mobile = "07700900123",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     val result = resource.deactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
     verify(offenderRepository).save(any())
+    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails))
   }
 
   @Test
@@ -150,10 +156,16 @@ class OffenderV2ResourceTest {
       requestedBy = "PRACT001",
       reason = "No longer on supervision",
     )
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      mobile = "07700900123",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     // mock s3
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
 
@@ -163,6 +175,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
     assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
+    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails))
   }
 
   @Test
@@ -172,6 +185,12 @@ class OffenderV2ResourceTest {
     val request = DeactivateOffenderRequest(
       requestedBy = "PRACT001",
       reason = "No longer on supervision",
+    )
+
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      mobile = "07700900123",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
     )
 
     val pendingCheckin = OffenderCheckinV2(
@@ -185,7 +204,7 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(any<OffenderV2>())).thenAnswer { it.getArgument(0) }
-
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinV2Status.CREATED))
       .thenReturn(listOf(pendingCheckin))
 
@@ -399,6 +418,92 @@ class OffenderV2ResourceTest {
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
     assertTrue(exception.reason?.contains("does not have an email address in NDelius") == true)
+  }
+
+@Test
+  fun `reactivateOffender - already completed today - first check in set to TODAY - creates a NEW fresh check in`() {
+    val uuid = UUID.randomUUID()
+    val today = LocalDate.now(clock)
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { 
+      firstCheckin = today
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Re-engagement")
+    
+    val myContactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
+      mobile = "07700900123",
+    )
+
+    val completedCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
+    whenever(completedCheckin.status).thenReturn(CheckinV2Status.SUBMITTED)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
+    whenever(checkinRepository.findByOffenderAndDueDate(offender, today)).thenReturn(Optional.of(completedCheckin))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    resource.reactivateOffender(uuid, request)
+
+    verify(checkinCreationService).createCheckin(eq(uuid), eq(today), eq("PRACT001"))
+  }
+
+  @Test
+  fun `reactivateOffender - cancelled check in exists - first check in set to TODAY - creates a NEW fresh check in`() {
+    val uuid = UUID.randomUUID()
+    val today = LocalDate.now(clock)
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { 
+      firstCheckin = today 
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Reactivating")
+    
+    val myContactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
+      mobile = "07700900123",
+    )
+
+    val cancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
+    whenever(cancelledCheckin.status).thenReturn(CheckinV2Status.CANCELLED)
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
+    whenever(checkinRepository.findByOffenderAndDueDate(offender, today)).thenReturn(Optional.of(cancelledCheckin))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    resource.reactivateOffender(uuid, request)
+
+    verify(checkinCreationService).createCheckin(eq(uuid), eq(today), eq("PRACT001"))
+  }
+
+  @Test
+  fun `reactivateOffender - first check in set to future date - does NOT create check in today`() {
+    val uuid = UUID.randomUUID()
+    val tomorrow = LocalDate.now(clock).plusDays(1)
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { 
+      firstCheckin = tomorrow 
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Reactivating with future start")
+    
+    val myContactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
+      mobile = "07700900123",
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = resource.reactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(OffenderStatus.VERIFIED, result.body?.status)
+    
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails))
   }
 
   // ========================================
