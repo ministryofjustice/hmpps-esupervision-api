@@ -2,9 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryProviderMonthRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.TotalFeedbackMonthlyRepository
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -57,8 +55,6 @@ data class StatsDashboardDto(
 
 @Service
 class StatsServiceV2(
-  private val monthlyFeedbackRepository: TotalFeedbackMonthlyRepository,
-  private val monthRepository: StatsSummaryProviderMonthRepository,
   private val statsSummaryRepository: StatsSummaryRepository,
 ) {
 
