@@ -123,7 +123,7 @@ class StatsResourceV2Test {
         updatedAt = providerUpdatedAt,
       )
 
-    whenever(service.getStatsForMonths(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-01-01")))
+    whenever(service.getStatsForMonths(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-02-01")))
       .thenReturn(
         StatsDashboardDto(
           total = totals,
@@ -131,14 +131,10 @@ class StatsResourceV2Test {
         ),
       )
 
-    val response = resource.getStats(fromMonth = "2026-01", toMonth = "2026-01")
+    val response = resource.getStats(fromMonth = "2026-01", toMonth = "2026-02")
 
     assertEquals(HttpStatus.OK, response.statusCode)
     val body = response.body!!
-
-    // verify routing
-    val month = LocalDate.parse("2026-01-01")
-    verify(service).getStatsForMonths(month, month)
 
     // totals mapping
     val total = body.total

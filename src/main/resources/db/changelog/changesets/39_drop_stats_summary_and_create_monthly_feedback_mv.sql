@@ -135,6 +135,7 @@ BEGIN
             COALESCE(SUM(total_feedback_monthly.feedback_total), 0)::BIGINT as total,
             (SELECT jsonb_object_agg(key, val) FROM (
                 SELECT key, SUM((value)::bigint) val FROM total_feedback_monthly t, jsonb_each(t.how_easy_counts)
+                WHERE month >= from_month AND month < to_month
                 GROUP BY key) s
             ) as easy_counts,
             (SELECT jsonb_object_agg(key, val) FROM (

@@ -23,15 +23,23 @@ class StatsServiceV2Test {
     )
 
   @Test
-  fun `getStatsForMonths throws when fromMonth after toMonth`() {
-    val exception =
+  fun `getStatsForMonths throws when fromMonth is not less than toMonth`() {
+    var exception =
       assertThrows(IllegalArgumentException::class.java) {
         service.getStatsForMonths(
           fromMonth = LocalDate.parse("2026-02-01"),
           toMonth = LocalDate.parse("2026-01-01"),
         )
       }
+    assertEquals("fromMonth must be < toMonth", exception.message)
 
+    exception =
+      assertThrows(IllegalArgumentException::class.java) {
+        service.getStatsForMonths(
+          fromMonth = LocalDate.parse("2026-01-01"),
+          toMonth = LocalDate.parse("2026-01-01"),
+        )
+      }
     assertEquals("fromMonth must be < toMonth", exception.message)
   }
 }

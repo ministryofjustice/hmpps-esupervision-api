@@ -27,8 +27,7 @@ class StatsResourceV2(private val service: StatsServiceV2) {
     Returns aggregated system statistics.
 
     Required Query params:
-    - month=YYYY-MM (single month)
-    - fromMonth=YYYY-MM&toMonth=YYYY-MM (inclusive range)
+    - fromMonth=YYYY-MM&toMonth=YYYY-MM (where fromMonth inclusive, toMonth exclusive)
     """,
   )
   @ApiResponse(responseCode = "200", description = "Stats returned successfully")
@@ -39,7 +38,7 @@ class StatsResourceV2(private val service: StatsServiceV2) {
   ): ResponseEntity<StatsResponse> {
     val from = parseYearMonth(fromMonth).atDay(1)
     val to = parseYearMonth(toMonth).atDay(1)
-    if (from > to) {
+    if (!from.isBefore(to)) {
       throw BadArgumentException("fromMonth must be < toMonth")
     }
     val result = service.getStatsForMonths(from, to)
