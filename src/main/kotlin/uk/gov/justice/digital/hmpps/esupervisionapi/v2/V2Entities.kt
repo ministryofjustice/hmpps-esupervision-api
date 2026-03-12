@@ -200,7 +200,7 @@ open class OffenderCheckinV2(
   @Column(name = "risk_feedback", nullable = true)
   open var riskFeedback: Boolean? = null,
   @Column(name = "sensitive", nullable = false)
-  open var sensitive: Boolean? = false,
+  open var sensitive: Boolean = false,
 ) : V2BaseEntity() {
   fun dto(
     personalDetails: ContactDetails? = null,

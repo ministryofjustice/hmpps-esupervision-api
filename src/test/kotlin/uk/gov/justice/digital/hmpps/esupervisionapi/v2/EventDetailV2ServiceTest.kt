@@ -380,8 +380,6 @@ class EventDetailV2ServiceTest {
 
       val result = service.getEventDetail("/v2/events/checkin-annotated/$annotationUuid")
 
-      println("DEBUG: Sensitive value is ${result?.sensitive}")
-
       assertThat(result!!.sensitive).isNotNull()
       assertThat(result.sensitive).isTrue()
     }
@@ -448,7 +446,7 @@ class EventDetailV2ServiceTest {
     autoIdCheck: AutomatedIdVerificationResult? = null,
     manualIdCheck: ManualIdVerificationResult? = null,
     surveyResponse: Map<String, Any>? = null,
-    sensitive: Boolean? = false,
+    sensitive: Boolean = false,
   ) = OffenderCheckinV2(
     uuid = uuid,
     offender = offender,

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -461,7 +462,7 @@ class CheckinV2ServiceTest {
 
     assertEquals(false, checkin.sensitive)
     assertEquals(false, result.sensitive)
-    verify(checkinRepository).save(checkin)
+    verify(checkinRepository, never()).save(checkin)
   }
 
   @Test
@@ -528,6 +529,7 @@ class CheckinV2ServiceTest {
     service.annotateCheckin(uuid, AnnotateCheckinV2Request("P1", "Note", sensitive = false))
 
     assertEquals(true, checkin.sensitive)
+    verify(checkinRepository, never()).save(checkin)
   }
 
   private fun createOffender() = OffenderV2(
