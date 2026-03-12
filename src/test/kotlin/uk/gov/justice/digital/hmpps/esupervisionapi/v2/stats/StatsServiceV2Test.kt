@@ -17,8 +17,6 @@ class StatsServiceV2Test {
 
   private val service =
     StatsServiceV2(
-      monthlyFeedbackRepository = monthlyFeedbackRepository,
-      monthRepository = monthRepository,
       statsSummaryRepository = statsSummaryRepository,
     )
 
