@@ -336,7 +336,7 @@ class NotificationOrchestratorV2Service(
   ) {
     val personalisation =
       mapOf(
-        "practitionerName" to checkin.offender.practitionerId,
+        "practitionerName" to (details.practitioner?.name?.forename ?: checkin.offender.practitionerId),
         "name" to "${details.name.forename} ${details.name.surname}",
         "popDashboardUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
       )
