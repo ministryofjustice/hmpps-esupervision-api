@@ -11,6 +11,7 @@ class MessageTypeTemplateConfig(
   private val popSubmissionConfirmation: String,
   private val popCheckinsStopped: String,
   private val popCheckinReminder: String,
+  private val popCheckinsRestarted: String,
 ) {
   fun getTemplate(messageType: NotificationType): String = when (messageType) {
     NotificationType.OffenderCheckinInvite -> this.popCheckinInvite
@@ -21,5 +22,6 @@ class MessageTypeTemplateConfig(
     NotificationType.PractitionerInviteIssueGeneric -> this.practitionerInviteIssueGeneric
     NotificationType.RegistrationConfirmation -> this.popRegistrationConfirmation
     NotificationType.OffenderCheckinReminder -> this.popCheckinReminder
+    NotificationType.OffenderCheckinsRestarted -> this.popCheckinsRestarted
   }
 }
