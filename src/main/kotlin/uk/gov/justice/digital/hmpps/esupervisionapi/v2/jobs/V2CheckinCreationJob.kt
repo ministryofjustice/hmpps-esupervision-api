@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
@@ -21,7 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Reposito
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.BatchCheckinCreationException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.V2CheckinCreationJob.Companion.LOGGER
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -65,6 +67,7 @@ class V2CheckinCreationJob(
   private val jobLogRepository: JobLogV2Repository,
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
+  private val appConfig: AppConfig,
 ) {
   @Scheduled(cron = "\${app.scheduling.v2-checkin-creation.cron}")
   @SchedulerLock(
@@ -103,7 +106,17 @@ class V2CheckinCreationJob(
               val checkinsToCreate = mutableListOf<Pair<OffenderCheckinV2, ContactDetails>>()
               for (crn in contactDetailsMap.keys) {
                 val checkin = checkinCreationService.prepareCheckinForOffender(offendersByCrn[crn]!!, today)
-                checkinsToCreate.add(Pair(checkin, contactDetailsMap[crn]!!))
+                val contactDetails = contactDetailsMap[crn]!!
+                if (appConfig.enabledFeatures.contains(Feature.ESUP_1183)) {
+                  val eventNumber = activeEventNumber(checkin.offender, contactDetails)
+                  if (eventNumber != null) {
+                    checkinsToCreate.add(Pair(checkin, contactDetails))
+                  } else {
+                    LOGGER.info("Skipping checkin for CRN {}: no active events found", crn)
+                  }
+                } else {
+                  checkinsToCreate.add(Pair(checkin, contactDetails))
+                }
               }
               metrics.processed += contactDetailsMap.size
 
