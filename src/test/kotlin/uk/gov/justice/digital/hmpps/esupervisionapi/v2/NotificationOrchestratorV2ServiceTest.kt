@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -119,7 +120,7 @@ class NotificationOrchestratorV2ServiceTest {
   }
 
   @Test
-  fun `sendCheckinSubmittedNotifications - sends with correct personalisation`() {
+  fun `sendCheckinSubmittedNotifications test`() {
     val offender = createOffender()
     val checkin = createCheckin(offender, status = CheckinV2Status.SUBMITTED)
     val contactDetails = createContactDetails()
@@ -133,6 +134,17 @@ class NotificationOrchestratorV2ServiceTest {
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
     verify(eventAuditService, never()).recordCheckinSubmitted(checkin, contactDetails)
+  }
+
+  @Test
+  fun `verify practitioner details for checkin submitted notifications`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender, status = CheckinV2Status.SUBMITTED)
+    val contactDetails = createContactDetails()
+
+    val personalisation = service.personalisationDetails(contactDetails, checkin, 4, "no")
+    assertEquals("Jane", personalisation["practitionerName"])
+    assertEquals("John Smith", personalisation["name"])
   }
 
   @Test
