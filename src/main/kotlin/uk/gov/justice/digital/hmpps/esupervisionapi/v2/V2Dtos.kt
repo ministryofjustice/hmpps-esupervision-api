@@ -18,28 +18,59 @@ import java.time.LocalDate
 import java.util.UUID
 
 // ========================================
-// Ndilius API DTOs (matching OpenAPI spec)
+// Delius API DTOs (matching OpenAPI spec)
 // ========================================
 
-/** Contact details from Ndilius API */
+data class CodedDescription(val code: String, val description: String)
+
+data class Event(
+  val number: Long,
+  val mainOffence: CodedDescription,
+  val sentence: Sentence?,
+) {
+  data class Sentence(
+    @field:JsonDeserialize(using = LocalDateDeserializer::class)
+    val date: LocalDate,
+
+    val description: String,
+  )
+}
+/** Contact details from Delius API
+ *
+ * See https://github.com/ministryofjustice/hmpps-probation-integration-services/blob/main/projects/esupervision-and-delius/src/main/kotlin/uk/gov/justice/digital/hmpps/model/ContactDetails.kt
+ * */
 data class ContactDetails(
-  @Schema(description = "Case Reference Number", required = true, example = "X123456")
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
   val crn: String,
-  @Schema(description = "Person's name", required = true) val name: Name,
-  @Schema(
+
+  @field:Schema(description = "Person's name", required = true)
+  val name: Name,
+
+  @field:Schema(
     description = "Mobile phone number (optional)",
     required = false,
     example = "07700900123",
   )
   val mobile: String? = null,
-  @Schema(
+
+  @field:Schema(
     description = "Email address (optional)",
     required = false,
     example = "john.smith@example.com",
   )
   val email: String? = null,
-  @Schema(description = "Practitioner details (optional)", required = false)
+
+  @field:Schema(description = "Practitioner details (optional)", required = false)
   val practitioner: PractitionerDetails? = null,
+
+  /**
+   * Note: no active events mean that the offender has no sentences at this moment.
+   */
+  @field:Schema(
+    description = "Collection of active events.",
+    required = false
+  )
+  val events: List<Event>? = null,
 )
 
 /** Person's name from Ndilius */
