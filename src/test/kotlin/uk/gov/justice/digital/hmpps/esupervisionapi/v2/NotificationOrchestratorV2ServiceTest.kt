@@ -142,7 +142,7 @@ class NotificationOrchestratorV2ServiceTest {
     val checkin = createCheckin(offender, status = CheckinV2Status.SUBMITTED)
     val contactDetails = createContactDetails()
 
-    val personalisation = service.personalisationDetails(contactDetails, checkin, 4, "no")
+    val personalisation = service.checkinSubmittedPersonalisationDetails(contactDetails, checkin, 4, "no")
     assertEquals("Jane", personalisation["practitionerName"])
     assertEquals("John Smith", personalisation["name"])
   }
