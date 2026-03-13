@@ -80,7 +80,7 @@ class LocalRekogConfig(
   @Bean
   fun rekognitionCompareFacesService(
     rekognitionCredentialsProvider: AwsCredentialsProvider,
-    asyncClient: RekognitionAsyncClient,
+    @Qualifier("rekognitionAsyncClient") asyncClient: RekognitionAsyncClient,
   ): OffenderIdVerifier {
     val client = RekognitionClient.builder()
       .region(Region.of(region))
