@@ -224,7 +224,7 @@ class HmppsESupervisionExceptionHandler {
       .body(
         ErrorResponse(
           status = BAD_REQUEST,
-          userMessage = "Resource not found",
+          userMessage = "Invalid request",
           developerMessage = message,
         ),
       )
