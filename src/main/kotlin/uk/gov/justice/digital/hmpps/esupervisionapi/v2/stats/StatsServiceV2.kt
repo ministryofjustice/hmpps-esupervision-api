@@ -2,10 +2,10 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummary
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDate
 
 data class StatsTotalsDto(
   val totalSignedUp: Long,
@@ -55,62 +55,50 @@ data class StatsDashboardDto(
 
 @Service
 class StatsServiceV2(
-  private val repository: StatsSummaryRepository,
+  private val statsSummaryRepository: StatsSummaryRepository,
 ) {
 
+  /**
+   * Calculates stats for given month range [fromMonth, toMonth) using the following tables:
+   * - stats_summary_provider_month (stats)
+   * - total_feedback_monthly (feedback)
+   *
+   *   @param fromMonth inclusive
+   *   @param toMonth exclusive
+   */
   @Transactional(readOnly = true)
-  fun getStats(): StatsDashboardDto {
-    val overall = repository.findOverallRow()
-      ?: throw IllegalStateException("Stats summary not found – materialised view stats_summary_v1 has no ALL row")
+  fun getStatsForMonths(fromMonth: LocalDate, toMonth: LocalDate): StatsDashboardDto {
+    require(fromMonth.isBefore(toMonth)) { "fromMonth must be < toMonth" }
 
-    val providers = repository.findProviderRows()
+    val allRows = statsSummaryRepository.getSummary(fromMonth, toMonth, "ALL")
+    val providerRows = statsSummaryRepository.getSummary(fromMonth, toMonth, "PROVIDER")
+    val feedback = statsSummaryRepository.getFeedbackSummary(fromMonth, toMonth)
 
-    return StatsDashboardDto(
-      total = overall.toTotalsDto(),
-      providers = providers.map { it.toProviderDto() },
-    )
+    val baseTotal = allRows.first().let {
+      StatsTotalsDto(
+        totalSignedUp = it.totalSignedUp,
+        activeUsers = it.activeUsers,
+        inactiveUsers = it.inactiveUsers,
+        completedCheckins = it.completedCheckins,
+        notCompletedOnTime = it.notCompletedOnTime,
+        avgHoursToComplete = it.avgHoursToComplete,
+        avgCompletedCheckinsPerPerson = it.avgCompletedCheckinsPerPerson,
+        pctActiveUsers = it.pctActiveUsers,
+        pctInactiveUsers = it.pctInactiveUsers,
+        pctCompletedCheckins = it.pctCompletedCheckins,
+        pctExpiredCheckins = it.pctExpiredCheckins,
+        feedbackTotal = feedback.feedbackTotal,
+        howEasyCounts = feedback.howEasyCounts,
+        howEasyPct = feedback.howEasyPct,
+        gettingSupportCounts = feedback.gettingSupportCounts,
+        gettingSupportPct = feedback.gettingSupportPct,
+        improvementsCounts = feedback.improvementsCounts,
+        improvementsPct = feedback.improvementsPct,
+        updatedAt = it.updatedAt,
+        pctSignedUpOfTotal = it.pctSignedUpOfTotal,
+      )
+    }
+
+    return StatsDashboardDto(total = baseTotal, providers = providerRows)
   }
-
-  private fun bdToDouble(value: java.math.BigDecimal?) = value?.toDouble() ?: 0.0
-
-  private fun StatsSummary.toTotalsDto() = StatsTotalsDto(
-    totalSignedUp = totalSignedUp,
-    activeUsers = activeUsers,
-    inactiveUsers = inactiveUsers,
-    completedCheckins = completedCheckins,
-    notCompletedOnTime = notCompletedOnTime,
-    avgHoursToComplete = bdToDouble(avgHoursToComplete),
-    avgCompletedCheckinsPerPerson = bdToDouble(avgCompletedCheckinsPerPerson),
-    pctActiveUsers = bdToDouble(pctActiveUsers),
-    pctInactiveUsers = bdToDouble(pctInactiveUsers),
-    pctCompletedCheckins = bdToDouble(pctCompletedCheckins),
-    pctExpiredCheckins = bdToDouble(pctExpiredCheckins),
-    feedbackTotal = feedbackTotal,
-    howEasyCounts = howEasyCounts,
-    howEasyPct = howEasyPct,
-    gettingSupportCounts = gettingSupportCounts,
-    gettingSupportPct = gettingSupportPct,
-    improvementsCounts = improvementsCounts,
-    improvementsPct = improvementsPct,
-    pctSignedUpOfTotal = bdToDouble(pctSignedUpOfTotal),
-    updatedAt = updatedAt,
-  )
-
-  private fun StatsSummary.toProviderDto() = StatsProviderDto(
-    providerCode = requireNotNull(id.providerCode) { "PROVIDER row missing providerCode" },
-    providerDescription = requireNotNull(providerDescription) { "PROVIDER row missing providerDescription" },
-    totalSignedUp = totalSignedUp,
-    activeUsers = activeUsers,
-    inactiveUsers = inactiveUsers,
-    completedCheckins = completedCheckins,
-    notCompletedOnTime = notCompletedOnTime,
-    avgHoursToComplete = bdToDouble(avgHoursToComplete),
-    avgCompletedCheckinsPerPerson = bdToDouble(avgCompletedCheckinsPerPerson),
-    pctActiveUsers = bdToDouble(pctActiveUsers),
-    pctInactiveUsers = bdToDouble(pctInactiveUsers),
-    pctCompletedCheckins = bdToDouble(pctCompletedCheckins),
-    pctExpiredCheckins = bdToDouble(pctExpiredCheckins),
-    pctSignedUpOfTotal = bdToDouble(pctSignedUpOfTotal),
-    updatedAt = updatedAt,
-  )
 }

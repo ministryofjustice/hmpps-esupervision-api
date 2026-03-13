@@ -7,6 +7,7 @@ import jakarta.persistence.EmbeddedId
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
@@ -466,52 +467,13 @@ data class StatsSummaryId(
 
 @Immutable
 @Entity
-@Table(name = "stats_summary_v1")
-open class StatsSummary(
+@Table(name = "total_feedback_monthly")
+open class TotalFeedbackMonthly(
 
-  @EmbeddedId
-  open val id: StatsSummaryId,
+  @Id
+  @Column(name = "month", nullable = false)
+  open val month: LocalDate,
 
-  @Column(name = "provider_description")
-  open val providerDescription: String?, // null for ALL row
-
-  @Column(name = "total_signed_up", nullable = false)
-  open val totalSignedUp: Long,
-
-  @Column(name = "users_activated", nullable = false)
-  open val activeUsers: Long,
-
-  @Column(name = "users_deactivated", nullable = false)
-  open val inactiveUsers: Long,
-
-  @Column(name = "completed_checkins", nullable = false)
-  open val completedCheckins: Long,
-
-  @Column(name = "not_completed_on_time", nullable = false)
-  open val notCompletedOnTime: Long,
-
-  @Column(name = "avg_hours_to_complete")
-  open val avgHoursToComplete: BigDecimal?,
-
-  @Column(name = "avg_completed_checkins_per_person")
-  open val avgCompletedCheckinsPerPerson: BigDecimal?,
-
-  @Column(name = "pct_signed_up_of_total")
-  open val pctSignedUpOfTotal: BigDecimal?,
-
-  @Column(name = "pct_active_users", nullable = false)
-  open val pctActiveUsers: BigDecimal,
-
-  @Column(name = "pct_inactive_users", nullable = false)
-  open val pctInactiveUsers: BigDecimal,
-
-  @Column(name = "pct_completed_checkins", nullable = false)
-  open val pctCompletedCheckins: BigDecimal,
-
-  @Column(name = "pct_expired_checkins", nullable = false)
-  open val pctExpiredCheckins: BigDecimal,
-
-  // feedback only exists for ALL row, MV sets default {} for PROVIDER rows
   @Column(name = "feedback_total", nullable = false)
   open val feedbackTotal: Long,
 
@@ -538,6 +500,79 @@ open class StatsSummary(
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "improvements_pct", nullable = false, columnDefinition = "jsonb")
   open val improvementsPct: Map<String, BigDecimal>,
+)
+
+data class TotalFeedbackSummary(
+  val feedbackTotal: Long,
+  val howEasyCounts: Map<String, Long>,
+  val howEasyPct: Map<String, BigDecimal>,
+  val gettingSupportCounts: Map<String, Long>,
+  val gettingSupportPct: Map<String, BigDecimal>,
+  val improvementsCounts: Map<String, Long>,
+  val improvementsPct: Map<String, BigDecimal>,
+)
+
+@Embeddable
+data class StatsSummaryProviderMonthId(
+  @Column(name = "row_type", nullable = false)
+  val rowType: String,
+
+  @Column(name = "month", nullable = false)
+  val month: LocalDate,
+
+  @Column(name = "provider_code", nullable = false)
+  val providerCode: String, // empty string for ALL rows
+)
+
+@Immutable
+@Entity
+@Table(name = "stats_summary_provider_month")
+open class StatsSummaryProviderMonth(
+
+  @EmbeddedId
+  open val id: StatsSummaryProviderMonthId,
+
+  @Column(name = "provider_description")
+  open val providerDescription: String?, // NULL for ALL rows
+
+  @Column(name = "active_users", nullable = false)
+  open val activeUsers: Long,
+
+  @Column(name = "inactive_users", nullable = false)
+  open val inactiveUsers: Long,
+
+  @Column(name = "total_signed_up", nullable = false)
+  open val totalSignedUp: Long,
+
+  @Column(name = "completed_checkins", nullable = false)
+  open val completedCheckins: Long,
+
+  @Column(name = "not_completed_on_time", nullable = false)
+  open val notCompletedOnTime: Long,
+
+  @Column(name = "total_hours_to_complete", nullable = false)
+  open val totalHoursToComplete: BigDecimal,
+
+  @Column(name = "unique_checkin_crns", nullable = false)
+  open val uniqueCheckinCrns: Long,
+
+  @Column(name = "avg_hours_to_complete", nullable = false)
+  open val avgHoursToComplete: BigDecimal,
+
+  @Column(name = "avg_completed_checkins_per_person", nullable = false)
+  open val avgCompletedCheckinsPerPerson: BigDecimal,
+
+  @Column(name = "pct_active_users", nullable = false)
+  open val pctActiveUsers: BigDecimal,
+
+  @Column(name = "pct_inactive_users", nullable = false)
+  open val pctInactiveUsers: BigDecimal,
+
+  @Column(name = "pct_completed_checkins", nullable = false)
+  open val pctCompletedCheckins: BigDecimal,
+
+  @Column(name = "pct_expired_checkins", nullable = false)
+  open val pctExpiredCheckins: BigDecimal,
 
   @Column(name = "updated_at", nullable = false)
   open val updatedAt: Instant,
