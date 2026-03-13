@@ -35,6 +35,7 @@ data class Event(
     val description: String,
   )
 }
+
 /** Contact details from Delius API
  *
  * See https://github.com/ministryofjustice/hmpps-probation-integration-services/blob/main/projects/esupervision-and-delius/src/main/kotlin/uk/gov/justice/digital/hmpps/model/ContactDetails.kt
@@ -68,7 +69,7 @@ data class ContactDetails(
    */
   @field:Schema(
     description = "Collection of active events.",
-    required = false
+    required = false,
   )
   val events: List<Event>? = null,
 )

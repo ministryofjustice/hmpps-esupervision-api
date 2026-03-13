@@ -3,7 +3,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 
-
 /**
  * Finds the active event number for the offender, when available.
  *

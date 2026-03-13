@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import java.net.URI
 import java.util.UUID
 

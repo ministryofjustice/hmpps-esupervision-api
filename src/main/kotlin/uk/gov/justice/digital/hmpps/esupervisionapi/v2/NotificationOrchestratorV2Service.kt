@@ -178,7 +178,7 @@ class NotificationOrchestratorV2Service(
     if (appConfig.enabledFeatures.contains(Feature.ESUP_1183)) {
       val activeEventNumber = activeEventNumber(checkin.offender, contactDetails)
       if (activeEventNumber == null) {
-        LOGGER.warn("Skipping checkin created notifications for checkin {}: no active events found", checkin.uuid,)
+        LOGGER.warn("Skipping checkin created notifications for checkin {}: no active events found", checkin.uuid)
         return
       }
     }
