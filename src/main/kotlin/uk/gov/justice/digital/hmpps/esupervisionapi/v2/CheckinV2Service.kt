@@ -523,9 +523,10 @@ class CheckinV2Service(
       )
     }
 
-    // Liveness passed - now compare the reference image from the session against setup photo
+    // Liveness passed - extract the reference image bytes from the session
     val referenceImage = livenessResult.referenceImage()
-    if (referenceImage == null || referenceImage.s3Object() == null) {
+    val imageBytes = referenceImage?.bytes()?.asByteArray()
+    if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {
       LOGGER.warn("Liveness session {} has no reference image for face comparison", sessionId)
       checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
       checkinRepository.save(checkin)
@@ -535,6 +536,10 @@ class CheckinV2Service(
         result = AutomatedIdVerificationResult.ERROR,
       )
     }
+
+    // Upload reference image to S3 as checkin snapshot so compareFaces can access it
+    s3UploadService.uploadCheckinSnapshot(checkin, 0, imageBytes, "image/jpeg")
+    LOGGER.info("Uploaded liveness reference image for checkin {} ({} bytes)", uuid, imageBytes.size)
 
     // Perform face comparison using existing service
     val result = performFacialRecognitionInternal(checkin, 1)
