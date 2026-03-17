@@ -20,11 +20,10 @@ class MonthlyStatsRefreshJobTest {
   private val fixedClock: Clock =
     Clock.fixed(Instant.parse("2026-01-22T12:00:00Z"), ZoneOffset.UTC)
 
-  private val viewName = "stats_summary_v1"
   private val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
 
   @Test
-  fun `refresh calls monthly stats function, monthly feedback stats function, and materialized view in order`() {
+  fun `refresh calls monthly stats, monthly feedback stats, and both materialized views in order`() {
     job.refresh()
 
     val order = inOrder(jdbcTemplate)
@@ -40,11 +39,14 @@ class MonthlyStatsRefreshJobTest {
     )
 
     order.verify(jdbcTemplate)
-      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $viewName")
+      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ${MonthlyStatsRefreshJob.FEEDBACK_MONTHLY_VIEW_NAME}")
+
+    order.verify(jdbcTemplate)
+      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ${MonthlyStatsRefreshJob.PROVIDER_MONTHLY_VIEW_NAME}")
   }
 
   @Test
-  fun `refresh logs and does not throw when JdbcTemplate throws`() {
+  fun `refresh does not throw when monthly stats function throws`() {
     doThrow(RuntimeException("DB error"))
       .whenever(jdbcTemplate)
       .execute(
@@ -61,7 +63,7 @@ class MonthlyStatsRefreshJobTest {
   }
 
   @Test
-  fun `refresh logs and does not throw when monthly feedback stats function throws`() {
+  fun `refresh does not throw when monthly feedback stats function throws`() {
     doThrow(RuntimeException("DB error"))
       .whenever(jdbcTemplate)
       .execute(
@@ -80,5 +82,49 @@ class MonthlyStatsRefreshJobTest {
       eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
       any<PreparedStatementCallback<*>>(),
     )
+  }
+
+  @Test
+  fun `refresh does not throw when feedback materialized view refresh throws`() {
+    doThrow(RuntimeException("DB error"))
+      .whenever(jdbcTemplate)
+      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ${MonthlyStatsRefreshJob.FEEDBACK_MONTHLY_VIEW_NAME}")
+
+    job.refresh()
+
+    verify(jdbcTemplate).execute(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+      any<PreparedStatementCallback<*>>(),
+    )
+
+    verify(jdbcTemplate).execute(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
+      any<PreparedStatementCallback<*>>(),
+    )
+
+    verify(jdbcTemplate)
+      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ${MonthlyStatsRefreshJob.FEEDBACK_MONTHLY_VIEW_NAME}")
+  }
+
+  @Test
+  fun `refresh does not throw when provider materialized view refresh throws`() {
+    doThrow(RuntimeException("DB error"))
+      .whenever(jdbcTemplate)
+      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ${MonthlyStatsRefreshJob.PROVIDER_MONTHLY_VIEW_NAME}")
+
+    job.refresh()
+
+    verify(jdbcTemplate).execute(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
+      any<PreparedStatementCallback<*>>(),
+    )
+
+    verify(jdbcTemplate).execute(
+      eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
+      any<PreparedStatementCallback<*>>(),
+    )
+
+    verify(jdbcTemplate)
+      .execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ${MonthlyStatsRefreshJob.PROVIDER_MONTHLY_VIEW_NAME}")
   }
 }

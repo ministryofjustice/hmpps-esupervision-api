@@ -4,6 +4,7 @@ enum class NotificationType {
   OffenderCheckinInvite,
   OffenderCheckinSubmitted,
   OffenderCheckinsStopped,
+  OffenderCheckinsRestarted,
   OffenderCheckinReminder,
   PractitionerCheckinSubmitted,
   PractitionerCheckinMissed,

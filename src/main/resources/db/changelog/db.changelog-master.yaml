@@ -73,3 +73,7 @@ databaseChangeLog:
       file: db/changelog/changesets/36_create_stats_summary_provider_month_mv.sql
   - include:
       file: db/changelog/changesets/37_offender_v2_add_event_id.sql
+  - include:
+      file: db/changelog/changesets/38_provider_month_mv_add_rollup_helpers.sql
+  - include:
+      file: db/changelog/changesets/39_drop_stats_summary_and_create_monthly_feedback_mv.sql

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -420,16 +419,16 @@ class OffenderV2ResourceTest {
     assertTrue(exception.reason?.contains("does not have an email address in NDelius") == true)
   }
 
-@Test
+  @Test
   fun `reactivateOffender - already completed today - first check in set to TODAY - creates a NEW fresh check in`() {
     val uuid = UUID.randomUUID()
     val today = LocalDate.now(clock)
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { 
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
       firstCheckin = today
       contactPreference = ContactPreference.PHONE
     }
     val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Re-engagement")
-    
+
     val myContactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
@@ -452,12 +451,12 @@ class OffenderV2ResourceTest {
   fun `reactivateOffender - cancelled check in exists - first check in set to TODAY - creates a NEW fresh check in`() {
     val uuid = UUID.randomUUID()
     val today = LocalDate.now(clock)
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { 
-      firstCheckin = today 
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      firstCheckin = today
       contactPreference = ContactPreference.PHONE
     }
     val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Reactivating")
-    
+
     val myContactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
@@ -481,12 +480,12 @@ class OffenderV2ResourceTest {
   fun `reactivateOffender - first check in set to future date - does NOT create check in today`() {
     val uuid = UUID.randomUUID()
     val tomorrow = LocalDate.now(clock).plusDays(1)
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { 
-      firstCheckin = tomorrow 
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      firstCheckin = tomorrow
       contactPreference = ContactPreference.PHONE
     }
     val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Reactivating with future start")
-    
+
     val myContactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
@@ -501,7 +500,7 @@ class OffenderV2ResourceTest {
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
-    
+
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails))
   }
