@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.rekognition.RekognitionAsyncClient
@@ -61,11 +62,11 @@ class RekognitionV2Config(
   }
 
   @Bean
-  fun livenessCredentialsService(rekognitionCredentialsProvider: AwsCredentialsProvider): LivenessCredentialsProvider {
+  fun livenessCredentialsService(): LivenessCredentialsProvider {
     LOGGER.info("Creating LivenessCredentialsService with STS in region {}", livenessRegion)
     val stsClient = StsClient.builder()
       .region(Region.of(livenessRegion))
-      .credentialsProvider(rekognitionCredentialsProvider)
+      .credentialsProvider(DefaultCredentialsProvider.builder().build())
       .build()
     return LivenessCredentialsService(stsClient, roleArn, roleSessionName, livenessRegion)
   }
