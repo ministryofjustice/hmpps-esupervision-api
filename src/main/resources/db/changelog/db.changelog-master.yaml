@@ -74,4 +74,4 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/37_offender_v2_add_event_id.sql
   - include:
-      file: db/changelog/changesets/38_add_sensitive_boolean_to_offender_checkin_v2.sql
+      file: db/changelog/changesets/40_add_sensitive_boolean_to_offender_checkin_v2.sql
