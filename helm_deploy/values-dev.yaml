@@ -25,6 +25,7 @@ generic-service:
     APP_SCHEDULING_V2_CHECKIN_REMINDER_CRON: "0 15 9,15,16 * * *"
     APP_SCHEDULING_V2_CHECKIN_REMINDER_ENABLED: "true"
     APP_FEATURES_ESUP_1239: "true"
+    APP_FEATURES_ESUP_1183: "true"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
