@@ -205,9 +205,10 @@ class CheckinV2Service(
     }
 
     // Verify video exists
-    if (!s3UploadService.isCheckinVideoUploaded(checkin)) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Video not uploaded")
-    }
+    // !! there is no video in s3 for the liveness check
+//    if (!s3UploadService.isCheckinVideoUploaded(checkin)) {
+//      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Video not uploaded")
+//    }
 
     // Note: Facial recognition should be called via /video/verify endpoint BEFORE submit
     // This matches V1 behavior where facial recognition was a separate explicit step
