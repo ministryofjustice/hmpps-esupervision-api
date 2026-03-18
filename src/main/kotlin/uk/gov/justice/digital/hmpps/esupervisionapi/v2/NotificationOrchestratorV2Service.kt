@@ -110,7 +110,7 @@ class NotificationOrchestratorV2Service(
           notificationPersistence.buildOffenderNotifications(
             offender = offender,
             contactDetails = details,
-            notificationType = NotificationType.RegistrationConfirmation,
+            notificationType = NotificationType.OffenderCheckinsRestarted,
           )
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)
@@ -266,15 +266,7 @@ class NotificationOrchestratorV2Service(
       // If "callback" is flagged, show the text within notify by sending 'yes'.
       val contactRequestFlag = if (flaggedResponses.contains("callback")) "yes" else "no"
       // Include all params needed by both offender and practitioner templates
-      val personalisation =
-        mapOf(
-          "name" to "${details.name.forename} ${details.name.surname}",
-          "practitionerName" to checkin.offender.practitionerId,
-          "number" to totalFlags.toString(),
-          "contactRequestFlag" to contactRequestFlag,
-          "dashboardSubmissionUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
-          "feedbackUrl" to appConfig.feedbackUrl().toString(),
-        )
+      val personalisation = checkinSubmittedPersonalisationDetails(details, checkin, totalFlags, contactRequestFlag)
 
       val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
       notificationsWithRecipients.addAll(
@@ -304,6 +296,26 @@ class NotificationOrchestratorV2Service(
     }
   }
 
+  fun checkinSubmittedPersonalisationDetails(
+    details: ContactDetails,
+    checkin: OffenderCheckinV2,
+    totalFlags: Int,
+    contactRequestFlag: String,
+  ): Map<String, String> {
+    require(contactRequestFlag == "yes" || contactRequestFlag == "no")
+
+    val personalisation =
+      mapOf(
+        "name" to "${details.name.forename} ${details.name.surname}",
+        "practitionerName" to (details.practitioner?.name?.forename ?: checkin.offender.practitionerId),
+        "number" to totalFlags.toString(),
+        "contactRequestFlag" to contactRequestFlag,
+        "dashboardSubmissionUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
+        "feedbackUrl" to appConfig.feedbackUrl().toString(),
+      )
+    return personalisation
+  }
+
   /** Send notifications for checkin reviewed event */
   fun sendCheckinReviewedNotifications(
     checkin: OffenderCheckinV2,
@@ -322,12 +334,7 @@ class NotificationOrchestratorV2Service(
     checkin: OffenderCheckinV2,
     details: ContactDetails,
   ) {
-    val personalisation =
-      mapOf(
-        "practitionerName" to checkin.offender.practitionerId,
-        "name" to "${details.name.forename} ${details.name.surname}",
-        "popDashboardUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
-      )
+    val personalisation = checkinExpiredPersonalisationDetails(details, checkin)
 
     val notificationsWithRecipients =
       notificationPersistence.buildPractitionerNotifications(
@@ -346,6 +353,15 @@ class NotificationOrchestratorV2Service(
       description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
     )
   }
+
+  private fun checkinExpiredPersonalisationDetails(
+    details: ContactDetails,
+    checkin: OffenderCheckinV2,
+  ): Map<String, String> = mapOf(
+    "practitionerName" to (details.practitioner?.name?.forename ?: checkin.offender.practitionerId),
+    "name" to "${details.name.forename} ${details.name.surname}",
+    "popDashboardUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
+  )
 
   /** Send notifications for checkin updated event */
   fun sendCheckinUpdatedNotifications(checkin: OffenderCheckinV2, annotation: OffenderEventLogV2) {
