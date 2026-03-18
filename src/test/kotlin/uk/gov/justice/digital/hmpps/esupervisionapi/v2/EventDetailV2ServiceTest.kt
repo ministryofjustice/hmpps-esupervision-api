@@ -338,6 +338,92 @@ class EventDetailV2ServiceTest {
     }
   }
 
+  @Nested
+  inner class SensitiveFlagMapping {
+
+    @Test
+    fun `includes sensitive flag for reviewed events`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(uuid, offender, status = CheckinV2Status.REVIEWED).apply {
+        sensitive = true
+      }
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.sensitive).isTrue()
+    }
+
+    @Test
+    fun `includes sensitive flag for annotated events`() {
+      val checkinUuid = UUID.randomUUID()
+      val annotationUuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+
+      val checkin = createCheckin(checkinUuid, offender, status = CheckinV2Status.REVIEWED).apply {
+        sensitive = true
+      }
+
+      val logEntry = OffenderCheckinLogEntryV2Dto(
+        annotationUuid,
+        notes = "Sensitive annotation",
+        createdAt = Instant.now(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+        practitioner = "PRACT001",
+        checkin = checkinUuid,
+      )
+
+      whenever(checkinRepository.findByUuid(checkinUuid)).thenReturn(Optional.of(checkin))
+      whenever(eventLogRepository.findCheckinLogByUuid(annotationUuid)).thenReturn(Optional.of(logEntry))
+
+      val result = service.getEventDetail("/v2/events/checkin-annotated/$annotationUuid")
+
+      assertThat(result!!.sensitive).isNotNull()
+      assertThat(result.sensitive).isTrue()
+    }
+
+    @Test
+    fun `sensitive flag is false when not explicitly set in check in reviewed`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(uuid, offender, status = CheckinV2Status.REVIEWED)
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.sensitive).isFalse()
+    }
+
+    @Test
+    fun `sensitive flag is false when not explicitly set in check in annotated`() {
+      val checkinUuid = UUID.randomUUID()
+      val annotationUuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+
+      val checkin = createCheckin(checkinUuid, offender, status = CheckinV2Status.REVIEWED)
+
+      val logEntry = OffenderCheckinLogEntryV2Dto(
+        annotationUuid,
+        notes = "Test note",
+        createdAt = Instant.now(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+        practitioner = "PRACT001",
+        checkin = checkinUuid,
+      )
+
+      whenever(eventLogRepository.findCheckinLogByUuid(annotationUuid)).thenReturn(Optional.of(logEntry))
+      whenever(checkinRepository.findByUuid(checkinUuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-annotated/$annotationUuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.sensitive).isFalse()
+    }
+  }
+
   private fun createOffender(uuid: UUID) = OffenderV2(
     uuid = uuid,
     crn = "X123456",
@@ -360,6 +446,7 @@ class EventDetailV2ServiceTest {
     autoIdCheck: AutomatedIdVerificationResult? = null,
     manualIdCheck: ManualIdVerificationResult? = null,
     surveyResponse: Map<String, Any>? = null,
+    sensitive: Boolean = false,
   ) = OffenderCheckinV2(
     uuid = uuid,
     offender = offender,
@@ -372,5 +459,6 @@ class EventDetailV2ServiceTest {
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
     surveyResponse = surveyResponse,
+    sensitive = sensitive,
   )
 }
