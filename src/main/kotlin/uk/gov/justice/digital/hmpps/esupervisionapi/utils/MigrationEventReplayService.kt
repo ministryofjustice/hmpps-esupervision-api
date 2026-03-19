@@ -193,6 +193,8 @@ class MigrationEventReplayService(
     return processedCrns
   }
 
+  fun additionalInformation(checkin: OffenderCheckinV2) = if (checkin.offender.currentEvent == null) null else AdditionalInformation(checkin.offender.currentEvent)
+
   fun CheckinV2Status.setColumn(control: MigrationControl, value: Boolean) {
     when (this) {
       CheckinV2Status.CREATED -> control.checkinCreated = value
@@ -226,6 +228,7 @@ class MigrationEventReplayService(
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in created for ${checkin.offender.crn}",
       occurredAt = checkin.createdAt.atZone(clock.zone),
+      additionalInformation = additionalInformation(checkin),
     )
   }
 
@@ -236,6 +239,7 @@ class MigrationEventReplayService(
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in submitted for ${checkin.offender.crn}",
       occurredAt = checkin.submittedAt?.atZone(clock.zone),
+      additionalInformation = additionalInformation(checkin),
     )
   }
 
@@ -246,6 +250,7 @@ class MigrationEventReplayService(
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in reviewed for ${checkin.offender.crn}",
       occurredAt = checkin.reviewedAt?.atZone(clock.zone),
+      additionalInformation = additionalInformation(checkin),
     )
   }
 
@@ -256,6 +261,7 @@ class MigrationEventReplayService(
       crn = checkin.offender.crn,
       description = "[MIGRATION] Check-in expired for ${checkin.offender.crn}",
       occurredAt = checkin.dueDate.plusDays(3).atStartOfDay(clock.zone),
+      additionalInformation = additionalInformation(checkin),
     )
   }
 }
