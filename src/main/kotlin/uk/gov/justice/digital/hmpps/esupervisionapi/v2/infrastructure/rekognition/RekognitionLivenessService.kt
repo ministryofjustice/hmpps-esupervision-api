@@ -4,7 +4,9 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.services.rekognition.RekognitionAsyncClient
+import software.amazon.awssdk.services.rekognition.model.ChallengePreference
 import software.amazon.awssdk.services.rekognition.model.CreateFaceLivenessSessionRequest
+import software.amazon.awssdk.services.rekognition.model.CreateFaceLivenessSessionRequestSettings
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsRequest
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import java.util.concurrent.CompletableFuture
@@ -29,7 +31,12 @@ open class RekognitionLivenessService(
   override fun createSession(): CompletableFuture<String> {
     LOGGER.info("Creating Rekognition Face Liveness session")
 
-    val request = CreateFaceLivenessSessionRequest.builder().build()
+    val movementOnly = ChallengePreference.builder().type("FaceMovementChallenge").build()
+    val movementAndLight = ChallengePreference.builder().type("FaceMovementAndLightChallenge").build()
+
+    val settings = CreateFaceLivenessSessionRequestSettings.builder().challengePreferences(movementAndLight).build()
+
+    val request = CreateFaceLivenessSessionRequest.builder().settings(settings).build()
 
     return asyncClient.createFaceLivenessSession(request)
       .thenApply { response ->
