@@ -111,6 +111,7 @@ class V2CheckinCreationJob(
                   val eventNumber = activeEventNumber(checkin.offender, contactDetails)
                   if (eventNumber != null) {
                     checkinsToCreate.add(Pair(checkin, contactDetails))
+                    LOGGER.debug("Will create checkin for CRN {}: active event number is {}", crn, eventNumber)
                   } else {
                     LOGGER.info("Skipping checkin for CRN {}: no active events found", crn)
                   }
