@@ -34,7 +34,7 @@ open class RekognitionLivenessService(
     val movementOnly = ChallengePreference.builder().type("FaceMovementChallenge").build()
     val movementAndLight = ChallengePreference.builder().type("FaceMovementAndLightChallenge").build()
 
-    val settings = CreateFaceLivenessSessionRequestSettings.builder().challengePreferences(movementAndLight).build()
+    val settings = CreateFaceLivenessSessionRequestSettings.builder().challengePreferences(movementOnly).build()
 
     val request = CreateFaceLivenessSessionRequest.builder().settings(settings).build()
 
