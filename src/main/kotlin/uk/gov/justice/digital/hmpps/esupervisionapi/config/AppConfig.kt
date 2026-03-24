@@ -12,8 +12,10 @@ class AppConfig(
   @Value("\${app.hostedAt}") private val hostedAt: String,
   @Value("\${app.scheduling.checkin-notification.cron}") val checkinNotificationCron: String,
   @Value("\${app.features.esup-1239}") val esup1239ProxyLinks: Boolean,
+  @Value("\${app.features.esup-1183}") val esup1183SendInviteOnlyWhenActiveEvent: Boolean,
   val enabledFeatures: Set<Feature> = listOfNotNull(
     if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
+    if (esup1183SendInviteOnlyWhenActiveEvent) Feature.ESUP_1183 else null,
   ).toSet(),
 ) {
 

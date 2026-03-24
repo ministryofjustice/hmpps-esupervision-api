@@ -10,12 +10,14 @@ import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
@@ -347,6 +349,195 @@ class CheckinV2ServiceTest {
     }
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+  }
+
+  @Test
+  fun `reviewCheckin - happy path - saves sensitive flag as true when provided`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+    )
+
+    val request = ReviewCheckinV2Request(
+      reviewedBy = "PRACT001",
+      manualIdCheck = ManualIdVerificationResult.MATCH,
+      notes = "Contains private health info",
+      sensitive = true,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.reviewCheckin(uuid, request)
+
+    assertEquals(true, checkin.sensitive)
+    assertEquals(true, result.sensitive)
+    verify(checkinRepository).save(checkin)
+  }
+
+  @Test
+  fun `reviewCheckin - happy path - saves sensitive flag as false when not provided`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+    )
+
+    val request = ReviewCheckinV2Request(
+      reviewedBy = "PRACT001",
+      manualIdCheck = ManualIdVerificationResult.MATCH,
+      notes = "Test note",
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.reviewCheckin(uuid, request)
+
+    assertEquals(false, checkin.sensitive)
+    assertEquals(false, result.sensitive)
+    verify(checkinRepository).save(checkin)
+  }
+
+  @Test
+  fun `annotateCheckin - happy path - updates checkin sensitive flag as true`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      sensitive = false,
+    )
+
+    val request = AnnotateCheckinV2Request(
+      updatedBy = "PRACT001",
+      notes = "Added sensitive medical evidence",
+      sensitive = true,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.annotateCheckin(uuid, request)
+
+    assertEquals(true, checkin.sensitive)
+    assertEquals(true, result.sensitive)
+    verify(checkinRepository).save(checkin)
+  }
+
+  @Test
+  fun `annotateCheckin - happy path - updates checkin sensitive flag as false when not provided`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      sensitive = false,
+    )
+
+    val request = AnnotateCheckinV2Request(
+      updatedBy = "PRACT001",
+      notes = "Test notes",
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.annotateCheckin(uuid, request)
+
+    assertEquals(false, checkin.sensitive)
+    assertEquals(false, result.sensitive)
+    verify(checkinRepository, never()).save(checkin)
+  }
+
+  @Test
+  fun `annotateCheckin - stays false when it was previously marked as false`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      sensitive = false,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    service.annotateCheckin(uuid, AnnotateCheckinV2Request("P1", "Note", sensitive = false))
+    assertEquals(false, checkin.sensitive)
+  }
+
+  @Test
+  fun `annotateCheckin - sensitive flag updates to true when it was previously marked as false `() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      sensitive = false,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    service.annotateCheckin(uuid, AnnotateCheckinV2Request("P1", "Note", sensitive = true))
+
+    assertEquals(true, checkin.sensitive)
+  }
+
+  @Test
+  fun `annotateCheckin - sensitive flag remains true when check in was already marked as true`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      sensitive = true,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    service.annotateCheckin(uuid, AnnotateCheckinV2Request("P1", "Note", sensitive = false))
+
+    assertEquals(true, checkin.sensitive)
+    verify(checkinRepository, never()).save(checkin)
   }
 
   private fun createOffender() = OffenderV2(

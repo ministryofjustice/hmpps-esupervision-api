@@ -18,28 +18,60 @@ import java.time.LocalDate
 import java.util.UUID
 
 // ========================================
-// Ndilius API DTOs (matching OpenAPI spec)
+// Delius API DTOs (matching OpenAPI spec)
 // ========================================
 
-/** Contact details from Ndilius API */
+data class CodedDescription(val code: String, val description: String)
+
+data class Event(
+  val number: Long,
+  val mainOffence: CodedDescription,
+  val sentence: Sentence?,
+) {
+  data class Sentence(
+    @field:JsonDeserialize(using = LocalDateDeserializer::class)
+    val date: LocalDate,
+
+    val description: String,
+  )
+}
+
+/** Contact details from Delius API
+ *
+ * See https://github.com/ministryofjustice/hmpps-probation-integration-services/blob/main/projects/esupervision-and-delius/src/main/kotlin/uk/gov/justice/digital/hmpps/model/ContactDetails.kt
+ * */
 data class ContactDetails(
-  @Schema(description = "Case Reference Number", required = true, example = "X123456")
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
   val crn: String,
-  @Schema(description = "Person's name", required = true) val name: Name,
-  @Schema(
+
+  @field:Schema(description = "Person's name", required = true)
+  val name: Name,
+
+  @field:Schema(
     description = "Mobile phone number (optional)",
     required = false,
     example = "07700900123",
   )
   val mobile: String? = null,
-  @Schema(
+
+  @field:Schema(
     description = "Email address (optional)",
     required = false,
     example = "john.smith@example.com",
   )
   val email: String? = null,
-  @Schema(description = "Practitioner details (optional)", required = false)
+
+  @field:Schema(description = "Practitioner details (optional)", required = false)
   val practitioner: PractitionerDetails? = null,
+
+  /**
+   * Note: no active events mean that the offender has no sentences at this moment.
+   */
+  @field:Schema(
+    description = "Collection of active events.",
+    required = false,
+  )
+  val events: List<Event>? = null,
 )
 
 /** Person's name from Ndilius */
@@ -273,6 +305,8 @@ data class CheckinV2Dto(
   val snapshotUrl: URL? = null,
   @field:Schema(description = "Risk management feedback", required = false)
   val riskFeedback: Boolean? = null,
+  @field:Schema(description = "Whether the review/annotation contains sensitive information", required = false)
+  val sensitive: Boolean = false,
   @field:Schema(description = "Checkin logs with practitioner notes", required = true)
   val checkinLogs: CheckinLogsV2Dto,
   @field:Schema(description = "Presigned S3 URL for reference photo", required = false)
@@ -356,6 +390,8 @@ data class ReviewCheckinV2Request(
   val missedCheckinComment: String? = null,
   @Schema(description = "Risk management feedback", required = false)
   val riskManagementFeedback: Boolean? = null,
+  @Schema(description = "Whether the review contains sensitive information", required = false)
+  val sensitive: Boolean = false,
 )
 
 /** Review started request */
@@ -373,6 +409,8 @@ data class AnnotateCheckinV2Request(
   @Schema(description = "Notes about the checkin", required = true)
   @field:NotBlank
   val notes: String,
+  @Schema(description = "Whether the annotation contains sensitive information", required = false)
+  val sensitive: Boolean = false,
 )
 
 /** Create checkin request (DEBUG ONLY) */
@@ -564,4 +602,5 @@ data class EventDetailResponse(
   @Schema(description = "Checkin UUID", required = false) val checkinUuid: UUID? = null,
   @Schema(description = "Offender UUID", required = false) val offenderUuid: UUID? = null,
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
+  @Schema(description = "Sensitive", required = false) val sensitive: Boolean = false,
 )

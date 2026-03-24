@@ -4,8 +4,10 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -173,6 +175,14 @@ class NotificationOrchestratorV2Service(
     checkin: OffenderCheckinV2,
     contactDetails: ContactDetails,
   ) {
+    if (appConfig.enabledFeatures.contains(Feature.ESUP_1183)) {
+      val activeEventNumber = activeEventNumber(checkin.offender, contactDetails)
+      if (activeEventNumber == null) {
+        LOGGER.warn("Skipping checkin created notifications for checkin {}: no active events found", checkin.uuid)
+        return
+      }
+    }
+
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_CREATED,
       uuid = checkin.uuid,

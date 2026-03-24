@@ -339,6 +339,9 @@ class CheckinV2Service(
     checkin.reviewedBy = request.reviewedBy
     checkin.manualIdCheck = request.manualIdCheck
     checkin.riskFeedback = request.riskManagementFeedback
+    if (!checkin.sensitive && request.sensitive) {
+      checkin.sensitive = true
+    }
     checkinRepository.save(checkin)
 
     LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
@@ -369,7 +372,11 @@ class CheckinV2Service(
         "Checkin must be reviewed before being annotated",
       )
     }
-
+    // if check in was already marked as sensitive, it cannot be then marked as not sensitive
+    if (checkin.sensitive != true && request.sensitive == true) {
+      checkin.sensitive = true
+      checkinRepository.save(checkin)
+    }
     val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = request.notes,

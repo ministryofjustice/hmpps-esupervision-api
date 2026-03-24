@@ -100,6 +100,7 @@ class EventDetailV2Service(
       offenderUuid = checkin.offender.uuid,
       checkinUuid = checkinUuid,
       timestamp = timestamp,
+      sensitive = checkin.sensitive,
     )
   }
 
@@ -125,6 +126,7 @@ class EventDetailV2Service(
       offenderUuid = checkin.offender.uuid,
       checkinUuid = annotation.checkin,
       timestamp = annotation.createdAt,
+      sensitive = checkin.sensitive,
     )
   }
 

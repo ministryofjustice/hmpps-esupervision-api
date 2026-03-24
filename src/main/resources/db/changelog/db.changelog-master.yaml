@@ -77,3 +77,5 @@ databaseChangeLog:
       file: db/changelog/changesets/38_provider_month_mv_add_rollup_helpers.sql
   - include:
       file: db/changelog/changesets/39_drop_stats_summary_and_create_monthly_feedback_mv.sql
+  - include:
+      file: db/changelog/changesets/40_add_sensitive_boolean_to_offender_checkin_v2.sql
