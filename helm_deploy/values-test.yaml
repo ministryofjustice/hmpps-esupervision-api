@@ -19,7 +19,9 @@ generic-service:
     MANAGE_USERS_API: "https://manage-users-api-dev.hmpps.service.justice.gov.uk/"
     MPOP_URL: "https://manage-people-on-probation-test.hmpps.service.justice.gov.uk"
     POP_UI_URL: "https://probation-check-in-test.hmpps.service.justice.gov.uk"
+    APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
     APP_FEATURES_ESUP_1239: "true"
+    APP_FEATURES_ESUP_1183: "true"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
