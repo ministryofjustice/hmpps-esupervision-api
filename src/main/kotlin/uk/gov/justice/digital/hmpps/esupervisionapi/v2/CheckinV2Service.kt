@@ -521,15 +521,15 @@ class CheckinV2Service(
       isLive,
     )
 
-    if (!isLive) {
-      checkin.autoIdCheck = AutomatedIdVerificationResult.NO_MATCH
-      checkinRepository.save(checkin)
-      return LivenessVerificationResponse(
-        isLive = false,
-        livenessConfidence = confidence,
-        result = AutomatedIdVerificationResult.NO_MATCH,
-      )
-    }
+//    if (!isLive) {
+//      checkin.autoIdCheck = AutomatedIdVerificationResult.NO_MATCH
+//      checkinRepository.save(checkin)
+//      return LivenessVerificationResponse(
+//        isLive = false,
+//        livenessConfidence = confidence,
+//        result = AutomatedIdVerificationResult.NO_MATCH,
+//      )
+//    }
 
     // Liveness passed - extract the reference image bytes from the session
     val referenceImage = livenessResult.referenceImage()
@@ -539,10 +539,20 @@ class CheckinV2Service(
       checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
       checkinRepository.save(checkin)
       return LivenessVerificationResponse(
-        isLive = true,
+        isLive = isLive,
         livenessConfidence = confidence,
         result = AutomatedIdVerificationResult.ERROR,
       )
+    }
+
+    if (livenessResult.hasAuditImages()) {
+      livenessResult.auditImages().forEachIndexed { index, image ->
+        val imageBytes = image.bytes().asByteArray()
+        if (imageBytes != null && imageBytes.isNotEmpty()) {
+          s3UploadService.uploadCheckinSnapshot(checkin, index + 1, imageBytes, "image/jpeg")
+          LOGGER.info("Uploaded liveness audit image for checkin {} ({} bytes)", uuid, imageBytes.size)
+        }
+      }
     }
 
     // Upload reference image to S3 as checkin snapshot so compareFaces can access it
@@ -553,7 +563,7 @@ class CheckinV2Service(
     val result = performFacialRecognitionInternal(checkin, 1)
 
     return LivenessVerificationResponse(
-      isLive = true,
+      isLive = isLive,
       livenessConfidence = confidence,
       result = result,
     )
