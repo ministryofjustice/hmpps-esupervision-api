@@ -102,7 +102,7 @@ class EventV2Resource(
     "Callback URL for Ndilius to query formatted notes for checkin updated event",
   )
   fun getCheckinAnnotatedEvent(
-    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @Parameter(description = "Checkin or annotation UUID", required = true) @PathVariable uuid: UUID,
   ): ResponseEntity<EventDetailResponse> {
     val detailUrl = "/v2/events/checkin-annotated/$uuid"
     val event =
