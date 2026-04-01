@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestionList
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 
@@ -37,27 +38,27 @@ class QuestionResource(
     description = "Retrieve list of question templates in the given language.",
   )
   @ApiResponse(responseCode = "200", description = "Checkins retrieved successfully")
-  fun listQuestionTemplates(@Parameter(description = "en-GB or cy-GB") @RequestParam language: String): ResponseEntity<ListQuestionTemplatesResponse> = ResponseEntity.ok(ListQuestionTemplatesResponse(questionService.listQuestionTemplates(language)))
+  fun listQuestionTemplates(@Parameter(description = "en-GB or cy-GB") @RequestParam language: Language): ResponseEntity<ListQuestionTemplatesResponse> = ResponseEntity.ok(ListQuestionTemplatesResponse(questionService.listQuestionTemplates(language)))
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/question-list/{listId}")
   fun getQuestionList(
     @Parameter(required = true) @PathVariable(required = true) listId: Long,
-    @RequestBody(required = true) @Valid request: QuestionListRequest,
+    @RequestParam(required = true) @Valid language: Language,
     binding: BindingResult,
   ): OffenderQuestionList {
     if (binding.hasErrors()) {
       throw intoResponseStatusException(binding)
     }
 
-    return questionService.offenderQuestionList(listId, request.language)
+    return questionService.offenderQuestionList(listId, language)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PutMapping("/question-list/assign")
   fun assignCustomQuestions(
     @RequestParam(required = true) crn: String,
-    @RequestParam(required = true) @Valid request: AssignCustomQuestionsRequest,
+    @RequestBody(required = true) @Valid request: AssignCustomQuestionsRequest,
     binding: BindingResult,
   ): ResponseEntity<AssignCustomQuestionsResponse> {
     if (binding.hasErrors()) {
@@ -70,9 +71,4 @@ class QuestionResource(
 
 data class ListQuestionTemplatesResponse(
   val templates: List<QuestionTemplateDto>,
-)
-
-data class QuestionListRequest(
-  @field:Parameter(description = "Language")
-  val language: String,
 )

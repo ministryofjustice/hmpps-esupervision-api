@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequ
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestionList
@@ -34,16 +35,11 @@ class QuestionService(
 ) {
 
   @Transactional(readOnly = true)
-  fun listQuestionTemplates(language: String): List<QuestionTemplateDto> {
-    require(language == "en-GB" || language == "cy-GB")
-
-    return questionsRepository.getQuestionTemplates(language)
-  }
+  fun listQuestionTemplates(language: Language): List<QuestionTemplateDto> = questionsRepository.getQuestionTemplates(language)
 
   @Transactional(readOnly = true)
-  fun offenderQuestionList(listId: Long, language: String): OffenderQuestionList {
+  fun offenderQuestionList(listId: Long, language: Language): OffenderQuestionList {
     require(listId > 0)
-    require(language == "en-GB" || language == "cy-GB")
 
     val questions = questionsRepository.getListItems(listId).map { it.evalTemplate() }
     return OffenderQuestionList(listId, questions)

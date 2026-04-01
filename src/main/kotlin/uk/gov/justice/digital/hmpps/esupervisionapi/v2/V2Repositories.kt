@@ -536,33 +536,28 @@ class QuestionRepository(
    *
    * Note: the result will contain the default questions (if any are defined).
    */
-  fun getListItems(listId: Long, language: String = "en-GB"): List<QuestionListItemDto> {
-    require(language == "en-GB" || language == "cy-GB")
-    return jdbcTemplate.query(
-      "select * from get_question_list(?::integer, ?::text_language)",
-      { rs, idx ->
-        val template = QuestionTemplateDto(
-          id = rs.getLong("question_id"),
-          template = rs.getString("question_template"),
-          responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
-          responseSpec = asMap(rs, "response_spec"),
-        )
-        QuestionListItemDto(
-          template = template,
-          params = asMap(rs, "params"),
-        )
-      },
-      listId,
-      language,
-    )
-  }
+  fun getListItems(listId: Long, language: Language = Language.ENGLISH): List<QuestionListItemDto> = jdbcTemplate.query(
+    "select * from get_question_list(?::integer, ?::text_language)",
+    { rs, idx ->
+      val template = QuestionTemplateDto(
+        id = rs.getLong("question_id"),
+        template = rs.getString("question_template"),
+        responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
+        responseSpec = asMap(rs, "response_spec"),
+      )
+      QuestionListItemDto(
+        template = template,
+        params = asMap(rs, "params"),
+      )
+    },
+    listId,
+    language.dbString,
+  )
 
   /**
    * Get a list of available question templates.
    */
-  fun getQuestionTemplates(language: String, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
-    require(language == "en-GB" || language == "cy-GB")
-
+  fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
       "select * from get_question_templates(?::text_language, ?)",
       { rs, _ ->
@@ -574,7 +569,7 @@ class QuestionRepository(
           responseSpec = spec,
         )
       },
-      "en-GB",
+      language.dbString,
       author,
     )
     return result

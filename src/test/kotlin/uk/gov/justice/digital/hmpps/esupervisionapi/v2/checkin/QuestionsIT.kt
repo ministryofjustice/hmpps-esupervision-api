@@ -24,6 +24,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequ
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
@@ -79,8 +80,7 @@ class QuestionsIT : IntegrationTestBase() {
     assertEquals(3, defaultQuestions.size)
 
     // get list of custom questions and add a list
-    val customQuestions = questionRepository.getQuestionTemplates("en-GB")
-
+    val customQuestions = questionRepository.getQuestionTemplates(Language.ENGLISH)
     val upsertedList = questionRepository.upsertQuestionList(
       null,
       "BARRY.WHITE",
@@ -106,16 +106,16 @@ class QuestionsIT : IntegrationTestBase() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderV2Repository.save(offender)
 
-    val templates = questionService.listQuestionTemplates("en-GB")
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH)
     assertEquals(1, templates.size)
 
-    val addQuestionsRequest = makeAssignCustomQuestionsRequest("en-GB", templates)
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
     val resp = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
 
     val qlitems = questionListItemRepository.findAllItems()
     assertEquals(3 + 1, qlitems.size)
 
-    val offenderQuestions = questionService.offenderQuestionList(resp.listId, "en-GB")
+    val offenderQuestions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH)
     assertEquals(3 + 1, offenderQuestions.questions.size)
   }
 
@@ -123,8 +123,8 @@ class QuestionsIT : IntegrationTestBase() {
   fun `QuestionService - assign custom questions - failure`() {
     val offender = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today()).toEntity()
     offenderV2Repository.save(offender)
-    val templates = questionService.listQuestionTemplates("en-GB")
-    val addQuestionsRequest = makeAssignCustomQuestionsRequest("en-GB", templates)
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH)
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
 
     assertThrows(BadArgumentException::class.java) {
       questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
@@ -137,8 +137,8 @@ class QuestionsIT : IntegrationTestBase() {
 
   @Test
   fun `QuestionService - assign custom questions when prev checkin had custom qs - success`() {
-    val templates = questionService.listQuestionTemplates("en-GB")
-    val addQuestionsRequest = makeAssignCustomQuestionsRequest("en-GB", templates)
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH)
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
 
     // ----- DAY 1
     val offender = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today()).toEntity()
@@ -187,11 +187,11 @@ private fun Clock.advanceBy(duration: Duration) = (this as MutableTestClock).adv
 private fun Clock.advanceTo(instant: Instant) = (this as MutableTestClock).advanceTo(instant)
 
 private fun makeAssignCustomQuestionsRequest(
-  language: String,
+  language: Language,
   templates: List<QuestionTemplateDto>,
 ) = AssignCustomQuestionsRequest(
   author = "BARRY.WHITE",
-  language = language,
+  language = language.toString(),
   questions = templates.mapIndexed { index, dto ->
     val params = mutableMapOf<String, Any>()
     dto.placeholders().forEach { params[it] = "$it value $index" }
