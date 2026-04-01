@@ -14,7 +14,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestionList
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListItemDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionPolicy
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.isCheckinDay
@@ -38,7 +37,7 @@ class QuestionService(
   fun listQuestionTemplates(language: String): List<QuestionTemplateDto> {
     require(language == "en-GB" || language == "cy-GB")
 
-    return questionsRepository.getQuestionTemplates(language, QuestionPolicy.CUSTOM)
+    return questionsRepository.getQuestionTemplates(language)
   }
 
   @Transactional(readOnly = true)

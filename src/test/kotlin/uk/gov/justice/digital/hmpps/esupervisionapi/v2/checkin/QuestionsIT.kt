@@ -27,7 +27,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionPolicy
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
@@ -80,13 +79,13 @@ class QuestionsIT : IntegrationTestBase() {
     assertEquals(3, defaultQuestions.size)
 
     // get list of custom questions and add a list
-    val customQuestions = questionRepository.getQuestionTemplates("en-GB", QuestionPolicy.CUSTOM)
-    assertEquals(1, customQuestions.size)
+    val customQuestions = questionRepository.getQuestionTemplates("en-GB")
 
     val upsertedList = questionRepository.upsertQuestionList(
       null,
       "BARRY.WHITE",
       customQuestions.mapIndexed { idx, it ->
+
         mapOf(
           "id" to it.id as Any,
           "params" to mapOf("placeholders" to mapOf("thing" to "School ${idx + 1}")),

@@ -543,7 +543,6 @@ class QuestionRepository(
       { rs, idx ->
         val template = QuestionTemplateDto(
           id = rs.getLong("question_id"),
-          policy = QuestionPolicy.fromString(rs.getString("question_policy")),
           template = rs.getString("question_template"),
           responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
           responseSpec = asMap(rs, "response_spec"),
@@ -561,23 +560,22 @@ class QuestionRepository(
   /**
    * Get a list of available question templates.
    */
-  fun getQuestionTemplates(language: String, policy: QuestionPolicy): List<QuestionTemplateDto> {
+  fun getQuestionTemplates(language: String, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     require(language == "en-GB" || language == "cy-GB")
 
     val result = jdbcTemplate.query(
-      "select * from get_question_templates(?::text_language, ?::question_policy)",
+      "select * from get_question_templates(?::text_language, ?)",
       { rs, _ ->
         val spec: Map<String, Any> = asMap(rs, "response_spec")
         QuestionTemplateDto(
           id = rs.getLong("question_id"),
-          policy = QuestionPolicy.fromString(rs.getString("question_policy")),
           template = rs.getString("question_template"),
           responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
           responseSpec = spec,
         )
       },
       "en-GB",
-      policy.toString(),
+      author,
     )
     return result
   }

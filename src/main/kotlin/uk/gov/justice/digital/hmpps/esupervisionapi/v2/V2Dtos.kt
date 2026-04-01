@@ -587,9 +587,6 @@ data class QuestionTemplateDto(
   @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
   val id: Long,
 
-  @field:Schema(description = "Question policy", required = true)
-  val policy: QuestionPolicy,
-
   @field:Schema(description = "Question template", required = true)
   val template: String,
 

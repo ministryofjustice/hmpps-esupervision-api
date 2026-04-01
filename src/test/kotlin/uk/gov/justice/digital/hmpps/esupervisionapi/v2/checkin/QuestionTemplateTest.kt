@@ -3,7 +3,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListItemDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionPolicy
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionResponseFormat
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.evalTemplate
@@ -32,7 +31,6 @@ class QuestionTemplateTest {
 private val example = QuestionListItemDto(
   template = QuestionTemplateDto(
     1,
-    QuestionPolicy.CUSTOM,
     template = "Replace {{this}} and {{that}}",
     responseFormat = QuestionResponseFormat.TEXT,
     responseSpec = mapOf("placeholders" to listOf("this", "that")),

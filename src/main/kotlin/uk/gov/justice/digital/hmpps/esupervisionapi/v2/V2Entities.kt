@@ -634,20 +634,6 @@ enum class QuestionResponseFormat {
   }
 }
 
-enum class QuestionPolicy {
-  MANDATORY,
-  CUSTOM,
-  ;
-
-  companion object {
-    fun fromString(value: String): QuestionPolicy = when (value) {
-      "MANDATORY" -> MANDATORY
-      "CUSTOM" -> CUSTOM
-      else -> throw IllegalArgumentException("Invalid QuestionPolicy value: $value")
-    }
-  }
-}
-
 @Entity
 @Table(name = "question_list_assignment")
 open class QuestionListAssignment(
