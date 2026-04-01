@@ -47,7 +47,7 @@ class QuestionResource(
     binding: BindingResult,
   ): OffenderQuestionList {
     if (binding.hasErrors()) {
-      intoResponseStatusException(binding)
+      throw intoResponseStatusException(binding)
     }
 
     return questionService.offenderQuestionList(listId, request.language)
@@ -61,7 +61,7 @@ class QuestionResource(
     binding: BindingResult,
   ): ResponseEntity<AssignCustomQuestionsResponse> {
     if (binding.hasErrors()) {
-      intoResponseStatusException(binding)
+      throw intoResponseStatusException(binding)
     }
 
     return ResponseEntity.ok(questionService.assignCustomQuestions(crn, request))
