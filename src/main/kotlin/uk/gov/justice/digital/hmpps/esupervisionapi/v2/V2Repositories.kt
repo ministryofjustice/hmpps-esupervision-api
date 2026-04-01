@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
@@ -13,6 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import java.lang.reflect.ParameterizedType
 import java.math.BigDecimal
+import java.sql.ResultSet
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -522,3 +524,108 @@ interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
 
 @Repository
 interface MigrationCheckinsUuidsRepository : JpaRepository<MigrationEventsToSend, Long>
+
+@Repository
+class QuestionRepository(
+  private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
+  private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
+) {
+
+  /**
+   * Get questions for a specific list.
+   *
+   * Note: the result will contain the default questions (if any are defined).
+   */
+  fun getListItems(listId: Long, language: String = "en-GB"): List<QuestionListItemDto> {
+    require(language == "en-GB" || language == "cy-GB")
+    return jdbcTemplate.query(
+      "select * from get_question_list(?::integer, ?::text_language)",
+      { rs, idx ->
+        val template = QuestionTemplateDto(
+          id = rs.getLong("question_id"),
+          policy = QuestionPolicy.fromString(rs.getString("question_policy")),
+          template = rs.getString("question_template"),
+          responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
+          responseSpec = asMap(rs, "response_spec"),
+        )
+        QuestionListItemDto(
+          template = template,
+          params = asMap(rs, "params"),
+        )
+      },
+      listId,
+      language,
+    )
+  }
+
+  /**
+   * Get a list of available question templates.
+   */
+  fun getQuestionTemplates(language: String, policy: QuestionPolicy): List<QuestionTemplateDto> {
+    require(language == "en-GB" || language == "cy-GB")
+
+    val result = jdbcTemplate.query(
+      "select * from get_question_templates(?::text_language, ?::question_policy)",
+      { rs, _ ->
+        val spec: Map<String, Any> = asMap(rs, "response_spec")
+        QuestionTemplateDto(
+          id = rs.getLong("question_id"),
+          policy = QuestionPolicy.fromString(rs.getString("question_policy")),
+          template = rs.getString("question_template"),
+          responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
+          responseSpec = spec,
+        )
+      },
+      "en-GB",
+      policy.toString(),
+    )
+    return result
+  }
+
+  /**
+   * Updates or creates a question list.
+   */
+  fun upsertQuestionList(listId: Long?, author: ExternalUserId, questions: List<Map<String, Any>>): Long? = jdbcTemplate.queryForObject(
+    "select upsert_custom_question_list(?::bigint, ?::varchar(255), ?)",
+    { rs, _ -> rs.getLong(1) },
+    listId,
+    author,
+    objectMapper.writeValueAsString(questions),
+  )
+
+  private fun asMap(rs: ResultSet, columnName: String): Map<String, Any> {
+    val content = rs.getString(columnName) ?: return emptyMap()
+    return objectMapper.readValue(
+      content,
+      object : TypeReference<Map<String, Any>>() {},
+    )
+  }
+}
+
+@Repository
+interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignment, Long> {
+
+  @Query(
+    """
+    insert into question_list_assignment (question_list_id, offender_id, checkin_id, updated_at)
+    select :listId, :offenderId, :checkinId, now()
+    where not exists (select 1 from offender_checkin_v2 where offender_id = :offenderId and status = 'CREATED'::offender_checkin_status_v2)
+    on conflict (offender_id) where checkin_id is null 
+    do update set
+        question_list_id = :listId,
+        updated_at = now()
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
+
+  @Query(
+    """
+    select qla.question_list_id from question_list_assignment qla
+    where qla.offender_id = :offenderId and qla.checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  fun upcomingAssignment(offenderId: Long): Long?
+}

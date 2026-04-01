@@ -2,6 +2,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
  * Finds the active event number for the offender, when available.
@@ -19,4 +21,21 @@ fun activeEventNumber(offender: OffenderV2, details: ContactDetails): Long? {
   }
 
   return details.events?.firstOrNull()?.number
+}
+
+/**
+ * Check if the date is a checkin day for the given offender
+ */
+fun isCheckinDay(offender: OffenderV2, date: LocalDate): Boolean {
+  val firstCheckin = offender.firstCheckin
+  if (offender.checkinInterval.toDays() > 0) {
+    if (date < firstCheckin) {
+      return false
+    }
+
+    val delta = firstCheckin.until(date, ChronoUnit.DAYS)
+    val interval = offender.checkinInterval.toDays()
+    return delta % interval == 0L
+  }
+  return false
 }

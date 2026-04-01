@@ -617,3 +617,52 @@ open class MigrationEventsToSend(
   @Column
   open var notes: String? = null,
 ) : V2BaseEntity()
+
+enum class QuestionResponseFormat {
+  TEXT,
+  SINGLE_CHOICE,
+  MULTIPLE_CHOICE,
+  ;
+
+  companion object {
+    fun fromString(value: String): QuestionResponseFormat = when (value) {
+      "TEXT" -> TEXT
+      "SINGLE_CHOICE" -> SINGLE_CHOICE
+      "MULTIPLE_CHOICE" -> MULTIPLE_CHOICE
+      else -> throw IllegalArgumentException("Invalid QuestionResponseFormat value: $value")
+    }
+  }
+}
+
+enum class QuestionPolicy {
+  MANDATORY,
+  CUSTOM,
+  ;
+
+  companion object {
+    fun fromString(value: String): QuestionPolicy = when (value) {
+      "MANDATORY" -> MANDATORY
+      "CUSTOM" -> CUSTOM
+      else -> throw IllegalArgumentException("Invalid QuestionPolicy value: $value")
+    }
+  }
+}
+
+@Entity
+@Table(name = "question_list_assignment")
+open class QuestionListAssignment(
+  @Column("question_list_id", nullable = false)
+  open var questionListId: Long,
+
+  @Column("offender_id", nullable = false)
+  open var offenderId: Long,
+
+  @Column("checkin_id")
+  open var checkinId: Long? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var created_at: Instant,
+
+  @Column(name = "updated_at", nullable = false)
+  open val updatedAt: Instant,
+) : V2BaseEntity()

@@ -582,3 +582,86 @@ data class EventDetailResponse(
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
   @Schema(description = "Sensitive", required = false) val sensitive: Boolean = false,
 )
+
+data class QuestionTemplateDto(
+  @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
+  val id: Long,
+
+  @field:Schema(description = "Question policy", required = true)
+  val policy: QuestionPolicy,
+
+  @field:Schema(description = "Question template", required = true)
+  val template: String,
+
+  @field:Schema(description = "Response format", required = true)
+  val responseFormat: QuestionResponseFormat,
+
+  @field:Schema(description = "Response spec", required = true)
+  val responseSpec: Map<String, Any>,
+)
+
+fun QuestionTemplateDto.placeholders(): List<String> {
+  val placeholders = this.responseSpec["placeholders"]
+  if (placeholders is List<*>) {
+    return placeholders.map { it.toString() }
+  }
+  return emptyList()
+}
+
+/**
+ * Specifies parameters for a choice item of a custom question item
+ */
+data class CustomQuestionItem(
+  @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
+  val id: Long,
+
+  @field:Schema(description = "Params for the custom question. Depends on question's response format", required = true)
+  val params: Map<String, Any>,
+)
+
+/**
+ * Specifies custom questions to be added to a checkin.
+ */
+data class AssignCustomQuestionsRequest(
+  @field:Schema(description = "List of custom questions", required = true)
+  val questions: List<CustomQuestionItem>,
+
+  @field:Schema(description = "Language (en-GB or cy-GB)", required = true)
+  @field:Pattern(regexp = "^(en-GB|cy-GB)$")
+  val language: String,
+
+  @field:Schema(description = "Author", required = true)
+  val author: ExternalUserId,
+)
+
+data class AssignCustomQuestionsResponse(
+  @field:Schema(description = "List ID", required = true, exclusiveMinimumValue = 0)
+  val listId: Long,
+)
+
+data class QuestionListItemDto(
+  @field:Schema(description = "Question Template", required = true)
+  val template: QuestionTemplateDto,
+
+  @field:Schema(description = "Parameters", required = true)
+  val params: Map<String, Any>,
+)
+
+/**
+ * Question in a form ready to be displayed to the offender.
+ *
+ * Note: Any templates have already been evaluated, transformations done.
+ */
+data class OffenderQuestion(
+  val question: String,
+  val format: QuestionResponseFormat,
+  val spec: Map<String, Any>,
+)
+
+/**
+ * List of questions in a form ready to be displayed to the offender.
+ */
+data class OffenderQuestionList(
+  val listId: Long,
+  val questions: List<OffenderQuestion>,
+)
