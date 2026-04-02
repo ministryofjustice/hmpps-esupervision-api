@@ -23,7 +23,7 @@ class QuestionTemplateTest {
   @Test
   fun `behaviour when placeholders and template string don't match`() {
     val item = example.copy(template = example.template.copy(template = "Some {{unexpected}} variables"))
-    assertEquals("Some {{unexpected variables}}", item.evalTemplate().question)
+    assertEquals("Some {{unexpected}} variables", item.evalTemplate().question)
   }
 }
 

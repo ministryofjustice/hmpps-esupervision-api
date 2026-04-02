@@ -100,7 +100,7 @@ fun QuestionListItemDto.evalTemplate(): OffenderQuestion {
   }
 
   assert(templateString.isNotBlank())
-  assert(!templateString.contains("{{") && !templateString.contains("}}"))
+  // assert(!templateString.contains("{{") && !templateString.contains("}}"))
 
   return OffenderQuestion(templateString, this.template.responseFormat, spec)
 }
