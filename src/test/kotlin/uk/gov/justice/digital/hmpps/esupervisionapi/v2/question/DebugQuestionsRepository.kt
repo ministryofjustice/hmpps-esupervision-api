@@ -9,8 +9,11 @@ data class QuestionListItem(
   val params: Map<String, Any>,
 )
 
+/**
+ * A few DB queries useful for testing
+ */
 @Repository
-class QuestionListItemsRepository(
+class DebugQuestionsRepository(
   private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
   private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
 ) {
@@ -33,5 +36,35 @@ class QuestionListItemsRepository(
 
   fun deleteAllNonSystem() {
     jdbcTemplate.execute("delete from question_list where author != 'SYSTEM'")
+  }
+
+  fun deleteCustomQuestions() {
+    jdbcTemplate.execute("delete from question where author != 'SYSTEM'")
+  }
+}
+
+@Repository
+class QuestionDefinitionRepository(
+  private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
+) {
+
+  fun defineCustomQuestion(author: String, questionTemplate: String, spec: String) {
+    jdbcTemplate.query(
+      """
+      select define_custom_question(
+        ?, --author
+        ?, -- en_question_template
+        ?::jsonb, -- en_spec,
+        ?, -- cy_question_template
+        ?::jsonb -- cy_spec
+      )
+    """,
+      { rs, _ -> println(rs) },
+      author,
+      questionTemplate,
+      spec,
+      questionTemplate,
+      spec,
+    )
   }
 }

@@ -25,7 +25,7 @@ class QuestionParamsValidator : ConstraintValidator<ValidParams, AssignCustomQue
   }
 }
 
-private fun ConstraintValidatorContext.constraint(message: String) {
+internal fun ConstraintValidatorContext.constraint(message: String) {
   this.disableDefaultConstraintViolation()
   this.buildConstraintViolationWithTemplate(message)
     .addConstraintViolation()

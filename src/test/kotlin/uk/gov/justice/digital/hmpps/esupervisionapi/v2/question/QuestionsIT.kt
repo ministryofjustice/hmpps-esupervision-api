@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -42,11 +43,13 @@ import java.time.Instant
 @Import(TestClockConfiguration::class)
 class QuestionsIT : IntegrationTestBase() {
 
-  @Autowired lateinit var questionListItemRepository: QuestionListItemsRepository
-
   @Autowired lateinit var questionRepository: QuestionRepository
 
+  @Autowired lateinit var questionListItemRepository: DebugQuestionsRepository
+
   @Autowired lateinit var questionListAssignmentRepository: QuestionListAssignmentRepository
+
+  @Autowired lateinit var questionDefinitionRepository: QuestionDefinitionRepository
 
   @Autowired lateinit var questionService: QuestionService
 
@@ -62,14 +65,31 @@ class QuestionsIT : IntegrationTestBase() {
 
   @BeforeEach
   fun setUp() {
-    questionListItemRepository.deleteAllNonSystem()
-    questionListAssignmentRepository.deleteAll()
-    offenderCheckinV2Repository.deleteAll()
-    offenderV2Repository.deleteAll()
     (clock as MutableTestClock).advanceTo(Instant.now())
 
     reset(s3UploadService)
     whenever(s3UploadService.isCheckinVideoUploaded(any())).thenReturn(true)
+
+    questionDefinitionRepository.defineCustomQuestion(
+      "BARRY.WHITE",
+      "Did you finish {{thing}}",
+      """
+        {
+          "placeholders": ["thing"],
+          "hint": "Hint for the {{thing}} question",
+          "domain_msg_head": "What did they say about the {{thing}}?"
+        }
+      """.trimIndent(),
+    )
+  }
+
+  @AfterEach
+  fun tearDown() {
+    questionListItemRepository.deleteAllNonSystem()
+    questionListAssignmentRepository.deleteAll()
+    questionListItemRepository.deleteCustomQuestions()
+    offenderCheckinV2Repository.deleteAll()
+    offenderV2Repository.deleteAll()
   }
 
   @Test
@@ -78,10 +98,11 @@ class QuestionsIT : IntegrationTestBase() {
     assertEquals(3, defaultQuestions.size)
 
     // get list of custom questions and add a list
-    val customQuestions = questionRepository.getQuestionTemplates(Language.ENGLISH)
+    val author = "BARRY.WHITE"
+    val customQuestions = questionRepository.getQuestionTemplates(Language.ENGLISH, author)
     val upsertedList = questionRepository.upsertQuestionList(
       null,
-      "BARRY.WHITE",
+      author,
       customQuestions.mapIndexed { idx, it ->
 
         mapOf(
@@ -104,7 +125,10 @@ class QuestionsIT : IntegrationTestBase() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderV2Repository.save(offender)
 
-    val templates = questionService.listQuestionTemplates(Language.ENGLISH)
+    val systemTemplates = questionService.listQuestionTemplates(Language.ENGLISH)
+    assertEquals(0, systemTemplates.size)
+
+    val templates = questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     assertEquals(1, templates.size)
 
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)

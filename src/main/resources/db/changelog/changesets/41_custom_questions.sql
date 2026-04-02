@@ -355,58 +355,58 @@ q_mandatory_1 := define_system_question(
                'Is there anything you need support with or want to let us know about?',
                $${
                  "placeholders": [],
-                 "label": "Is there anything you need support with or want to let us know about?",
                  "hint": "This could be anything you're worrying about, struggling with or just want to let us know.",
-                 "domain_msg_head": "What they want us to know about thing",
+                 "domain_msg_head": "Anything they need support with or to let us know",
+                 "domain_msg_key": "assistance",
                  "choices": [
                         {
                           "id": "MENTAL_HEALTH",
                           "label": "Mental health",
                           "details_label": "Tell us what you want us to know about mental health (optional)",
-                          "details_id": "??",
-                          "domain_msg_head": ""
+                          "details_id": "mentalHealthSupport",
+                          "domain_msg_head": "What they want us to know about mental health"
                        },
                        {
                          "id": "ALCOHOL",
                          "label": "Alcohol",
                          "details_label": "Tell us what you want us to know about alcohol (optional)",
-                         "details_id": "??",
-                         "domain_msg_head": ""
+                         "details_id": "alcoholSupport",
+                         "domain_msg_head": "What they want us to know about alcohol"
                        },
                        {
                          "id": "DRUGS",
                          "label": "Drugs",
                          "details_label": "Tell us what you want us to know about drugs (optional)",
-                         "details_id": "??",
-                         "domain_msg_head": ""
+                         "details_id": "drugsSupport",
+                         "domain_msg_head": "What they want us to know about drugs"
                        },
                        {
                          "id": "MONEY",
                          "label": "Money",
                          "details_label": "Tell us what you want us to know about money (optional)",
-                         "details_id": "??",
-                         "domain_msg_head": ""
+                         "details_id": "moneySupport",
+                         "domain_msg_head": "What they want us to know about money"
                        },
                        {
                          "id": "HOUSING",
                          "label": "Housing",
                          "details_label": "Tell us what you want us to know about housing (optional)",
-                         "details_id": "??",
-                         "domain_msg_head": ""
+                         "details_id": "housingSupport",
+                         "domain_msg_head": "What they want us to know about housing"
                        },
                        {
                          "id": "SUPPORT_SYSTEM",
                          "label": "Support system (family, relationships, friends)",
                          "details_label": "Tell us what you want us to know about your support system (optional)",
-                         "details_id": "??",
-                         "domain_msg_head": ""
+                         "details_id": "supportSystemSupport",
+                         "domain_msg_head": "What they want us to know about their support system"
                        },
                        {
                          "id": "OTHER",
                          "label": "Something else",
                          "details_label": "Tell us what you want us to know about (optional)",
-                         "details_id": "??",
-                         "domain_msg_head": ""
+                         "details_id": "otherSupport",
+                         "domain_msg_head": "What they want us to know about (something else)"
                        }
                    ],
                    "alternative": {
@@ -421,58 +421,58 @@ q_mandatory_1 := define_system_question(
                'Is there anything you need support with or want to let us know about?',
                $${
                  "placeholders": [],
-                 "label": "Is there anything you need support with or want to let us know about?",
                  "hint": "This could be anything you're worrying about, struggling with or just want to let us know.",
-                 "domain_msg_head": "What they want us to know about thing",
+                 "domain_msg_head": "Anything they need support with or to let us know",
+                 "domain_msg_key": "assistance",
                  "choices": [
                    {
                      "id": "MENTAL_HEALTH",
                      "label": "Mental health",
                      "details_label": "Tell us what you want us to know about mental health (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthSupport",
+                     "domain_msg_head": "What they want us to know about mental health"
                    },
                    {
                      "id": "ALCOHOL",
                      "label": "Alcohol",
                      "details_label": "Tell us what you want us to know about alcohol (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "alcoholSupport",
+                     "domain_msg_head": "What they want us to know about alcohol"
                    },
                    {
                      "id": "DRUGS",
                      "label": "Drugs",
                      "details_label": "Tell us what you want us to know about drugs (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "drugsSupport",
+                     "domain_msg_head": "What they want us to know about drugs"
                    },
                    {
                      "id": "MONEY",
                      "label": "Money",
                      "details_label": "Tell us what you want us to know about money (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "moneySupport",
+                     "domain_msg_head": "What they want us to know about money"
                    },
                    {
                      "id": "HOUSING",
                      "label": "Housing",
                      "details_label": "Tell us what you want us to know about housing (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "housingSupport",
+                     "domain_msg_head": "What they want us to know about housing"
                    },
                    {
                      "id": "SUPPORT_SYSTEM",
                      "label": "Support system (family, relationships, friends)",
                      "details_label": "Tell us what you want us to know about your support system (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "supportSystemSupport",
+                     "domain_msg_head": "What they want us to know about their support system"
                    },
                    {
                      "id": "OTHER",
                      "label": "Something else",
                      "details_label": "Tell us what you want us to know about (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "otherSupport",
+                     "domain_msg_head": "What they want us to know about (something else)"
                    }
                  ],
                  "alternative": {
@@ -490,47 +490,46 @@ q_mandatory_2 := define_system_question(
                'How have you been feeling since we last spoke?',
                $${
                  "placeholders": [],
-                 "label": "Is there anything you need support with or want to let us know about?",
                  "hint": "Think about things like if you have noticed a change in your mood and what may have caused this. ",
                  "message": {
                    "html": "If you need to speak to someone urgently about how you are feeling, check the <a href=\"https://www.nhs.uk/mental-health/feelings-symptoms-behaviours/behaviours/help-for-suicidal-thoughts/\" class=\"govuk-link\" target=\"_blank\">NHS website for help (opens in new tab)</a>."
                  },
-                 "domain_msg_head": "TODO",
+                 "domain_msg_head": "How they have been feeling",
                  "choices": [
                    {
                      "id": "VERY_WELL",
                      "label": "Very well",
                      "details_label": "Tell us why you are very well (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "WELL",
                      "label": "Well",
                      "details_label": "Tell us why you are well (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "OK",
                      "label": "OK",
                      "details_label": "Tell us why you are OK (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "NOT_GREAT",
                      "label": "Not great",
                      "details_label":  "Tell us why you are not great (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "STRUGGLING",
                      "label": "Struggling",
                      "details_label": "Tell us why you are struggling (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    }
                  ]
                }$$::jsonb,
@@ -538,47 +537,46 @@ q_mandatory_2 := define_system_question(
                'How have you been feeling since we last spoke?',
                $${
                  "placeholders": [],
-                 "label": "Is there anything you need support with or want to let us know about?",
                  "hint": "Think about things like if you have noticed a change in your mood and what may have caused this. ",
                  "message": {
                    "html": "If you need to speak to someone urgently about how you are feeling, check the <a href=\"https://www.nhs.uk/mental-health/feelings-symptoms-behaviours/behaviours/help-for-suicidal-thoughts/\" class=\"govuk-link\" target=\"_blank\">NHS website for help (opens in new tab)</a>."
                  },
-                 "domain_msg_head": "TODO",
+                 "domain_msg_head": "How they have been feeling",
                  "choices": [
                    {
                      "id": "VERY_WELL",
                      "label": "Very well",
                      "details_label": "Tell us why you are very well (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "WELL",
                      "label": "Well",
                      "details_label": "Tell us why you are well (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "OK",
                      "label": "OK",
                      "details_label": "Tell us why you are OK (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "NOT_GREAT",
                      "label": "Not great",
                      "details_label":  "Tell us why you are not great (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    },
                    {
                      "id": "STRUGGLING",
                      "label": "Struggling",
                      "details_label": "Tell us why you are struggling (optional)",
-                     "details_id": "??",
-                     "domain_msg_head": ""
+                     "details_id": "mentalHealthComment",
+                     "domain_msg_head": "What they want us to know about how they have been feeling"
                    }
                  ]
                }$$::jsonb
@@ -589,26 +587,22 @@ q_mandatory_3 := define_system_question(
         'Would you like us to contact you about anything before your next appointment?',
         $${
           "placeholders": [],
-          "label": "Is there anything you need support with or want to let us know about?",
           "hint": "Think about things like if you have noticed a change in your mood and what may have caused this. ",
           "message": {
             "html": "If you need to speak to someone urgently about how you are feeling, check the <a href=\"https://www.nhs.uk/mental-health/feelings-symptoms-behaviours/behaviours/help-for-suicidal-thoughts/\" class=\"govuk-link\" target=\"_blank\">NHS website for help (opens in new tab)</a>."
           },
-          "domain_msg_head": "TODO",
+          "domain_msg_head": "If they need us to contact them before their next appointment",
           "choices": [
             {
-              "id": "Yes",
+              "id": "YES",
               "label": "Yes",
               "details_label": "This could be something you've already asked for help with or something new.",
-              "details_id": "??",
-              "domain_msg_head": ""
+              "details_id": "callbackDetails",
+              "domain_msg_head": "What they want to talk about"
             },
             {
               "id": "NO",
-              "label": "No",
-              "details_label": null,
-              "details_id": null,
-              "domain_msg_head": ""
+              "label": "No"
             }
           ]
         }$$::jsonb,
@@ -616,26 +610,22 @@ q_mandatory_3 := define_system_question(
         'Would you like us to contact you about anything before your next appointment?',
         $${
           "placeholders": [],
-          "label": "Is there anything you need support with or want to let us know about?",
           "hint": "Think about things like if you have noticed a change in your mood and what may have caused this. ",
           "message": {
             "html": "If you need to speak to someone urgently about how you are feeling, check the <a href=\"https://www.nhs.uk/mental-health/feelings-symptoms-behaviours/behaviours/help-for-suicidal-thoughts/\" class=\"govuk-link\" target=\"_blank\">NHS website for help (opens in new tab)</a>."
           },
-          "domain_msg_head": "TODO",
+          "domain_msg_head": "If they need us to contact them before their next appointment",
           "choices": [
             {
-              "id": "Yes",
+              "id": "YES",
               "label": "Yes",
               "details_label": "This could be something you've already asked for help with or something new.",
-              "details_id": "??",
-              "domain_msg_head": ""
+              "details_id": "callbackDetails",
+              "domain_msg_head": "What they want to talk about"
             },
             {
               "id": "NO",
-              "label": "No",
-              "details_label": null,
-              "details_id": null,
-              "domain_msg_head": ""
+              "label": "No"
             }
           ]
         }$$::jsonb
@@ -664,22 +654,20 @@ insert into question_list_item(question_list_id, question_id, "position", params
 values (current_setting('esup_41_custom_questions.default_list_id')::bigint,
         q_mandatory_3, 3, $${"responseFormat": "SINGLE_CHOICE"}$$::jsonb);
 
-perform define_custom_question(
-        'SYSTEM',
-        'Did you finish {{thing}}?',
-        $${
-         "placeholders": [ "thing" ],
-         "label": "Label for did you finish this thing?",
-         "hint": "Hint for the question",
-         "domain_msg_head": "Did they finish this thing?"}$$::jsonb,
-        -- cy-GB
-        'Bork bork bork {{thing}}?',
-        $${
-          "placeholders": [ "thing" ],
-          "label": "Label for did you finish this thing?",
-          "hint": "Hint for the question",
-          "domain_msg_head": "Did they finish this thing?"}$$::jsonb
-        );
+-- perform define_custom_question(
+--         'SYSTEM',
+--         'Did you finish {{thing}}?',
+--         $${
+--          "placeholders": [ "thing" ],
+--          "hint": "Hint for the question",
+--          "domain_msg_head": "Did they finish this thing?"}$$::jsonb,
+--         -- cy-GB
+--         'Bork bork bork {{thing}}?',
+--         $${
+--           "placeholders": [ "thing" ],
+--           "hint": "Hint for the question",
+--           "domain_msg_head": "Did they finish this thing?"}$$::jsonb
+--         );
 
 end $main$;
 
@@ -691,7 +679,7 @@ end $main$;
 
 --changeset roland.sadowski:41_custom_questions-10 splitStatements:false
 
-create or replace function get_question_templates(p_lang text_language, p_author varchar(255))
+create or replace function get_question_templates(p_lang text_language, p_author varchar(255), p_policy question_policy default 'CUSTOMISABLE'::question_policy)
     returns table (
                       question_id bigint,
                       question_template text,
@@ -708,7 +696,7 @@ begin
         where
             qi.lang = p_lang
           and q.author = p_author
-          and q.policy = 'CUSTOMISABLE'::question_policy
+          and q.policy = p_policy
         order by q.created_at;
 end;
 $$ LANGUAGE plpgsql STABLE;

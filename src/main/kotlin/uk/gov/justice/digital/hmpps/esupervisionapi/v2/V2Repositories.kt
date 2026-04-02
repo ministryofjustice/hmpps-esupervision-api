@@ -560,15 +560,20 @@ class QuestionRepository(
   fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
       "select * from get_question_templates(?::text_language, ?)",
-      { rs, _ ->
-        val spec: Map<String, Any> = asMap(rs, "response_spec")
-        QuestionTemplateDto(
-          id = rs.getLong("question_id"),
-          template = rs.getString("question_template"),
-          responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
-          responseSpec = spec,
-        )
-      },
+      { rs, _ -> rowMapper(rs, 0) },
+      language.dbString,
+      author,
+    )
+    return result
+  }
+
+  /**
+   * Returns question templates that shouldn't be shown to practitioners as a choice.
+   */
+  fun getFixedQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
+    val result = jdbcTemplate.query(
+      "select * from get_question_templates(?::text_language, ?, 'FIXED'::question_policy)",
+      { rs, _ -> rowMapper(rs, 0) },
       language.dbString,
       author,
     )
@@ -585,6 +590,16 @@ class QuestionRepository(
     author,
     objectMapper.writeValueAsString(questions),
   )
+
+  private fun rowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto {
+    val spec: Map<String, Any> = asMap(rs, "response_spec")
+    return QuestionTemplateDto(
+      id = rs.getLong("question_id"),
+      template = rs.getString("question_template"),
+      responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
+      responseSpec = spec,
+    )
+  }
 
   private fun asMap(rs: ResultSet, columnName: String): Map<String, Any> {
     val content = rs.getString(columnName) ?: return emptyMap()

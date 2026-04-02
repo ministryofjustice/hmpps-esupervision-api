@@ -8,11 +8,15 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestB
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 
 class ValidatorTest : IntegrationTestBase() {
   @Autowired lateinit var validator: Validator
 
-  @Autowired lateinit var questionListItemsRepository: QuestionListItemsRepository
+  @Autowired lateinit var debugQuestionsRepository: DebugQuestionsRepository
+
+  @Autowired lateinit var questionRepository: QuestionRepository
 
   @Test
   fun `AssignCustomQuestionsRequest validator - fail, no responseFormat in params`() {
@@ -58,11 +62,56 @@ class ValidatorTest : IntegrationTestBase() {
 
   @Test
   fun `validate default questions have been configured properly`() {
-    val items = questionListItemsRepository.findAllItems()
+    val items = debugQuestionsRepository.findAllItems()
     for (i in 0..<items.size) {
       val item = items[i]
       val params = item.params
       assertTrue(validateParams(CustomQuestionItem(1, params), i, null), "Question $i failed validation")
+    }
+  }
+
+  @Test
+  fun `validate fixed ENGLISH questions specs in the db`() {
+    val templates = questionRepository.getFixedQuestionTemplates(Language.ENGLISH)
+    assertTrue(templates.isNotEmpty())
+    validateFixedQuestions(templates)
+  }
+
+  @Test
+  fun `validate fixed WELSH questions specs in the db`() {
+    val templates = questionRepository.getFixedQuestionTemplates(Language.ENGLISH)
+    assertTrue(templates.isNotEmpty())
+    validateFixedQuestions(templates)
+  }
+
+  private fun validateFixedQuestions(templates: List<QuestionTemplateDto>) {
+    for (i in 0..<templates.size) {
+      val result = validateSpec(templates[i].responseFormat, templates[i].responseSpec, null)
+      assertTrue(
+        result.isValid,
+        "Question id=${templates[i].id} failed validation: ${result.message}",
+      )
+    }
+  }
+
+  @Test
+  fun `validate custom ENGLISH questions specs in the db`() {
+    validateCustomQuestions(Language.ENGLISH)
+  }
+
+  @Test
+  fun `validate custom WELSH questions specs in the db`() {
+    validateCustomQuestions(Language.WELSH)
+  }
+
+  private fun validateCustomQuestions(language: Language) {
+    val templates = questionRepository.getQuestionTemplates(language)
+    for (i in 0..<templates.size) {
+      val result = validateSpec(templates[i].responseFormat, templates[i].responseSpec, null)
+      assertTrue(
+        result.isValid,
+        "Question id=${templates[i].id} failed validation: ${result.message}",
+      )
     }
   }
 }
