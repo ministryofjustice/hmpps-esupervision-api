@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -34,8 +34,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionListItemsRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -191,7 +189,7 @@ private fun makeAssignCustomQuestionsRequest(
   templates: List<QuestionTemplateDto>,
 ) = AssignCustomQuestionsRequest(
   author = "BARRY.WHITE",
-  language = language.toString(),
+  language = language,
   questions = templates.mapIndexed { index, dto ->
     val params = mutableMapOf<String, Any>()
     dto.placeholders().forEach { params[it] = "$it value $index" }

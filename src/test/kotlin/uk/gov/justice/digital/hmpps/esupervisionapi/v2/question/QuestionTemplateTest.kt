@@ -1,11 +1,10 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListItemDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionResponseFormat
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.evalTemplate
 
 class QuestionTemplateTest {
 

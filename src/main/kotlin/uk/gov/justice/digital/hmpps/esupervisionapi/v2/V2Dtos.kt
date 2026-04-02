@@ -11,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidParams
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.serialization.LocalDateDeserializer
 import java.net.URL
 import java.time.Instant
@@ -619,13 +620,13 @@ data class CustomQuestionItem(
 /**
  * Specifies custom questions to be added to a checkin.
  */
+@ValidParams
 data class AssignCustomQuestionsRequest(
   @field:Schema(description = "List of custom questions", required = true)
   val questions: List<CustomQuestionItem>,
 
   @field:Schema(description = "Language (en-GB or cy-GB)", required = true)
-  @field:Pattern(regexp = "^(en-GB|cy-GB)$")
-  val language: String,
+  val language: Language,
 
   @field:Schema(description = "Author", required = true)
   val author: ExternalUserId,

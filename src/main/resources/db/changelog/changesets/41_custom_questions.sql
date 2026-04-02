@@ -656,13 +656,13 @@ from question_list;
 
 insert into question_list_item(question_list_id, question_id, "position", params)
 values (current_setting('esup_41_custom_questions.default_list_id')::bigint,
-        q_mandatory_1, 1, $${}$$::jsonb);
+        q_mandatory_1, 1, $${"responseFormat": "MULTIPLE_CHOICE"}$$::jsonb);
 insert into question_list_item(question_list_id, question_id, "position", params)
 values (current_setting('esup_41_custom_questions.default_list_id')::bigint,
-        q_mandatory_2, 2, $${}$$::jsonb);
+        q_mandatory_2, 2, $${"responseFormat": "SINGLE_CHOICE"}$$::jsonb);
 insert into question_list_item(question_list_id, question_id, "position", params)
 values (current_setting('esup_41_custom_questions.default_list_id')::bigint,
-        q_mandatory_3, 3, $${}$$::jsonb);
+        q_mandatory_3, 3, $${"responseFormat": "SINGLE_CHOICE"}$$::jsonb);
 
 perform define_custom_question(
         'SYSTEM',
