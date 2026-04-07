@@ -12,7 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.serialization.LocalDateDeserializer
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidParams
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidQuestionParams
 import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
@@ -620,7 +620,7 @@ data class CustomQuestionItem(
 /**
  * Specifies custom questions to be added to a checkin.
  */
-@ValidParams
+@ValidQuestionParams
 data class AssignCustomQuestionsRequest(
   @field:Schema(description = "List of custom questions", required = true)
   val questions: List<CustomQuestionItem>,

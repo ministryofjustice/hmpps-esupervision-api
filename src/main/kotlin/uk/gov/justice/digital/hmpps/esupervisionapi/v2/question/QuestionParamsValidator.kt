@@ -10,7 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import kotlin.reflect.KClass
 
 @Component
-class QuestionParamsValidator : ConstraintValidator<ValidParams, AssignCustomQuestionsRequest> {
+class QuestionParamsValidator : ConstraintValidator<ValidQuestionParams, AssignCustomQuestionsRequest> {
   override fun isValid(value: AssignCustomQuestionsRequest?, context: ConstraintValidatorContext): Boolean {
     if (value == null) return false
     if (value.questions.isEmpty()) {
@@ -76,7 +76,7 @@ fun validateParams(
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 @Constraint(validatedBy = [QuestionParamsValidator::class])
-annotation class ValidParams(
+annotation class ValidQuestionParams(
   val message: String = "Invalid question parameters",
   val groups: Array<KClass<*>> = [],
   val payload: Array<KClass<out Payload>> = [],
