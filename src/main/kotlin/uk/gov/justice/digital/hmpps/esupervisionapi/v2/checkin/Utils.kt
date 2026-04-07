@@ -39,3 +39,14 @@ fun isCheckinDay(offender: OffenderV2, date: LocalDate): Boolean {
   }
   return false
 }
+
+/**
+ * Returns the next checkin day (excluding today - assuming checkin already created. See [isCheckinDay]).
+ */
+fun nextCheckinDay(offender: OffenderV2, today: LocalDate): LocalDate {
+  require(today >= offender.firstCheckin) { "Today ($today) is before first checkin ($offender.firstCheckin)" }
+
+  val days = offender.firstCheckin.until(today, ChronoUnit.DAYS)
+  val rem = days % offender.checkinInterval.toDays()
+  return today.plusDays(offender.checkinInterval.toDays() - rem)
+}
