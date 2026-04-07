@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerific
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.serialization.LocalDateDeserializer
@@ -293,6 +294,10 @@ data class CheckinV2Dto(
   val checkinStartedAt: Instant? = null,
   @field:Schema(description = "Auto ID check result", required = false)
   val autoIdCheck: AutomatedIdVerificationResult? = null,
+  @field:Schema(description = "Liveness check result (null for video-based check-ins)", required = false)
+  val livenessResult: LivenessResult? = null,
+  @field:Schema(description = "Liveness confidence score 0-100 (null for video-based check-ins)", required = false)
+  val livenessConfidence: Float? = null,
   @field:Schema(description = "Manual ID check result", required = false)
   val manualIdCheck: ManualIdVerificationResult? = null,
   @field:Schema(description = "Survey responses (JSONB)", required = false)

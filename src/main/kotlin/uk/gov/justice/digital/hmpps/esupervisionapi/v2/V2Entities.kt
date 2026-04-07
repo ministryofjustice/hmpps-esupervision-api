@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerific
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.persistence.V2BaseEntity
@@ -194,6 +195,13 @@ open class OffenderCheckinV2(
   @Enumerated(EnumType.STRING)
   open var autoIdCheck: AutomatedIdVerificationResult? = null,
 
+  @Column(name = "liveness_result", nullable = true, length = 10)
+  @Enumerated(EnumType.STRING)
+  open var livenessResult: LivenessResult? = null,
+
+  @Column(name = "liveness_confidence", nullable = true)
+  open var livenessConfidence: Float? = null,
+
   @Column(name = "manual_id_check", nullable = true, length = 50)
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult? = null,
@@ -230,6 +238,8 @@ open class OffenderCheckinV2(
       reviewedBy = reviewedBy,
       checkinStartedAt = checkinStartedAt,
       autoIdCheck = autoIdCheck,
+      livenessResult = livenessResult,
+      livenessConfidence = livenessConfidence,
       manualIdCheck = manualIdCheck,
       riskFeedback = riskFeedback,
       sensitive = sensitive,
@@ -378,6 +388,9 @@ open class EventAuditV2(
 
   @Column(name = "auto_id_check_result", nullable = true, length = 50)
   open var autoIdCheckResult: String? = null,
+
+  @Column(name = "liveness_result", nullable = true, length = 10)
+  open var livenessResult: String? = null,
 
   @Column(name = "manual_id_check_result", nullable = true, length = 50)
   open var manualIdCheckResult: String? = null,

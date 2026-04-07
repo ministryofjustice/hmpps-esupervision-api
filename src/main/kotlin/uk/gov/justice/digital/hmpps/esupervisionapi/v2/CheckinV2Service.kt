@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
@@ -204,11 +205,10 @@ class CheckinV2Service(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin is past submission date")
     }
 
-    // Verify video exists
-    // !! there is no video in s3 for the liveness check
-//    if (!s3UploadService.isCheckinVideoUploaded(checkin)) {
-//      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Video not uploaded")
-//    }
+    // Only verify video exists for non-liveness check-ins (liveness has no video)
+    if (checkin.livenessResult == null && !s3UploadService.isCheckinVideoUploaded(checkin)) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Video not uploaded")
+    }
 
     // Note: Facial recognition should be called via /video/verify endpoint BEFORE submit
     // This matches V1 behavior where facial recognition was a separate explicit step
@@ -521,17 +521,11 @@ class CheckinV2Service(
       isLive,
     )
 
-//    if (!isLive) {
-//      checkin.autoIdCheck = AutomatedIdVerificationResult.NO_MATCH
-//      checkinRepository.save(checkin)
-//      return LivenessVerificationResponse(
-//        isLive = false,
-//        livenessConfidence = confidence,
-//        result = AutomatedIdVerificationResult.NO_MATCH,
-//      )
-//    }
+    // Persist liveness result
+    checkin.livenessResult = if (isLive) LivenessResult.LIVE else LivenessResult.NOT_LIVE
+    checkin.livenessConfidence = confidence
 
-    // Liveness passed - extract the reference image bytes from the session
+    // Extract the reference image bytes from the session
     val referenceImage = livenessResult.referenceImage()
     val imageBytes = referenceImage?.bytes()?.asByteArray()
     if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {

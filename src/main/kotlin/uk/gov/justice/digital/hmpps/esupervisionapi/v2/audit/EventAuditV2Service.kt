@@ -86,6 +86,7 @@ class EventAuditV2Service(
         checkin,
         timeToSubmitHours = timeToSubmitHours,
         autoIdCheckResult = checkin.autoIdCheck?.name,
+        livenessResult = checkin.livenessResult?.name,
       )
       transactionTemplate.execute { auditRepository.save(audit) }
       LOGGER.info("Recorded CHECKIN_SUBMITTED audit event for checkin={}", checkin.uuid)
@@ -244,6 +245,7 @@ class EventAuditV2Service(
     timeToReviewHours: BigDecimal? = null,
     reviewDurationHours: BigDecimal? = null,
     autoIdCheckResult: String? = null,
+    livenessResult: String? = null,
     manualIdCheckResult: String? = null,
     notes: String? = null,
   ): EventAuditV2 = EventAuditV2(
@@ -264,6 +266,7 @@ class EventAuditV2Service(
     timeToReviewHours = timeToReviewHours,
     reviewDurationHours = reviewDurationHours,
     autoIdCheckResult = autoIdCheckResult,
+    livenessResult = livenessResult,
     manualIdCheckResult = manualIdCheckResult,
     notes = notes,
   )
