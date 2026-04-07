@@ -166,6 +166,9 @@ class EventDetailV2Service(
           sb.appendLine("${logEntry.notes}")
         }
       }
+      DomainEventType.V2_SETUP_COMPLETED,
+      DomainEventType.V2_SETUP_REMOVED,
+      -> {}
     }
 
     return sb.toString().trimEnd('\n')
