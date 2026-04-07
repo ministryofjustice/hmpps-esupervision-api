@@ -51,14 +51,13 @@ class NotificationOrchestratorV2Service(
     contactDetails: ContactDetails? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
-    val eventNumber = details?.let { activeEventNumber(offender, it) }
 
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
-      additionalInformation = eventNumber?.let { AdditionalInformation(eventNumber = it) },
+      additionalInformation = details?.let { activeEventNumber(offender, it) }?.let { AdditionalInformation(eventNumber = it) },
     )
 
     eventAuditService.recordSetupCompleted(offender, details)
@@ -142,14 +141,13 @@ class NotificationOrchestratorV2Service(
     contactDetails: ContactDetails? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
-    val eventNumber = details?.let { activeEventNumber(offender, it) }
 
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_REMOVED,
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Online check-ins stopped for offender ${offender.crn}",
-      additionalInformation = eventNumber?.let { AdditionalInformation(eventNumber = it) },
+      additionalInformation = details?.let { activeEventNumber(offender, it) }?.let { AdditionalInformation(eventNumber = it) },
     )
 
     if (details != null) {

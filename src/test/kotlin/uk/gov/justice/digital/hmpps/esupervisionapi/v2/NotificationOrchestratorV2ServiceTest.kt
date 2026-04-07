@@ -228,6 +228,26 @@ class NotificationOrchestratorV2ServiceTest {
   }
 
   @Test
+  fun `sendSetupCompletedNotifications - publishes event without additionalInformation when no events`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetails()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendSetupCompletedNotifications(offender, contactDetails)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_COMPLETED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      eq(null),
+      eq(null),
+    )
+  }
+
+  @Test
   fun `sendDeactivationCompletedNotifications - publishes setup removed domain event`() {
     val offender = createOffender()
     val contactDetails = createContactDetailsWithEvents()

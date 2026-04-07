@@ -48,7 +48,7 @@ class DomainEventService(
       )
 
       eventPublisher.publish(event)
-      LOGGER.info("Published domain event: eventType={}, crn={}", eventType.type, crn)
+      LOGGER.info("Published domain event: eventType={}, crn={}, detailUrl={}", eventType.type, crn, detailUrl)
     } catch (e: Exception) {
       LOGGER.error(
         "Failed to publish domain event: {}",
