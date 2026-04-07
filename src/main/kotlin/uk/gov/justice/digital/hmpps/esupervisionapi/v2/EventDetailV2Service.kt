@@ -15,7 +15,6 @@ import kotlin.jvm.optionals.getOrNull
 
 @Service
 class EventDetailV2Service(
-  private val offenderRepository: OffenderV2Repository,
   private val checkinRepository: OffenderCheckinV2Repository,
   private val eventLogRepository: OffenderEventLogV2Repository,
   private val proxyLinkCreator: ProxyLinkCreator,
@@ -42,39 +41,20 @@ class EventDetailV2Service(
     }
 
     return when (val domainEventType = DomainEventType.fromPath(eventType)) {
-      DomainEventType.V2_SETUP_COMPLETED -> getRegistrationCompletedDetail(uuid)
       DomainEventType.V2_CHECKIN_CREATED,
       DomainEventType.V2_CHECKIN_SUBMITTED,
       DomainEventType.V2_CHECKIN_REVIEWED,
       DomainEventType.V2_CHECKIN_EXPIRED,
       -> getCheckinEventDetail(uuid, domainEventType)
       DomainEventType.V2_CHECKIN_ANNOTATED -> getCheckinAnnotatedEventDetail(uuid)
-      null -> {
+      DomainEventType.V2_SETUP_COMPLETED,
+      DomainEventType.V2_SETUP_REMOVED,
+      null,
+      -> {
         LOGGER.warn("Unknown event type in detail URL: {}", detailUrl)
         null
       }
     }
-  }
-
-  private fun getRegistrationCompletedDetail(offenderUuid: UUID): EventDetailResponse? {
-    val offender = offenderRepository.findByUuid(offenderUuid).orElse(null)
-    if (offender == null) {
-      LOGGER.warn("Offender not found for UUID: {}", offenderUuid)
-      return null
-    }
-
-    val notes = formatSetupCompletedNotes(offender)
-
-    val eventType = DomainEventType.V2_SETUP_COMPLETED
-    return EventDetailResponse(
-      eventReferenceId = "${eventType.eventTypeName}-$offenderUuid",
-      eventType = eventType.eventTypeName,
-      notes = notes,
-      crn = offender.crn,
-      offenderUuid = offenderUuid,
-      checkinUuid = null,
-      timestamp = offender.createdAt,
-    )
   }
 
   private fun getCheckinEventDetail(checkinUuid: UUID, eventType: DomainEventType): EventDetailResponse? {
@@ -130,26 +110,9 @@ class EventDetailV2Service(
     )
   }
 
-  private fun formatSetupCompletedNotes(offender: OffenderV2): String {
-    val lines = mutableListOf<String>()
-    lines.add("Registration Completed")
-    lines.add("Offender UUID: ${offender.uuid}")
-    lines.add("CRN: ${offender.crn}")
-    lines.add("Practitioner: ${offender.practitionerId}")
-    lines.add("Status: ${offender.status}")
-    lines.add("First check-in: ${offender.firstCheckin}")
-    lines.add("Check-in interval: ${offender.checkinInterval}")
-    lines.add("Created at: ${offender.createdAt}")
-    lines.add("Created by: ${offender.createdBy}")
-    return lines.joinToString("\n")
-  }
-
   private fun formatCheckinNotes(checkin: OffenderCheckinV2, eventType: DomainEventType, logEntry: IOffenderCheckinLogEntryV2Dto? = null): String {
     val sb = StringBuilder()
     when (eventType) {
-      DomainEventType.V2_SETUP_COMPLETED -> {
-        sb.appendLine("Check in: ${formatHumanReadableDateTime(checkin.createdAt)}")
-      }
       DomainEventType.V2_CHECKIN_CREATED -> {
         sb.appendLine("Check in created: ${formatHumanReadableDateTime(checkin.createdAt)}")
       }

@@ -16,6 +16,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Period
 import java.time.format.DateTimeFormatter
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import java.util.UUID
 
 /**
@@ -49,14 +50,17 @@ class NotificationOrchestratorV2Service(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
   ) {
+    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+    val eventNumber = details?.let { activeEventNumber(offender, it) }
+
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
+      additionalInformation = eventNumber?.let { AdditionalInformation(eventNumber = it) },
     )
 
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
     eventAuditService.recordSetupCompleted(offender, details)
 
     if (details != null) {
@@ -138,6 +142,15 @@ class NotificationOrchestratorV2Service(
     contactDetails: ContactDetails? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+    val eventNumber = details?.let { activeEventNumber(offender, it) }
+
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_SETUP_REMOVED,
+      uuid = offender.uuid,
+      crn = offender.crn,
+      description = "Online check-ins stopped for offender ${offender.crn}",
+      additionalInformation = eventNumber?.let { AdditionalInformation(eventNumber = it) },
+    )
 
     if (details != null) {
       try {
