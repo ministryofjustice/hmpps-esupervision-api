@@ -6,7 +6,7 @@ data class AdditionalInformation(val eventNumber: Long? = null)
 
 data class DomainEvent(
   val eventType: String,
-  val detailUrl: String,
+  val detailUrl: String? = null,
   val occurredAt: ZonedDateTime,
   val description: String,
   val personReference: PersonReference?,
