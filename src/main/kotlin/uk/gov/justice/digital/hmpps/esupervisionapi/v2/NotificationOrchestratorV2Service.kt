@@ -102,6 +102,14 @@ class NotificationOrchestratorV2Service(
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_SETUP_COMPLETED,
+      uuid = offender.uuid,
+      crn = offender.crn,
+      description = "Practitioner reactivated online check-ins for offender ${offender.crn}",
+      additionalInformation = details?.let { activeEventNumber(offender, it) }?.let { AdditionalInformation(eventNumber = it) },
+    )
+
     if (details != null) {
       try {
         val personalisation =
