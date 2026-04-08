@@ -397,11 +397,18 @@ q_mandatory_1 := define_system_question(
                          "domain_msg_head": "What they want us to know about housing"
                        },
                        {
+                         "id": "EMPLOYMENT_EDU",
+                         "label": "Employment and education",
+                         "details_label": "Tell us what you want us to know about employment and education (optional)",
+                         "details_id": "employmentEduSupport",
+                         "domain_msg_head": "What they want us to know about employment and education"
+                       },
+                       {
                          "id": "SUPPORT_SYSTEM",
-                         "label": "Support system (family, relationships, friends)",
-                         "details_label": "Tell us what you want us to know about your support system (optional)",
+                         "label": "Relationships (family, friends, partner)",
+                         "details_label": "Tell us what you want us to know about your relationships (optional)",
                          "details_id": "supportSystemSupport",
-                         "domain_msg_head": "What they want us to know about their support system"
+                         "domain_msg_head": "What they want us to know about their relationships"
                        },
                        {
                          "id": "OTHER",
@@ -412,11 +419,11 @@ q_mandatory_1 := define_system_question(
                        }
                    ],
                    "alternative": {
-                         "id": "DRUGS",
-                         "label": "No, I do not need help",
+                         "id": "NONE",
+                         "label": "No, I do not need any support",
                          "details_label": null,
                          "details_id": null,
-                         "domain_msg_head": "They don't need help"
+                         "domain_msg_head": "They don't need support"
                    }
                }$$::jsonb,
                 -- cy-GB
