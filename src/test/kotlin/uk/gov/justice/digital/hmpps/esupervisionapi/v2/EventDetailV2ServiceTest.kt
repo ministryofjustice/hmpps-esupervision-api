@@ -20,7 +20,6 @@ import java.util.UUID
 
 class EventDetailV2ServiceTest {
 
-  private val offenderRepository: OffenderV2Repository = mock()
   private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val eventLogRepository: OffenderEventLogV2Repository = mock()
   private val proxyLinkCreator: ProxyLinkCreator = mock()
@@ -30,25 +29,11 @@ class EventDetailV2ServiceTest {
 
   @BeforeEach
   fun setUp() {
-    service = EventDetailV2Service(offenderRepository, checkinRepository, eventLogRepository, proxyLinkCreator, appConfig)
+    service = EventDetailV2Service(checkinRepository, eventLogRepository, proxyLinkCreator, appConfig)
   }
 
   @Nested
   inner class GetEventDetail {
-
-    @Test
-    fun `returns setup-completed event detail`() {
-      val uuid = UUID.randomUUID()
-      val offender = createOffender(uuid)
-      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-
-      val result = service.getEventDetail("/v2/events/setup-completed/$uuid")
-
-      assertThat(result).isNotNull
-      assertThat(result!!.eventType).isEqualTo("SETUP_COMPLETED")
-      assertThat(result.crn).isEqualTo("X123456")
-      assertThat(result.offenderUuid).isEqualTo(uuid)
-    }
 
     @Test
     fun `returns checkin-submitted event detail with submittedAt timestamp`() {
@@ -318,24 +303,6 @@ class EventDetailV2ServiceTest {
 
     assertThat(result).isNotNull
     assertThat(result!!.notes).contains("Some note")
-  }
-
-  @Nested
-  inner class SetupCompletedNotesFormatting {
-
-    @Test
-    fun `formats setup completed notes`() {
-      val uuid = UUID.randomUUID()
-      val offender = createOffender(uuid)
-      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-
-      val result = service.getEventDetail("/v2/events/setup-completed/$uuid")
-
-      assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Registration Completed")
-      assertThat(result.notes).contains("CRN: X123456")
-      assertThat(result.notes).contains("Practitioner: PRACT001")
-    }
   }
 
   @Nested

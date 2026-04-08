@@ -15,6 +15,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -205,6 +207,86 @@ class NotificationOrchestratorV2ServiceTest {
     verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), eq(null))
   }
 
+  @Test
+  fun `sendSetupCompletedNotifications - includes event number when contact details have events`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendSetupCompletedNotifications(offender, contactDetails)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_COMPLETED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      eq(null),
+      eq(AdditionalInformation(eventNumber = 12345L)),
+    )
+  }
+
+  @Test
+  fun `sendSetupCompletedNotifications - publishes event without additionalInformation when no events`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetails()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendSetupCompletedNotifications(offender, contactDetails)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_COMPLETED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      eq(null),
+      eq(null),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - publishes setup removed domain event`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendDeactivationCompletedNotifications(offender, contactDetails)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_REMOVED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      eq(null),
+      eq(AdditionalInformation(eventNumber = 12345L)),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - publishes event without additionalInformation when no events`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetails()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendDeactivationCompletedNotifications(offender, contactDetails)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_REMOVED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      eq(null),
+      eq(null),
+    )
+  }
+
   private fun createOffender(status: OffenderStatus = OffenderStatus.VERIFIED) = OffenderV2(
     uuid = UUID.randomUUID(),
     crn = "X123456",
@@ -228,6 +310,21 @@ class NotificationOrchestratorV2ServiceTest {
     dueDate = LocalDate.now(clock),
     createdAt = clock.instant(),
     createdBy = "SYSTEM",
+  )
+
+  private fun createContactDetailsWithEvents() = ContactDetails(
+    crn = "X123456",
+    name = Name("John", "Smith"),
+    mobile = "07700900123",
+    email = "test@test.com",
+    practitioner = PractitionerDetails(
+      name = Name("Jane", "Doe"),
+      email = "jane.doe@probation.gov.uk",
+      localAdminUnit = OrganizationalUnit("LAU01", "Test LAU"),
+      probationDeliveryUnit = OrganizationalUnit("PDU01", "Test PDU"),
+      provider = OrganizationalUnit("PRV01", "Test Provider"),
+    ),
+    events = listOf(Event(number = 12345L, mainOffence = CodedDescription("OFF01", "Test Offence"), sentence = null)),
   )
 
   private fun createContactDetails() = ContactDetails(
