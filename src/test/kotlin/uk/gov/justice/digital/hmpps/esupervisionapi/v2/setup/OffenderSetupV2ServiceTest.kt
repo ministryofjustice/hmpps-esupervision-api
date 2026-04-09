@@ -301,10 +301,6 @@ class OffenderSetupV2ServiceTest {
     assertEquals(first.uuid, second.uuid)
   }
 
-  // ========================================
-  // activateOffenderAndIncrementSetupCounter Tests
-  // ========================================
-
   @Test
   fun `activateOffenderAndIncrementSetupCounter - INACTIVE offender - increments counter and activates`() {
     val offender = makeOffender(clock, LocalDate.now(clock)).apply {
