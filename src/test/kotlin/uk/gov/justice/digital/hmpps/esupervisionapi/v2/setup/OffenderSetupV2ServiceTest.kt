@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -160,7 +161,7 @@ class OffenderSetupV2ServiceTest {
     assertEquals(1, setup.setupCounter)
     verify(s3UploadService).isSetupPhotoUploaded(setup)
     verify(offenderRepository).save(any())
-    verify(notificationService).sendSetupCompletedNotifications(any(), any(), any<UUID>())
+    verify(notificationService).sendSetupCompletedNotifications(any(), any(), eq(setup.setupId()))
   }
 
   @Test
