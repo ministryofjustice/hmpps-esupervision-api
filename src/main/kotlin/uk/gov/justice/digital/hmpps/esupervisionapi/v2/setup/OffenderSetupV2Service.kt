@@ -204,9 +204,6 @@ class OffenderSetupV2Service(
       )
     }
 
-    setup.incrementSetupCounter()
-    offenderSetupRepository.save(setup)
-
     LOGGER.info(
       "Completed V2 offender setup: offender={}, crn={}, setup={}, checkin={}",
       savedOffender.uuid,
