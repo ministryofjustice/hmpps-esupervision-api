@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -30,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -50,6 +52,7 @@ class OffenderV2ResourceTest {
   private val notificationV2Service: NotificationV2Service = mock()
   private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val offenderSetupRepository: OffenderSetupV2Repository = mock()
+  private val offenderSetupV2Service: OffenderSetupV2Service = mock()
 
   private lateinit var resource: OffenderV2Resource
 
@@ -65,6 +68,7 @@ class OffenderV2ResourceTest {
       notificationV2Service,
       checkinRepository,
       offenderSetupRepository,
+      offenderSetupV2Service,
     )
   }
 
@@ -94,7 +98,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
     verify(offenderRepository).save(any())
-    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), any())
+    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
   }
 
   @Test
@@ -177,7 +181,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
     assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
-    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), any())
+    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
   }
 
   @Test
@@ -244,7 +248,11 @@ class OffenderV2ResourceTest {
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupV2Service.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.VERIFIED
+      Pair(o, null)
+    }
     whenever(checkinCreationService.createCheckin(any(), any(), any())).thenReturn(checkin)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
 
@@ -253,8 +261,8 @@ class OffenderV2ResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
-    verify(offenderRepository).save(offender)
-    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails), any())
+    verify(offenderSetupV2Service).activateOffenderAndIncrementSetupCounter(offender)
+    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
   }
 
   @Test
@@ -282,13 +290,17 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupV2Service.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.VERIFIED
+      Pair(o, null)
+    }
 
     val result = resource.reactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(futureDate, result.body?.firstCheckin)
-    verify(offenderRepository).save(offender)
+    verify(offenderSetupV2Service).activateOffenderAndIncrementSetupCounter(offender)
   }
 
   @Test
@@ -361,7 +373,11 @@ class OffenderV2ResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupV2Service.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.VERIFIED
+      Pair(o, null)
+    }
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
 
     val result = resource.reactivateOffender(uuid, request)
@@ -443,7 +459,11 @@ class OffenderV2ResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
     whenever(checkinRepository.findByOffenderAndDueDate(offender, today)).thenReturn(Optional.of(completedCheckin))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupV2Service.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.VERIFIED
+      Pair(o, null)
+    }
 
     resource.reactivateOffender(uuid, request)
 
@@ -472,7 +492,11 @@ class OffenderV2ResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
     whenever(checkinRepository.findByOffenderAndDueDate(offender, today)).thenReturn(Optional.of(cancelledCheckin))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupV2Service.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.VERIFIED
+      Pair(o, null)
+    }
 
     resource.reactivateOffender(uuid, request)
 
@@ -497,7 +521,11 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupV2Service.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.VERIFIED
+      Pair(o, null)
+    }
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -505,7 +533,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
-    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails), any())
+    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails), isNull())
   }
 
   // ========================================
