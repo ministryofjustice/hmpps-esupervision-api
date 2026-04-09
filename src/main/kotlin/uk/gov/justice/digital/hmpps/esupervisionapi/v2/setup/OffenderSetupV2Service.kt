@@ -204,6 +204,9 @@ class OffenderSetupV2Service(
       )
     }
 
+    setup.incrementSetupCounter()
+    offenderSetupRepository.save(setup)
+
     LOGGER.info(
       "Completed V2 offender setup: offender={}, crn={}, setup={}, checkin={}",
       savedOffender.uuid,
@@ -211,7 +214,7 @@ class OffenderSetupV2Service(
       uuid,
       checkin?.uuid ?: "not due",
     )
-    notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails)
+    notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails, setup.setupId())
 
     checkin?.let {
       try {

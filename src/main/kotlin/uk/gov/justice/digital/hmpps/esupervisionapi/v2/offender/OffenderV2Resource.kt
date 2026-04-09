@@ -27,6 +27,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -55,6 +56,7 @@ class OffenderV2Resource(
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationV2Service: NotificationV2Service,
   private val checkinRepository: OffenderCheckinV2Repository,
+  private val offenderSetupRepository: OffenderSetupV2Repository,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -222,7 +224,8 @@ class OffenderV2Resource(
       request.reason,
     )
 
-    notificationV2Service.sendDeactivationCompletedNotifications(offender, contactDetails)
+    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+    notificationV2Service.sendDeactivationCompletedNotifications(offender, contactDetails, setup?.setupId())
 
     return ResponseEntity.ok(saved.toSummaryDto(photoUrl))
   }
@@ -296,7 +299,12 @@ class OffenderV2Resource(
     offender.updatedAt = clock.instant()
     val savedOffender = offenderRepository.save(offender)
 
-    notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails)
+    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+    setup?.let {
+      it.incrementSetupCounter()
+      offenderSetupRepository.save(it)
+    }
+    notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails, setup?.setupId())
 
     // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
     val today = clock.today()

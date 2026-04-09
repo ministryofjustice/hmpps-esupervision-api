@@ -141,6 +141,7 @@ class OffenderSetupV2ServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(offenderSetupRepository.save(any<OffenderSetupV2>())).thenAnswer { it.getArgument(0) }
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<OffenderV2, Any?>>(any())).thenAnswer {
@@ -155,8 +156,11 @@ class OffenderSetupV2ServiceTest {
     // Then
     assertNotNull(result)
     assertEquals(offender.uuid, result.uuid)
+    assertEquals(2, setup.setupCounter)
     verify(s3UploadService).isSetupPhotoUploaded(setup)
     verify(offenderRepository).save(any())
+    verify(offenderSetupRepository).save(setup)
+    verify(notificationService).sendSetupCompletedNotifications(any(), any(), any())
   }
 
   @Test

@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -48,6 +49,7 @@ class OffenderV2ResourceTest {
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val notificationV2Service: NotificationV2Service = mock()
   private val checkinRepository: OffenderCheckinV2Repository = mock()
+  private val offenderSetupRepository: OffenderSetupV2Repository = mock()
 
   private lateinit var resource: OffenderV2Resource
 
@@ -62,6 +64,7 @@ class OffenderV2ResourceTest {
       ndiliusApiClient,
       notificationV2Service,
       checkinRepository,
+      offenderSetupRepository,
     )
   }
 
@@ -91,7 +94,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
     verify(offenderRepository).save(any())
-    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails))
+    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), any())
   }
 
   @Test
@@ -174,7 +177,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
     assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
-    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails))
+    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), any())
   }
 
   @Test
@@ -251,7 +254,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
     verify(offenderRepository).save(offender)
-    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails))
+    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails), any())
   }
 
   @Test
@@ -502,7 +505,7 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
-    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails))
+    verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails), any())
   }
 
   // ========================================
