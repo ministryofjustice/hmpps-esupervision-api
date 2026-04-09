@@ -584,11 +584,28 @@ data class EventDetailResponse(
   @Schema(description = "Sensitive", required = false) val sensitive: Boolean = false,
 )
 
+enum class QuestionPolicy {
+  FIXED,
+  CUSTOMISABLE,
+  ;
+
+  companion object {
+    fun fromString(policy: String): QuestionPolicy = when (policy) {
+      "FIXED" -> FIXED
+      "CUSTOMISABLE" -> CUSTOMISABLE
+      else -> throw IllegalArgumentException("Invalid question policy: $policy")
+    }
+  }
+}
+
 data class QuestionTemplateDto(
   @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
   val id: Long,
 
+  internal val policy: QuestionPolicy,
+
   @field:Schema(description = "Question template", required = true)
+  @field:NotBlank
   val template: String,
 
   @field:Schema(description = "Response format", required = true)
@@ -596,6 +613,9 @@ data class QuestionTemplateDto(
 
   @field:Schema(description = "Response spec", required = true)
   val responseSpec: Map<String, Any>,
+
+  @field:Schema(description = "Example", required = false)
+  val example: String?,
 )
 
 fun QuestionTemplateDto.placeholders(): List<String> {
@@ -633,10 +653,14 @@ data class AssignCustomQuestionsRequest(
 )
 
 data class AssignCustomQuestionsResponse(
+  val expectedCheckinDate: LocalDate,
   @field:Schema(description = "List ID", required = true, exclusiveMinimumValue = 0)
   val listId: Long,
 )
 
+/**
+ * Describes an already _customised_ question in a question list.
+ */
 data class QuestionListItemDto(
   @field:Schema(description = "Question Template", required = true)
   val template: QuestionTemplateDto,
@@ -661,5 +685,38 @@ data class OffenderQuestion(
  */
 data class OffenderQuestionList(
   val listId: Long,
+  val questions: List<OffenderQuestion>,
+)
+
+data class UpcomingQuestionAssignmentInfo(
+  val expectedCheckinDate: LocalDate,
+  val questionList: Long?,
+)
+
+data class UpcomingQuestionAssignmentResponse(
+  val upcomingAssignment: UpcomingQuestionAssignmentInfo?,
+)
+
+data class UpcomingQuestionListItems(
+  val expectedCheckinDate: LocalDate,
+  val items: List<QuestionListItemDto>,
+)
+
+/**
+ * Returned when clients (e.g. MPOP) asks for a list of available questions
+ */
+data class ListQuestionTemplatesResponse(
+  val templates: List<QuestionTemplateDto>,
+)
+
+/**
+ * Contains upcoming question list items (templates + params)
+ */
+data class UpcomingQuestionItemsResponse(
+  val upcoming: UpcomingQuestionListItems,
+)
+
+data class UpcomingOffenderQuestions(
+  val expectedCheckinDate: LocalDate,
   val questions: List<OffenderQuestion>,
 )

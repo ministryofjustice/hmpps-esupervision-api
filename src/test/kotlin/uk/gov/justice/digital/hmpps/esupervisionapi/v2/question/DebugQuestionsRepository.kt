@@ -55,16 +55,20 @@ class QuestionDefinitionRepository(
         ?, --author
         ?, -- en_question_template
         ?::jsonb, -- en_spec,
+        ?, -- en_example,
         ?, -- cy_question_template
-        ?::jsonb -- cy_spec
+        ?::jsonb, -- cy_spec,
+        ? -- cy_example
       )
     """,
       { rs, _ -> println(rs) },
       author,
       questionTemplate,
       spec,
+      null,
       questionTemplate,
       spec,
+      null,
     )
   }
 }

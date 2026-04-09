@@ -7,6 +7,9 @@ import jakarta.validation.Payload
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import kotlin.reflect.KClass
 
 @Component
@@ -17,11 +20,17 @@ class QuestionParamsValidator : ConstraintValidator<ValidQuestionParams, AssignC
       context.constraint("Missing questions")
       return false
     }
-    val questions = value.questions
-    for (i in 0..<questions.size) {
-      return validateParams(questions[i], i, context)
+    if (value.questions.size > 3) {
+      context.constraint("Up to three question allowed")
+      return false
     }
-    return true
+
+    val questions = value.questions
+    var valid = true
+    for (i in 0..<questions.size) {
+      valid = valid && validateParams(questions[i], i, context)
+    }
+    return valid
   }
 }
 
@@ -73,7 +82,7 @@ fun validateParams(
   }
 }
 
-@Target(AnnotationTarget.CLASS)
+@Target(AnnotationTarget.CLASS, AnnotationTarget.VALUE_PARAMETER)
 @Retention(AnnotationRetention.RUNTIME)
 @Constraint(validatedBy = [QuestionParamsValidator::class])
 annotation class ValidQuestionParams(
@@ -81,3 +90,17 @@ annotation class ValidQuestionParams(
   val groups: Array<KClass<*>> = [],
   val payload: Array<KClass<out Payload>> = [],
 )
+
+fun validateAgainstTemplates(item: CustomQuestionItem, template: QuestionTemplateDto) {
+  if (item.params.containsKey("placeholders")) {
+    val placeholders = (item.params["placeholders"] as Map<String, String>).keys
+    if (placeholders.any { !template.placeholders().contains(it) }) {
+      throw BadArgumentException("Question ${item.id} has invalid placeholders: $placeholders")
+    }
+  }
+  if (item.params.containsKey("responseFormat")) {
+    if (item.params["responseFormat"] != template.responseFormat.name) {
+      throw BadArgumentException("Question ${item.id} has invalid responseFormat: ${item.params["responseFormat"]}")
+    }
+  }
+}

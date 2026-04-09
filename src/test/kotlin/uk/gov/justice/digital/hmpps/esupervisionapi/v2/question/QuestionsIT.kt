@@ -142,24 +142,28 @@ class QuestionsIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `QuestionService - assign custom questions - failure`() {
+  fun `QuestionService - assign custom questions - failure (it's checkin day)`() {
     val offender = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today()).toEntity()
     offenderV2Repository.save(offender)
-    val templates = questionService.listQuestionTemplates(Language.ENGLISH)
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
 
+    // it's checkin day, so it should fail
     assertThrows(BadArgumentException::class.java) {
       questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
     }
 
     clock.advanceBy(Duration.ofDays(1))
 
-    questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    val moreThan3Questions = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates + templates + templates + templates)
+    assertThrows(jakarta.validation.ConstraintViolationException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, moreThan3Questions)
+    }
   }
 
   @Test
   fun `QuestionService - assign custom questions when prev checkin had custom qs - success`() {
-    val templates = questionService.listQuestionTemplates(Language.ENGLISH)
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
 
     // ----- DAY 1
@@ -215,8 +219,8 @@ private fun makeAssignCustomQuestionsRequest(
   author = "BARRY.WHITE",
   language = language,
   questions = templates.mapIndexed { index, dto ->
-    val params = mutableMapOf<String, Any>()
-    dto.placeholders().forEach { params[it] = "$it value $index" }
-    CustomQuestionItem(id = dto.id, params = mapOf("placeholders" to params))
+    val paramsPlaceholders = mutableMapOf<String, Any>()
+    dto.placeholders().forEach { paramsPlaceholders[it] = "$it value $index" }
+    CustomQuestionItem(id = dto.id, params = mapOf("placeholders" to paramsPlaceholders, "responseFormat" to dto.responseFormat.name))
   },
 )

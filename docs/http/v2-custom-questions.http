@@ -1,0 +1,48 @@
+@practitioner_id = ??
+@offender_uuid = 796a6ed0-8c37-4d14-9409-3522fb3137aa
+@offender_crn = Q220001
+
+### Get offender details
+GET {{HOST}}/v2/offenders/crn/{{offender_crn}}
+Authorization: Bearer {{hmpps_auth.token}}
+Accept: application/json
+
+### Get upcoming questions for the offender
+GET {{HOST}}/v2/questions/upcoming/{{offender_crn}}/offender-questions?language=en-GB
+Authorization: Bearer {{hmpps_auth.token}}
+Accept: application/json
+
+### Get upcomping question items for the offender
+GET {{HOST}}/v2/questions/upcoming/{{offender_crn}}/question-items?language=en-GB
+Authorization: Bearer {{hmpps_auth.token}}
+Accept: application/json
+
+### List available custom questions
+GET {{HOST}}/v2/questions/templates?language=en-GB
+Authorization: Bearer {{hmpps_auth.token}}
+Accept: application/json
+
+### Add custom questions to an offender's next checkin
+PUT {{HOST}}/v2/questions/assignment?crn={{offender_crn}}
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+  "questions": [
+    {
+      "id": 4,
+      "params": {
+        "placeholders": {
+          "thing": "pottery class"
+        },
+        "responseFormat": "TEXT"
+      }
+    }
+  ],
+  "language": "en-GB",
+  "author": "BARRY.WHITE"
+}
+
+### Delete upcoming assignment
+DELETE {{HOST}}/v2/questions/assignment?crn={{offender_crn}}
+Authorization: Bearer {{hmpps_auth.token}}

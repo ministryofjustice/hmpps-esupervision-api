@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
@@ -530,7 +531,6 @@ class QuestionRepository(
   private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
   private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
 ) {
-
   /**
    * Get questions for a specific list.
    *
@@ -538,19 +538,19 @@ class QuestionRepository(
    */
   fun getListItems(listId: Long, language: Language = Language.ENGLISH): List<QuestionListItemDto> = jdbcTemplate.query(
     "select * from get_question_list(?::integer, ?::text_language)",
-    { rs, idx ->
-      val template = QuestionTemplateDto(
-        id = rs.getLong("question_id"),
-        template = rs.getString("question_template"),
-        responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
-        responseSpec = asMap(rs, "response_spec"),
-      )
-      QuestionListItemDto(
-        template = template,
-        params = asMap(rs, "params"),
-      )
-    },
+    { rs, idx -> listItemRowMapper(rs, idx) },
     listId,
+    language.dbString,
+  )
+
+  fun defaultListItems(language: Language): List<QuestionListItemDto> = jdbcTemplate.query(
+    """
+        with default_question_list as (
+          select id as list_id from question_list where name = 'Default'
+        )
+        select * from get_question_list((select list_id from default_question_list), ?::text_language)
+      """,
+    { rs, idx -> listItemRowMapper(rs, idx) },
     language.dbString,
   )
 
@@ -560,7 +560,7 @@ class QuestionRepository(
   fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
       "select * from get_question_templates(?::text_language, ?)",
-      { rs, _ -> rowMapper(rs, 0) },
+      { rs, idx -> questionTemplateRowMapper(rs, idx) },
       language.dbString,
       author,
     )
@@ -573,9 +573,19 @@ class QuestionRepository(
   fun getFixedQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
       "select * from get_question_templates(?::text_language, ?, 'FIXED'::question_policy)",
-      { rs, _ -> rowMapper(rs, 0) },
+      { rs, idx -> questionTemplateRowMapper(rs, idx) },
       language.dbString,
       author,
+    )
+    return result
+  }
+
+  fun getQuestionTemplates(questionIds: List<Long>, language: Language): List<QuestionTemplateDto> {
+    val result = jdbcTemplate.query(
+      "select * from get_question_templates_by_ids(?, ?::text_language)",
+      { rs, idx -> questionTemplateRowMapper(rs, idx) },
+      questionIds.toTypedArray(),
+      language.dbString,
     )
     return result
   }
@@ -591,13 +601,30 @@ class QuestionRepository(
     objectMapper.writeValueAsString(questions),
   )
 
-  private fun rowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto {
+  private fun questionTemplateRowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto {
     val spec: Map<String, Any> = asMap(rs, "response_spec")
     return QuestionTemplateDto(
       id = rs.getLong("question_id"),
+      policy = QuestionPolicy.fromString(rs.getString("policy")),
       template = rs.getString("question_template"),
       responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
       responseSpec = spec,
+      example = rs.getString("example"),
+    )
+  }
+
+  private fun listItemRowMapper(rs: ResultSet, idx: Int): QuestionListItemDto {
+    val template = QuestionTemplateDto(
+      id = rs.getLong("question_id"),
+      policy = QuestionPolicy.fromString(rs.getString("policy")),
+      template = rs.getString("question_template"),
+      responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
+      responseSpec = asMap(rs, "response_spec"),
+      example = rs.getString("example"),
+    )
+    return QuestionListItemDto(
+      template = template,
+      params = asMap(rs, "params"),
     )
   }
 
@@ -636,4 +663,26 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
     nativeQuery = true,
   )
   fun upcomingAssignment(offenderId: Long): Long?
+
+  /**
+   * Returns question list ID of upcoming question list assignment, if any.
+   */
+  @Query(
+    """
+    select qla.question_list_id from question_list_assignment qla
+    join offender_v2 o on o.id = qla.offender_id
+    where o.crn = :crn and qla.offender_id = :offenderId and qla.checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  fun upcomingAssignment(crn: CRN): Long?
+
+  @Query(
+    """
+    delete from question_list_assignment where offender_id = :offenderId and checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun deleteUpcomingAssignment(offenderId: Long): Int
 }

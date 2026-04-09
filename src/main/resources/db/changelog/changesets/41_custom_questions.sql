@@ -24,16 +24,12 @@ create table question_info(
     -- question_template: can contain placeholders, e.g. "How did {{placeholder1}} go?"
     question_template text not null,
     response_format response_format not null,
-    -- response_format == 'TEXT' -> {"placeholders": ["placeholder1", "placeholder2"]}
-    -- response_format == 'SINGLE_CHOICE' -> {"placeholders": ["placeholder1"], "choices": ["option1", "option2"]}
-    -- response_format == 'MULTIPLE_CHOICE' -> {"placeholders": ["placeholder1"], "choices": ["option1", "option2"]}
     response_spec jsonb,
     example text,
     created_at timestamp with time zone not null default now(),
     updated_at timestamp with time zone not null default now(),
 
     constraint question_text_unique_question_lang unique (question_id, lang)
-    --constraint question_info_pk primary key (question_id, lang)
 );
 
 create index question_policy_idx on question (policy);
@@ -59,7 +55,7 @@ create table question_list(
     updated_at timestamp with time zone not null default now()
 );
 
---rollback drop table questions_list;
+--rollback drop table question_list;
 
 --changeset roland.sadowski:41_custom_questions-3 splitStatements:false
 
@@ -67,9 +63,6 @@ create table question_list_item(
     question_list_id bigint not null references question_list(id) on delete cascade,
     question_id bigint not null references question(id) on delete cascade,
     "position" int not null,
-    -- if response_format == 'TEXT' -> {"placeholders": {"placeholder1": "value1", "placeholder2": "value2"}}
-    -- if response_format == 'SINGLE_CHOICE' -> {"placeholders": {"placeholder1": "option1", "placeholder2": "option2"}}
-    -- if response_format == 'MULTIPLE_CHOICE' -> {"placeholders": {"placeholder1": "option1", "placeholder2": "option2"}}
     params jsonb,
 
     constraint question_list_item_pk primary key (question_list_id, question_id, "position")
@@ -94,6 +87,10 @@ create table question_list_assignment(
 create unique index idx_single_pending_assignment_per_offender
 on question_list_assignment (offender_id)
 where checkin_id is null;
+
+--rollback:
+--rollback drop index idx_single_pending_assignment_per_offender;
+--rollback drop table question_list_assignment;
 
 --changeset roland.sadowski:41_custom_questions-4 splitStatements:false
 
@@ -128,7 +125,8 @@ begin
         v_question_list_id := p_question_list_id;
 
         update question_list
-        set author = coalesce(p_author, author)
+        set author = coalesce(p_author, author),
+            updated_at = now()
         where id = v_question_list_id;
     end if;
 
@@ -198,6 +196,10 @@ create constraint trigger question_localisation_check_from_question
     for each row
 execute function validate_question_localisations();
 
+--rollback:
+--rollback drop trigger if exists question_localisation_check_from_question on question;
+--rollback drop function validate_question_localisations;
+
 --changeset roland.sadowski:41_custom_questions-5.1 splitStatements:false
 
 -- we want any pending question list assignments to reference the checkin once its status changes
@@ -206,8 +208,9 @@ RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.status = 'CREATED'::offender_checkin_status_v2 AND NEW.status IS DISTINCT FROM 'CREATED'::offender_checkin_status_v2 THEN
         UPDATE question_list_assignment
-        SET checkin_id = NEW.id
-        WHERE checkin_id IS NULL;
+        SET checkin_id = NEW.id,
+            updated_at = now()
+        WHERE offender_id = OLD.offender_id and checkin_id IS NULL;
     END IF;
 
     RETURN NEW;
@@ -220,36 +223,44 @@ FOR EACH ROW
 WHEN (OLD.status = 'CREATED'::offender_checkin_status_v2 and OLD.STATUS IS DISTINCT FROM NEW.status)
 EXECUTE FUNCTION fn_update_question_assignment();
 
+--rollback:
+--rollback drop trigger if exists trg_checkin_status_change on offender_checkin_v2;
+--rollback drop function fn_update_question_assignment;
+
 --changeset roland.sadowski:41_custom_questions-6 splitStatements:false
 
 create or replace function get_question_list(p_list_id bigint, p_lang text_language)
 returns table (
         question_id bigint,
+        policy question_policy,
         question_template text,
         response_format response_format,
         response_spec jsonb,
+        example text,
         params jsonb,
         "position" int,
         section int
 ) as $$
 begin
     return query
-    select q.id,
+    select q.id, q.policy,
            qi.question_template, qi.response_format, qi.response_spec,
-           qli.params, qli.position as "position",
+           coalesce(qi.example, qi2.example) as example, qli.params, qli.position as "position",
            1 as section
     from question q
              join question_info qi on q.id = qi.question_id
              join question_list_item qli on q.id = qli.question_id
+             left join question_info qi2 on q.id = qi2.question_id and qi2.lang != p_lang
     where qli.question_list_id = 1 and qi.lang = p_lang
     union select
-        q.id,
+        q.id, q.policy,
         qi.question_template, qi.response_format, qi.response_spec,
-        qli.params, qli.position as "position",
+        coalesce(qi.example, qi2.example) as example, qli.params, qli.position as "position",
         2 as section
     from question q
              join question_info qi on q.id = qi.question_id
              join question_list_item qli on q.id = qli.question_id
+             left join question_info qi2 on q.id = qi2.question_id and qi2.lang != p_lang
     where qli.question_list_id = p_list_id and qli.question_list_id <> 1 and qi.lang = p_lang
     order by section, "position";
 end;
@@ -263,8 +274,10 @@ create or replace function define_system_question(
     p_response_format response_format,
     en_question_template text,
     en_spec jsonb,
+    en_example text,
     cy_question_template text,
-    cy_spec jsonb
+    cy_spec jsonb,
+    cy_example text
 ) returns bigint as $$
 declare
     new_question_id bigint;
@@ -278,19 +291,21 @@ begin
         lang,
         question_template,
         response_format,
-        response_spec
+        response_spec,
+        example
     )
     select
         new_question_id,
         q.lang,
         q.template,
         p_response_format,
-        q.spec
+        q.spec,
+        q.example
     from (
              values
-                 ('en-GB'::text_language, en_question_template, en_spec),
-                 ('cy-GB'::text_language, cy_question_template, cy_spec)
-         ) as q(lang, template, spec);
+                 ('en-GB'::text_language, en_question_template, en_spec, en_example),
+                 ('cy-GB'::text_language, cy_question_template, cy_spec, cy_example)
+         ) as q(lang, template, spec, example);
 
     return new_question_id;
 end;
@@ -304,8 +319,10 @@ create or replace function define_custom_question(
     p_author varchar(255),
     en_question_template text default null,
     en_spec jsonb default null,
+    en_example text default null,
     cy_question_template text default null,
-    cy_spec jsonb default null
+    cy_spec jsonb default null,
+    cy_example text default null
 ) returns integer as $$
 declare
     new_question_id integer;
@@ -319,19 +336,21 @@ begin
         lang,
         question_template,
         response_format,
-        response_spec
+        response_spec,
+        example
     )
     select
         new_question_id,
         q.lang,
         q.template,
         'TEXT'::response_format,
-        q.spec
+        q.spec,
+        q.example
     from (
              values
-                 ('en-GB'::text_language, en_question_template, en_spec),
-                 ('cy-GB'::text_language, cy_question_template, cy_spec)
-         ) as q(lang, template, spec)
+                 ('en-GB'::text_language, en_question_template, en_spec, en_example),
+                 ('cy-GB'::text_language, cy_question_template, cy_spec, cy_example)
+         ) as q(lang, template, spec, example)
     where q.template is not null; -- This ensures only provided versions are saved
 
     if not exists (select 1 from question_info where question_id = new_question_id) then
@@ -426,6 +445,7 @@ q_mandatory_1 := define_system_question(
                          "domain_msg_head": "They don't need support"
                    }
                }$$::jsonb,
+                null,
                 -- cy-GB
                'Is there anything you need support with or want to let us know about?',
                $${
@@ -491,7 +511,8 @@ q_mandatory_1 := define_system_question(
                    "details_id": null,
                    "domain_msg_head": "They don't need help"
                  }
-               }$$::jsonb
+               }$$::jsonb,
+             null
        );
 
 q_mandatory_2 := define_system_question(
@@ -542,6 +563,7 @@ q_mandatory_2 := define_system_question(
                    }
                  ]
                }$$::jsonb,
+               null,
                -- cy-GB
                'How have you been feeling since we last spoke?',
                $${
@@ -588,7 +610,8 @@ q_mandatory_2 := define_system_question(
                      "domain_msg_head": "What they want us to know about how they have been feeling"
                    }
                  ]
-               }$$::jsonb
+               }$$::jsonb,
+               null
        );
 
 q_mandatory_3 := define_system_question(
@@ -615,6 +638,7 @@ q_mandatory_3 := define_system_question(
             }
           ]
         }$$::jsonb,
+        null,
     -- cy-GB
         'Would you like us to contact you about anything before your next appointment?',
         $${
@@ -637,7 +661,8 @@ q_mandatory_3 := define_system_question(
               "label": "No"
             }
           ]
-        }$$::jsonb
+        }$$::jsonb,
+        null
 );
 
 -- defines the default question list that every checkin will require by default.
@@ -670,12 +695,14 @@ values ((select ql.id from question_list ql where name = 'Default')::bigint,
 --          "placeholders": [ "thing" ],
 --          "hint": "Hint for the question",
 --          "domain_msg_head": "Did they finish this thing?"}$$::jsonb,
+--         'school, basket weaving course',
 --         -- cy-GB
 --         'Bork bork bork {{thing}}?',
 --         $${
 --           "placeholders": [ "thing" ],
 --           "hint": "Hint for the question",
---           "domain_msg_head": "Did they finish this thing?"}$$::jsonb
+--           "domain_msg_head": "Did they finish this thing?"}$$::jsonb,
+--         null
 --         );
 
 end $main$;
@@ -691,19 +718,23 @@ end $main$;
 create or replace function get_question_templates(p_lang text_language, p_author varchar(255), p_policy question_policy default 'CUSTOMISABLE'::question_policy)
     returns table (
                       question_id bigint,
+                      policy question_policy,
                       question_template text,
                       response_format response_format,
-                      response_spec jsonb
+                      response_spec jsonb,
+                      example text
                   ) as $$
 begin
     return query
         select
-            q.id,
-            qi.question_template, qi.response_format, qi.response_spec
+            q.id, q.policy,
+            qi.question_template, qi.response_format, qi.response_spec, coalesce(qi.example, qi2.example) as example
         from question q
         join question_info qi on q.id = qi.question_id
+        left join question_info qi2 on qi2.question_id = q.id
         where
             qi.lang = p_lang
+          and qi2.lang != p_lang
           and q.author = p_author
           and q.policy = p_policy
         order by q.created_at;
@@ -711,3 +742,32 @@ end;
 $$ LANGUAGE plpgsql STABLE;
 
 --rollback drop function get_question_templates;
+
+--changeset roland.sadowski:41_custom_questions-11 splitStatements:false
+
+create or replace function get_question_templates_by_ids(ids bigint[], p_lang text_language)
+    returns table (
+                      question_id bigint,
+                      policy question_policy,
+                      question_template text,
+                      response_format response_format,
+                      response_spec jsonb,
+                      example text
+                  ) as $$
+begin
+    return query
+        select
+            q.id, q.policy,
+            qi.question_template, qi.response_format, qi.response_spec, coalesce(qi.example, qi2.example) as example
+        from question q
+        join question_info qi on q.id = qi.question_id
+        left join question_info qi2 on qi2.question_id = q.id
+        where
+            qi.lang = p_lang
+            and qi2.lang != p_lang
+            and q.id = any(ids)
+        order by q.created_at;
+end;
+$$ LANGUAGE plpgsql STABLE;
+
+--rollback drop function get_question_templates_by_ids;
