@@ -206,12 +206,10 @@ execute function validate_question_localisations();
 CREATE OR REPLACE FUNCTION fn_update_question_assignment()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF OLD.status = 'CREATED'::offender_checkin_status_v2 AND NEW.status IS DISTINCT FROM 'CREATED'::offender_checkin_status_v2 THEN
-        UPDATE question_list_assignment
-        SET checkin_id = NEW.id,
-            updated_at = now()
-        WHERE offender_id = OLD.offender_id and checkin_id IS NULL;
-    END IF;
+    UPDATE question_list_assignment
+    SET checkin_id = NEW.id,
+        updated_at = now()
+    WHERE offender_id = OLD.offender_id and checkin_id IS NULL;
 
     RETURN NEW;
 END;
