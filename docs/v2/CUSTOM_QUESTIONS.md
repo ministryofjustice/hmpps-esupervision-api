@@ -67,8 +67,8 @@ erDiagram
 
 There are constraints on the tables that enforce the following rules:
 - each `question` with `author='SYSTEM'` must have exactly two `question_info` records (one per language)
-- there can be only one pending `question_list_assignment` per `offender_id`, where "pending" means the check in
-  has not been SUBMITTED or EXPIRED yet.
+- there can be only one upcoming `question_list_assignment` per `offender_id`, where "upcoming" means the check in
+  has not been SUBMITTED or EXPIRED yet (it's possible it has been CREATED).
 - a trigger will automatically set the `checkin_id` of a `qustion_list_assignment` when the check in's status changes
 
 A few postgres functions allow to query and define the questions, question lists and question list assignments:
