@@ -74,12 +74,9 @@ create table question_list_item(
 
 create table question_list_assignment(
     id bigint generated always as identity primary key,
---     question_list_id bigint not null references question_list(id) on delete cascade,
---     offender_id bigint not null references offender(id) on delete cascade,
---     checkin_id bigint references checkin(id) on delete cascade,
-    question_list_id bigint not null,
-    offender_id bigint not null,
-    checkin_id bigint,
+    question_list_id bigint not null references question_list(id) on delete cascade,
+    offender_id bigint not null references offender_v2(id) on delete cascade,
+    checkin_id bigint references offender_checkin_v2(id) on delete cascade,
     created_at timestamp with time zone not null default now(),
     updated_at timestamp with time zone not null default now()
 );
