@@ -92,6 +92,8 @@ class QuestionService(
 
   @Transactional
   fun assignCustomQuestions(crn: CRN, @ValidQuestionParams request: AssignCustomQuestionsRequest): AssignCustomQuestionsResponse {
+    require(crn.matches(crnRegex))
+    // validate the supplied params
     val questionsById = questionsRepository
       .getQuestionTemplates(request.questions.map { it.id }, request.language)
       .associateBy { it.id }
@@ -101,7 +103,6 @@ class QuestionService(
       validateAgainstTemplates(it, template)
     }
 
-    require(crn.matches(crnRegex))
     val offender = offenderRepository.findByCrn(crn).orElseThrow { BadArgumentException("Offender not found for CRN=$crn") }
     if (offender.status != OffenderStatus.VERIFIED) {
       throw BadArgumentException("Can't add question to offender with status ${offender.status}")
