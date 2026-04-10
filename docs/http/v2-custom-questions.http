@@ -34,8 +34,7 @@ Content-Type: application/json
       "params": {
         "placeholders": {
           "thing": "pottery class"
-        },
-        "responseFormat": "TEXT"
+        }
       }
     }
   ],

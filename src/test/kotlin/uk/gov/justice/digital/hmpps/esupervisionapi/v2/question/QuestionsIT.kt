@@ -249,6 +249,6 @@ private fun makeAssignCustomQuestionsRequest(
   questions = templates.mapIndexed { index, dto ->
     val paramsPlaceholders = mutableMapOf<String, Any>()
     dto.placeholders().forEach { paramsPlaceholders[it] = "$it value $index" }
-    CustomQuestionItem(id = dto.id, params = mapOf("placeholders" to paramsPlaceholders, "responseFormat" to dto.responseFormat.name))
+    CustomQuestionItem(id = dto.id, params = mapOf("placeholders" to paramsPlaceholders))
   },
 )

@@ -28,7 +28,7 @@ class QuestionParamsValidator : ConstraintValidator<ValidQuestionParams, AssignC
     val questions = value.questions
     var valid = true
     for (i in 0..<questions.size) {
-      valid = valid && validateParams(questions[i], i, context)
+      valid = valid && preValidateParams(questions[i], i, context)
     }
     return valid
   }
@@ -49,11 +49,16 @@ fun validatePlaceholders(params: Map<String, Any>): Boolean {
 }
 
 /**
+ * A high-level validation pass. Allows us to quickly reject obviously invalid input.
+ *
+ * Note: proper validation requires us to have the `responseSpec` of a question (see [validateAgainstTemplates]).
+ * This means that even when we return true, the question may not be valid
+ *
  * @param question
  * @param i question index (for error messages
  * @param context
  */
-fun validateParams(
+fun preValidateParams(
   question: CustomQuestionItem,
   i: Int = 1,
   context: ConstraintValidatorContext?,
@@ -62,24 +67,7 @@ fun validateParams(
     context?.constraint("Invalid placeholders for question ${i + 1}")
     return false
   }
-  when (val format = question.params["responseFormat"]) {
-    "TEXT" -> {
-      return true
-    }
-
-    "MULTIPLE_CHOICE" -> {
-      return true
-    }
-
-    "SINGLE_CHOICE" -> {
-      return true
-    }
-
-    else -> {
-      context?.constraint("Invalid responseFormat for question ${i + 1}: '$format'")
-      return false
-    }
-  }
+  return true
 }
 
 @Target(AnnotationTarget.CLASS, AnnotationTarget.VALUE_PARAMETER)
@@ -93,14 +81,10 @@ annotation class ValidQuestionParams(
 
 fun validateAgainstTemplates(item: CustomQuestionItem, template: QuestionTemplateDto) {
   if (item.params.containsKey("placeholders")) {
-    val placeholders = (item.params["placeholders"] as Map<String, String>).keys
-    if (placeholders.any { !template.placeholders().contains(it) }) {
-      throw BadArgumentException("Question ${item.id} has invalid placeholders: $placeholders")
-    }
-  }
-  if (item.params.containsKey("responseFormat")) {
-    if (item.params["responseFormat"] != template.responseFormat.name) {
-      throw BadArgumentException("Question ${item.id} has invalid responseFormat: ${item.params["responseFormat"]}")
+    val paramsPlaceholders = (item.params["placeholders"] as Map<String, String>).keys
+    val templatePlaceholders = template.placeholders().toSet()
+    if (paramsPlaceholders != templatePlaceholders) {
+      throw BadArgumentException("Question ${item.id} has invalid placeholders: $paramsPlaceholders. Expected: $templatePlaceholders")
     }
   }
 }

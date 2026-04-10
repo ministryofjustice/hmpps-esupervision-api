@@ -678,13 +678,13 @@ from question_list;
 
 insert into question_list_item(question_list_id, question_id, "position", params)
 values ((select ql.id from question_list ql where name = 'Default'),
-        q_mandatory_1, 1, $${"responseFormat": "MULTIPLE_CHOICE"}$$::jsonb);
+        q_mandatory_1, 1, $${}$$::jsonb);
 insert into question_list_item(question_list_id, question_id, "position", params)
 values ((select ql.id from question_list ql where name = 'Default')::bigint,
-        q_mandatory_2, 2, $${"responseFormat": "SINGLE_CHOICE"}$$::jsonb);
+        q_mandatory_2, 2, $${}$$::jsonb);
 insert into question_list_item(question_list_id, question_id, "position", params)
 values ((select ql.id from question_list ql where name = 'Default')::bigint,
-        q_mandatory_3, 3, $${"responseFormat": "SINGLE_CHOICE"}$$::jsonb);
+        q_mandatory_3, 3, $${}$$::jsonb);
 
 -- perform define_custom_question(
 --         'SYSTEM',
