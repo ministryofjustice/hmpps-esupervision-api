@@ -142,6 +142,34 @@ class QuestionsIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `Checkin status change causes assignment update`() {
+    val offender = offenderTemplate.copy(crn = "A123456").toEntity()
+    offenderV2Repository.save(offender)
+
+    val systemTemplates = questionService.listQuestionTemplates(Language.ENGLISH)
+    assertEquals(0, systemTemplates.size)
+
+    val templates = questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    assertEquals(1, templates.size)
+
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    val resp = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+
+    val qlitems = questionListItemRepository.findAllItems()
+    assertEquals(3 + 1, qlitems.size)
+
+    val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnV2Request("BARRY.WHITE", offender.crn, clock.today()))
+    val assignment = questionService.upcomingAssignment(offender.crn)
+    assertNotNull(assignment.questionList)
+
+    clock.advanceBy(Duration.ofHours(4))
+    offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
+
+    val assignmentAfterSubmission = questionService.upcomingAssignment(offender.crn)
+    assertNull(assignmentAfterSubmission.questionList)
+  }
+
+  @Test
   fun `QuestionService - assign custom questions - failure (it's checkin day)`() {
     val offender = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today()).toEntity()
     offenderV2Repository.save(offender)
