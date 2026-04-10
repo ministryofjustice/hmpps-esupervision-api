@@ -612,57 +612,6 @@ q_mandatory_2 := define_system_question(
                null
        );
 
-q_mandatory_3 := define_system_question(
-        'SINGLE_CHOICE'::response_format,
-        'Would you like us to contact you about anything before your next appointment?',
-        $${
-          "placeholders": [],
-          "hint": "Think about things like if you have noticed a change in your mood and what may have caused this. ",
-          "message": {
-            "html": "If you need to speak to someone urgently about how you are feeling, check the <a href=\"https://www.nhs.uk/mental-health/feelings-symptoms-behaviours/behaviours/help-for-suicidal-thoughts/\" class=\"govuk-link\" target=\"_blank\">NHS website for help (opens in new tab)</a>."
-          },
-          "domain_msg_head": "If they need us to contact them before their next appointment",
-          "choices": [
-            {
-              "id": "YES",
-              "label": "Yes",
-              "details_label": "This could be something you've already asked for help with or something new.",
-              "details_id": "callbackDetails",
-              "domain_msg_head": "What they want to talk about"
-            },
-            {
-              "id": "NO",
-              "label": "No"
-            }
-          ]
-        }$$::jsonb,
-        null,
-    -- cy-GB
-        'Would you like us to contact you about anything before your next appointment?',
-        $${
-          "placeholders": [],
-          "hint": "Think about things like if you have noticed a change in your mood and what may have caused this. ",
-          "message": {
-            "html": "If you need to speak to someone urgently about how you are feeling, check the <a href=\"https://www.nhs.uk/mental-health/feelings-symptoms-behaviours/behaviours/help-for-suicidal-thoughts/\" class=\"govuk-link\" target=\"_blank\">NHS website for help (opens in new tab)</a>."
-          },
-          "domain_msg_head": "If they need us to contact them before their next appointment",
-          "choices": [
-            {
-              "id": "YES",
-              "label": "Yes",
-              "details_label": "This could be something you've already asked for help with or something new.",
-              "details_id": "callbackDetails",
-              "domain_msg_head": "What they want to talk about"
-            },
-            {
-              "id": "NO",
-              "label": "No"
-            }
-          ]
-        }$$::jsonb,
-        null
-);
-
 -- defines the default question list that every checkin will require by default.
 -- If the practitioner adds custom questions to a checkin, they
 insert into question_list(id, author, name, comment)
@@ -682,9 +631,6 @@ values ((select ql.id from question_list ql where name = 'Default'),
 insert into question_list_item(question_list_id, question_id, "position", params)
 values ((select ql.id from question_list ql where name = 'Default')::bigint,
         q_mandatory_2, 2, $${}$$::jsonb);
-insert into question_list_item(question_list_id, question_id, "position", params)
-values ((select ql.id from question_list ql where name = 'Default')::bigint,
-        q_mandatory_3, 3, $${}$$::jsonb);
 
 -- perform define_custom_question(
 --         'SYSTEM',

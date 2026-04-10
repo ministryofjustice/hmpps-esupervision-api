@@ -95,7 +95,7 @@ class QuestionsIT : IntegrationTestBase() {
   @Test
   fun `define a list of custom questions - success`() {
     val defaultQuestions = questionRepository.getListItems(1)
-    assertEquals(3, defaultQuestions.size)
+    assertEquals(2, defaultQuestions.size)
 
     // get list of custom questions and add a list
     val author = "BARRY.WHITE"
@@ -117,7 +117,7 @@ class QuestionsIT : IntegrationTestBase() {
 
     assertTrue(upsertedList != null)
     val upsertedItems = questionRepository.getListItems(upsertedList!!)
-    assertEquals(3 + 1, upsertedItems.size)
+    assertEquals(2 + 1, upsertedItems.size)
   }
 
   @Test
@@ -135,10 +135,10 @@ class QuestionsIT : IntegrationTestBase() {
     val resp = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
 
     val qlitems = questionListItemRepository.findAllItems()
-    assertEquals(3 + 1, qlitems.size)
+    assertEquals(2 + 1, qlitems.size)
 
     val offenderQuestions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH)
-    assertEquals(3 + 1, offenderQuestions.questions.size)
+    assertEquals(2 + 1, offenderQuestions.questions.size)
   }
 
   @Test
@@ -156,7 +156,7 @@ class QuestionsIT : IntegrationTestBase() {
     val resp = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
 
     val qlitems = questionListItemRepository.findAllItems()
-    assertEquals(3 + 1, qlitems.size)
+    assertEquals(2 + 1, qlitems.size)
 
     val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnV2Request("BARRY.WHITE", offender.crn, clock.today()))
     val assignment = questionService.upcomingAssignment(offender.crn)
