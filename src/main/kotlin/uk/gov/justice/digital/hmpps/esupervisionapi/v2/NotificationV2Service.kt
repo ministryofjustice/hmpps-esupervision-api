@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.springframework.stereotype.Service
+import java.util.UUID
 
 /**
  * V2 Notification Service
@@ -15,22 +16,22 @@ class NotificationV2Service(
   /**
    * Send notifications for setup completed event
    */
-  fun sendSetupCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null) {
-    orchestrator.sendSetupCompletedNotifications(offender, contactDetails)
+  fun sendSetupCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
+    orchestrator.sendSetupCompletedNotifications(offender, contactDetails, setupId)
   }
 
   /**
    * Send notifications for deactivation completed event
    */
-  fun sendDeactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null) {
-    orchestrator.sendDeactivationCompletedNotifications(offender, contactDetails)
+  fun sendDeactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
+    orchestrator.sendDeactivationCompletedNotifications(offender, contactDetails, setupId)
   }
 
   /**
    * Send notifications for reactivation completed event
    */
-  fun sendReactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null) {
-    orchestrator.sendReactivationCompletedNotifications(offender, contactDetails)
+  fun sendReactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
+    orchestrator.sendReactivationCompletedNotifications(offender, contactDetails, setupId)
   }
 
   /**

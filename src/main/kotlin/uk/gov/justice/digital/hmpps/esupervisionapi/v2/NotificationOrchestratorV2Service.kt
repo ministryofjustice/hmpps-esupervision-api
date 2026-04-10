@@ -49,6 +49,7 @@ class NotificationOrchestratorV2Service(
   fun sendSetupCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
+    setupId: UUID? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
@@ -57,7 +58,10 @@ class NotificationOrchestratorV2Service(
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
-      additionalInformation = details?.let { activeEventNumber(offender, it) }?.let { AdditionalInformation(eventNumber = it) },
+      additionalInformation = AdditionalInformation(
+        eventNumber = details?.let { activeEventNumber(offender, it) },
+        setupId = setupId,
+      ),
     )
 
     eventAuditService.recordSetupCompleted(offender, details)
@@ -99,6 +103,7 @@ class NotificationOrchestratorV2Service(
   fun sendReactivationCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
+    setupId: UUID? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
@@ -107,7 +112,10 @@ class NotificationOrchestratorV2Service(
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner reactivated online check-ins for offender ${offender.crn}",
-      additionalInformation = details?.let { activeEventNumber(offender, it) }?.let { AdditionalInformation(eventNumber = it) },
+      additionalInformation = AdditionalInformation(
+        eventNumber = details?.let { activeEventNumber(offender, it) },
+        setupId = setupId,
+      ),
     )
 
     if (details != null) {
@@ -147,6 +155,7 @@ class NotificationOrchestratorV2Service(
   fun sendDeactivationCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
+    setupId: UUID? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
@@ -155,7 +164,10 @@ class NotificationOrchestratorV2Service(
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Online check-ins stopped for offender ${offender.crn}",
-      additionalInformation = details?.let { activeEventNumber(offender, it) }?.let { AdditionalInformation(eventNumber = it) },
+      additionalInformation = AdditionalInformation(
+        eventNumber = details?.let { activeEventNumber(offender, it) },
+        setupId = setupId,
+      ),
     )
 
     if (details != null) {
