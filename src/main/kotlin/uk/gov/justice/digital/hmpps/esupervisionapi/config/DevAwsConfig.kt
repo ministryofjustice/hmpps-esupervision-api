@@ -14,7 +14,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import java.net.URI
 
 @Configuration
-@Profile("(dev | test) & !local")
+@Profile("(dev | test) & !local-aws")
 class DevAwsConfig {
   @Value("\${aws.region-name}")
   lateinit var region: String

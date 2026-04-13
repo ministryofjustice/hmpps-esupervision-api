@@ -11,7 +11,7 @@ import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 
 @Configuration
-@Profile("local")
+@Profile("local-aws")
 class LocalAwsConfig(
   @Value("\${aws.region-name}") private val region: String,
   @Value("\${aws.s3.profile}") private val s3Profile: String,

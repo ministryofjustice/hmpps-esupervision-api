@@ -28,7 +28,7 @@ import java.time.Duration
  *   - A bean named 'rekognitionS3' implementing @see S3UploadService
  *   - A bean implementing @see OffenderIdVerifier
  */
-@Profile("!test & !stubrekog & !local")
+@Profile("!test & !stubrekog & !local-aws")
 @Configuration
 class RekogConfig(
   @Value("\${rekognition.region}") val region: String,
