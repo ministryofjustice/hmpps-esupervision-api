@@ -26,7 +26,7 @@ import java.time.Duration
  * (rekognition.profile) as the base credentials for the STS assume-role chain,
  * allowing separate credentials from the S3 profile used in LocalAwsConfig.
  *
- * Activate with: SPRING_PROFILES_ACTIVE=dev,local
+ * Activate with: SPRING_PROFILES_ACTIVE=local
  */
 @Profile("local")
 @Configuration

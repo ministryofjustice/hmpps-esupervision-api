@@ -655,7 +655,6 @@ class CheckinV2Service(
     )
 
     val offender = offenderRepository.findByCrn(request.offender).orElseThrow {
-      println("Offender not found: $request.offender")
       ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $request.offender")
     }
 
