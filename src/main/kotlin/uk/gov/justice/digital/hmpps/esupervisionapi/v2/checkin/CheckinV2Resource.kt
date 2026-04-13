@@ -30,7 +30,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationRespons
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessSessionResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerificationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerifyRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogCheckinEventV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
@@ -38,6 +37,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewStartedRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UploadLocationsV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
 import java.util.UUID
 
 /** V2 Checkin REST Controller */

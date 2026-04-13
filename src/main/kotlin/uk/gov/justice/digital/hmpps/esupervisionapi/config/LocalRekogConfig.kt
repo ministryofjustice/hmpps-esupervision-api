@@ -58,18 +58,16 @@ class LocalRekogConfig(
   }
 
   @Bean(name = ["rekognitionS3Client"])
-  fun s3Client(rekognitionCredentialsProvider: AwsCredentialsProvider): S3Client =
-    S3Client.builder()
-      .region(Region.of(region))
-      .credentialsProvider(rekognitionCredentialsProvider)
-      .build()
+  fun s3Client(rekognitionCredentialsProvider: AwsCredentialsProvider): S3Client = S3Client.builder()
+    .region(Region.of(region))
+    .credentialsProvider(rekognitionCredentialsProvider)
+    .build()
 
   @Bean(name = ["rekognitionS3PreSigner"])
-  fun s3Presigner(rekognitionCredentialsProvider: AwsCredentialsProvider): S3Presigner =
-    S3Presigner.builder()
-      .region(Region.of(region))
-      .credentialsProvider(rekognitionCredentialsProvider)
-      .build()
+  fun s3Presigner(rekognitionCredentialsProvider: AwsCredentialsProvider): S3Presigner = S3Presigner.builder()
+    .region(Region.of(region))
+    .credentialsProvider(rekognitionCredentialsProvider)
+    .build()
 
   @Bean(name = ["rekognitionS3"])
   fun s3UploadService(
@@ -90,17 +88,16 @@ class LocalRekogConfig(
   }
 
   @Bean
-  fun rekognitionAsyncClient(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionAsyncClient =
-    RekognitionAsyncClient.builder()
-      .region(Region.of(region))
-      .credentialsProvider(rekognitionCredentialsProvider)
-      .httpClientBuilder {
-        NettyNioAsyncHttpClient.builder()
-          .maxConcurrency(rekognitionMaxConcurrency)
-          .readTimeout(Duration.ofSeconds(rekognitionReadTimeoutSeconds))
-          .build()
-      }
-      .build()
+  fun rekognitionAsyncClient(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionAsyncClient = RekognitionAsyncClient.builder()
+    .region(Region.of(region))
+    .credentialsProvider(rekognitionCredentialsProvider)
+    .httpClientBuilder {
+      NettyNioAsyncHttpClient.builder()
+        .maxConcurrency(rekognitionMaxConcurrency)
+        .readTimeout(Duration.ofSeconds(rekognitionReadTimeoutSeconds))
+        .build()
+    }
+    .build()
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(LocalRekogConfig::class.java)
