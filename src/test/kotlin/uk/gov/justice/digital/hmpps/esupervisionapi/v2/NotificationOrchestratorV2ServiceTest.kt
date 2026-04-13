@@ -68,7 +68,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     service.sendSetupCompletedNotifications(offender, contactDetails)
 
-    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), eq(null))
+    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
   }
 
   @Test
@@ -80,7 +80,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendSetupCompletedNotifications(offender, null)
 
     // Domain event ALWAYS published (even without contact details)
-    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), eq(null))
+    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
     // Audit event ALWAYS recorded (even with null contact details)
     verify(eventAuditService).recordSetupCompleted(offender, null)
     // Notifications NOT sent (because contact details missing)
@@ -204,7 +204,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     service.sendSetupCompletedNotifications(offender, contactDetails)
 
-    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), eq(null))
+    verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
   }
 
   @Test
@@ -223,12 +223,12 @@ class NotificationOrchestratorV2ServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L)),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = null)),
     )
   }
 
   @Test
-  fun `sendSetupCompletedNotifications - publishes event without additionalInformation when no events`() {
+  fun `sendSetupCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
     val contactDetails = createContactDetails()
 
@@ -243,7 +243,47 @@ class NotificationOrchestratorV2ServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
+      eq(AdditionalInformation(eventNumber = null, setupId = null)),
+    )
+  }
+
+  @Test
+  fun `sendReactivationCompletedNotifications - publishes setup completed domain event with event number`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendReactivationCompletedNotifications(offender, contactDetails)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_COMPLETED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
       eq(null),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = null)),
+    )
+  }
+
+  @Test
+  fun `sendReactivationCompletedNotifications - publishes event without eventNumber when no events`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetails()
+
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendReactivationCompletedNotifications(offender, contactDetails)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_COMPLETED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      eq(null),
+      eq(AdditionalInformation(eventNumber = null, setupId = null)),
     )
   }
 
@@ -263,12 +303,12 @@ class NotificationOrchestratorV2ServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L)),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = null)),
     )
   }
 
   @Test
-  fun `sendDeactivationCompletedNotifications - publishes event without additionalInformation when no events`() {
+  fun `sendDeactivationCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
     val contactDetails = createContactDetails()
 
@@ -283,7 +323,7 @@ class NotificationOrchestratorV2ServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = null, setupId = null)),
     )
   }
 

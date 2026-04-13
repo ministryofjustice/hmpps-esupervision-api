@@ -122,7 +122,16 @@ open class OffenderSetupV2(
 
   @Column(name = "started_at", nullable = true)
   open var startedAt: Instant? = null,
+
+  @Column(name = "setup_counter", nullable = false)
+  open var setupCounter: Int = 1,
 ) : V2BaseEntity() {
+  fun setupId(): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
+
+  fun incrementSetupCounter() {
+    setupCounter++
+  }
+
   fun dto(): OffenderSetupV2Dto = OffenderSetupV2Dto(
     uuid = uuid,
     practitionerId = practitionerId,

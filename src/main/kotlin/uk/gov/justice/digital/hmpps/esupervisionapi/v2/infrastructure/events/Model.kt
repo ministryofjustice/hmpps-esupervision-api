@@ -1,8 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events
 
 import java.time.ZonedDateTime
+import java.util.UUID
 
-data class AdditionalInformation(val eventNumber: Long? = null)
+data class AdditionalInformation(val eventNumber: Long? = null, val setupId: UUID? = null)
 
 data class DomainEvent(
   val eventType: String,

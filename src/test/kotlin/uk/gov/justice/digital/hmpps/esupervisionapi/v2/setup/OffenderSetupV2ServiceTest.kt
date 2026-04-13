@@ -2,11 +2,15 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
@@ -155,8 +159,10 @@ class OffenderSetupV2ServiceTest {
     // Then
     assertNotNull(result)
     assertEquals(offender.uuid, result.uuid)
+    assertEquals(1, setup.setupCounter)
     verify(s3UploadService).isSetupPhotoUploaded(setup)
     verify(offenderRepository).save(any())
+    verify(notificationService).sendSetupCompletedNotifications(any(), isNull(), eq(setup.setupId()))
   }
 
   @Test
@@ -293,6 +299,97 @@ class OffenderSetupV2ServiceTest {
     )
 
     assertEquals(first.uuid, second.uuid)
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - INACTIVE offender - increments counter and activates`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.INACTIVE
+    }
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+    )
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetupV2>())).thenAnswer { it.getArgument(0) }
+
+    val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+
+    assertEquals(OffenderStatus.VERIFIED, savedOffender.status)
+    assertEquals(2, setup.setupCounter)
+    assertNotNull(setupId)
+    verify(offenderRepository).save(offender)
+    verify(offenderSetupRepository).save(setup)
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - already VERIFIED - does not increment counter`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.VERIFIED
+    }
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+    )
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
+
+    val (returnedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+
+    assertEquals(OffenderStatus.VERIFIED, returnedOffender.status)
+    assertEquals(1, setup.setupCounter)
+    assertNotNull(setupId)
+    verify(offenderRepository, never()).save(any())
+    verify(offenderSetupRepository, never()).save(any<OffenderSetupV2>())
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - no setup exists - returns null setupId`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.INACTIVE
+    }
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.empty())
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+
+    assertEquals(OffenderStatus.VERIFIED, savedOffender.status)
+    assertNull(setupId)
+    verify(offenderRepository).save(offender)
+    verify(offenderSetupRepository, never()).save(any<OffenderSetupV2>())
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - idempotent across lifecycle`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.INACTIVE
+    }
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+    )
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetupV2>())).thenAnswer { it.getArgument(0) }
+
+    // First call: INACTIVE -> VERIFIED, counter 1 -> 2
+    val (_, firstSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+    assertEquals(2, setup.setupCounter)
+
+    // Second call: already VERIFIED, counter stays at 2
+    val (_, secondSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+    assertEquals(2, setup.setupCounter)
+    assertEquals(firstSetupId, secondSetupId)
   }
 }
 

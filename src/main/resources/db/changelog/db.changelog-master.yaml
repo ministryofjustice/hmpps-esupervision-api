@@ -80,4 +80,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/40_add_sensitive_boolean_to_offender_checkin_v2.sql
   - include:
-      file: db/changelog/changesets/41_add_liveness_columns_to_offender_checkin_v2.sql
+      file: db/changelog/changesets/41_add_setup_counter_to_offender_setup_v2.sql
+  - include:
+      file: db/changelog/changesets/42_add_liveness_columns_to_offender_checkin_v2.sql

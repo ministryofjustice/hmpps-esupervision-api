@@ -27,6 +27,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -38,6 +39,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -55,6 +57,8 @@ class OffenderV2Resource(
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationV2Service: NotificationV2Service,
   private val checkinRepository: OffenderCheckinV2Repository,
+  private val offenderSetupRepository: OffenderSetupV2Repository,
+  private val offenderSetupV2Service: OffenderSetupV2Service,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -222,7 +226,8 @@ class OffenderV2Resource(
       request.reason,
     )
 
-    notificationV2Service.sendDeactivationCompletedNotifications(offender, contactDetails)
+    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+    notificationV2Service.sendDeactivationCompletedNotifications(offender, contactDetails, setup?.setupId())
 
     return ResponseEntity.ok(saved.toSummaryDto(photoUrl))
   }
@@ -278,7 +283,7 @@ class OffenderV2Resource(
       }
       ContactPreference.EMAIL -> {
         if (contactDetails.email.isNullOrBlank()) {
-          throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reactivate: {offender.crn} does not have an email address in NDelius.")
+          throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reactivate: ${offender.crn} does not have an email address in NDelius.")
         }
       }
     }
@@ -292,11 +297,8 @@ class OffenderV2Resource(
       offender.contactPreference = pref.contactPreference
     }
 
-    offender.status = OffenderStatus.VERIFIED
-    offender.updatedAt = clock.instant()
-    val savedOffender = offenderRepository.save(offender)
-
-    notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails)
+    val (savedOffender, setupId) = offenderSetupV2Service.activateOffenderAndIncrementSetupCounter(offender)
+    notificationV2Service.sendReactivationCompletedNotifications(savedOffender, contactDetails, setupId)
 
     // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
     val today = clock.today()
