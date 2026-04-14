@@ -24,7 +24,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CustomQuestionsReminderJob
 import java.time.Clock
 import java.time.Duration
@@ -62,6 +64,14 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
   @Autowired lateinit var offenderV2Repository: OffenderV2Repository
 
+  @Autowired lateinit var offenderCheckinV2Repository: OffenderCheckinV2Repository
+
+  @Autowired lateinit var questionListItemRepository: DebugQuestionsRepository
+
+  @Autowired lateinit var questionListAssignmentRepository: QuestionListAssignmentRepository
+
+  @Autowired lateinit var questionDefinitionRepository: QuestionDefinitionRepository
+
   val dataProvider = GeneratingStubDataProvider()
 
   @BeforeEach
@@ -77,6 +87,12 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
   @AfterEach
   fun tearDown() {
     reset(notificationService)
+
+    questionListItemRepository.deleteAllNonSystem()
+    questionListAssignmentRepository.deleteAll()
+    questionListItemRepository.deleteCustomQuestions()
+    offenderCheckinV2Repository.deleteAll()
+    offenderV2Repository.deleteAll()
   }
 
   @Test
