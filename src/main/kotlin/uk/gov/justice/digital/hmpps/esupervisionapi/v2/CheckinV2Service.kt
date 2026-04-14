@@ -26,7 +26,10 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Period
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /** V2 Checkin Service Handles all checkin business logic for V2 */
 @Service
@@ -48,6 +51,8 @@ class CheckinV2Service(
   private val faceSimilarityThreshold: Float,
   @Value("\${rekognition.liveness.confidence-threshold:90.0}")
   private val livenessConfidenceThreshold: Float,
+  @Value("\${rekognition.call-timeout-seconds:30}")
+  private val rekognitionCallTimeoutSeconds: Long,
   private val eventAuditService: EventAuditV2Service,
   @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
@@ -240,7 +245,10 @@ class CheckinV2Service(
    *
    * @param numSnapshots Number of snapshots to compare against setup photo (default 1)
    */
-  @Transactional
+  /**
+   * This method is intentionally NOT @Transactional. The Rekognition call is done outside
+   * any DB transaction, and the result is persisted via a single short write at the end.
+   */
   fun verifyFace(uuid: UUID, numSnapshots: Int = 1): FacialRecognitionResult {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
@@ -279,8 +287,12 @@ class CheckinV2Service(
       }
     }
 
-    // Perform facial recognition
-    val result = performFacialRecognitionInternal(checkin, numSnapshots)
+    // Perform facial recognition (slow I/O, no DB transaction held)
+    val result = performFacialRecognition(checkin, numSnapshots)
+
+    // Persist result in a short write transaction
+    checkin.autoIdCheck = result
+    checkinRepository.save(checkin)
 
     return FacialRecognitionResult(result)
   }
@@ -437,43 +449,89 @@ class CheckinV2Service(
       )
     }
 
-    val sessionId = try {
-      livenessSessionService.createSession().join()
-    } catch (e: CompletionException) {
-      val cause = e.cause
+    val sessionId = awaitRekognition(
+      future = livenessSessionService.createSession(),
+      action = "create liveness session",
+      checkinUuid = uuid,
+    )
+    LOGGER.info("Liveness session created for checkin {}: {}", uuid, sessionId)
 
-      when (cause) {
+    return LivenessSessionResponse(sessionId = sessionId)
+  }
+
+  /**
+   * Block on a Rekognition async call with an upper-bound timeout and map any failure
+   * to a [ResponseStatusException]. Keeps the caller off a long-running transaction.
+   */
+  private fun <T> awaitRekognition(
+    future: CompletableFuture<T>,
+    action: String,
+    checkinUuid: UUID,
+  ): T {
+    val startNanos = System.nanoTime()
+    try {
+      val result = future.orTimeout(rekognitionCallTimeoutSeconds, TimeUnit.SECONDS).join()
+      LOGGER.info(
+        "Rekognition ({}) for checkin {} completed in {}ms",
+        action,
+        checkinUuid,
+        elapsedMs(startNanos),
+      )
+      return result
+    } catch (e: CompletionException) {
+      val elapsedMs = elapsedMs(startNanos)
+      when (val cause = e.cause) {
+        is TimeoutException -> {
+          LOGGER.error(
+            "Timeout waiting for Rekognition ({}) for checkin {} after {}ms (limit {}s)",
+            action,
+            checkinUuid,
+            elapsedMs,
+            rekognitionCallTimeoutSeconds,
+            cause,
+          )
+          throw ResponseStatusException(
+            HttpStatus.GATEWAY_TIMEOUT,
+            "Rekognition call timed out: $action",
+            cause,
+          )
+        }
         is RekognitionException -> {
           LOGGER.error(
-            "Failed to create Rekognition liveness session for checkin {}: awsErrorCode={}, statusCode={}, message={}",
-            uuid,
+            "Rekognition error ({}) for checkin {} after {}ms: awsErrorCode={}, statusCode={}, message={}",
+            action,
+            checkinUuid,
+            elapsedMs,
             cause.awsErrorDetails()?.errorCode(),
             cause.statusCode(),
             cause.message,
             cause,
           )
-
           throw ResponseStatusException(
             HttpStatus.BAD_GATEWAY,
-            "Unable to create liveness session: ${cause.awsErrorDetails()?.errorMessage() ?: cause.message}",
+            "Rekognition call failed ($action): ${cause.awsErrorDetails()?.errorMessage() ?: cause.message}",
             cause,
           )
         }
-
         else -> {
-          LOGGER.error("Unexpected async error creating liveness session for checkin {}", uuid, cause ?: e)
+          LOGGER.error(
+            "Unexpected async error ({}) for checkin {} after {}ms",
+            action,
+            checkinUuid,
+            elapsedMs,
+            cause ?: e,
+          )
           throw ResponseStatusException(
             HttpStatus.INTERNAL_SERVER_ERROR,
-            "Unable to create liveness session",
+            "Rekognition call failed ($action)",
             cause ?: e,
           )
         }
       }
     }
-    LOGGER.info("Liveness session created for checkin {}: {}", uuid, sessionId)
-
-    return LivenessSessionResponse(sessionId = sessionId)
   }
+
+  private fun elapsedMs(startNanos: Long): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos)
 
   /** Get scoped temporary AWS credentials for the browser liveness detector */
   fun getLivenessCredentials(uuid: UUID): LivenessCredentialsResponse {
@@ -490,7 +548,12 @@ class CheckinV2Service(
    * Gets the liveness result from Rekognition, checks confidence threshold,
    * then compares the liveness reference image against the offender's setup photo.
    */
-  @Transactional
+  /**
+   * This method is intentionally NOT @Transactional. It performs several slow I/O calls
+   * (Rekognition, S3) and we must not hold a database connection for their duration.
+   * Reads and writes each happen in their own short, auto-managed transactions via the
+   * repository. The outer flow is: load → validate → Rekognition → S3 → face compare → persist.
+   */
   fun verifyLiveness(uuid: UUID, sessionId: String): LivenessVerificationResponse {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
@@ -508,10 +571,15 @@ class CheckinV2Service(
       )
     }
 
-    // Get liveness session results from Rekognition
-    val livenessResult = livenessSessionService.getSessionResults(sessionId).join()
+    // Get liveness session results from Rekognition (slow I/O, no DB transaction held)
+    val livenessResult = awaitRekognition(
+      future = livenessSessionService.getSessionResults(sessionId),
+      action = "get liveness session results",
+      checkinUuid = uuid,
+    )
     val confidence = livenessResult.confidence()
     val isLive = confidence >= livenessConfidenceThreshold
+    val livenessStatus = if (isLive) LivenessResult.LIVE else LivenessResult.NOT_LIVE
 
     LOGGER.info(
       "Liveness result for checkin {}: confidence={}, threshold={}, isLive={}",
@@ -521,15 +589,13 @@ class CheckinV2Service(
       isLive,
     )
 
-    // Persist liveness result
-    checkin.livenessResult = if (isLive) LivenessResult.LIVE else LivenessResult.NOT_LIVE
-    checkin.livenessConfidence = confidence
-
     // Extract the reference image bytes from the session
     val referenceImage = livenessResult.referenceImage()
     val imageBytes = referenceImage?.bytes()?.asByteArray()
     if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {
       LOGGER.warn("Liveness session {} has no reference image for face comparison", sessionId)
+      checkin.livenessResult = livenessStatus
+      checkin.livenessConfidence = confidence
       checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
       checkinRepository.save(checkin)
       return LivenessVerificationResponse(
@@ -539,12 +605,13 @@ class CheckinV2Service(
       )
     }
 
+    // S3 uploads (slow I/O, no DB transaction held)
     if (livenessResult.hasAuditImages()) {
       livenessResult.auditImages().forEachIndexed { index, image ->
-        val imageBytes = image.bytes().asByteArray()
-        if (imageBytes != null && imageBytes.isNotEmpty()) {
-          s3UploadService.uploadCheckinSnapshot(checkin, index + 1, imageBytes, "image/jpeg")
-          LOGGER.info("Uploaded liveness audit image for checkin {} ({} bytes)", uuid, imageBytes.size)
+        val auditBytes = image.bytes().asByteArray()
+        if (auditBytes != null && auditBytes.isNotEmpty()) {
+          s3UploadService.uploadCheckinSnapshot(checkin, index + 1, auditBytes, "image/jpeg")
+          LOGGER.info("Uploaded liveness audit image for checkin {} ({} bytes)", uuid, auditBytes.size)
         }
       }
     }
@@ -553,8 +620,14 @@ class CheckinV2Service(
     s3UploadService.uploadCheckinSnapshot(checkin, 0, imageBytes, "image/jpeg")
     LOGGER.info("Uploaded liveness reference image for checkin {} ({} bytes)", uuid, imageBytes.size)
 
-    // Perform face comparison using existing service
-    val result = performFacialRecognitionInternal(checkin, 1)
+    // Perform face comparison (slow I/O, no DB transaction held)
+    val result = performFacialRecognition(checkin, numSnapshots = 1)
+
+    // Persist both results in a single short write transaction
+    checkin.livenessResult = livenessStatus
+    checkin.livenessConfidence = confidence
+    checkin.autoIdCheck = result
+    checkinRepository.save(checkin)
 
     return LivenessVerificationResponse(
       isLive = isLive,
@@ -568,12 +641,15 @@ class CheckinV2Service(
   // ========================================
 
   /**
-   * Perform facial recognition and return result Used by verifyFace() endpoint - throws exceptions
-   * on failure
+   * Run the face-compare call against Rekognition and return the result.
+   *
+   * Does NOT persist — callers are responsible for saving the result to the checkin in
+   * their own short transaction. Called from non-transactional code so the Rekognition
+   * wait never holds a DB connection.
    *
    * @param numSnapshots Number of snapshots to compare (indices 0 to numSnapshots-1)
    */
-  private fun performFacialRecognitionInternal(
+  private fun performFacialRecognition(
     checkin: OffenderCheckinV2,
     numSnapshots: Int,
   ): AutomatedIdVerificationResult {
@@ -594,18 +670,17 @@ class CheckinV2Service(
         s3UploadService.checkinObjectCoordinate(checkin, index)
       }
 
-    // Perform facial recognition (async, but we wait for result)
     val images =
       CheckinVerificationImages(
         reference = referenceCoordinate,
         snapshots = snapshotCoordinates,
       )
 
-    val result = compareFacesService.verifyCheckinImages(images, faceSimilarityThreshold).join()
-
-    // Save result to checkin
-    checkin.autoIdCheck = result
-    checkinRepository.save(checkin)
+    val result = awaitRekognition(
+      future = compareFacesService.verifyCheckinImages(images, faceSimilarityThreshold),
+      action = "compare faces",
+      checkinUuid = checkin.uuid,
+    )
 
     when (result) {
       AutomatedIdVerificationResult.MATCH -> {

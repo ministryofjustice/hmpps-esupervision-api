@@ -87,6 +87,7 @@ class CheckinV2ServiceTest {
       uploadTtlMinutes,
       faceSimilarityThreshold,
       livenessConfidenceThreshold,
+      30,
       eventAuditService,
       3,
     )
