@@ -58,6 +58,37 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
     upperBoundExclusive: LocalDate,
   ): Stream<OffenderV2>
 
+  /**
+   * Find offenders whose next checkin due date matches specific offsets from :today
+   * - Status = VERIFIED
+   * - Next checkin due date matches (today + 1) OR (today + 4)
+   * - No reminder sent yet for the next checkin
+   */
+  @Query(
+    value = """
+    SELECT o.* FROM offender_v2 o
+    WHERE o.status = 'VERIFIED'
+      AND o.first_checkin != :today
+      AND (
+        MOD(CAST(((cast(:today as date) + '1 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+        OR
+        MOD(CAST(((cast(:today as date) + '3 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM generic_notification_v2 n
+        WHERE n.offender_id = o.id
+          AND n.event_type = :notificationType
+          AND n.created_at >= :reminderWindowStart
+      )
+    """,
+    nativeQuery = true,
+  )
+  fun findEligibleForPractitionerCustomQuestionsReminder(
+    @Param("today") today: LocalDate,
+    @Param("notificationType") notificationType: String,
+    @Param("reminderWindowStart") reminderWindowStart: Instant,
+  ): Stream<OffenderV2>
+
   @Query("SELECT o.crn FROM OffenderV2 o WHERE o IN :offenders")
   fun getCrnsForOffenders(offenders: List<OffenderV2>): List<String>
 
@@ -279,10 +310,7 @@ interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2,
  */
 @Repository
 interface EventAuditV2Repository : JpaRepository<EventAuditV2, Long> {
-  fun findAllByCrn(crn: String): List<EventAuditV2>
   fun findAllByEventType(eventType: String): List<EventAuditV2>
-  fun findAllByPractitionerId(practitionerId: String): List<EventAuditV2>
-  fun findAllByCheckinUuid(checkinUuid: UUID): List<EventAuditV2>
 
   @Query(
     """

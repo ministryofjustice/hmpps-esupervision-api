@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController
 class JobControlResource(
   private val v2CheckinCreationJob: V2CheckinCreationJob,
   private val v2CheckinExpiryJob: V2CheckinExpiryJob,
+  private val customQuestionsReminderJob: CustomQuestionsReminderJob,
 ) {
 
   @PostMapping("/checkin-creation")
@@ -26,8 +27,15 @@ class JobControlResource(
 
   @PostMapping("/checkin-expiry")
   @PreAuthorize("permitAll()")
-  @Operation(summary = "Trigger V2 Checkin Creation Job")
+  @Operation(summary = "Trigger V2 Checkin Expiry Job")
   fun triggerCheckinExpiry() {
     v2CheckinExpiryJob.process()
+  }
+
+  @PostMapping("/question-reminders")
+  @PreAuthorize("permitAll()")
+  @Operation(summary = "Trigger Custom Question Reminders Job")
+  fun triggerQuestionReminders() {
+    customQuestionsReminderJob.process()
   }
 }

@@ -13,10 +13,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
 import java.time.Clock
 import java.time.Duration
 import java.time.Period
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -323,6 +325,7 @@ class NotificationOrchestratorV2Service(
           contactDetails = details.practitioner,
           checkin = checkin,
           notificationType = NotificationType.PractitionerCheckinSubmitted,
+          practitionerId = checkin.offender.practitionerId,
         ),
       )
 
@@ -383,6 +386,7 @@ class NotificationOrchestratorV2Service(
         contactDetails = details.practitioner,
         checkin = checkin,
         notificationType = NotificationType.PractitionerCheckinMissed,
+        practitionerId = checkin.offender.practitionerId,
       )
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
@@ -412,6 +416,30 @@ class NotificationOrchestratorV2Service(
       crn = checkin.offender.crn,
       description = "Check-in updated for ${checkin.offender.crn}",
     )
+  }
+
+  /** Send reminder for practitioner to add custom questions */
+  fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {
+    LOGGER.info("Sending reminder to practitioner about custom questions: crn={}, practitioner={}", info.contactDetails.crn, info.practitionerId)
+    val deadline = info.expectedCheckinDate.minusDays(1)
+    val diff = ChronoUnit.DAYS.between(deadline, info.expectedCheckinDate)
+
+    val personalisation = mapOf(
+      "offenderName" to "${info.contactDetails.name.forename}",
+      "expectedCheckinDate" to info.expectedCheckinDate.format(DATE_FORMATTER),
+      "questionsDeadline" to if (diff == 1L) "today" else deadline.format(DATE_FORMATTER),
+      "practitionerName" to (info.contactDetails.practitioner?.name?.forename ?: info.practitionerId),
+      "dashboardUrl" to appConfig.dashboardUrl().toString(),
+    )
+    val notificationsWithRecipients = notificationPersistence.buildPractitionerNotifications(
+      null,
+      info.contactDetails.practitioner,
+      null,
+      NotificationType.PractitionerCustomQuestionsReminder,
+      info.practitionerId,
+    )
+
+    processAndSendNotifications(notificationsWithRecipients, personalisation)
   }
 
   /** Get event detail for a given URL */

@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
 import java.util.UUID
 
 /**
@@ -67,6 +68,13 @@ class NotificationV2Service(
    */
   fun sendCheckinReminderNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
     orchestrator.sendReminderCheckinNotifications(checkin, contactDetails)
+  }
+
+  /**
+   * Send reminder for practitioner to add custom questions
+   */
+  fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {
+    orchestrator.sendPractitionerCustomQuestionsReminder(info)
   }
 
   /**

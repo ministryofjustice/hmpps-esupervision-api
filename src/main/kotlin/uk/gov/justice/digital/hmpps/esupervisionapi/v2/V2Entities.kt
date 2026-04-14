@@ -33,6 +33,11 @@ import java.time.LocalDate
 import java.time.Period
 import java.util.UUID
 
+interface CheckinSchedule {
+  val firstCheckin: LocalDate
+  val checkinInterval: Duration
+}
+
 /**
  * V2 Offender Entity (no PII, only CRN)
  */
@@ -60,10 +65,10 @@ open class OffenderV2(
   open var status: OffenderStatus = OffenderStatus.INITIAL,
 
   @Column(name = "first_checkin", nullable = false)
-  open var firstCheckin: LocalDate,
+  open override var firstCheckin: LocalDate,
 
   @Column(name = "checkin_interval", nullable = false)
-  open var checkinInterval: Duration,
+  open override var checkinInterval: Duration,
 
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
@@ -80,7 +85,8 @@ open class OffenderV2(
 
   @Column(name = "current_event", nullable = true)
   open var currentEvent: Long? = null,
-) : V2BaseEntity() {
+) : V2BaseEntity(),
+  CheckinSchedule {
   fun dto(personalDetails: ContactDetails? = null): OffenderV2Dto = OffenderV2Dto(
     uuid = uuid,
     crn = crn,
