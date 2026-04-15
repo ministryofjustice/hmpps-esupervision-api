@@ -83,4 +83,6 @@ databaseChangeLog:
       file: db/changelog/changesets/41_add_setup_counter_to_offender_setup_v2.sql
   - include:
       file: db/changelog/changesets/42_custom_questions.sql
+  - include:
+      file: db/changelog/changesets/43_add_custom_questions_reminder_job_enum.sql
 

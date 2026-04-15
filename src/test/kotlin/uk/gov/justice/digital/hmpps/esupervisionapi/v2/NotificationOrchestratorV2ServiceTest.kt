@@ -100,7 +100,7 @@ class NotificationOrchestratorV2ServiceTest {
 
     // V1 only notifies offender for checkin invite (no practitioner template)
     verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinInvite))
-    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any())
+    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any())
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
     verify(ndiliusApiClient, never()).getContactDetails(any())
   }
@@ -117,7 +117,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendReminderCheckinNotifications(checkin, contactDetails)
 
     verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinReminder))
-    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any())
+    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any())
     verify(ndiliusApiClient, never()).getContactDetails(any())
   }
 
@@ -128,7 +128,7 @@ class NotificationOrchestratorV2ServiceTest {
     val contactDetails = createContactDetails()
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
-    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
@@ -155,14 +155,14 @@ class NotificationOrchestratorV2ServiceTest {
     val checkin = createCheckin(offender, status = CheckinV2Status.EXPIRED)
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
     service.sendCheckinExpiredNotifications(checkin, contactDetails)
 
     verify(notificationPersistence, never()).buildOffenderNotifications(any(), any(), any())
-    verify(notificationPersistence).buildPractitionerNotifications(any(), any(), eq(checkin), eq(NotificationType.PractitionerCheckinMissed))
+    verify(notificationPersistence).buildPractitionerNotifications(any(), any(), eq(checkin), eq(NotificationType.PractitionerCheckinMissed), any())
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
   }
 

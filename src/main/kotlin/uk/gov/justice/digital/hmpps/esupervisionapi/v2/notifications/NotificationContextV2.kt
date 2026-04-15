@@ -21,6 +21,7 @@ object NotificationContextV2 {
       NotificationType.PractitionerCheckinSubmitted -> "PSUB-$date"
       NotificationType.PractitionerCheckinMissed -> "PEXP-$date"
       NotificationType.PractitionerInviteIssueGeneric -> "PING-$date"
+      NotificationType.PractitionerCustomQuestionsReminder -> "PCQR-$date"
     }
   }
 }

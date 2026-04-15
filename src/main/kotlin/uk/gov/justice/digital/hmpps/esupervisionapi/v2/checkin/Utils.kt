@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import java.time.LocalDate
@@ -26,7 +27,7 @@ fun activeEventNumber(offender: OffenderV2, details: ContactDetails): Long? {
 /**
  * Check if the date is a checkin day for the given offender
  */
-fun isCheckinDay(offender: OffenderV2, date: LocalDate): Boolean {
+fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
   val firstCheckin = offender.firstCheckin
   if (offender.checkinInterval.toDays() > 0) {
     if (date < firstCheckin) {
@@ -48,7 +49,7 @@ fun isCheckinDay(offender: OffenderV2, date: LocalDate): Boolean {
  * But I'd like this function to not require an extra DB call (to see if the checkin already exists). So we will
  * assume that today is excluded from the possible "next checkin day."
  */
-fun nextCheckinDay(offender: OffenderV2, today: LocalDate): LocalDate {
+fun nextCheckinDay(offender: CheckinSchedule, today: LocalDate): LocalDate {
   if (today < offender.firstCheckin) return offender.firstCheckin
 
   val days = offender.firstCheckin.until(today, ChronoUnit.DAYS)

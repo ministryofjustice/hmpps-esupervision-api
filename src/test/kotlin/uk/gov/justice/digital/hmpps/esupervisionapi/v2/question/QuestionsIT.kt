@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -15,9 +16,11 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -38,6 +41,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestClockConfiguration::class)
@@ -234,6 +238,33 @@ class QuestionsIT : IntegrationTestBase() {
     // the assignment should have the checkin set
     val assignment = questionListAssignmentRepository.upcomingAssignment(offender.id)
     assertNull(assignment, "No assignment should be present after checkin1 was submitted: $assignment")
+  }
+
+  @Test
+  @Transactional
+  fun `CustomQuestionsReminderJob - test our query`() {
+    val offender1 = offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
+    val offender2 = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID()).toEntity()
+    val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
+    val offender4 = offenderTemplate.copy(crn = "A000004", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
+    offenderV2Repository.saveAll(listOf(offender1, offender2, offender3, offender4))
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    questionService.assignCustomQuestions(offender4.crn, addQuestionsRequest)
+
+    val candidates = offenderV2Repository.findEligibleForPractitionerCustomQuestionsReminder(
+      clock.today(),
+      NotificationType.PractitionerCustomQuestionsReminder.name,
+      clock.today().atStartOfDay(clock.zone).toInstant(),
+    )
+      .toList()
+      .associateBy { it.crn }
+
+    assertFalse(candidates.containsKey("A000001")) // too late to add questions
+    assertFalse(candidates.containsKey("A000004")) // already has a question list assignment
+    assertTrue(candidates.containsKey("A000002"))
+    assertTrue(candidates.containsKey("A000003"))
   }
 }
 
