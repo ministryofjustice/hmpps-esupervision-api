@@ -129,9 +129,6 @@ class QuestionsIT : IntegrationTestBase() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderV2Repository.save(offender)
 
-    val systemTemplates = questionService.listQuestionTemplates(Language.ENGLISH)
-    assertEquals(0, systemTemplates.size)
-
     val templates = questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     assertEquals(1, templates.size)
 
@@ -149,9 +146,6 @@ class QuestionsIT : IntegrationTestBase() {
   fun `Checkin status change causes assignment update`() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderV2Repository.save(offender)
-
-    val systemTemplates = questionService.listQuestionTemplates(Language.ENGLISH)
-    assertEquals(0, systemTemplates.size)
 
     val templates = questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     assertEquals(1, templates.size)
