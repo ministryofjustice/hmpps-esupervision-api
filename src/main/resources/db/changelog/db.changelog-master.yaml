@@ -85,4 +85,5 @@ databaseChangeLog:
       file: db/changelog/changesets/42_custom_questions.sql
   - include:
       file: db/changelog/changesets/43_add_custom_questions_reminder_job_enum.sql
-
+  - include:
+      file: db/changelog/changesets/44_custom_questions_definitions.sql
