@@ -245,8 +245,13 @@ class QuestionsIT : IntegrationTestBase() {
   fun `CustomQuestionsReminderJob - test our query`() {
     val offender1 = offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
     val offender2 = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID()).toEntity()
-    val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(3), uuid = UUID.randomUUID()).toEntity()
-    offenderV2Repository.saveAll(listOf(offender1, offender2, offender3))
+    val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
+    val offender4 = offenderTemplate.copy(crn = "A000004", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
+    offenderV2Repository.saveAll(listOf(offender1, offender2, offender3, offender4))
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    questionService.assignCustomQuestions(offender4.crn, addQuestionsRequest)
 
     val candidates = offenderV2Repository.findEligibleForPractitionerCustomQuestionsReminder(
       clock.today(),
@@ -256,7 +261,8 @@ class QuestionsIT : IntegrationTestBase() {
       .toList()
       .associateBy { it.crn }
 
-    assertFalse(candidates.containsKey("A000001"))
+    assertFalse(candidates.containsKey("A000001")) // too late to add questions
+    assertFalse(candidates.containsKey("A000004")) // already has a question list assignment
     assertTrue(candidates.containsKey("A000002"))
     assertTrue(candidates.containsKey("A000003"))
   }

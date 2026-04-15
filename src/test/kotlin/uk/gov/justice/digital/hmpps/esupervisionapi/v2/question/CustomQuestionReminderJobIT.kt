@@ -80,7 +80,7 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
     val offender1 = offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
     val offender2 = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID()).toEntity()
-    val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(3), uuid = UUID.randomUUID()).toEntity()
+    val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
     offenderV2Repository.saveAll(listOf(offender1, offender2, offender3))
   }
 

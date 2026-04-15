@@ -63,23 +63,29 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
    * - Status = VERIFIED
    * - Next checkin due date matches (today + 1) OR (today + 4)
    * - No reminder sent yet for the next checkin
+   * - No (upcoming) question list assignment for the offender exists
    */
   @Query(
     value = """
-    SELECT o.* FROM offender_v2 o
-    WHERE o.status = 'VERIFIED'
-      AND o.first_checkin != :today
-      AND (
-        MOD(CAST(((cast(:today as date) + '1 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
-        OR
-        MOD(CAST(((cast(:today as date) + '3 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+      with the_offenders as (
+          select o.*, qla.id as question_list_assignment_id, gn.id as generic_notification_id
+          from offender_v2 o
+          left join question_list_assignment qla
+              on qla.offender_id = o.id and qla.checkin_id is null
+          left join generic_notification_v2 gn
+              on gn.offender_id = o.id
+                     and gn.event_type = :notificationType
+                     and gn.created_at >= :reminderWindowStart
+          where o.status = 'VERIFIED'
+          and o.first_checkin != :today
+          and (
+          MOD(CAST(((cast(:today as date) + '1 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+              or
+          MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+          )
       )
-      AND NOT EXISTS (
-        SELECT 1 FROM generic_notification_v2 n
-        WHERE n.offender_id = o.id
-          AND n.event_type = :notificationType
-          AND n.created_at >= :reminderWindowStart
-      )
+      select * from the_offenders
+      where question_list_assignment_id is null and generic_notification_id is null;
     """,
     nativeQuery = true,
   )
