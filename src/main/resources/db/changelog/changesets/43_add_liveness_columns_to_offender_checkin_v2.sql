@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset richard-birch:42_add_liveness_columns_to_offender_checkin_v2 splitStatements:false
+--changeset richard-birch:43_add_liveness_columns_to_offender_checkin_v2 splitStatements:false
 ALTER TABLE offender_checkin_v2
     ADD COLUMN liveness_result VARCHAR(10),
     ADD COLUMN liveness_confidence REAL;
