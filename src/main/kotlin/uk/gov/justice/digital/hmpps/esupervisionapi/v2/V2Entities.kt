@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonValue
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Embeddable
@@ -629,4 +631,58 @@ open class MigrationEventsToSend(
   open var sentAt: Instant? = null,
   @Column
   open var notes: String? = null,
+) : V2BaseEntity()
+
+enum class Language(@get:JsonValue val dbString: String) {
+  ENGLISH("en-GB"),
+  WELSH("cy-GB"),
+  ;
+
+  companion object {
+    /**
+     * value must be "en-GB" or "cy-GB"
+     */
+    @JvmStatic
+    @JsonCreator
+    fun fromString(value: String): Language = when (value) {
+      "en-GB" -> ENGLISH
+      "cy-GB" -> WELSH
+      else -> throw IllegalArgumentException("Invalid Language value: $value")
+    }
+  }
+}
+
+enum class QuestionResponseFormat {
+  TEXT,
+  SINGLE_CHOICE,
+  MULTIPLE_CHOICE,
+  ;
+
+  companion object {
+    fun fromString(value: String): QuestionResponseFormat = when (value) {
+      "TEXT" -> TEXT
+      "SINGLE_CHOICE" -> SINGLE_CHOICE
+      "MULTIPLE_CHOICE" -> MULTIPLE_CHOICE
+      else -> throw IllegalArgumentException("Invalid QuestionResponseFormat value: $value")
+    }
+  }
+}
+
+@Entity
+@Table(name = "question_list_assignment")
+open class QuestionListAssignment(
+  @Column("question_list_id", nullable = false)
+  open var questionListId: Long,
+
+  @Column("offender_id", nullable = false)
+  open var offenderId: Long,
+
+  @Column("checkin_id")
+  open var checkinId: Long? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var created_at: Instant,
+
+  @Column(name = "updated_at", nullable = false)
+  open val updatedAt: Instant,
 ) : V2BaseEntity()
