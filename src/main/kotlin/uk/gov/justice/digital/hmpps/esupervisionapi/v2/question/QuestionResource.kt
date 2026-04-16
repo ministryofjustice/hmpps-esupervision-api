@@ -55,14 +55,7 @@ class QuestionResource(
   fun getQuestionList(
     @Parameter(required = true) @PathVariable(required = true) listId: Long,
     @RequestParam(required = true) @Valid language: Language,
-    binding: BindingResult,
-  ): ResponseEntity<OffenderQuestionList> {
-    if (binding.hasErrors()) {
-      throw intoResponseStatusException(binding)
-    }
-
-    return ResponseEntity.ok(questionService.offenderQuestionList(listId, language))
-  }
+  ): ResponseEntity<OffenderQuestionList> = ResponseEntity.ok(questionService.offenderQuestionList(listId, language))
 
   /**
    * .
