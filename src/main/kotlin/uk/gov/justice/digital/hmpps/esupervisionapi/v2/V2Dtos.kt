@@ -320,15 +320,6 @@ data class CheckinV2Dto(
   @field:Schema(description = "Notes of further actions to be taken after checkin review", required = false)
   val furtherActions: String? = null,
 ) {
-  @get:JsonProperty("idMatched")
-  @get:Schema(
-    description = "Computed overall ID match. True only if face match passed AND " +
-      "(liveness passed OR liveness was not performed for historical records).",
-  )
-  val idMatched: Boolean
-    get() = autoIdCheck == AutomatedIdVerificationResult.MATCH &&
-      (livenessResult == null || livenessResult == LivenessResult.LIVE)
-
   @get:JsonProperty("flaggedResponses")
   val flaggedResponses: List<String>
     @Schema(description = "Flagged keys of the survey")
