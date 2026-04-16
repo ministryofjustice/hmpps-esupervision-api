@@ -37,39 +37,44 @@ data class SingleNotificationContext(val ref: String) : NotificationContext(ref,
     fun from(message: Message, clock: Clock): NotificationContext = when (message.messageType) {
       // NOTE: the references starting with "O" are for notifs. sent to the offender, the ones with "P" to the practitioner.
       NotificationType.OffenderCheckinSubmitted -> {
-        SingleNotificationContext("OSUB-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("OSUB-${formatDate(clock.today())}")
       }
       NotificationType.OffenderCheckinsStopped -> {
-        SingleNotificationContext("OSTP-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("OSTP-${formatDate(clock.today())}")
       }
       NotificationType.OffenderCheckinsRestarted -> {
-        SingleNotificationContext("ORES-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("ORES-${formatDate(clock.today())}")
       }
       NotificationType.RegistrationConfirmation -> {
-        SingleNotificationContext("OREG-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("OREG-${formatDate(clock.today())}")
       }
       NotificationType.OffenderCheckinReminder -> {
-        SingleNotificationContext("OREM-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("OREM-${formatDate(clock.today())}")
       }
       NotificationType.PractitionerCheckinSubmitted -> {
-        SingleNotificationContext("PSUB-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("PSUB-${formatDate(clock.today())}")
       }
       NotificationType.PractitionerCheckinMissed -> {
-        SingleNotificationContext("PEXP-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("PEXP-${formatDate(clock.today())}")
       }
       NotificationType.OffenderCheckinInvite -> {
         SingleNotificationContext(formatCheckinReference(clock.today()))
       }
       NotificationType.PractitionerInviteIssueGeneric -> {
-        SingleNotificationContext("PING-${clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+        SingleNotificationContext("PING-${formatDate(clock.today())}")
+      }
+      NotificationType.PractitionerCustomQuestionsReminder -> {
+        SingleNotificationContext("PCQR-${formatDate(clock.today())}")
       }
     }
+
+    private fun formatDate(date: LocalDate): String? = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
     fun forCheckin(now: LocalDate) = SingleNotificationContext(formatCheckinReference(now))
 
     fun forCheckin(clock: Clock) = forCheckin(clock.today())
 
-    private fun formatCheckinReference(date: LocalDate) = "CHK-${date.format(DateTimeFormatter.ISO_LOCAL_DATE)}"
+    private fun formatCheckinReference(date: LocalDate) = "CHK-${formatDate(date)}"
   }
 }
 

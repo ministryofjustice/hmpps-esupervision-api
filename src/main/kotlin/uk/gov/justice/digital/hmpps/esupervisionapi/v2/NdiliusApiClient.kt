@@ -94,8 +94,8 @@ class NdiliusApiClient(
     }
   }
 
-  private fun getContactDetailsForMultipleFallback(crns: List<String>, e: Exception): List<ContactDetails> {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns.size}"))
+  private fun getContactDetailsForMultipleFallback(crns: List<String>?, e: Exception): List<ContactDetails> {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns?.size}"))
     return emptyList()
   }
 

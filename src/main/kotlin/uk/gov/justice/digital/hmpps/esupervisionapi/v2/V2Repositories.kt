@@ -58,6 +58,43 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
     upperBoundExclusive: LocalDate,
   ): Stream<OffenderV2>
 
+  /**
+   * Find offenders whose next checkin due date matches specific offsets from :today
+   * - Status = VERIFIED
+   * - Next checkin due date matches (today + 1) OR (today + 4)
+   * - No reminder sent yet for the next checkin
+   * - No (upcoming) question list assignment for the offender exists
+   */
+  @Query(
+    value = """
+      with the_offenders as (
+          select o.*, qla.id as question_list_assignment_id, gn.id as generic_notification_id
+          from offender_v2 o
+          left join question_list_assignment qla
+              on qla.offender_id = o.id and qla.checkin_id is null
+          left join generic_notification_v2 gn
+              on gn.offender_id = o.id
+                     and gn.event_type = :notificationType
+                     and gn.created_at >= :reminderWindowStart
+          where o.status = 'VERIFIED'
+          and o.first_checkin != :today
+          and (
+          MOD(CAST(((cast(:today as date) + '1 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+              or
+          MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+          )
+      )
+      select * from the_offenders
+      where question_list_assignment_id is null and generic_notification_id is null;
+    """,
+    nativeQuery = true,
+  )
+  fun findEligibleForPractitionerCustomQuestionsReminder(
+    @Param("today") today: LocalDate,
+    @Param("notificationType") notificationType: String,
+    @Param("reminderWindowStart") reminderWindowStart: Instant,
+  ): Stream<OffenderV2>
+
   @Query("SELECT o.crn FROM OffenderV2 o WHERE o IN :offenders")
   fun getCrnsForOffenders(offenders: List<OffenderV2>): List<String>
 
@@ -279,10 +316,7 @@ interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2,
  */
 @Repository
 interface EventAuditV2Repository : JpaRepository<EventAuditV2, Long> {
-  fun findAllByCrn(crn: String): List<EventAuditV2>
   fun findAllByEventType(eventType: String): List<EventAuditV2>
-  fun findAllByPractitionerId(practitionerId: String): List<EventAuditV2>
-  fun findAllByCheckinUuid(checkinUuid: UUID): List<EventAuditV2>
 
   @Query(
     """

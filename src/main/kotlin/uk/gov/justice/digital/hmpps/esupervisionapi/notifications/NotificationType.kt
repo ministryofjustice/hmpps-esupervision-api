@@ -10,4 +10,5 @@ enum class NotificationType {
   PractitionerCheckinMissed,
   PractitionerInviteIssueGeneric,
   RegistrationConfirmation,
+  PractitionerCustomQuestionsReminder,
 }

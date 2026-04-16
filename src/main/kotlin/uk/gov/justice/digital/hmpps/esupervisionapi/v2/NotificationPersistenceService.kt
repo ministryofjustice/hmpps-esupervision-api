@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContextV2
 import java.time.Clock
 import java.util.UUID
@@ -97,10 +98,11 @@ class NotificationPersistenceService(
 
   /** Build notification records for practitioner (Email only) */
   fun buildPractitionerNotifications(
-    offender: OffenderV2,
+    offender: OffenderV2?,
     contactDetails: PractitionerDetails?,
     checkin: OffenderCheckinV2?,
     notificationType: NotificationType,
+    practitionerId: ExternalUserId,
   ): List<NotificationWithRecipient> {
     val notifications = mutableListOf<NotificationWithRecipient>()
     val channels = templateConfig.channels
@@ -111,7 +113,7 @@ class NotificationPersistenceService(
 
     if (contactDetails?.email == null) {
       val reason = if (contactDetails == null) "details missing" else "no email"
-      LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}, offenderUuid={}]", reason, notificationType, offender.crn, offender.uuid)
+      LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}, offenderUuid={}]", reason, notificationType, offender?.crn, offender?.uuid)
       return notifications
     }
 
@@ -123,7 +125,7 @@ class NotificationPersistenceService(
       recipientType = "PRACTITIONER",
       channel = "EMAIL",
       offender = offender,
-      practitionerId = offender.practitionerId,
+      practitionerId = practitionerId,
       status = "created",
       reference = reference,
       createdAt = clock.instant(),
