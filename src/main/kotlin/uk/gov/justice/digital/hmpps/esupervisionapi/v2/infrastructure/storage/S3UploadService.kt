@@ -314,6 +314,18 @@ class S3UploadService(
   }
 
   /**
+   * V2 Checkin - uploads raw bytes as a checkin snapshot
+   */
+  @CircuitBreaker(name = "awsS3")
+  @Retry(name = "awsS3")
+  fun uploadCheckinSnapshot(checkin: OffenderCheckinV2, index: Int, bytes: ByteArray, contentType: String): S3ObjectCoordinate {
+    val key = CheckinPhotoKey(checkin.uuid, index)
+    val putReq = putObjectRequest(bucketFor(key), key.toKey(), contentType)
+    s3uploadClient.putObject(putReq, RequestBody.fromBytes(bytes))
+    return S3ObjectCoordinate(bucket = bucketFor(key), key = key.toKey())
+  }
+
+  /**
    * V2 Checkin - gets S3 object coordinate for snapshot (used by Rekognition)
    */
   fun checkinObjectCoordinate(checkin: OffenderCheckinV2, index: Int): S3ObjectCoordinate {

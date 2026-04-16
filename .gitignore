@@ -10,6 +10,7 @@
 build/
 temp/
 bin/
+META-INF/
 
 # CMake
 cmake-build-debug/

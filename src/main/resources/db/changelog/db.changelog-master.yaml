@@ -87,3 +87,5 @@ databaseChangeLog:
       file: db/changelog/changesets/43_add_custom_questions_reminder_job_enum.sql
   - include:
       file: db/changelog/changesets/44_custom_questions_definitions.sql
+  - include:
+      file: db/changelog/changesets/45_add_liveness_columns_to_offender_checkin_v2.sql

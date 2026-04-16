@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerific
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.serialization.LocalDateDeserializer
@@ -128,6 +129,28 @@ data class IdentityValidationResponse(
 /** Facial recognition verification result */
 data class FacialRecognitionResult(
   @Schema(description = "Verification result: MATCH, NO_MATCH, NO_FACE_DETECTED, or ERROR", required = true)
+  val result: AutomatedIdVerificationResult,
+)
+
+/** Liveness session creation response */
+data class LivenessSessionResponse(
+  @Schema(description = "AWS Rekognition liveness session ID", required = true)
+  val sessionId: String,
+)
+
+/** Liveness verification request */
+data class LivenessVerifyRequest(
+  @Schema(description = "Liveness session ID to verify", required = true)
+  val sessionId: String,
+)
+
+/** Liveness verification response */
+data class LivenessVerificationResponse(
+  @Schema(description = "Whether the session passed liveness detection", required = true)
+  val isLive: Boolean,
+  @Schema(description = "Liveness confidence score (0-100)", required = true)
+  val livenessConfidence: Float,
+  @Schema(description = "Face comparison result against setup photo", required = true)
   val result: AutomatedIdVerificationResult,
 )
 
@@ -272,6 +295,10 @@ data class CheckinV2Dto(
   val checkinStartedAt: Instant? = null,
   @field:Schema(description = "Auto ID check result", required = false)
   val autoIdCheck: AutomatedIdVerificationResult? = null,
+  @field:Schema(description = "Liveness check result (null for video-based check-ins)", required = false)
+  val livenessResult: LivenessResult? = null,
+  @field:Schema(description = "Liveness confidence score 0-100 (null for video-based check-ins)", required = false)
+  val livenessConfidence: Float? = null,
   @field:Schema(description = "Manual ID check result", required = false)
   val manualIdCheck: ManualIdVerificationResult? = null,
   @field:Schema(description = "Survey responses (JSONB)", required = false)
@@ -293,6 +320,15 @@ data class CheckinV2Dto(
   @field:Schema(description = "Notes of further actions to be taken after checkin review", required = false)
   val furtherActions: String? = null,
 ) {
+  @get:JsonProperty("idMatched")
+  @get:Schema(
+    description = "Computed overall ID match. True only if face match passed AND " +
+      "(liveness passed OR liveness was not performed for historical records).",
+  )
+  val idMatched: Boolean
+    get() = autoIdCheck == AutomatedIdVerificationResult.MATCH &&
+      (livenessResult == null || livenessResult == LivenessResult.LIVE)
+
   @get:JsonProperty("flaggedResponses")
   val flaggedResponses: List<String>
     @Schema(description = "Flagged keys of the survey")

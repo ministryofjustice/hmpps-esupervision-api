@@ -195,12 +195,21 @@ rekognition:
   face-similarity:
     # minimum accepted value that qualifies a "match"
     threshold: 90.0
+  liveness:
+    # minimum confidence score for liveness detection to pass
+    confidence-threshold: 90.0
+    # Face Liveness is not available in eu-west-2, so we use eu-west-1
+    region: ${REKOG_LIVENESS_REGION:eu-west-1}
   region: ${REKOG_AWS_REGION}
   role_arn: ${REKOG_ROLE_ARN}
   role_session_name: ${REKOG_ROLE_SESSION_NAME}
   s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
   max-concurrency: 10
   read-timeout-seconds: 20
+  # Upper bound on how long we will wait for an async Rekognition call to complete
+  # before treating it as timed out. Slightly above read-timeout-seconds to allow
+  # the SDK's own read timeout to fire first.
+  call-timeout-seconds: 30
 
 resilience4j:
   circuitbreaker:

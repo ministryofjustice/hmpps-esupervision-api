@@ -1,0 +1,55 @@
+app:
+  hostedAt: http://localhost:3000
+  scheduling:
+    checkin-notification:
+      cron: "-"
+      # cron: "*/30 * * * * *"  # Local development schedule (every 30 seconds)
+    offender-checkin-expiry:
+      cron: "0 */17 * * * *"  # Development schedule (every 17 minutes)
+      # cron: "*/40 * * * * *"  # Local development schedule (every 40 seconds)
+    monthly-stats-refresh:
+      # cron: "0 0 * * * *" # Development schedule (every hour, on the hour)
+      cron: "0 */2 * * * *"  # Local development schedule (every 2 minutes)
+
+hmpps-auth:
+  url: "http://localhost:8090/auth"
+
+spring:
+  config:
+    import: "optional:file:.env[.properties]"
+
+logging:
+  level:
+    org.springframework.web: INFO
+
+management:
+  security:
+    enabled: false
+  health:
+    probes:
+      enabled: true
+    jms:
+      enabled: true
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,info
+  endpoint:
+    info:
+      enabled: true
+    health:
+      show-details: always
+      path-mapping: "health"
+
+aws:
+  region-name: eu-west-2
+  s3:
+    image-uploads: ${S3_DATA_BUCKET_NAME}
+    video-uploads: ${S3_DATA_BUCKET_NAME}
+    profile: ${AWS_S3_PROFILE:default}
+
+rekognition:
+  s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
+  role_session_name: development
+  profile: ${AWS_REKOGNITION_PROFILE:default}
