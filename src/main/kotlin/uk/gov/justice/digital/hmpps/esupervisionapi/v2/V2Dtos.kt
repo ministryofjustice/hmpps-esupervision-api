@@ -315,6 +315,8 @@ data class CheckinV2Dto(
   val livenessResult: LivenessResult? = null,
   @field:Schema(description = "Liveness confidence score 0-100 (null for video-based check-ins)", required = false)
   val livenessConfidence: Float? = null,
+  @field:Schema(description = "Whether liveness verification was enabled for this check-in", required = false)
+  val livenessEnabled: Boolean = false,
   @field:Schema(description = "Manual ID check result", required = false)
   val manualIdCheck: ManualIdVerificationResult? = null,
   @field:Schema(description = "Survey responses (JSONB)", required = false)

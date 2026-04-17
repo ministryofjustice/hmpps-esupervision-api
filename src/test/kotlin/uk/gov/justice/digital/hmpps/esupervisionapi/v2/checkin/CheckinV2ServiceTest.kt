@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -46,6 +47,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 class CheckinV2ServiceTest {
 
@@ -539,6 +541,69 @@ class CheckinV2ServiceTest {
 
     assertEquals(true, checkin.sensitive)
     verify(checkinRepository, never()).save(checkin)
+  }
+
+  @Test
+  fun `createLivenessSession - happy path - sets livenessEnabled to true`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+    )
+
+    assertFalse(checkin.livenessEnabled)
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(livenessSessionService.createSession()).thenReturn(CompletableFuture.completedFuture("session-123"))
+
+    val result = service.createLivenessSession(uuid)
+
+    assertEquals("session-123", result.sessionId)
+    assertTrue(checkin.livenessEnabled)
+    verify(checkinRepository).save(checkin)
+  }
+
+  @Test
+  fun `createLivenessSession - unhappy path - checkin not found throws exception`() {
+    val uuid = UUID.randomUUID()
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.empty())
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.createLivenessSession(uuid)
+    }
+
+    assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
+  }
+
+  @Test
+  fun `createLivenessSession - unhappy path - non-CREATED checkin throws exception`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.createLivenessSession(uuid)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertFalse(checkin.livenessEnabled)
   }
 
   private fun createOffender() = OffenderV2(
