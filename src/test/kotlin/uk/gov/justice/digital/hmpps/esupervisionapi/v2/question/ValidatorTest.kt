@@ -37,6 +37,15 @@ class ValidatorTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `AssignCustomQuestionsRequest validator - fail, empty string placeholders`() {
+    val req = assignCustomQuestionsRequest.copy(
+      questions = listOf(CustomQuestionItem(1, mapOf("placeholders" to mapOf("key" to "")))),
+    )
+    val result = validator.validate(req)
+    assertTrue(result.isNotEmpty())
+  }
+
+  @Test
   fun `AssignCustomQuestionsRequest validator - fail, placeholders are not strings`() {
     val req = assignCustomQuestionsRequest.copy(
       questions = listOf(CustomQuestionItem(1, mapOf("placeholders" to listOf(1, 2, 3)))),
