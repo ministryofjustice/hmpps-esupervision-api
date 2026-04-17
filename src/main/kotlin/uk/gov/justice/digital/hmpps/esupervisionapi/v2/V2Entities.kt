@@ -219,6 +219,9 @@ open class OffenderCheckinV2(
   @Column(name = "liveness_confidence", nullable = true)
   open var livenessConfidence: Float? = null,
 
+  @Column(name = "liveness_enabled", nullable = false)
+  open var livenessEnabled: Boolean = false,
+
   @Column(name = "manual_id_check", nullable = true, length = 50)
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult? = null,
@@ -257,6 +260,7 @@ open class OffenderCheckinV2(
       autoIdCheck = autoIdCheck,
       livenessResult = livenessResult,
       livenessConfidence = livenessConfidence,
+      livenessEnabled = livenessEnabled,
       manualIdCheck = manualIdCheck,
       riskFeedback = riskFeedback,
       sensitive = sensitive,
