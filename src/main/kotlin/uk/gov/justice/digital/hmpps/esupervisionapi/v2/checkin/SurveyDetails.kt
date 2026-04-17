@@ -7,9 +7,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SurveyVersion
  */
 fun StringBuilder.appendQuestionsAndAnswers(survey: Map<String, Any>): StringBuilder = formatSurvey(survey, this)
 
-// as of now, we don't allow more than three questions, so we shouldn't need all of the below
-val customQuestionsMarkers = listOf("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟")
-
 /**
  * Formats the offender's response to a survey into a human-readable string
  * that will be displayed as a note in NDelius.
@@ -25,17 +22,12 @@ fun formatSurvey(survey: Map<String, Any>, sb: StringBuilder): StringBuilder {
   if (version == SurveyVersion.V20260416Questions.version) {
     // customQuestions: Array<{ question: string; response: string; details?: string }>)
     val customQuestions = (survey["customQuestions"] as? List<Map<String, Any>>) ?: emptyList()
-    if (customQuestions.isNotEmpty()) {
-      sb.appendLine("Custom questions")
-    }
-    customQuestions.forEachIndexed { index, customQuestion ->
+    customQuestions.forEach { customQuestion ->
       val question = customQuestion["question"]
-      val marker = if (index < customQuestionsMarkers.size) customQuestionsMarkers[index] else "⏺️"
-      sb.appendLine("$marker $question")
-      val response = customQuestion["response"] ?: ""
-      sb.appendLine("Answer: ${response.trim()}")
-      val details = customQuestion["details"]
-      if (details != null) {
+      val response = (customQuestion["response"] ?: "") as String
+      sb.appendLine("$question: ${response.trim()}")
+      val details = (customQuestion["details"] ?: "") as String
+      if (details.isNotBlank()) {
         sb.appendLine("Details: ${details.trim()}")
       }
       sb.appendLine()
