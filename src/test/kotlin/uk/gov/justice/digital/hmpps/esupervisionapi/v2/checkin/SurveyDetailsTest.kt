@@ -20,9 +20,8 @@ class SurveyDetailsTest {
     )
 
     val result = formatSurvey(survey, StringBuilder()).toString()
-    assertTrue(result.contains("Custom questions\n"))
-    assertTrue(result.contains("1️⃣ What is your favourite colour?\nAnswer: Blue"))
-    assertTrue(result.contains("2️⃣ What is your favourite animal?\nAnswer: Dog"))
+    assertTrue(result.contains("What is your favourite colour?: Blue"))
+    assertTrue(result.contains("What is your favourite animal?: Dog"))
   }
 
   @Test
@@ -35,12 +34,15 @@ class SurveyDetailsTest {
   fun `render survey for pre-questions version`() {
     val survey = exampleSurvey.toMutableMap()
     survey["version"] = SurveyVersion.V20250710pilot.version
+    survey["customQuestions"] = listOf(
+      mapOf("question" to "What is your favourite colour?", "response" to "Blue"),
+    )
     val result = formatSurvey(survey, StringBuilder()).toString()
-    assertFalse(result.contains("Custom questions"))
+    assertFalse(result.contains("Blue"))
   }
 }
 
-private val exampleSurvey = mapOf(
+private val exampleSurvey: Map<String, Any> = mapOf(
   "version" to SurveyVersion.V20260416Questions.version,
   "mentalHealth" to "WELL",
   "housingSupport" to "NO_HELP",
