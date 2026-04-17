@@ -449,6 +449,9 @@ class CheckinV2Service(
       )
     }
 
+    checkin.livenessEnabled = true
+    checkinRepository.save(checkin)
+
     val sessionId = awaitRekognition(
       future = livenessSessionService.createSession(),
       action = "create liveness session",
