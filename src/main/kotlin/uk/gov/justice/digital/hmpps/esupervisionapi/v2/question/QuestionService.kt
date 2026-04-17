@@ -162,7 +162,7 @@ fun QuestionListItemDto.evalTemplate(): OffenderQuestion {
   var hint = spec["hint"] as String
   val values = (this.params["placeholders"] ?: emptyMap<String, String>()) as Map<String, String>
   for (placeholder in this.template.placeholders()) {
-    val value = values[placeholder]
+    val value = values[placeholder]?.trim()
     templateString = templateString.replacePlaceholder(placeholder, value)
     hint = hint.replacePlaceholder(placeholder, value)
   }

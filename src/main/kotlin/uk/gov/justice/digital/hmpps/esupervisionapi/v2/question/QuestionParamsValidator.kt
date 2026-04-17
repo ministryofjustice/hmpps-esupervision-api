@@ -43,7 +43,7 @@ internal fun ConstraintValidatorContext.constraint(message: String) {
 fun validatePlaceholders(params: Map<String, Any>): Boolean {
   val placeholders = params["placeholders"] ?: return true
   if (placeholders is Map<*, *>) {
-    return placeholders.all { it.key is String && it.value is String }
+    return placeholders.all { it.key is String && it.value is String && (it.value as String).isNotBlank() }
   }
   return false
 }
