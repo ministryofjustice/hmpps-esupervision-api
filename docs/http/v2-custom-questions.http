@@ -45,3 +45,8 @@ Content-Type: application/json
 ### Delete upcoming assignment
 DELETE {{HOST}}/v2/questions/assignment?crn={{offender_crn}}
 Authorization: Bearer {{hmpps_auth.token}}
+
+### Get offender details
+GET {{HOST}}/v2/questions/question-list/1?language=en-GB
+Authorization: Bearer {{hmpps_auth.token}}
+Accept: application/json
