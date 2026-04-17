@@ -91,3 +91,7 @@ databaseChangeLog:
       file: db/changelog/changesets/45_add_liveness_columns_to_offender_checkin_v2.sql
   - include:
       file: db/changelog/changesets/46_add_liveness_enabled_to_offender_checkin_v2.sql
+  - include:
+      file: db/changelog/changesets/47_fix_default_question_list_order.sql
+  - include:
+      file: db/changelog/changesets/48_update_hint_for_customisable_questions.sql
