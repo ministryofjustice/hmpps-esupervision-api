@@ -276,6 +276,22 @@ enum class CheckinV2Status {
   }
 }
 
+enum class SurveyVersion(val version: String) {
+  V20250710pilot("2025-07-10@pilot"),
+
+  /**
+   * the one below was added to the UI repo with incorrect date formatting. Keeping it here in the mapping in case there are entries in dev that use the incorrect date.
+   */
+  V20260707Typo("2026-0-07@pre"),
+  V20260707Pre("2026-01-07@pre"),
+
+  /**
+   * the first release of custom questions will have a mix of previous survey format + custom questions,
+   * so we can use the existing flagging logic (flagging for custom questions is not in scope)
+   */
+  V20260416Questions("2026-04-16@questions"),
+}
+
 /** V2 Checkin DTO */
 data class CheckinV2Dto(
   @field:Schema(description = "Unique identifier", required = true) val uuid: UUID,
@@ -349,10 +365,10 @@ private typealias SurveyContents = Map<String, Any>
  * Add new survey versions here as they are created.
  */
 private val versionToFlaggingFn = mapOf<String, (SurveyContents) -> List<String>>(
-  "2025-07-10@pilot" to { flaggedFor20250710pilot(it) },
-  // the one below was added to the UI repo with incorrect date formatting. Keeping it here in the mapping in case there are entries in dev that use the incorrect date.
-  "2026-0-07@pre" to { flaggedFor20250710pilot(it) },
-  "2026-01-07@pre" to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20250710pilot.version to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20260707Typo.version to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20260707Pre.version to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20260416Questions.version to { flaggedFor20250710pilot(it) },
 )
 
 /**
