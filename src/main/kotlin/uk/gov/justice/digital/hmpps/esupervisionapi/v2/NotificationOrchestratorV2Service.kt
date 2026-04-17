@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -18,7 +19,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Period
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -422,12 +422,11 @@ class NotificationOrchestratorV2Service(
   fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {
     LOGGER.info("Sending reminder to practitioner about custom questions: crn={}, practitioner={}", info.contactDetails.crn, info.practitionerId)
     val deadline = info.expectedCheckinDate.minusDays(1)
-    val diff = ChronoUnit.DAYS.between(deadline, info.expectedCheckinDate)
 
     val personalisation = mapOf(
       "offenderName" to "${info.contactDetails.name.forename}",
       "expectedCheckinDate" to info.expectedCheckinDate.format(DATE_FORMATTER),
-      "questionsDeadline" to if (diff == 1L) "today" else deadline.format(DATE_FORMATTER),
+      "questionsDeadline" to if (clock.today() == deadline) "today" else "on ${deadline.format(DATE_FORMATTER)}",
       "practitionerName" to (info.contactDetails.practitioner?.name?.forename ?: info.practitionerId),
       "dashboardUrl" to appConfig.dashboardUrl().toString(),
     )
