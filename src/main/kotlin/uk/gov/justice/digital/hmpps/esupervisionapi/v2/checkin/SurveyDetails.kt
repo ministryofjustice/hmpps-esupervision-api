@@ -33,10 +33,10 @@ fun formatSurvey(survey: Map<String, Any>, sb: StringBuilder): StringBuilder {
       val marker = if (index < customQuestionsMarkers.size) customQuestionsMarkers[index] else "⏺️"
       sb.appendLine("$marker $question")
       val response = customQuestion["response"] ?: ""
-      sb.appendLine("Answer: ${formatValue(response)}")
+      sb.appendLine("Answer: ${response.trim()}")
       val details = customQuestion["details"]
       if (details != null) {
-        sb.appendLine("Details: ${formatValue(details)}")
+        sb.appendLine("Details: ${details.trim()}")
       }
       sb.appendLine()
     }
