@@ -31,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
 import java.net.URI
 import java.time.Clock
@@ -53,6 +54,7 @@ class OffenderV2ResourceTest {
   private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val offenderSetupRepository: OffenderSetupV2Repository = mock()
   private val offenderSetupV2Service: OffenderSetupV2Service = mock()
+  private val questionService: QuestionService = mock()
 
   private lateinit var resource: OffenderV2Resource
 
@@ -69,6 +71,7 @@ class OffenderV2ResourceTest {
       checkinRepository,
       offenderSetupRepository,
       offenderSetupV2Service,
+      questionService,
     )
   }
 
@@ -97,6 +100,7 @@ class OffenderV2ResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
+    verify(questionService).deleteUpcomingAssignment(eq(offender.crn))
     verify(offenderRepository).save(any())
     verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
   }
