@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import java.net.URI
 import java.util.UUID
 
@@ -50,6 +51,10 @@ class AppConfig(
 
   fun feedbackUrl(): URI = URI(
     "$checkinUrl/feedback",
+  )
+
+  fun addQuestionsUrl(offenderUuid: UUID, crn: CRN): URI = URI(
+    "$mpopUrl/case/$crn/appointments/check-in/manage/$offenderUuid/questions/start",
   )
 
   fun mediaProxyUrl(): URI = URI("$hostedAt/resolve")
