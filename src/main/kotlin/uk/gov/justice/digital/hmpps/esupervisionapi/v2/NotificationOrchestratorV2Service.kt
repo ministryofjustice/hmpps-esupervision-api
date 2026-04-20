@@ -428,7 +428,7 @@ class NotificationOrchestratorV2Service(
       "expectedCheckinDate" to info.expectedCheckinDate.format(DATE_FORMATTER),
       "questionsDeadline" to if (clock.today() == deadline) "today" else "on ${deadline.format(DATE_FORMATTER)}",
       "practitionerName" to (info.contactDetails.practitioner?.name?.forename ?: info.practitionerId),
-      "dashboardUrl" to appConfig.dashboardUrl().toString(),
+      "dashboardUrl" to appConfig.addQuestionsUrl(info.offenderUuid, info.contactDetails.crn).toString(),
     )
     val notificationsWithRecipients = notificationPersistence.buildPractitionerNotifications(
       null,
