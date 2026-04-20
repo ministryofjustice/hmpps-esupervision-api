@@ -39,6 +39,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
 import java.time.Clock
 import java.time.Duration
@@ -59,6 +60,7 @@ class OffenderV2Resource(
   private val checkinRepository: OffenderCheckinV2Repository,
   private val offenderSetupRepository: OffenderSetupV2Repository,
   private val offenderSetupV2Service: OffenderSetupV2Service,
+  private val questionService: QuestionService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -203,6 +205,8 @@ class OffenderV2Resource(
     offender.status = OffenderStatus.INACTIVE
     offender.updatedAt = clock.instant()
     val saved = offenderRepository.save(offender)
+
+    questionService.deleteUpcomingAssignment(offender.crn)
 
     // set any pending check ins to cancelled
     val pendingCheckins = checkinRepository.findAllByOffenderAndStatus(saved, CheckinV2Status.CREATED)
