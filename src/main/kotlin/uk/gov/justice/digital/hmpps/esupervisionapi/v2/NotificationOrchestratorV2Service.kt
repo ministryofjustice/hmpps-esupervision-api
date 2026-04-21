@@ -425,8 +425,8 @@ class NotificationOrchestratorV2Service(
 
     val personalisation = mapOf(
       "offenderName" to "${info.contactDetails.name.forename}",
-      "expectedCheckinDate" to info.expectedCheckinDate.format(DATE_FORMATTER),
-      "questionsDeadline" to if (clock.today() == deadline) "today" else "on ${deadline.format(DATE_FORMATTER)}",
+      "expectedCheckinDate" to info.expectedCheckinDate.format(QUESTIONS_REMINDER_FORMATTER),
+      "questionsDeadline" to if (clock.today() == deadline) "today" else "on ${deadline.format(QUESTIONS_REMINDER_FORMATTER)}",
       "practitionerName" to (info.contactDetails.practitioner?.name?.forename ?: info.practitionerId),
       "dashboardUrl" to appConfig.addQuestionsUrl(info.offenderUuid, info.contactDetails.crn).toString(),
     )
@@ -516,6 +516,8 @@ class NotificationOrchestratorV2Service(
 
     // Match V1 date format: "Monday 15 January 2025"
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")
+
+    private val QUESTIONS_REMINDER_FORMATTER = DateTimeFormatter.ofPattern("d LLLL yyyy")
 
     /** Format checkin frequency - matches V1 RegistrationConfirmationMessage */
     private fun formatCheckinFrequency(interval: CheckinInterval): String = when (interval) {
