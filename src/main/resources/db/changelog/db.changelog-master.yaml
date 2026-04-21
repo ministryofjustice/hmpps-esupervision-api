@@ -95,3 +95,5 @@ databaseChangeLog:
       file: db/changelog/changesets/47_fix_default_question_list_order.sql
   - include:
       file: db/changelog/changesets/48_update_hint_for_customisable_questions.sql
+  - include:
+      file: db/changelog/changesets/49_move_qs_assignment_trigger_to_insert.sql
