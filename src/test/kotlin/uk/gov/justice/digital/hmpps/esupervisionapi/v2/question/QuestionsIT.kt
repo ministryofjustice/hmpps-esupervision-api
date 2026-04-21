@@ -41,6 +41,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -158,7 +159,7 @@ class QuestionsIT : IntegrationTestBase() {
 
     val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnV2Request("BARRY.WHITE", offender.crn, clock.today()))
     val assignment = questionService.upcomingAssignment(offender.crn)
-    assertNotNull(assignment.questionList)
+    assertNull(assignment.questionList)
 
     clock.advanceBy(Duration.ofHours(4))
     offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
@@ -223,15 +224,22 @@ class QuestionsIT : IntegrationTestBase() {
         clock.today(),
       ),
     )
-    // there's a checkin with STATUS=CREATED already
-    assertThrows(BadArgumentException::class.java) {
-      questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    }
+    // the assignment should have the checkin set
+    val upcoming2 = questionListAssignmentRepository.upcomingAssignment(offender.id)
+    assertNull(upcoming2, "No assignment should be present after checkin2 was submitted: $upcoming2")
+
+    // We can assign questions to the _next_ checkin now
+    val assignment3 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+
+    val upcoming3 = questionService.upcomingAssignment(offender.crn)
+    assertEquals(assignment3.listId, upcoming3.questionList)
+    assertEquals(offender.firstCheckin.plus(offender.checkinInterval.toDays(), ChronoUnit.DAYS), assignment3.expectedCheckinDate)
+
     val submission2 = offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
 
     // the assignment should have the checkin set
     val assignment = questionListAssignmentRepository.upcomingAssignment(offender.id)
-    assertNull(assignment, "No assignment should be present after checkin1 was submitted: $assignment")
+    assertNotNull(assignment, "New assignment should be there after a submission of checkin2: $assignment")
   }
 
   @Test

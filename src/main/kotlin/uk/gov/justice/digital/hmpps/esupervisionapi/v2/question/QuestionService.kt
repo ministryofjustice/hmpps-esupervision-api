@@ -9,7 +9,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestion
@@ -84,8 +83,12 @@ class QuestionService(
 
     val listId = questionListAssignmentRepository.upcomingAssignment(offender.id)
     val today = clock.today()
+    val checkinDay = isCheckinDay(offender, today)
+    val checkinForTodayExists = if (checkinDay) checkinRepository.existsByOffenderAndDueDate(offender, today) else null
+    val nextCheckinDay = if (checkinForTodayExists == false) today else nextCheckinDay(offender, today)
+
     return UpcomingQuestionAssignmentInfo(
-      if (isCheckinDay(offender, today)) today else nextCheckinDay(offender, today),
+      nextCheckinDay,
       listId,
     )
   }
@@ -110,12 +113,6 @@ class QuestionService(
     val maybeCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
     if (maybeCheckin.isEmpty && isCheckinDay(offender, clock.today())) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
-    } else {
-      maybeCheckin.ifPresent {
-        if (it.status == CheckinV2Status.CREATED) {
-          throw BadArgumentException("Checkin already due and CREATED. Too late to assign questions.")
-        }
-      }
     }
 
     val listId = questionsRepository.upsertQuestionList(

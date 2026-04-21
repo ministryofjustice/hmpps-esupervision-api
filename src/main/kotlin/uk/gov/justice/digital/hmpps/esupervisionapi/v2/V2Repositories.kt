@@ -678,7 +678,6 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
     """
     insert into question_list_assignment (question_list_id, offender_id, checkin_id, updated_at)
     select :listId, :offenderId, :checkinId, now()
-    where not exists (select 1 from offender_checkin_v2 where offender_id = :offenderId and status = 'CREATED'::offender_checkin_status_v2)
     on conflict (offender_id) where checkin_id is null 
     do update set
         question_list_id = :listId,
