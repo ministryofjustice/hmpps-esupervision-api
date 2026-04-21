@@ -4,7 +4,9 @@
 
 DROP TRIGGER IF EXISTS trg_checkin_status_change ON offender_checkin_v2;
 
-CREATE OR REPLACE FUNCTION fn_update_question_assignment()
+ALTER FUNCTION fn_update_question_assignment() RENAME TO fn_update_question_assignment_on_update;
+
+CREATE OR REPLACE FUNCTION fn_update_question_assignment_on_insert()
     RETURNS TRIGGER AS $$
 BEGIN
     UPDATE question_list_assignment
@@ -20,4 +22,14 @@ CREATE TRIGGER trg_checkin_status_change
     AFTER INSERT ON offender_checkin_v2
     FOR EACH ROW
     WHEN (NEW.status = 'CREATED'::offender_checkin_status_v2)
-EXECUTE FUNCTION fn_update_question_assignment();
+EXECUTE FUNCTION fn_update_question_assignment_on_insert();
+
+--rollback:
+--rollback drop trigger if exists trg_checkin_status_change ON offender_checkin_v2;
+--rollback drop function fn_update_question_assignment_on_insert;
+--rollback ALTER FUNCTION fn_update_question_assignment_on_update() RENAME TO fn_update_question_assignment;
+--rollback CREATE TRIGGER trg_checkin_status_change
+--rollback     AFTER UPDATE ON offender_checkin_v2
+--rollback     FOR EACH ROW
+--rollback     WHEN (OLD.status = 'CREATED'::offender_checkin_status_v2 and OLD.STATUS IS DISTINCT FROM NEW.status)
+--rollback  EXECUTE FUNCTION fn_update_question_assignment();
