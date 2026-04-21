@@ -211,7 +211,7 @@ class CheckinV2Service(
     }
 
     // Only verify video exists for non-liveness check-ins (liveness has no video)
-    if (checkin.livenessResult == null && !s3UploadService.isCheckinVideoUploaded(checkin)) {
+    if (!checkin.livenessEnabled && !s3UploadService.isCheckinVideoUploaded(checkin)) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Video not uploaded")
     }
 
