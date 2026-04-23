@@ -50,9 +50,9 @@ app:
       batch-size: 50
   features:
     # publish media proxy links to NDelius
-    esup-1239: false
+    esup-1239: true
     # ensure a POP is still on probation before sending them a check in link
-    esup-1183: false
+    esup-1183: true
 
 spring:
   application:
