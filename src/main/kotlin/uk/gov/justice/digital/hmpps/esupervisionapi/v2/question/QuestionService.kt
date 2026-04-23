@@ -148,7 +148,7 @@ class QuestionService(
     return result == 1
   }
 
-  @Transactional
+  @Transactional(readOnly = true)
   fun checkinQuestions(checkinUuid: UUID, language: Language): List<QuestionListItemDto> {
     val checkin = checkinRepository.findByUuid(checkinUuid).orElseThrow { BadArgumentException("Checkin not found for UUID=$checkinUuid") }
     val listId = questionListAssignmentRepository.checkinAssignment(checkin.id)
