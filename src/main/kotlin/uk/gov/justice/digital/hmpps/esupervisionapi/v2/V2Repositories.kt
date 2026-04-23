@@ -9,7 +9,6 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
@@ -698,17 +697,16 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   fun upcomingAssignment(offenderId: Long): Long?
 
   /**
-   * Returns question list ID of upcoming question list assignment, if any.
+   * Returns the question list id for the checkin, if any.
    */
   @Query(
     """
     select qla.question_list_id from question_list_assignment qla
-    join offender_v2 o on o.id = qla.offender_id
-    where o.crn = :crn and qla.offender_id = :offenderId and qla.checkin_id is null
+    where qla.checkin_id = :checkinId
   """,
     nativeQuery = true,
   )
-  fun upcomingAssignment(crn: CRN): Long?
+  fun checkinAssignment(checkinId: Long): Long?
 
   @Query(
     """

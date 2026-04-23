@@ -765,3 +765,10 @@ data class UpcomingOffenderQuestions(
   val expectedCheckinDate: LocalDate,
   val questions: List<OffenderQuestion>,
 )
+
+/**
+ * Questions for a checkin. If no custom questions were assigned, returns the default list.
+ */
+data class OffenderCheckinQuestionsResponse(
+  val questions: List<OffenderQuestion>,
+)
