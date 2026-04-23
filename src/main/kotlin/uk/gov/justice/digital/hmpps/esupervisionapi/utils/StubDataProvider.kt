@@ -1,9 +1,13 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
+import java.time.LocalDate
+import java.time.ZoneId
 
 typealias CRN = String
 
@@ -76,6 +80,16 @@ class GeneratingStubDataProvider : StubDataProvider {
         provider = OrganizationalUnit(
           code = "PRV${parsed.unit.padStart(3, '0')}",
           description = "Provider ${parsed.unit}",
+        ),
+      ),
+      events = listOf(
+        Event(
+          1,
+          CodedDescription("0001", "stealing candy"),
+          Event.Sentence(
+            LocalDate.now(ZoneId.of("Europe/London")).minusWeeks(90),
+            "Sentence description here",
+          ),
         ),
       ),
     )

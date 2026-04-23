@@ -23,9 +23,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequ
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ListQuestionTemplatesResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinQuestionsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestionList
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UpcomingOffenderQuestions
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UpcomingQuestionItemsResponse
+import java.util.UUID
 
 @Validated
 @RestController
@@ -94,6 +96,25 @@ class QuestionResource(
     val upcoming = questionService.upcomingQuestionListItems(crn, language)
     val upcomingQuestions = upcoming.items.map { it.evalTemplate() }
     return ResponseEntity.ok(UpcomingOffenderQuestions(upcoming.expectedCheckinDate, upcomingQuestions))
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/checkin/{uuid}/offender-questions")
+  @Tag(name = "offender")
+  @Operation(
+    summary = "Get checkin questions for the offender",
+    description = """
+      Assuming the checkin has not been submitted, expired or cancelled, this endpoint will always return valid questions for an offender (including the fixed questions). 
+      These are meant be used in the offender context.
+    """,
+  )
+  fun checkinQuestions(
+    @PathVariable(name = "uuid") checkinUuid: UUID,
+    @RequestParam(required = true) @Valid language: Language,
+  ): ResponseEntity<OffenderCheckinQuestionsResponse> {
+    val items = questionService.checkinQuestions(checkinUuid, language)
+    val questions = items.map { it.evalTemplate() }
+    return ResponseEntity.ok(OffenderCheckinQuestionsResponse(questions))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")

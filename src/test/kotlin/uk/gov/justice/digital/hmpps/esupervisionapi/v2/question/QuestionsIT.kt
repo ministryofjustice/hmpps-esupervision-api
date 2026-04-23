@@ -152,14 +152,21 @@ class QuestionsIT : IntegrationTestBase() {
     assertEquals(1, templates.size)
 
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
-    val resp = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
 
     val qlitems = questionListItemRepository.findAllItems()
-    assertEquals(2 + 1, qlitems.size)
+    assertTrue(qlitems.size > 1)
 
     val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnV2Request("BARRY.WHITE", offender.crn, clock.today()))
     val assignment = questionService.upcomingAssignment(offender.crn)
-    assertNull(assignment.questionList)
+    assertNull(assignment.questionList, "*Upcoming* assignment should flip to null after a checkin is created")
+
+    val checkinEntity = offenderCheckinV2Repository.findByUuid(checkin.uuid)
+    val checkinQuestions = questionListAssignmentRepository.checkinAssignment(checkinEntity.get().id)
+    assertNotNull(checkinQuestions, "The assignment should still be visible for the checkin UI")
+
+    val checkinQuestionResponse = questionService.checkinQuestions(checkin.uuid, Language.ENGLISH)
+    assertEquals(questionRepository.defaultListItems(Language.ENGLISH).size + 1, checkinQuestionResponse.size)
 
     clock.advanceBy(Duration.ofHours(4))
     offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))

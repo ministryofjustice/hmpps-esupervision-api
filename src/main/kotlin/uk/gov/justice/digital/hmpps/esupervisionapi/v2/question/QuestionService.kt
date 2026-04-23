@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
+import java.util.UUID
 import kotlin.collections.emptyMap
 
 @Service
@@ -145,6 +146,15 @@ class QuestionService(
     val result = questionListAssignmentRepository.deleteUpcomingAssignment(offender.id)
     LOG.info("Removed upcoming question list assignment for CRN={}, result={}", crn, result)
     return result == 1
+  }
+
+  @Transactional
+  fun checkinQuestions(checkinUuid: UUID, language: Language): List<QuestionListItemDto> {
+    val checkin = checkinRepository.findByUuid(checkinUuid).orElseThrow { BadArgumentException("Checkin not found for UUID=$checkinUuid") }
+    val listId = questionListAssignmentRepository.checkinAssignment(checkin.id)
+    val items = if (listId != null) questionsRepository.getListItems(listId, language) else questionsRepository.defaultListItems(language)
+    LOG.info("checkinQuestions: returning {} items for checkin UUID={}, listId={}", items.size, checkinUuid, listId)
+    return items
   }
 
   companion object {
