@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestion
@@ -151,6 +152,9 @@ class QuestionService(
   @Transactional(readOnly = true)
   fun checkinQuestions(checkinUuid: UUID, language: Language): List<QuestionListItemDto> {
     val checkin = checkinRepository.findByUuid(checkinUuid).orElseThrow { BadArgumentException("Checkin not found for UUID=$checkinUuid") }
+    if (checkin.status != CheckinV2Status.CREATED) {
+      throw BadArgumentException("Can't checkin questions for checkin with status ${checkin.status}")
+    }
     val listId = questionListAssignmentRepository.checkinAssignment(checkin.id)
     val items = if (listId != null) questionsRepository.getListItems(listId, language) else questionsRepository.defaultListItems(language)
     LOG.info("checkinQuestions: returning {} items for checkin UUID={}, listId={}", items.size, checkinUuid, listId)
