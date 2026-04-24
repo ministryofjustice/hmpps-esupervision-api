@@ -123,6 +123,25 @@ class EventDetailV2ServiceTest {
     }
 
     @Test
+    fun `labels automated ID check as System ID and liveness check result when liveness enabled`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        livenessEnabled = true,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Pass")
+      assertThat(result.notes).doesNotContain("System ID check result:")
+    }
+
+    @Test
     fun `formats automated ID check NO_FACE_DETECTED`() {
       val uuid = UUID.randomUUID()
       val offender = createOffender(UUID.randomUUID())
@@ -414,6 +433,7 @@ class EventDetailV2ServiceTest {
     manualIdCheck: ManualIdVerificationResult? = null,
     surveyResponse: Map<String, Any>? = null,
     sensitive: Boolean = false,
+    livenessEnabled: Boolean = false,
   ) = OffenderCheckinV2(
     uuid = uuid,
     offender = offender,
@@ -427,5 +447,6 @@ class EventDetailV2ServiceTest {
     manualIdCheck = manualIdCheck,
     surveyResponse = surveyResponse,
     sensitive = sensitive,
+    livenessEnabled = livenessEnabled,
   )
 }
