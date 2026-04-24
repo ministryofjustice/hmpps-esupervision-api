@@ -121,12 +121,12 @@ class EventDetailV2Service(
         sb.appendLine("Check in status: Submitted")
         sb.appendLine()
         checkin.autoIdCheck?.let {
-          sb.appendLine("System ID check result: ${formatAutoIdCheckResult(it.name)}")
+          val label = if (checkin.livenessEnabled) "System ID and liveness check result" else "System ID check result"
+          sb.appendLine("$label: ${formatAutoIdCheckResult(it.name)}")
         }
         if (appConfig.enabledFeatures.contains(Feature.ESUP_1239)) {
           sb.appendLine("Reference photo: ${proxyLinkCreator.offenderReferencePhoto(checkin.offender)}")
           sb.appendLine("Checkin snapshot: ${proxyLinkCreator.checkinSnapshot(checkin, 0)}")
-          sb.appendLine("Checkin video: ${proxyLinkCreator.checkinVideo(checkin)}")
         }
         checkin.surveyResponse?.let { survey ->
           sb.appendLine()
