@@ -101,3 +101,5 @@ databaseChangeLog:
       file: db/changelog/changesets/50_add_question_list_assignment_index.sql
   - include:
       file: db/changelog/changesets/51_question_add_uuid.sql
+  - include:
+      file: db/changelog/changesets/52_add_question_examples.sql

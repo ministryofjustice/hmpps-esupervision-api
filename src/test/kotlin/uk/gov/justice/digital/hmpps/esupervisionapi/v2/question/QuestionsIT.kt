@@ -82,7 +82,8 @@ class QuestionsIT : IntegrationTestBase() {
         {
           "placeholders": ["thing"],
           "hint": "Hint for the {{thing}} question",
-          "domain_msg_head": "What did they say about the {{thing}}?"
+          "domain_msg_head": "What did they say about the {{thing}}?",
+          "placeholders_examples": [ {"thing": "School"}, {"thing": "Work"} ] 
         }
       """.trimIndent(),
     )

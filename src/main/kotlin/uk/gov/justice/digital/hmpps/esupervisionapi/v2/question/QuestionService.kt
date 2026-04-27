@@ -186,4 +186,4 @@ fun QuestionListItemDto.evalTemplate(): OffenderQuestion {
   return OffenderQuestion(templateString, this.template.responseFormat, processedSpec)
 }
 
-private fun String.replacePlaceholder(placeholder: String, value: String?): String = this.replace("{{$placeholder}}", value ?: "{{$placeholder}}")
+fun String.replacePlaceholder(placeholder: String, value: String?): String = this.replace("{{$placeholder}}", value ?: "{{$placeholder}}")

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import java.lang.reflect.ParameterizedType
 import java.math.BigDecimal
@@ -634,31 +635,53 @@ class QuestionRepository(
     objectMapper.writeValueAsString(questions),
   )
 
-  private fun questionTemplateRowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto {
-    val spec: Map<String, Any> = asMap(rs, "response_spec")
+  private fun questionTemplateRowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto = toQuestionTemplate(rs, idx)
+
+  private fun listItemRowMapper(rs: ResultSet, idx: Int): QuestionListItemDto = QuestionListItemDto(
+    template = toQuestionTemplate(rs, idx),
+    params = asMap(rs, "params"),
+  )
+
+  private fun toQuestionTemplate(rs: ResultSet, idx: Int): QuestionTemplateDto {
+    val template = rs.getString("question_template")
+    val responseSpec = asMap(rs, "response_spec")
+
+    // We're going to safely create question examples from the template,
+    // We don't want to fail here because:
+    // 1. Missing/invalid example should not stop us from returning data
+    // 2. We have integration tests for the SYSTEM customisable questions that verify the examples get created
+    val questionExamples = responseSpec["placeholders_examples"]?.let {
+      if (it is List<*>) it as List<Any> else null
+    }
+      ?.map { evalExamples(template, it) }
+      ?.filter { !it.contains("{{") }
+
     return QuestionTemplateDto(
       id = rs.getLong("question_id"),
       policy = QuestionPolicy.fromString(rs.getString("policy")),
-      template = rs.getString("question_template"),
+      template = template,
       responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
-      responseSpec = spec,
+      responseSpec = responseSpec,
       example = rs.getString("example"),
+      questionExamples = questionExamples,
     )
   }
 
-  private fun listItemRowMapper(rs: ResultSet, idx: Int): QuestionListItemDto {
-    val template = QuestionTemplateDto(
-      id = rs.getLong("question_id"),
-      policy = QuestionPolicy.fromString(rs.getString("policy")),
-      template = rs.getString("question_template"),
-      responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
-      responseSpec = asMap(rs, "response_spec"),
-      example = rs.getString("example"),
-    )
-    return QuestionListItemDto(
-      template = template,
-      params = asMap(rs, "params"),
-    )
+  private fun evalExamples(template: String, replacement: Any): String {
+    try {
+      var q = template
+      if (replacement is Map<*, *>) {
+        val m = replacement as Map<String, String>
+        m.entries.forEach {
+          q = q.replacePlaceholder(it.key, it.value)
+        }
+      }
+      return q
+    } catch (e: Exception) {
+      // This will be filtered out in, we don't want to log as this may be a lot of results.
+      // We also don't want to throw here, it's not a critical failure if an example string is missing
+      return template
+    }
   }
 
   private fun asMap(rs: ResultSet, columnName: String): Map<String, Any> {

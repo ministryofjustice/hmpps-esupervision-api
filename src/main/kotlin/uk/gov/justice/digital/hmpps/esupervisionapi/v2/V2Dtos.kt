@@ -659,17 +659,25 @@ data class QuestionTemplateDto(
   @field:Schema(description = "Response spec", required = true)
   val responseSpec: Map<String, Any>,
 
-  @field:Schema(description = "Example", required = false)
+  @field:Schema(description = "Placeholder examples to be presented in a table", required = false)
   val example: String?,
+
+  @field:Schema(description = "Fully question examples", required = false)
+  val questionExamples: List<String>?,
 )
 
-fun QuestionTemplateDto.placeholders(): List<String> {
-  val placeholders = this.responseSpec["placeholders"]
+/**
+ * Safely extract placeholder names (not including the "{{" or "}}" delimiters) from the response spec.
+ */
+fun questionTemplatePlaceholders(responseSpec: Map<String, Any>): List<String> {
+  val placeholders = responseSpec["placeholders"]
   if (placeholders is List<*>) {
     return placeholders.map { it.toString() }
   }
   return emptyList()
 }
+
+fun QuestionTemplateDto.placeholders(): List<String> = questionTemplatePlaceholders(responseSpec)
 
 /**
  * Specifies parameters for a choice item of a custom question item
