@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
@@ -645,19 +646,20 @@ class QuestionRepository(
   private fun toQuestionTemplate(rs: ResultSet, idx: Int): QuestionTemplateDto {
     val template = rs.getString("question_template")
     val responseSpec = asMap(rs, "response_spec")
+    val questionId = rs.getLong("question_id")
 
     // We're going to safely create question examples from the template,
     // We don't want to fail here because:
     // 1. Missing/invalid example should not stop us from returning data
     // 2. We have integration tests for the SYSTEM customisable questions that verify the examples get created
     val questionExamples = responseSpec["placeholders_examples"]?.let {
-      if (it is List<*>) it as List<Any> else null
+      if (it is List<*>) it else null
     }
-      ?.map { evalExamples(template, it) }
+      ?.map { evalExample(questionId, template, it) }
       ?.filter { !it.contains("{{") }
 
     return QuestionTemplateDto(
-      id = rs.getLong("question_id"),
+      id = questionId,
       policy = QuestionPolicy.fromString(rs.getString("policy")),
       template = template,
       responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
@@ -667,29 +669,34 @@ class QuestionRepository(
     )
   }
 
-  private fun evalExamples(template: String, replacement: Any): String {
-    try {
-      var q = template
-      if (replacement is Map<*, *>) {
-        val m = replacement as Map<String, String>
-        m.entries.forEach {
-          q = q.replacePlaceholder(it.key, it.value)
-        }
-      }
-      return q
-    } catch (e: Exception) {
-      // This will be filtered out, we don't want to log as this may be a lot of results.
-      // We also don't want to throw here, it's not a critical failure if an example string is missing
-      return template
-    }
-  }
-
   private fun asMap(rs: ResultSet, columnName: String): Map<String, Any> {
     val content = rs.getString(columnName) ?: return emptyMap()
     return objectMapper.readValue(
       content,
       object : TypeReference<Map<String, Any>>() {},
     )
+  }
+
+  companion object {
+    val LOGGER = logger<QuestionRepository>()
+
+    private fun evalExample(questionId: Long, template: String, replacement: Any?): String {
+      try {
+        var q = template
+        if (replacement is Map<*, *>) {
+          val m = replacement as Map<String, String>
+          m.entries.forEach {
+            q = q.replacePlaceholder(it.key, it.value)
+          }
+        }
+        return q
+      } catch (e: Exception) {
+        // This will be filtered out
+        // We also don't want to throw here, it's not a critical failure if an example string is missing
+        LOGGER.warn("evalExamples: Failed to eval example for questionId={}, replacement={}: {}", questionId, replacement, e.message)
+        return template
+      }
+    }
   }
 }
 
