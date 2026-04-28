@@ -6,15 +6,22 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import kotlin.Double
+import kotlin.Long
 
 data class StatsTotalsDto(
   val totalSignedUp: Long,
+  val totalActiveUsers: Long,
+  val totalInactiveUsers: Long,
+  val signedUp: Long,
   val activeUsers: Long,
   val inactiveUsers: Long,
   val completedCheckins: Long,
   val notCompletedOnTime: Long,
   val avgHoursToComplete: Double,
   val avgCompletedCheckinsPerPerson: Double,
+  val pctTotalActiveUsers: Double,
+  val pctTotalInactiveUsers: Double,
   val pctActiveUsers: Double,
   val pctInactiveUsers: Double,
   val pctCompletedCheckins: Double,
@@ -34,12 +41,17 @@ data class StatsProviderDto(
   val providerCode: String,
   val providerDescription: String,
   val totalSignedUp: Long,
+  val totalActiveUsers: Long,
+  val totalInactiveUsers: Long,
+  val signedUp: Long,
   val activeUsers: Long,
   val inactiveUsers: Long,
   val completedCheckins: Long,
   val notCompletedOnTime: Long,
   val avgHoursToComplete: Double,
   val avgCompletedCheckinsPerPerson: Double,
+  val pctTotalActiveUsers: Double,
+  val pctTotalInactiveUsers: Double,
   val pctActiveUsers: Double,
   val pctInactiveUsers: Double,
   val pctCompletedCheckins: Double,
@@ -77,12 +89,17 @@ class StatsServiceV2(
     val baseTotal = allRows.first().let {
       StatsTotalsDto(
         totalSignedUp = it.totalSignedUp,
+        totalActiveUsers = it.totalActiveUsers,
+        totalInactiveUsers = it.totalInactiveUsers,
+        signedUp = it.signedUp,
         activeUsers = it.activeUsers,
         inactiveUsers = it.inactiveUsers,
         completedCheckins = it.completedCheckins,
         notCompletedOnTime = it.notCompletedOnTime,
         avgHoursToComplete = it.avgHoursToComplete,
         avgCompletedCheckinsPerPerson = it.avgCompletedCheckinsPerPerson,
+        pctTotalActiveUsers = it.pctTotalActiveUsers,
+        pctTotalInactiveUsers = it.pctTotalInactiveUsers,
         pctActiveUsers = it.pctActiveUsers,
         pctInactiveUsers = it.pctInactiveUsers,
         pctCompletedCheckins = it.pctCompletedCheckins,
@@ -98,7 +115,13 @@ class StatsServiceV2(
         pctSignedUpOfTotal = it.pctSignedUpOfTotal,
       )
     }
+    println(baseTotal)
+    println(providerRows)
 
-    return StatsDashboardDto(total = baseTotal, providers = providerRows)
+    val sd = StatsDashboardDto(total = baseTotal, providers = providerRows)
+
+    println(sd)
+
+    return sd
   }
 }
