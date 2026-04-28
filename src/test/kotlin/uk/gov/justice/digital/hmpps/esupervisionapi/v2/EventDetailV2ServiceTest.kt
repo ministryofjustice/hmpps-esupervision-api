@@ -11,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Instant
@@ -120,6 +121,83 @@ class EventDetailV2ServiceTest {
 
       assertThat(result).isNotNull
       assertThat(result!!.notes).contains("System ID check result: Pass")
+    }
+
+    @Test
+    fun `passes when liveness enabled and both face match and liveness pass`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        livenessEnabled = true,
+        livenessResult = LivenessResult.LIVE,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Pass")
+      assertThat(result.notes).doesNotContain("System ID check result:")
+    }
+
+    @Test
+    fun `fails when liveness enabled and liveness fails even if face matches`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        livenessEnabled = true,
+        livenessResult = LivenessResult.NOT_LIVE,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Fail")
+    }
+
+    @Test
+    fun `fails when liveness enabled and face does not match even if liveness passes`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+        livenessEnabled = true,
+        livenessResult = LivenessResult.LIVE,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Fail")
+    }
+
+    @Test
+    fun `fails when liveness enabled but liveness result missing`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        livenessEnabled = true,
+        livenessResult = null,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Fail")
     }
 
     @Test
@@ -414,6 +492,8 @@ class EventDetailV2ServiceTest {
     manualIdCheck: ManualIdVerificationResult? = null,
     surveyResponse: Map<String, Any>? = null,
     sensitive: Boolean = false,
+    livenessEnabled: Boolean = false,
+    livenessResult: LivenessResult? = null,
   ) = OffenderCheckinV2(
     uuid = uuid,
     offender = offender,
@@ -427,5 +507,7 @@ class EventDetailV2ServiceTest {
     manualIdCheck = manualIdCheck,
     surveyResponse = surveyResponse,
     sensitive = sensitive,
+    livenessEnabled = livenessEnabled,
+    livenessResult = livenessResult,
   )
 }

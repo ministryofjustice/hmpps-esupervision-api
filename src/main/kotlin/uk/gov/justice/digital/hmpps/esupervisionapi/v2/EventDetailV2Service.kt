@@ -6,6 +6,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.appendQuestionsAndAnswers
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Instant
 import java.time.ZoneId
@@ -120,13 +122,18 @@ class EventDetailV2Service(
       DomainEventType.V2_CHECKIN_SUBMITTED -> {
         sb.appendLine("Check in status: Submitted")
         sb.appendLine()
-        checkin.autoIdCheck?.let {
-          sb.appendLine("System ID check result: ${formatAutoIdCheckResult(it.name)}")
+        checkin.autoIdCheck?.let { autoIdCheck ->
+          val label = if (checkin.livenessEnabled) "System ID and liveness check result" else "System ID check result"
+          val passed = if (checkin.livenessEnabled) {
+            autoIdCheck == AutomatedIdVerificationResult.MATCH && checkin.livenessResult == LivenessResult.LIVE
+          } else {
+            autoIdCheck == AutomatedIdVerificationResult.MATCH
+          }
+          sb.appendLine("$label: ${if (passed) "Pass" else "Fail"}")
         }
         if (appConfig.enabledFeatures.contains(Feature.ESUP_1239)) {
           sb.appendLine("Reference photo: ${proxyLinkCreator.offenderReferencePhoto(checkin.offender)}")
           sb.appendLine("Checkin snapshot: ${proxyLinkCreator.checkinSnapshot(checkin, 0)}")
-          sb.appendLine("Checkin video: ${proxyLinkCreator.checkinVideo(checkin)}")
         }
         checkin.surveyResponse?.let { survey ->
           sb.appendLine()
@@ -178,14 +185,6 @@ class EventDetailV2Service(
       .format(formatter)
       .replace("AM", "am")
       .replace("PM", "pm")
-  }
-
-  private fun formatAutoIdCheckResult(result: String): String = when (result) {
-    "MATCH" -> "Pass"
-    "NO_MATCH" -> "Fail"
-    "NO_FACE_DETECTED" -> "Fail"
-    "ERROR" -> "Fail"
-    else -> result
   }
 
   private fun formatManualIdCheckResult(result: String): String = when (result) {
