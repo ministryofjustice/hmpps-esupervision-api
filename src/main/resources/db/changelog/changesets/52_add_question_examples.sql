@@ -231,7 +231,7 @@ select fn_update_question_spec_with_example(
        }$$::jsonb
 );
 
---rollback update question_info set example_full = NULL;
+--rollback update question_info set response_spec = response_spec - 'placeholders_examples';
 
 --changeset roland.sadowski:52_add_question_examples-3 splitStatements:false
 
