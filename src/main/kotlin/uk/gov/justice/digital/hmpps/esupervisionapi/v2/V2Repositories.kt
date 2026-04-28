@@ -9,8 +9,10 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import java.lang.reflect.ParameterizedType
 import java.math.BigDecimal
@@ -634,30 +636,36 @@ class QuestionRepository(
     objectMapper.writeValueAsString(questions),
   )
 
-  private fun questionTemplateRowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto {
-    val spec: Map<String, Any> = asMap(rs, "response_spec")
-    return QuestionTemplateDto(
-      id = rs.getLong("question_id"),
-      policy = QuestionPolicy.fromString(rs.getString("policy")),
-      template = rs.getString("question_template"),
-      responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
-      responseSpec = spec,
-      example = rs.getString("example"),
-    )
-  }
+  private fun questionTemplateRowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto = toQuestionTemplate(rs, idx)
 
-  private fun listItemRowMapper(rs: ResultSet, idx: Int): QuestionListItemDto {
-    val template = QuestionTemplateDto(
-      id = rs.getLong("question_id"),
+  private fun listItemRowMapper(rs: ResultSet, idx: Int): QuestionListItemDto = QuestionListItemDto(
+    template = toQuestionTemplate(rs, idx),
+    params = asMap(rs, "params"),
+  )
+
+  private fun toQuestionTemplate(rs: ResultSet, idx: Int): QuestionTemplateDto {
+    val template = rs.getString("question_template")
+    val responseSpec = asMap(rs, "response_spec")
+    val questionId = rs.getLong("question_id")
+
+    // We're going to safely create question examples from the template,
+    // We don't want to fail here because:
+    // 1. Missing/invalid example should not stop us from returning data
+    // 2. We have integration tests for the SYSTEM customisable questions that verify the examples get created
+    val questionExamples = responseSpec["placeholders_examples"]?.let {
+      if (it is List<*>) it else null
+    }
+      ?.map { evalExample(questionId, template, it) }
+      ?.filter { !it.contains("{{") }
+
+    return QuestionTemplateDto(
+      id = questionId,
       policy = QuestionPolicy.fromString(rs.getString("policy")),
-      template = rs.getString("question_template"),
-      responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
-      responseSpec = asMap(rs, "response_spec"),
-      example = rs.getString("example"),
-    )
-    return QuestionListItemDto(
       template = template,
-      params = asMap(rs, "params"),
+      responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
+      responseSpec = responseSpec,
+      example = rs.getString("example"),
+      questionExamples = questionExamples,
     )
   }
 
@@ -667,6 +675,35 @@ class QuestionRepository(
       content,
       object : TypeReference<Map<String, Any>>() {},
     )
+  }
+
+  companion object {
+    val LOGGER = logger<QuestionRepository>()
+
+    private fun evalExample(questionId: Long, template: String, replacement: Any?): String {
+      try {
+        var q = template
+        if (replacement is Map<*, *>) {
+          replacement.entries.forEach {
+            val key = it.key
+            val value = it.value
+            if (key is String && value is String) {
+              q = q.replacePlaceholder(key, value)
+            } else {
+              LOGGER.warn("evalExamples: Invalid replacement for questionId={}, key={}, value={}", questionId, key, value)
+            }
+          }
+        } else {
+          LOGGER.warn("evalExamples: Invalid replacement for questionId={}, replacement={}", questionId, replacement)
+        }
+        return q
+      } catch (e: Exception) {
+        // This will be filtered out
+        // We also don't want to throw here, it's not a critical failure if an example string is missing
+        LOGGER.warn("evalExamples: Failed to eval example for questionId={}, replacement={}: {}", questionId, replacement, e.message)
+        return template
+      }
+    }
   }
 }
 

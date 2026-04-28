@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
 import jakarta.validation.Validator
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -114,6 +115,11 @@ class ValidatorTest : IntegrationTestBase() {
       assertTrue(
         result.isValid,
         "Question id=${templates[i].id} failed validation: ${result.message}",
+      )
+      assertEquals(
+        2,
+        templates[i].questionExamples?.size,
+        "Each SYSTEM custom question should have 2 examples, but found: ${templates[i].questionExamples}",
       )
     }
   }
