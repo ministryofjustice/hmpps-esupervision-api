@@ -678,7 +678,7 @@ class QuestionRepository(
       }
       return q
     } catch (e: Exception) {
-      // This will be filtered out in, we don't want to log as this may be a lot of results.
+      // This will be filtered out, we don't want to log as this may be a lot of results.
       // We also don't want to throw here, it's not a critical failure if an example string is missing
       return template
     }
