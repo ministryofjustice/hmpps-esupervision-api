@@ -155,7 +155,7 @@ select fn_update_question_spec_with_example(
        'ad1b2ba1-fb73-5383-a0eb-e1a5d26dc3b6'::uuid,
        $${
          "replacements": [
-           {"thing": "your family and and home life"},
+           {"thing": "your family and home life"},
            {"thing": "your work"}
          ]
        }$$::jsonb
@@ -176,7 +176,7 @@ select fn_update_question_spec_with_example(
        $${
          "replacements": [
            {"thing": "need us to contact you about your recent appointment"},
-           {"thing": "want any support with you benefits application"}
+           {"thing": "want any support with your benefits application"}
          ]
        }$$::jsonb
 );
