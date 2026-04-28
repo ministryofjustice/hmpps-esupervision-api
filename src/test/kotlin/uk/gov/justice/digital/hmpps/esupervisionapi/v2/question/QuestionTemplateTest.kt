@@ -37,6 +37,7 @@ private val example = QuestionListItemDto(
     responseFormat = QuestionResponseFormat.TEXT,
     responseSpec = mapOf("placeholders" to listOf("this", "that"), "hint" to "Hint about {{this}}"),
     example = "Example of this or that",
+    questionExamples = null,
   ),
   params = mapOf("placeholders" to mapOf("this" to "this", "that" to "that")) as Map<String, Any>,
 )
