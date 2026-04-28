@@ -24,7 +24,7 @@ class MockConfig {
   @Primary
   fun mockCompareFacesService(): RekognitionCompareFacesService = mock(RekognitionCompareFacesService::class.java)
 
-  @Bean
+  @Bean("hmppsQueueService")
   @Primary
   fun mockHmppsQueueService(): HmppsQueueService = mock(HmppsQueueService::class.java)
 

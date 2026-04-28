@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonValue
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Embeddable
@@ -20,6 +22,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerific
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.persistence.V2BaseEntity
@@ -30,6 +33,11 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.util.UUID
+
+interface CheckinSchedule {
+  val firstCheckin: LocalDate
+  val checkinInterval: Duration
+}
 
 /**
  * V2 Offender Entity (no PII, only CRN)
@@ -58,10 +66,10 @@ open class OffenderV2(
   open var status: OffenderStatus = OffenderStatus.INITIAL,
 
   @Column(name = "first_checkin", nullable = false)
-  open var firstCheckin: LocalDate,
+  open override var firstCheckin: LocalDate,
 
   @Column(name = "checkin_interval", nullable = false)
-  open var checkinInterval: Duration,
+  open override var checkinInterval: Duration,
 
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
@@ -78,7 +86,8 @@ open class OffenderV2(
 
   @Column(name = "current_event", nullable = true)
   open var currentEvent: Long? = null,
-) : V2BaseEntity() {
+) : V2BaseEntity(),
+  CheckinSchedule {
   fun dto(personalDetails: ContactDetails? = null): OffenderV2Dto = OffenderV2Dto(
     uuid = uuid,
     crn = crn,
@@ -121,7 +130,16 @@ open class OffenderSetupV2(
 
   @Column(name = "started_at", nullable = true)
   open var startedAt: Instant? = null,
+
+  @Column(name = "setup_counter", nullable = false)
+  open var setupCounter: Int = 1,
 ) : V2BaseEntity() {
+  fun setupId(): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
+
+  fun incrementSetupCounter() {
+    setupCounter++
+  }
+
   fun dto(): OffenderSetupV2Dto = OffenderSetupV2Dto(
     uuid = uuid,
     practitionerId = practitionerId,
@@ -194,6 +212,16 @@ open class OffenderCheckinV2(
   @Enumerated(EnumType.STRING)
   open var autoIdCheck: AutomatedIdVerificationResult? = null,
 
+  @Column(name = "liveness_result", nullable = true, length = 10)
+  @Enumerated(EnumType.STRING)
+  open var livenessResult: LivenessResult? = null,
+
+  @Column(name = "liveness_confidence", nullable = true)
+  open var livenessConfidence: Float? = null,
+
+  @Column(name = "liveness_enabled", nullable = false)
+  open var livenessEnabled: Boolean = false,
+
   @Column(name = "manual_id_check", nullable = true, length = 50)
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult? = null,
@@ -230,6 +258,9 @@ open class OffenderCheckinV2(
       reviewedBy = reviewedBy,
       checkinStartedAt = checkinStartedAt,
       autoIdCheck = autoIdCheck,
+      livenessResult = livenessResult,
+      livenessConfidence = livenessConfidence,
+      livenessEnabled = livenessEnabled,
       manualIdCheck = manualIdCheck,
       riskFeedback = riskFeedback,
       sensitive = sensitive,
@@ -378,6 +409,9 @@ open class EventAuditV2(
 
   @Column(name = "auto_id_check_result", nullable = true, length = 50)
   open var autoIdCheckResult: String? = null,
+
+  @Column(name = "liveness_result", nullable = true, length = 10)
+  open var livenessResult: String? = null,
 
   @Column(name = "manual_id_check_result", nullable = true, length = 50)
   open var manualIdCheckResult: String? = null,
@@ -607,4 +641,58 @@ open class MigrationEventsToSend(
   open var sentAt: Instant? = null,
   @Column
   open var notes: String? = null,
+) : V2BaseEntity()
+
+enum class Language(@get:JsonValue val dbString: String) {
+  ENGLISH("en-GB"),
+  WELSH("cy-GB"),
+  ;
+
+  companion object {
+    /**
+     * value must be "en-GB" or "cy-GB"
+     */
+    @JvmStatic
+    @JsonCreator
+    fun fromString(value: String): Language = when (value) {
+      "en-GB" -> ENGLISH
+      "cy-GB" -> WELSH
+      else -> throw IllegalArgumentException("Invalid Language value: $value")
+    }
+  }
+}
+
+enum class QuestionResponseFormat {
+  TEXT,
+  SINGLE_CHOICE,
+  MULTIPLE_CHOICE,
+  ;
+
+  companion object {
+    fun fromString(value: String): QuestionResponseFormat = when (value) {
+      "TEXT" -> TEXT
+      "SINGLE_CHOICE" -> SINGLE_CHOICE
+      "MULTIPLE_CHOICE" -> MULTIPLE_CHOICE
+      else -> throw IllegalArgumentException("Invalid QuestionResponseFormat value: $value")
+    }
+  }
+}
+
+@Entity
+@Table(name = "question_list_assignment")
+open class QuestionListAssignment(
+  @Column("question_list_id", nullable = false)
+  open var questionListId: Long,
+
+  @Column("offender_id", nullable = false)
+  open var offenderId: Long,
+
+  @Column("checkin_id")
+  open var checkinId: Long? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var created_at: Instant,
+
+  @Column(name = "updated_at", nullable = false)
+  open val updatedAt: Instant,
 ) : V2BaseEntity()

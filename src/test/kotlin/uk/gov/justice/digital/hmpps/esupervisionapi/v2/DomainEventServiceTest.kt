@@ -7,6 +7,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -29,7 +30,7 @@ class DomainEventServiceTest {
   }
 
   @Test
-  fun `publishDomainEvent - constructs correct detail URL for setup completed`() {
+  fun `publishDomainEvent - does not include detailUrl for setup completed`() {
     val uuid = UUID.randomUUID()
 
     service.publishDomainEvent(
@@ -43,7 +44,7 @@ class DomainEventServiceTest {
     verify(eventPublisher).publish(captor.capture())
 
     val event = captor.firstValue
-    assertThat(event.detailUrl).isEqualTo("$apiBaseUrl/v2/events/setup-completed/$uuid")
+    assertThat(event.detailUrl).isNull()
     assertThat(event.eventType).isEqualTo("esupervision.setup.completed")
   }
 
@@ -64,6 +65,27 @@ class DomainEventServiceTest {
     val event = captor.firstValue
     assertThat(event.detailUrl).isEqualTo("$apiBaseUrl/v2/events/checkin-submitted/$uuid")
     assertThat(event.eventType).isEqualTo("esupervision.check-in.received")
+  }
+
+  @Test
+  fun `publishDomainEvent - does not include detailUrl for setup removed`() {
+    val uuid = UUID.randomUUID()
+
+    service.publishDomainEvent(
+      eventType = DomainEventType.V2_SETUP_REMOVED,
+      uuid = uuid,
+      crn = "X123456",
+      description = "Test description",
+      additionalInformation = AdditionalInformation(eventNumber = 1),
+    )
+
+    val captor = argumentCaptor<DomainEvent>()
+    verify(eventPublisher).publish(captor.capture())
+
+    val event = captor.firstValue
+    assertThat(event.detailUrl).isNull()
+    assertThat(event.eventType).isEqualTo("esupervision.setup.removed")
+    assertThat(event.additionalInformation?.eventNumber).isEqualTo(1)
   }
 
   @Test

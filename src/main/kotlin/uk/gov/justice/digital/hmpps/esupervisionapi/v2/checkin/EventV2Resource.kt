@@ -23,24 +23,6 @@ class EventV2Resource(
   private val notificationService: NotificationV2Service,
 ) {
   @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
-  @GetMapping("/setup-completed/{uuid}")
-  @Operation(
-    summary = "Get setup completed event details",
-    description =
-    "Callback URL for Ndilius to query formatted notes for setup completed event",
-  )
-  fun getSetupCompletedEvent(
-    @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
-  ): ResponseEntity<EventDetailResponse> {
-    val detailUrl = "/v2/events/setup-completed/$uuid"
-    val event =
-      notificationService.getEventDetail(detailUrl)
-        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found")
-
-    return ResponseEntity.ok(event)
-  }
-
-  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/checkin-created/{uuid}")
   @Operation(
     summary = "Get checkin created event details",
@@ -120,7 +102,7 @@ class EventV2Resource(
     "Callback URL for Ndilius to query formatted notes for checkin updated event",
   )
   fun getCheckinAnnotatedEvent(
-    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @Parameter(description = "Checkin or annotation UUID", required = true) @PathVariable uuid: UUID,
   ): ResponseEntity<EventDetailResponse> {
     val detailUrl = "/v2/events/checkin-annotated/$uuid"
     val event =

@@ -4,15 +4,19 @@ import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import java.lang.reflect.ParameterizedType
 import java.math.BigDecimal
+import java.sql.ResultSet
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -53,6 +57,43 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
   fun findEligibleForCheckinCreation(
     lowerBoundInclusive: LocalDate,
     upperBoundExclusive: LocalDate,
+  ): Stream<OffenderV2>
+
+  /**
+   * Find offenders whose next checkin due date matches specific offsets from :today
+   * - Status = VERIFIED
+   * - Next checkin due date matches (today + 1) OR (today + 4)
+   * - No reminder sent yet for the next checkin
+   * - No (upcoming) question list assignment for the offender exists
+   */
+  @Query(
+    value = """
+      with the_offenders as (
+          select o.*, qla.id as question_list_assignment_id, gn.id as generic_notification_id
+          from offender_v2 o
+          left join question_list_assignment qla
+              on qla.offender_id = o.id and qla.checkin_id is null
+          left join generic_notification_v2 gn
+              on gn.offender_id = o.id
+                     and gn.event_type = :notificationType
+                     and gn.created_at >= :reminderWindowStart
+          where o.status = 'VERIFIED'
+          and o.first_checkin != :today
+          and (
+          MOD(CAST(((cast(:today as date) + '1 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+              or
+          MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+          )
+      )
+      select * from the_offenders
+      where question_list_assignment_id is null and generic_notification_id is null;
+    """,
+    nativeQuery = true,
+  )
+  fun findEligibleForPractitionerCustomQuestionsReminder(
+    @Param("today") today: LocalDate,
+    @Param("notificationType") notificationType: String,
+    @Param("reminderWindowStart") reminderWindowStart: Instant,
   ): Stream<OffenderV2>
 
   @Query("SELECT o.crn FROM OffenderV2 o WHERE o IN :offenders")
@@ -276,10 +317,7 @@ interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2,
  */
 @Repository
 interface EventAuditV2Repository : JpaRepository<EventAuditV2, Long> {
-  fun findAllByCrn(crn: String): List<EventAuditV2>
   fun findAllByEventType(eventType: String): List<EventAuditV2>
-  fun findAllByPractitionerId(practitionerId: String): List<EventAuditV2>
-  fun findAllByCheckinUuid(checkinUuid: UUID): List<EventAuditV2>
 
   @Query(
     """
@@ -527,3 +565,197 @@ interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
 
 @Repository
 interface MigrationCheckinsUuidsRepository : JpaRepository<MigrationEventsToSend, Long>
+
+@Repository
+class QuestionRepository(
+  private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
+  private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
+) {
+  /**
+   * Get questions for a specific list.
+   *
+   * Note: the result will contain the default questions (if any are defined).
+   */
+  fun getListItems(listId: Long, language: Language = Language.ENGLISH): List<QuestionListItemDto> = jdbcTemplate.query(
+    "select * from get_question_list(?::integer, ?::text_language)",
+    { rs, idx -> listItemRowMapper(rs, idx) },
+    listId,
+    language.dbString,
+  )
+
+  fun defaultListItems(language: Language): List<QuestionListItemDto> = jdbcTemplate.query(
+    """
+        with default_question_list as (
+          select id as list_id from question_list where name = 'Default'
+        )
+        select * from get_question_list((select list_id from default_question_list), ?::text_language)
+      """,
+    { rs, idx -> listItemRowMapper(rs, idx) },
+    language.dbString,
+  )
+
+  /**
+   * Get a list of available question templates.
+   */
+  fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
+    val result = jdbcTemplate.query(
+      "select * from get_question_templates(?::text_language, ?)",
+      { rs, idx -> questionTemplateRowMapper(rs, idx) },
+      language.dbString,
+      author,
+    )
+    return result
+  }
+
+  /**
+   * Returns question templates that shouldn't be shown to practitioners as a choice.
+   */
+  fun getFixedQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
+    val result = jdbcTemplate.query(
+      "select * from get_question_templates(?::text_language, ?, 'FIXED'::question_policy)",
+      { rs, idx -> questionTemplateRowMapper(rs, idx) },
+      language.dbString,
+      author,
+    )
+    return result
+  }
+
+  fun getQuestionTemplates(questionIds: List<Long>, language: Language): List<QuestionTemplateDto> {
+    val result = jdbcTemplate.query(
+      "select * from get_question_templates_by_ids(?, ?::text_language)",
+      { rs, idx -> questionTemplateRowMapper(rs, idx) },
+      questionIds.toTypedArray(),
+      language.dbString,
+    )
+    return result
+  }
+
+  /**
+   * Updates or creates a question list.
+   */
+  fun upsertQuestionList(listId: Long?, author: ExternalUserId, questions: List<Map<String, Any>>): Long? = jdbcTemplate.queryForObject(
+    "select upsert_custom_question_list(?::bigint, ?::varchar(255), ?)",
+    { rs, _ -> rs.getLong(1) },
+    listId,
+    author,
+    objectMapper.writeValueAsString(questions),
+  )
+
+  private fun questionTemplateRowMapper(rs: ResultSet, idx: Int): QuestionTemplateDto = toQuestionTemplate(rs, idx)
+
+  private fun listItemRowMapper(rs: ResultSet, idx: Int): QuestionListItemDto = QuestionListItemDto(
+    template = toQuestionTemplate(rs, idx),
+    params = asMap(rs, "params"),
+  )
+
+  private fun toQuestionTemplate(rs: ResultSet, idx: Int): QuestionTemplateDto {
+    val template = rs.getString("question_template")
+    val responseSpec = asMap(rs, "response_spec")
+    val questionId = rs.getLong("question_id")
+
+    // We're going to safely create question examples from the template,
+    // We don't want to fail here because:
+    // 1. Missing/invalid example should not stop us from returning data
+    // 2. We have integration tests for the SYSTEM customisable questions that verify the examples get created
+    val questionExamples = responseSpec["placeholders_examples"]?.let {
+      if (it is List<*>) it else null
+    }
+      ?.map { evalExample(questionId, template, it) }
+      ?.filter { !it.contains("{{") }
+
+    return QuestionTemplateDto(
+      id = questionId,
+      policy = QuestionPolicy.fromString(rs.getString("policy")),
+      template = template,
+      responseFormat = QuestionResponseFormat.fromString(rs.getString("response_format")),
+      responseSpec = responseSpec,
+      example = rs.getString("example"),
+      questionExamples = questionExamples,
+    )
+  }
+
+  private fun asMap(rs: ResultSet, columnName: String): Map<String, Any> {
+    val content = rs.getString(columnName) ?: return emptyMap()
+    return objectMapper.readValue(
+      content,
+      object : TypeReference<Map<String, Any>>() {},
+    )
+  }
+
+  companion object {
+    val LOGGER = logger<QuestionRepository>()
+
+    private fun evalExample(questionId: Long, template: String, replacement: Any?): String {
+      try {
+        var q = template
+        if (replacement is Map<*, *>) {
+          replacement.entries.forEach {
+            val key = it.key
+            val value = it.value
+            if (key is String && value is String) {
+              q = q.replacePlaceholder(key, value)
+            } else {
+              LOGGER.warn("evalExamples: Invalid replacement for questionId={}, key={}, value={}", questionId, key, value)
+            }
+          }
+        } else {
+          LOGGER.warn("evalExamples: Invalid replacement for questionId={}, replacement={}", questionId, replacement)
+        }
+        return q
+      } catch (e: Exception) {
+        // This will be filtered out
+        // We also don't want to throw here, it's not a critical failure if an example string is missing
+        LOGGER.warn("evalExamples: Failed to eval example for questionId={}, replacement={}: {}", questionId, replacement, e.message)
+        return template
+      }
+    }
+  }
+}
+
+@Repository
+interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignment, Long> {
+
+  @Query(
+    """
+    insert into question_list_assignment (question_list_id, offender_id, checkin_id, updated_at)
+    select :listId, :offenderId, :checkinId, now()
+    on conflict (offender_id) where checkin_id is null 
+    do update set
+        question_list_id = :listId,
+        updated_at = now()
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
+
+  @Query(
+    """
+    select qla.question_list_id from question_list_assignment qla
+    where qla.offender_id = :offenderId and qla.checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  fun upcomingAssignment(offenderId: Long): Long?
+
+  /**
+   * Returns the question list id for the checkin, if any.
+   */
+  @Query(
+    """
+    select qla.question_list_id from question_list_assignment qla
+    where qla.checkin_id = :checkinId
+  """,
+    nativeQuery = true,
+  )
+  fun checkinAssignment(checkinId: Long): Long?
+
+  @Query(
+    """
+    delete from question_list_assignment where offender_id = :offenderId and checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun deleteUpcomingAssignment(offenderId: Long): Int
+}

@@ -35,7 +35,7 @@ class DomainEventService(
     additionalInformation: AdditionalInformation? = null,
   ) {
     LOGGER.debug(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
-    val detailUrl = "$apiBaseUrl/v2/events/${eventType.pathSegment}/$uuid"
+    val detailUrl = eventType.pathSegment?.let { "$apiBaseUrl/v2/events/$it/$uuid" }
 
     try {
       val event = DomainEvent(
@@ -48,7 +48,7 @@ class DomainEventService(
       )
 
       eventPublisher.publish(event)
-      LOGGER.info("Published domain event: eventType={}, crn={}, detailUrl={}", eventType.type, crn, detailUrl)
+      LOGGER.info("Published domain event: eventType={}, crn={}, detailUrl={}, eventNumber={}, setupId={}", eventType.type, crn, detailUrl, additionalInformation?.eventNumber, additionalInformation?.setupId)
     } catch (e: Exception) {
       LOGGER.error(
         "Failed to publish domain event: {}",

@@ -37,6 +37,9 @@ app:
     v2-checkin-reminder:
       cron: "0 0 9 * * *"  # Same time as initial checkin notification
       chunk-size: 100
+    v2-practitioner-custom-questions-reminder:
+      cron: "0 15 8 * * *"
+      enabled: true
     v2-checkin-expiry:
       cron: "0 15 9 * * *"  # Every day at 9:15 AM (matches V1 timing)
       grace-period-days: 3
@@ -47,9 +50,9 @@ app:
       batch-size: 50
   features:
     # publish media proxy links to NDelius
-    esup-1239: false
+    esup-1239: true
     # ensure a POP is still on probation before sending them a check in link
-    esup-1183: false
+    esup-1183: true
 
 spring:
   application:
@@ -169,6 +172,7 @@ notify:
     POP_CHECKIN_INVITE: 41f78d9f-95d1-45c4-bad2-ec53fcddc017
     PRACTITIONER_CHECKIN_SUBMITTED: 6923e8c1-543c-44b9-bcc4-766ce4bb6a23
     PRACTITIONER_CHECKIN_MISSED: c1bb3afc-31ce-4e83-a97f-b6e5d686d702
+    PRACTITIONER_CUSTOM_QUESTION_REMINDER: 00EED1B5-5578-4C5E-B705-E874C287DAAD #  fake, no SMS template for practitioners
     PRACTITIONER_INVITE_ISSUE_GENERIC: 0bef5b11-9261-4c98-9580-92f2f3ecd27d
     POP_REGISTRATION_CONFIRMATION: 35274201-ecef-493b-b4e1-86e60d071142
     POP_SUBMISSION_CONFIRMATION: 30e5881a-f7f5-427b-a46e-980f3089aec4
@@ -180,6 +184,7 @@ notify:
     PRACTITIONER_CHECKIN_SUBMITTED: fa88ba73-81c0-48b4-a8d6-8357dc1e5de8
     PRACTITIONER_CHECKIN_MISSED: a65ff803-22f5-4f8b-947e-10535ad24bc5
     PRACTITIONER_INVITE_ISSUE_GENERIC: 6054dbfb-5d43-4d23-8ecf-138216f8b629
+    PRACTITIONER_CUSTOM_QUESTION_REMINDER: 8140b40b-8339-486d-b95a-e28156766b09
     POP_REGISTRATION_CONFIRMATION: 7e63c01c-05df-4b2c-a77c-57d2412793a1
     POP_SUBMISSION_CONFIRMATION: df4b43f5-767b-4f0f-b248-615554431384
     POP_CHECKINS_STOPPED: 5ea87cee-4772-4496-87d3-099327bd7dee
@@ -190,12 +195,21 @@ rekognition:
   face-similarity:
     # minimum accepted value that qualifies a "match"
     threshold: 90.0
+  liveness:
+    # minimum confidence score for liveness detection to pass
+    confidence-threshold: 90.0
+    # Face Liveness is not available in eu-west-2, so we use eu-west-1
+    region: ${REKOG_LIVENESS_REGION:eu-west-1}
   region: ${REKOG_AWS_REGION}
   role_arn: ${REKOG_ROLE_ARN}
   role_session_name: ${REKOG_ROLE_SESSION_NAME}
   s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
   max-concurrency: 10
   read-timeout-seconds: 20
+  # Upper bound on how long we will wait for an async Rekognition call to complete
+  # before treating it as timed out. Slightly above read-timeout-seconds to allow
+  # the SDK's own read timeout to fire first.
+  call-timeout-seconds: 30
 
 resilience4j:
   circuitbreaker:

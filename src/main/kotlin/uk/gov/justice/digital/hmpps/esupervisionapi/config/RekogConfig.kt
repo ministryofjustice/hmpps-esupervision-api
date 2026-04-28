@@ -28,7 +28,7 @@ import java.time.Duration
  *   - A bean named 'rekognitionS3' implementing @see S3UploadService
  *   - A bean implementing @see OffenderIdVerifier
  */
-@Profile("!test & !stubrekog")
+@Profile("!test & !stubrekog & !local-aws")
 @Configuration
 class RekogConfig(
   @Value("\${rekognition.region}") val region: String,
@@ -83,7 +83,7 @@ class RekogConfig(
   }
 
   @Bean
-  fun rekognitionCompareFacesService(rekognitionCredentialsProvider: AwsCredentialsProvider, asyncClient: RekognitionAsyncClient): OffenderIdVerifier {
+  fun rekognitionCompareFacesService(rekognitionCredentialsProvider: AwsCredentialsProvider, @Qualifier("rekognitionAsyncClient") asyncClient: RekognitionAsyncClient): OffenderIdVerifier {
     val client = RekognitionClient.builder()
       .region(Region.of(region))
       .credentialsProvider(rekognitionCredentialsProvider)

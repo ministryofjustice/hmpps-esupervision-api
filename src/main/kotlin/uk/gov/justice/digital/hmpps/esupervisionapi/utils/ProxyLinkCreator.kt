@@ -13,7 +13,5 @@ class ProxyLinkCreator(
 
   fun checkinSnapshot(checkin: OffenderCheckinV2, index: Int = 0): URI = URI.create("${appConfig.mediaProxyUrl()}/checkin/${checkin.uuid}/snapshot?index=$index")
 
-  fun checkinVideo(checkin: OffenderCheckinV2): URI = URI.create("${appConfig.mediaProxyUrl()}/checkin/${checkin.uuid}/video")
-
   fun offenderReferencePhoto(offender: OffenderV2): URI = URI.create("${appConfig.mediaProxyUrl()}/offender/${offender.uuid}/photo")
 }

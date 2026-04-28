@@ -80,6 +80,30 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/40_add_sensitive_boolean_to_offender_checkin_v2.sql
   - include:
-      file: db/changelog/changesets/41_update_provider_month_mv.sql
+      file: db/changelog/changesets/41_add_setup_counter_to_offender_setup_v2.sql
   - include:
-      file: db/changelog/changesets/42_update_monthly_feedback_mv.sql
+      file: db/changelog/changesets/42_custom_questions.sql
+  - include:
+      file: db/changelog/changesets/43_add_custom_questions_reminder_job_enum.sql
+  - include:
+      file: db/changelog/changesets/44_custom_questions_definitions.sql
+  - include:
+      file: db/changelog/changesets/45_add_liveness_columns_to_offender_checkin_v2.sql
+  - include:
+      file: db/changelog/changesets/46_add_liveness_enabled_to_offender_checkin_v2.sql
+  - include:
+      file: db/changelog/changesets/47_fix_default_question_list_order.sql
+  - include:
+      file: db/changelog/changesets/48_update_hint_for_customisable_questions.sql
+  - include:
+      file: db/changelog/changesets/49_move_qs_assignment_trigger_to_insert.sql
+  - include:
+      file: db/changelog/changesets/50_add_question_list_assignment_index.sql
+  - include:
+      file: db/changelog/changesets/51_question_add_uuid.sql
+  - include:
+      file: db/changelog/changesets/52_add_question_examples.sql
+  - include:
+      file: db/changelog/changesets/53_update_provider_month_mv.sql
+  - include:
+      file: db/changelog/changesets/54_update_monthly_feedback_mv.sql

@@ -6,12 +6,15 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
 import java.time.Clock
 import java.time.Duration
 import java.time.Period
@@ -48,15 +51,21 @@ class NotificationOrchestratorV2Service(
   fun sendSetupCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
+    setupId: UUID? = null,
   ) {
+    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
+      additionalInformation = AdditionalInformation(
+        eventNumber = details?.let { activeEventNumber(offender, it) },
+        setupId = setupId,
+      ),
     )
 
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
     eventAuditService.recordSetupCompleted(offender, details)
 
     if (details != null) {
@@ -96,8 +105,20 @@ class NotificationOrchestratorV2Service(
   fun sendReactivationCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
+    setupId: UUID? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_SETUP_COMPLETED,
+      uuid = offender.uuid,
+      crn = offender.crn,
+      description = "Practitioner reactivated online check-ins for offender ${offender.crn}",
+      additionalInformation = AdditionalInformation(
+        eventNumber = details?.let { activeEventNumber(offender, it) },
+        setupId = setupId,
+      ),
+    )
 
     if (details != null) {
       try {
@@ -136,8 +157,20 @@ class NotificationOrchestratorV2Service(
   fun sendDeactivationCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
+    setupId: UUID? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+
+    domainEventService.publishDomainEvent(
+      eventType = DomainEventType.V2_SETUP_REMOVED,
+      uuid = offender.uuid,
+      crn = offender.crn,
+      description = "Online check-ins stopped for offender ${offender.crn}",
+      additionalInformation = AdditionalInformation(
+        eventNumber = details?.let { activeEventNumber(offender, it) },
+        setupId = setupId,
+      ),
+    )
 
     if (details != null) {
       try {
@@ -292,6 +325,7 @@ class NotificationOrchestratorV2Service(
           contactDetails = details.practitioner,
           checkin = checkin,
           notificationType = NotificationType.PractitionerCheckinSubmitted,
+          practitionerId = checkin.offender.practitionerId,
         ),
       )
 
@@ -352,6 +386,7 @@ class NotificationOrchestratorV2Service(
         contactDetails = details.practitioner,
         checkin = checkin,
         notificationType = NotificationType.PractitionerCheckinMissed,
+        practitionerId = checkin.offender.practitionerId,
       )
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
@@ -381,6 +416,29 @@ class NotificationOrchestratorV2Service(
       crn = checkin.offender.crn,
       description = "Check-in updated for ${checkin.offender.crn}",
     )
+  }
+
+  /** Send reminder for practitioner to add custom questions */
+  fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {
+    LOGGER.info("Sending reminder to practitioner about custom questions: crn={}, practitioner={}", info.contactDetails.crn, info.practitionerId)
+    val deadline = info.expectedCheckinDate.minusDays(1)
+
+    val personalisation = mapOf(
+      "offenderName" to "${info.contactDetails.name.forename}",
+      "expectedCheckinDate" to info.expectedCheckinDate.format(QUESTIONS_REMINDER_FORMATTER),
+      "questionsDeadline" to if (clock.today() == deadline) "today" else "on ${deadline.format(QUESTIONS_REMINDER_FORMATTER)}",
+      "practitionerName" to (info.contactDetails.practitioner?.name?.forename ?: info.practitionerId),
+      "dashboardUrl" to appConfig.addQuestionsUrl(info.offenderUuid, info.contactDetails.crn).toString(),
+    )
+    val notificationsWithRecipients = notificationPersistence.buildPractitionerNotifications(
+      null,
+      info.contactDetails.practitioner,
+      null,
+      NotificationType.PractitionerCustomQuestionsReminder,
+      info.practitionerId,
+    )
+
+    processAndSendNotifications(notificationsWithRecipients, personalisation)
   }
 
   /** Get event detail for a given URL */
@@ -458,6 +516,8 @@ class NotificationOrchestratorV2Service(
 
     // Match V1 date format: "Monday 15 January 2025"
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")
+
+    private val QUESTIONS_REMINDER_FORMATTER = DateTimeFormatter.ofPattern("d LLLL yyyy")
 
     /** Format checkin frequency - matches V1 RegistrationConfirmationMessage */
     private fun formatCheckinFrequency(interval: CheckinInterval): String = when (interval) {
