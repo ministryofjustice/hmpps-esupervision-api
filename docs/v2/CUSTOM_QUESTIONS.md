@@ -69,7 +69,7 @@ There are constraints on the tables that enforce the following rules:
 - each `question` with `author='SYSTEM'` must have exactly two `question_info` records (one per language)
 - there can be only one upcoming `question_list_assignment` per `offender_id`, where "upcoming" means the check in
   has not been SUBMITTED or EXPIRED yet (it's possible it has been CREATED).
-- a trigger will automatically set the `checkin_id` of a `qustion_list_assignment` when the check in status changes from CREATED to something else.
+- a trigger will automatically set the `checkin_id` of a `qustion_list_assignment` when the check in is created.
 
 A few postgres functions allow to query and define the questions, question lists and question list assignments:
 
@@ -137,8 +137,12 @@ Returns question list items (template + params).
 
 ### GET /v2/questions/upcoming/{crn}/offender-questions
 
-Returns the question list associated with upcoming checkin, in a form that should be viewed by the offender.
+Returns the question list associated with upcoming check-in (e.g., the check-in does not yet exist), in a form that should be viewed by the offender.
 
 ### GET /v2/questions/upcoming/{crn}/question-items
 
 Returns the question list items (template + params) associated with upcoming checkin.
+
+### GET /v2/questions/checkin/{uuid}/offender-questions
+
+Returns the questions associated with a specific check-in with status=CREATED. Meant to be used by the Probation Check In UI.
