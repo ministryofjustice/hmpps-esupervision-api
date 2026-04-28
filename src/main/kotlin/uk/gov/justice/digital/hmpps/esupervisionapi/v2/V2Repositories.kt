@@ -684,10 +684,17 @@ class QuestionRepository(
       try {
         var q = template
         if (replacement is Map<*, *>) {
-          val m = replacement as Map<String, String>
-          m.entries.forEach {
-            q = q.replacePlaceholder(it.key, it.value)
+          replacement.entries.forEach {
+            val key = it.key
+            val value = it.value
+            if (key is String && value is String) {
+              q = q.replacePlaceholder(key, value)
+            } else {
+              LOGGER.warn("evalExamples: Invalid replacement for questionId={}, key={}, value={}", questionId, key, value)
+            }
           }
+        } else {
+          LOGGER.warn("evalExamples: Invalid replacement for questionId={}, replacement={}", questionId, replacement)
         }
         return q
       } catch (e: Exception) {
