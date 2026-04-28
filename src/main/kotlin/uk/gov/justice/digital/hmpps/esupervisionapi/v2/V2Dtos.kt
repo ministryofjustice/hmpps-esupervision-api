@@ -662,7 +662,7 @@ data class QuestionTemplateDto(
   @field:Schema(description = "Placeholder examples to be presented in a table", required = false)
   val example: String?,
 
-  @field:Schema(description = "Fully question examples", required = false)
+  @field:Schema(description = "Question examples", required = false)
   val questionExamples: List<String>?,
 )
 
