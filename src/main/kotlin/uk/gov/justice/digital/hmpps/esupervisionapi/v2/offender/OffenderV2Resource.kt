@@ -218,16 +218,17 @@ class OffenderV2Resource(
       LOGGER.info("Cancelled ${pendingCheckins.size} created/pending check ins for CRN ${saved.crn} due to offender deactivation")
     }
 
-    recordOffenderAuditEvent("OFFENDER_DEACTIVATED", offender, request.reason)
+    recordOffenderAuditEvent("OFFENDER_DEACTIVATED", offender, request.reason, request.sensitive)
 
     val photoUrl = getOffenderPhotoUrl(saved)
 
     LOGGER.info(
-      "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
+      "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",
       uuid,
       offender.crn,
       request.requestedBy,
       request.reason,
+      request.sensitive,
     )
 
     val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
@@ -388,7 +389,7 @@ class OffenderV2Resource(
     }
   }
 
-  private fun recordOffenderAuditEvent(eventType: String, offender: OffenderV2, reason: String) {
+  private fun recordOffenderAuditEvent(eventType: String, offender: OffenderV2, reason: String, sensitive: Boolean = false) {
     assert(eventType in listOf("OFFENDER_DEACTIVATED", "OFFENDER_REACTIVATED"))
     var contactDetails: ContactDetails? = null
     try {
@@ -398,7 +399,7 @@ class OffenderV2Resource(
       LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
     }
     when (eventType) {
-      "OFFENDER_DEACTIVATED" -> eventAuditService.recordOffenderDeactivated(offender, contactDetails ?: missingDetails(offender.crn), reason)
+      "OFFENDER_DEACTIVATED" -> eventAuditService.recordOffenderDeactivated(offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
       "OFFENDER_REACTIVATED" -> eventAuditService.recordOffenderReactivated(offender, contactDetails ?: missingDetails(offender.crn), reason)
     }
   }
@@ -455,6 +456,9 @@ data class DeactivateOffenderRequest(
   @Schema(description = "Reason for deactivation", required = true)
   @field:NotBlank
   val reason: String,
+
+  @Schema(description = "Whether the deactivation reason contains sensitive information", required = false)
+  val sensitive: Boolean = false,
 )
 
 /** Request to reactivate an offender */

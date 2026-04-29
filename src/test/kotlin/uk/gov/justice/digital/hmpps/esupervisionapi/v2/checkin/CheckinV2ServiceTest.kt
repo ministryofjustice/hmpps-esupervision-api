@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -385,6 +386,11 @@ class CheckinV2ServiceTest {
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
     verify(checkinRepository).save(checkin)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true && comment == "Contains private health info"
+      },
+    )
   }
 
   @Test
@@ -415,6 +421,11 @@ class CheckinV2ServiceTest {
     assertEquals(false, checkin.sensitive)
     assertEquals(false, result.sensitive)
     verify(checkinRepository).save(checkin)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == false && comment == "Test note"
+      },
+    )
   }
 
   @Test
@@ -446,6 +457,12 @@ class CheckinV2ServiceTest {
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
     verify(checkinRepository).save(checkin)
+
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true && comment == "Added sensitive medical evidence"
+      },
+    )
   }
 
   @Test
@@ -476,6 +493,12 @@ class CheckinV2ServiceTest {
     assertEquals(false, checkin.sensitive)
     assertEquals(false, result.sensitive)
     verify(checkinRepository, never()).save(checkin)
+
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == false && comment == "Test notes"
+      },
+    )
   }
 
   @Test

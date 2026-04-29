@@ -336,6 +336,7 @@ class CheckinV2Service(
     offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = reviewInfo.comment,
+        sensitive = request.sensitive,
         createdAt = clock.instant(),
         logEntryType = reviewInfo.logEntryType,
         practitioner = request.reviewedBy,
@@ -392,10 +393,11 @@ class CheckinV2Service(
     val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = request.notes,
+        sensitive = request.sensitive == true,
         createdAt = clock.instant(),
         logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
         practitioner = request.updatedBy,
-        UUID.randomUUID(),
+        uuid = UUID.randomUUID(),
         offender = checkin.offender,
         checkin = checkin.id,
       ),

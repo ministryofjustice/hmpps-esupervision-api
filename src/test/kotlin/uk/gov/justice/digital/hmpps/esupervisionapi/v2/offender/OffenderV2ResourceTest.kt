@@ -227,6 +227,66 @@ class OffenderV2ResourceTest {
     verify(offenderRepository).save(offender)
   }
 
+  @Test
+  fun `deactivateOffender - happy path - passes sensitive flag as TRUE to audit service`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val request = DeactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Safety concerns disclosed",
+      sensitive = true,
+    )
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      mobile = "07700900123",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val result = resource.deactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+
+    verify(eventAuditV2Service).recordOffenderDeactivated(
+      eq(offender),
+      eq(contactDetails),
+      eq("Safety concerns disclosed"),
+      eq(true),
+    )
+  }
+
+  @Test
+  fun `deactivateOffender - happy path - passes sensitive flag as FALSE to audit service`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val request = DeactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Standard deactivation",
+      sensitive = false,
+    )
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      mobile = "07700900123",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    resource.deactivateOffender(uuid, request)
+
+    verify(eventAuditV2Service).recordOffenderDeactivated(
+      eq(offender),
+      eq(contactDetails),
+      eq("Standard deactivation"),
+      eq(false),
+    )
+  }
+
   // ========================================
   // Reactivate Tests
   // ========================================

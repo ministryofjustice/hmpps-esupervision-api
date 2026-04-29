@@ -418,6 +418,9 @@ open class EventAuditV2(
 
   @Column(name = "notes", nullable = true, columnDefinition = "TEXT")
   open var notes: String? = null,
+
+  @Column(name = "sensitive", nullable = false)
+  open val sensitive: Boolean = false,
 ) : V2BaseEntity()
 
 /**
@@ -458,6 +461,9 @@ open class JobLogV2(
 open class OffenderEventLogV2(
   @Column(name = "comment", nullable = true)
   open var comment: String,
+
+  @Column(name = "sensitive", nullable = false)
+  open var sensitive: Boolean = false,
 
   @Column(name = "created_at", nullable = true)
   open var createdAt: Instant,

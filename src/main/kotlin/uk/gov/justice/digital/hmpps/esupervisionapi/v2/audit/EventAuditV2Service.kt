@@ -134,6 +134,7 @@ class EventAuditV2Service(
         reviewDurationHours = reviewDurationHours,
         manualIdCheckResult = checkin.manualIdCheck?.name,
         notes = notes,
+        sensitive = checkin.sensitive,
       )
 
       transactionTemplate.execute { auditRepository.save(audit) }
@@ -213,7 +214,7 @@ class EventAuditV2Service(
     }
   }
 
-  private fun recordOffenderStatusEvent(eventType: String, offender: OffenderV2, contactDetails: ContactDetails, notes: String) {
+  private fun recordOffenderStatusEvent(eventType: String, offender: OffenderV2, contactDetails: ContactDetails, notes: String, sensitive: Boolean = false) {
     assert(eventType in listOf("OFFENDER_VERIFIED", "OFFENDER_UNVERIFIED"))
     try {
       val audit = buildAudit(
@@ -221,6 +222,7 @@ class EventAuditV2Service(
         offender,
         contactDetails,
         notes = notes,
+        sensitive = sensitive,
       )
       transactionTemplate.execute { auditRepository.save(audit) }
     } catch (e: Exception) {
@@ -228,8 +230,8 @@ class EventAuditV2Service(
     }
   }
 
-  fun recordOffenderDeactivated(offender: OffenderV2, contactDetails: ContactDetails, notes: String) {
-    recordOffenderStatusEvent("OFFENDER_DEACTIVATED", offender, contactDetails, notes)
+  fun recordOffenderDeactivated(offender: OffenderV2, contactDetails: ContactDetails, notes: String, sensitive: Boolean = false) {
+    recordOffenderStatusEvent("OFFENDER_DEACTIVATED", offender, contactDetails, notes, sensitive)
   }
 
   fun recordOffenderReactivated(offender: OffenderV2, contactDetails: ContactDetails, notes: String) {
@@ -248,6 +250,7 @@ class EventAuditV2Service(
     livenessResult: String? = null,
     manualIdCheckResult: String? = null,
     notes: String? = null,
+    sensitive: Boolean = false,
   ): EventAuditV2 = EventAuditV2(
     eventType = eventType,
     occurredAt = clock.instant(),
@@ -269,6 +272,7 @@ class EventAuditV2Service(
     livenessResult = livenessResult,
     manualIdCheckResult = manualIdCheckResult,
     notes = notes,
+    sensitive = sensitive,
   )
 
   companion object {
