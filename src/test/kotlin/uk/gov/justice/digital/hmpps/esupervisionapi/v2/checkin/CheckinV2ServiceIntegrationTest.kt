@@ -101,6 +101,7 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
     offenderEventLogV2Repository.save(
       OffenderEventLogV2(
         "he forgot",
+        sensitive = false,
         Instant.now(),
         logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
         practitioner = offender.practitionerId,

@@ -415,6 +415,7 @@ data class ReviewCheckinV2Request(
   @Schema(description = "Risk management feedback", required = false)
   val riskManagementFeedback: Boolean? = null,
   @Schema(description = "Whether the review contains sensitive information", required = false)
+  @JsonDeserialize(using = StrictBooleanDeserializer::class)
   val sensitive: Boolean = false,
 )
 
@@ -434,6 +435,7 @@ data class AnnotateCheckinV2Request(
   @field:NotBlank
   val notes: String,
   @Schema(description = "Whether the annotation contains sensitive information", required = false)
+  @JsonDeserialize(using = StrictBooleanDeserializer::class)
   val sensitive: Boolean = false,
 )
 
