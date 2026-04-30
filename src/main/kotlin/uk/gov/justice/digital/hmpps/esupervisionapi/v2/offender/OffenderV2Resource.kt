@@ -457,6 +457,7 @@ data class DeactivateOffenderRequest(
   @field:NotBlank
   val reason: String,
 
+  @JsonDeserialize(using = StrictBooleanDeserializer::class)
   @Schema(description = "Whether the deactivation reason contains sensitive information", required = false)
   val sensitive: Boolean = false,
 )
