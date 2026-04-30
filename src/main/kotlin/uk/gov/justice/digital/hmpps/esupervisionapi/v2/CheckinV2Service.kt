@@ -393,7 +393,7 @@ class CheckinV2Service(
     val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = request.notes,
-        sensitive = request.sensitive == true,
+        sensitive = request.sensitive,
         createdAt = clock.instant(),
         logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
         practitioner = request.updatedBy,
