@@ -60,7 +60,7 @@ app:
       NO: "No"
       EMPLOYMENT_EDU: "Employment and education"
       SUPPORT_SYSTEM: "Relationships (family, friends, partner)"
-      NO_HELP: "No, I don't need any support"
+      NO_HELP: "No, I do not need any support"
     custom-labels:
       mentalHealth: "How they have been feeling"
       mentalHealthComment: "What they want us to know about how they have been feeling"
