@@ -53,6 +53,28 @@ app:
     esup-1239: true
     # ensure a POP is still on probation before sending them a check in link
     esup-1183: true
+  offender-survey:
+    # expand form values into human-readable strings in NDelius notes
+    expansions:
+      YES: "Yes"
+      NO: "No"
+      EMPLOYMENT_EDU: "Employment and education"
+      SUPPORT_SYSTEM: "Relationships (family, friends, partner)"
+      NO_HELP: "No, I do not need any support"
+    custom-labels:
+      mentalHealth: "How they have been feeling"
+      mentalHealthComment: "What they want us to know about how they have been feeling"
+      assistance: "Anything they need support with or to let us know"
+      mentalHealthSupport: "What they want us to know about mental health"
+      alcoholSupport: "What they want us to know about alcohol"
+      drugsSupport: "What they want us to know about drugs"
+      moneySupport: "What they want us to know about money"
+      housingSupport: "What they want us to know about housing"
+      employmentEduSupport: "What they want us to know about employment and education"
+      supportSystemSupport: "What they want us to know about their relationships"
+      otherSupport: "What they want us to know about (something else)"
+      callback: "If they need us to contact them before their next appointment"
+      callbackDetails: "What they want to talk about"
 
 spring:
   application:

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.SurveyValueExpansionsConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -25,12 +26,21 @@ class EventDetailV2ServiceTest {
   private val eventLogRepository: OffenderEventLogV2Repository = mock()
   private val proxyLinkCreator: ProxyLinkCreator = mock()
   private val appConfig: AppConfig = mock()
+  private val surveyExpansionsConfig: SurveyValueExpansionsConfig = SurveyValueExpansionsConfig(
+    mapOf(),
+    mapOf(
+      "mentalHealth" to "How they have been feeling",
+      "callback" to "If they need us to contact them before their next appointment",
+      "callbackDetails" to "What they want to talk about",
+      "assistance" to "Anything they need support with or to let us know",
+    ),
+  )
 
   private lateinit var service: EventDetailV2Service
 
   @BeforeEach
   fun setUp() {
-    service = EventDetailV2Service(checkinRepository, eventLogRepository, proxyLinkCreator, appConfig)
+    service = EventDetailV2Service(checkinRepository, eventLogRepository, proxyLinkCreator, appConfig, surveyExpansionsConfig)
   }
 
   @Nested
