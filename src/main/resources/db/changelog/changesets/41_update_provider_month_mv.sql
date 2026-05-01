@@ -144,7 +144,7 @@ SELECT
   -- snapshot totals "as of this month"
   COALESCE(pr.total_active_users_to_date, 0)::BIGINT AS total_active_users,
   COALESCE(pr.total_deactivated_to_date, 0)::BIGINT AS total_inactive_users,
-  COALESCE(pr.users_active, 0)::BIGINT AS total_signed_up,
+  COALESCE(pr.total_activated_to_date, 0)::BIGINT AS total_signed_up,
 
   -- month totals
   COALESCE(pr.users_active, 0)::BIGINT AS active_users,
@@ -177,12 +177,12 @@ SELECT
   CASE
     WHEN COALESCE(pr.total_activated_to_date, 0) = 0 THEN 0
     ELSE ROUND(pr.total_active_users_to_date::NUMERIC / pr.total_activated_to_date::NUMERIC, 4)
-  END AS pct_active_users,
+  END AS pct_active_users_total,
 
   CASE
     WHEN COALESCE(pr.total_activated_to_date, 0) = 0 THEN 0
     ELSE ROUND(pr.total_deactivated_to_date::NUMERIC / pr.total_activated_to_date::NUMERIC, 4)
-  END AS pct_inactive_users,
+  END AS pct_inactive_users_total,
 
   -- month percentages
   CASE

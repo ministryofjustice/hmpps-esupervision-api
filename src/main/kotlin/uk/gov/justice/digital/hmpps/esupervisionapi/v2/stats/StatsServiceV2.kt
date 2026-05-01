@@ -115,13 +115,7 @@ class StatsServiceV2(
         pctSignedUpOfTotal = it.pctSignedUpOfTotal,
       )
     }
-    println(baseTotal)
-    println(providerRows)
 
-    val sd = StatsDashboardDto(total = baseTotal, providers = providerRows)
-
-    println(sd)
-
-    return sd
+    return StatsDashboardDto(total = baseTotal, providers = providerRows)
   }
 }

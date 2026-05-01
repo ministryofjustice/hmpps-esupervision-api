@@ -81,12 +81,12 @@ BEGIN
         SELECT
             rs.provider_code,
             ls.provider_description,
-            ls.total_signed_up as total_signed_up,
-            ls.total_active_users,
-            ls.total_inactive_users,
             ls.signed_up,
             ls.active_users,
             ls.inactive_users,
+            ls.total_signed_up as total_signed_up,
+            ls.total_active_users,
+            ls.total_inactive_users,
             rs.range_completed as completed_checkins,
             rs.range_expired as expired_checkins,
             CASE WHEN rs.range_completed = 0 THEN 0
