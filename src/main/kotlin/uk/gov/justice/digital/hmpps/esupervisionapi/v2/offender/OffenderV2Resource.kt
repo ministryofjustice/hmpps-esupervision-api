@@ -8,7 +8,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
-import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -20,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -323,6 +323,14 @@ class OffenderV2Resource(
       }
     }
 
+    LOGGER.info(
+      "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
+      uuid,
+      offender.crn,
+      request.requestedBy,
+      request.reason,
+    )
+
     recordOffenderAuditEvent("OFFENDER_REACTIVATED", savedOffender, request.reason)
     return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
   }
@@ -357,14 +365,12 @@ class OffenderV2Resource(
 
     val offenderBefore = offender.toSummaryDto()
 
-    var updateRequired = false
     if (request.checkinSchedule != null) {
       validate(request.checkinSchedule)
       val scheduleUpdate = request.checkinSchedule
       offender.firstCheckin = scheduleUpdate.firstCheckin
       offender.checkinInterval = scheduleUpdate.checkinInterval.duration
       offender.updatedAt = clock.instant()
-      updateRequired = true
     }
 
     if (request.contactPreference != null) {
@@ -372,11 +378,11 @@ class OffenderV2Resource(
       if (offender.contactPreference != preferenceUpdate.contactPreference) {
         offender.contactPreference = preferenceUpdate.contactPreference
         offender.updatedAt = clock.instant()
-        updateRequired = true
       }
     }
 
-    if (updateRequired) {
+    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
+    if (request.checkinSchedule != null || request.contactPreference != null) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
       if (newFirstCheckinDateIsToday(offenderBefore, offenderAfter, LocalDate.now(clock))) {
@@ -422,7 +428,7 @@ class OffenderV2Resource(
   }
 
   companion object {
-    private val LOGGER = LoggerFactory.getLogger(OffenderV2Resource::class.java)
+    private val LOGGER = logger<OffenderV2Resource>()
   }
 }
 
