@@ -50,7 +50,7 @@ private fun formatSurveyResponseHumanReadable(survey: Map<String, Any>, surveyCo
     val formattedValueNew: List<String> = when (surveyValue) {
       is String -> listOf(surveyValue)
       is Boolean -> listOf(if (surveyValue) "YES" else "NO")
-      is Number -> listOf(value)
+      is Number -> listOf(surveyValue.toString())
       is List<*> -> surveyValue.filter { it is String && it.isNotBlank() }.map { it as String }
       else -> listOf(surveyValue.toString())
     }
