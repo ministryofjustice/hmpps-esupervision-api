@@ -252,9 +252,9 @@ class QuestionsIT : IntegrationTestBase() {
     assertNull(upcoming4)
 
     val assignment2 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id)
+    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
     assertNotNull(assignment2.listId)
-    assertEquals(assignment2.listId, upcoming5.getOrNull()?.questionListId)
+    assertEquals(assignment2.listId, upcoming5?.questionListId)
   }
 
   @Test
