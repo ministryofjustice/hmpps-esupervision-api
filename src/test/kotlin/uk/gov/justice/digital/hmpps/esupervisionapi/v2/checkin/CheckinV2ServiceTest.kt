@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -32,8 +33,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
@@ -383,6 +386,11 @@ class CheckinV2ServiceTest {
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
     verify(checkinRepository).save(checkin)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true && comment == "Contains private health info"
+      },
+    )
   }
 
   @Test
@@ -413,6 +421,11 @@ class CheckinV2ServiceTest {
     assertEquals(false, checkin.sensitive)
     assertEquals(false, result.sensitive)
     verify(checkinRepository).save(checkin)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == false && comment == "Test note"
+      },
+    )
   }
 
   @Test
@@ -444,6 +457,12 @@ class CheckinV2ServiceTest {
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
     verify(checkinRepository).save(checkin)
+
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true && comment == "Added sensitive medical evidence"
+      },
+    )
   }
 
   @Test
@@ -474,6 +493,12 @@ class CheckinV2ServiceTest {
     assertEquals(false, checkin.sensitive)
     assertEquals(false, result.sensitive)
     verify(checkinRepository, never()).save(checkin)
+
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == false && comment == "Test notes"
+      },
+    )
   }
 
   @Test
@@ -604,6 +629,64 @@ class CheckinV2ServiceTest {
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
     assertFalse(checkin.livenessEnabled)
+  }
+
+  @Test
+  fun `createLivenessSession - clears stale livenessResult, livenessConfidence and autoIdCheck from a prior failed attempt`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      livenessEnabled = true,
+      livenessResult = LivenessResult.NOT_LIVE,
+      livenessConfidence = 42.0f,
+      autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(livenessSessionService.createSession()).thenReturn(CompletableFuture.completedFuture("session-456"))
+
+    service.createLivenessSession(uuid)
+
+    assertTrue(checkin.livenessEnabled)
+    assertNull(checkin.livenessResult)
+    assertNull(checkin.livenessConfidence)
+    assertNull(checkin.autoIdCheck)
+  }
+
+  @Test
+  fun `createLivenessSession - clears stale livenessResult=LIVE so a later fallback cannot piggyback on a prior pass`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      livenessEnabled = true,
+      livenessResult = LivenessResult.LIVE,
+      livenessConfidence = 95.0f,
+      autoIdCheck = AutomatedIdVerificationResult.MATCH,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(livenessSessionService.createSession()).thenReturn(CompletableFuture.completedFuture("session-789"))
+
+    service.createLivenessSession(uuid)
+
+    assertTrue(checkin.livenessEnabled)
+    assertNull(checkin.livenessResult)
+    assertNull(checkin.livenessConfidence)
+    assertNull(checkin.autoIdCheck)
   }
 
   private fun createOffender() = OffenderV2(

@@ -336,6 +336,7 @@ class CheckinV2Service(
     offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = reviewInfo.comment,
+        sensitive = request.sensitive,
         createdAt = clock.instant(),
         logEntryType = reviewInfo.logEntryType,
         practitioner = request.reviewedBy,
@@ -392,10 +393,11 @@ class CheckinV2Service(
     val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = request.notes,
+        sensitive = request.sensitive,
         createdAt = clock.instant(),
         logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
         practitioner = request.updatedBy,
-        UUID.randomUUID(),
+        uuid = UUID.randomUUID(),
         offender = checkin.offender,
         checkin = checkin.id,
       ),
@@ -449,7 +451,16 @@ class CheckinV2Service(
       )
     }
 
+    // Starting (or restarting) liveness invalidates any face-match results from a prior attempt.
+    // This matters when the offender is retrying liveness in the same session, or returning to a
+    // checkin where liveness previously passed but didn't get submitted: without clearing here,
+    // a later fallback video could complete on top of stale livenessResult/autoIdCheck values
+    // and the practitioner gate (livenessEnabled && livenessResult == LIVE) would read the
+    // wrong outcome.
     checkin.livenessEnabled = true
+    checkin.livenessResult = null
+    checkin.livenessConfidence = null
+    checkin.autoIdCheck = null
     checkinRepository.save(checkin)
 
     val sessionId = awaitRekognition(
