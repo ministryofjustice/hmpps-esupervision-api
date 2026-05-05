@@ -13,8 +13,19 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 
 interface OffenderIdVerifier {
-  fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): CompletableFuture<AutomatedIdVerificationResult>
+  fun verifyCheckinImages(snapshots: CheckinVerificationImages, requiredConfidence: Float): CompletableFuture<FacialRecognitionOutcome>
 }
+
+/**
+ * Outcome of a facial verification call. [topSimilarity] is the highest similarity score
+ * Rekognition reported across the compared snapshots — populated for MATCH (the matched
+ * score) and for NO_MATCH (the best below-threshold score, useful for tuning), null when
+ * no faces were detected or an error occurred.
+ */
+data class FacialRecognitionOutcome(
+  val result: AutomatedIdVerificationResult,
+  val topSimilarity: Float?,
+)
 
 /**
  * AWS Rekognition facial comparison service.
@@ -34,10 +45,12 @@ open class RekognitionCompareFacesService(
   override fun verifyCheckinImages(
     snapshots: CheckinVerificationImages,
     requiredConfidence: Float,
-  ): CompletableFuture<AutomatedIdVerificationResult> {
+  ): CompletableFuture<FacialRecognitionOutcome> {
     if (snapshots.snapshots.isEmpty()) {
       LOGGER.warn("No snapshots provided for facial verification")
-      return CompletableFuture.completedFuture(AutomatedIdVerificationResult.NO_MATCH)
+      return CompletableFuture.completedFuture(
+        FacialRecognitionOutcome(AutomatedIdVerificationResult.NO_MATCH, topSimilarity = null),
+      )
     }
 
     LOGGER.info(
@@ -65,21 +78,21 @@ open class RekognitionCompareFacesService(
             matchResult.snapshotIndex,
             matchResult.topSimilarity,
           )
-          return@thenApply AutomatedIdVerificationResult.MATCH
+          return@thenApply FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, matchResult.topSimilarity)
         }
 
         // Check if all failed due to no face detected
         val allNoFace = results.all { it.result == AutomatedIdVerificationResult.NO_FACE_DETECTED }
         if (allNoFace) {
           LOGGER.warn("Facial verification failed: NO_FACE_DETECTED in any snapshot")
-          return@thenApply AutomatedIdVerificationResult.NO_FACE_DETECTED
+          return@thenApply FacialRecognitionOutcome(AutomatedIdVerificationResult.NO_FACE_DETECTED, topSimilarity = null)
         }
 
         // Check if any had errors
         val errorResult = results.find { it.result == AutomatedIdVerificationResult.ERROR }
         if (errorResult != null) {
           LOGGER.error("Facial verification failed with ERROR at snapshot index {}", errorResult.snapshotIndex)
-          return@thenApply AutomatedIdVerificationResult.ERROR
+          return@thenApply FacialRecognitionOutcome(AutomatedIdVerificationResult.ERROR, topSimilarity = null)
         }
 
         // Otherwise it's a NO_MATCH (faces found but didn't match)
@@ -88,7 +101,7 @@ open class RekognitionCompareFacesService(
           "Facial verification NO_MATCH: faces detected but similarity below threshold, topSimilarity={}",
           topSimilarity,
         )
-        AutomatedIdVerificationResult.NO_MATCH
+        FacialRecognitionOutcome(AutomatedIdVerificationResult.NO_MATCH, topSimilarity)
       }
   }
 

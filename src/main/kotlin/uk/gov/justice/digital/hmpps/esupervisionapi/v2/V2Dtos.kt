@@ -311,6 +311,8 @@ data class CheckinV2Dto(
   val checkinStartedAt: Instant? = null,
   @field:Schema(description = "Auto ID check result", required = false)
   val autoIdCheck: AutomatedIdVerificationResult? = null,
+  @field:Schema(description = "Top similarity score (0-100) reported by Rekognition CompareFaces; null when no face detected or on error", required = false)
+  val autoIdCheckScore: Float? = null,
   @field:Schema(description = "Liveness check result (null for video-based check-ins)", required = false)
   val livenessResult: LivenessResult? = null,
   @field:Schema(description = "Liveness confidence score 0-100 (null for video-based check-ins)", required = false)

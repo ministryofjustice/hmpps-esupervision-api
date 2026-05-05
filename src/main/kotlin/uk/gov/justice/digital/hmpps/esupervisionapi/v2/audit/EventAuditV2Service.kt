@@ -238,6 +238,52 @@ class EventAuditV2Service(
     recordOffenderStatusEvent("OFFENDER_REACTIVATED", offender, contactDetails, notes)
   }
 
+  /**
+   * Record a failed face-match attempt against Rekognition. Successful matches are not
+   * logged here — the final outcome lives on the checkin row and the CHECKIN_SUBMITTED
+   * audit event. Recording every failed attempt gives us a durable history of retries.
+   * The [notes] payload is JSON so it can be queried with notes::jsonb in Postgres or
+   * extracted as fields in App Insights.
+   */
+  fun recordFaceMatchFailed(checkin: OffenderCheckinV2, autoIdCheckResult: String, notes: String) {
+    recordAttemptFailed("CHECKIN_FACE_MATCH_FAILED", checkin, notes, autoIdCheckResult = autoIdCheckResult)
+  }
+
+  /**
+   * Record a failed liveness attempt against Rekognition. See [recordFaceMatchFailed]
+   * for the rationale.
+   */
+  fun recordLivenessFailed(checkin: OffenderCheckinV2, livenessResult: String, notes: String) {
+    recordAttemptFailed("CHECKIN_LIVENESS_FAILED", checkin, notes, livenessResult = livenessResult)
+  }
+
+  private fun recordAttemptFailed(
+    eventType: String,
+    checkin: OffenderCheckinV2,
+    notes: String,
+    autoIdCheckResult: String? = null,
+    livenessResult: String? = null,
+  ) {
+    try {
+      val audit = EventAuditV2(
+        eventType = eventType,
+        occurredAt = clock.instant(),
+        crn = checkin.offender.crn,
+        practitionerId = checkin.offender.practitionerId,
+        checkinUuid = checkin.uuid,
+        checkinStatus = checkin.status.name,
+        checkinDueDate = checkin.dueDate,
+        autoIdCheckResult = autoIdCheckResult,
+        livenessResult = livenessResult,
+        notes = notes,
+      )
+      transactionTemplate.execute { auditRepository.save(audit) }
+      LOGGER.info("Recorded {} audit event for checkin={}", eventType, checkin.uuid)
+    } catch (e: Exception) {
+      LOGGER.error("Failed to record {} audit: {}", eventType, PiiSanitizer.sanitizeException(e, checkin.offender.crn, checkin.uuid))
+    }
+  }
+
   private fun buildAudit(
     eventType: String,
     offender: OffenderV2,

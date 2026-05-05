@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
@@ -16,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.CheckinVerificationImages
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.FacialRecognitionOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
@@ -54,6 +56,7 @@ class CheckinV2Service(
   @Value("\${rekognition.call-timeout-seconds:30}")
   private val rekognitionCallTimeoutSeconds: Long,
   private val eventAuditService: EventAuditV2Service,
+  private val objectMapper: ObjectMapper,
   @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
 ) {
@@ -288,13 +291,26 @@ class CheckinV2Service(
     }
 
     // Perform facial recognition (slow I/O, no DB transaction held)
-    val result = performFacialRecognition(checkin, numSnapshots)
+    val outcome = performFacialRecognition(checkin, numSnapshots)
+
+    // Record every non-MATCH outcome so retries leave an audit trail.
+    if (outcome.result != AutomatedIdVerificationResult.MATCH) {
+      eventAuditService.recordFaceMatchFailed(
+        checkin,
+        outcome.result.name,
+        attemptNotes(
+          "result" to outcome.result.name,
+          "similarity" to outcome.topSimilarity,
+        ),
+      )
+    }
 
     // Persist result in a short write transaction
-    checkin.autoIdCheck = result
+    checkin.autoIdCheck = outcome.result
+    checkin.autoIdCheckScore = outcome.topSimilarity
     checkinRepository.save(checkin)
 
-    return FacialRecognitionResult(result)
+    return FacialRecognitionResult(outcome.result)
   }
 
   /** Mark checkin review as started */
@@ -467,6 +483,18 @@ class CheckinV2Service(
       future = livenessSessionService.createSession(),
       action = "create liveness session",
       checkinUuid = uuid,
+      onFailure = { kind, errorCode, elapsedMs ->
+        eventAuditService.recordLivenessFailed(
+          checkin,
+          LivenessResult.ERROR.name,
+          attemptNotes(
+            "result" to failureResultLabel(kind),
+            "errorCode" to errorCode,
+            "action" to "create liveness session",
+            "elapsedMs" to elapsedMs,
+          ),
+        )
+      },
     )
     LOGGER.info("Liveness session created for checkin {}: {}", uuid, sessionId)
 
@@ -476,11 +504,15 @@ class CheckinV2Service(
   /**
    * Block on a Rekognition async call with an upper-bound timeout and map any failure
    * to a [ResponseStatusException]. Keeps the caller off a long-running transaction.
+   *
+   * [onFailure] is invoked once before any throw — callers use it to record an attempt
+   * audit row capturing the failure kind and timing.
    */
   private fun <T> awaitRekognition(
     future: CompletableFuture<T>,
     action: String,
     checkinUuid: UUID,
+    onFailure: ((kind: RekognitionFailureKind, errorCode: String?, elapsedMs: Long) -> Unit)? = null,
   ): T {
     val startNanos = System.nanoTime()
     try {
@@ -496,6 +528,7 @@ class CheckinV2Service(
       val elapsedMs = elapsedMs(startNanos)
       when (val cause = e.cause) {
         is TimeoutException -> {
+          onFailure?.invoke(RekognitionFailureKind.TIMEOUT, null, elapsedMs)
           LOGGER.error(
             "Timeout waiting for Rekognition ({}) for checkin {} after {}ms (limit {}s)",
             action,
@@ -511,12 +544,14 @@ class CheckinV2Service(
           )
         }
         is RekognitionException -> {
+          val errorCode = cause.awsErrorDetails()?.errorCode()
+          onFailure?.invoke(RekognitionFailureKind.REKOG_ERROR, errorCode, elapsedMs)
           LOGGER.error(
             "Rekognition error ({}) for checkin {} after {}ms: awsErrorCode={}, statusCode={}, message={}",
             action,
             checkinUuid,
             elapsedMs,
-            cause.awsErrorDetails()?.errorCode(),
+            errorCode,
             cause.statusCode(),
             cause.message,
             cause,
@@ -528,6 +563,7 @@ class CheckinV2Service(
           )
         }
         else -> {
+          onFailure?.invoke(RekognitionFailureKind.OTHER, null, elapsedMs)
           LOGGER.error(
             "Unexpected async error ({}) for checkin {} after {}ms",
             action,
@@ -546,6 +582,20 @@ class CheckinV2Service(
   }
 
   private fun elapsedMs(startNanos: Long): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos)
+
+  /**
+   * Build a small JSON object for the audit row's notes column from the supplied
+   * key/value pairs. Null values are omitted so the JSON only carries meaningful fields.
+   */
+  private fun attemptNotes(vararg fields: Pair<String, Any?>): String {
+    val map = fields.toMap().filterValues { it != null }
+    return objectMapper.writeValueAsString(map)
+  }
+
+  private fun failureResultLabel(kind: RekognitionFailureKind): String = when (kind) {
+    RekognitionFailureKind.TIMEOUT -> "TIMEOUT"
+    RekognitionFailureKind.REKOG_ERROR, RekognitionFailureKind.OTHER -> "ERROR"
+  }
 
   /** Get scoped temporary AWS credentials for the browser liveness detector */
   fun getLivenessCredentials(uuid: UUID): LivenessCredentialsResponse {
@@ -590,6 +640,19 @@ class CheckinV2Service(
       future = livenessSessionService.getSessionResults(sessionId),
       action = "get liveness session results",
       checkinUuid = uuid,
+      onFailure = { kind, errorCode, elapsedMs ->
+        eventAuditService.recordLivenessFailed(
+          checkin,
+          LivenessResult.ERROR.name,
+          attemptNotes(
+            "result" to failureResultLabel(kind),
+            "errorCode" to errorCode,
+            "action" to "get liveness session results",
+            "sessionId" to sessionId,
+            "elapsedMs" to elapsedMs,
+          ),
+        )
+      },
     )
     val confidence = livenessResult.confidence()
     val isLive = confidence >= livenessConfidenceThreshold
@@ -603,14 +666,36 @@ class CheckinV2Service(
       isLive,
     )
 
+    if (!isLive) {
+      eventAuditService.recordLivenessFailed(
+        checkin,
+        LivenessResult.NOT_LIVE.name,
+        attemptNotes(
+          "result" to LivenessResult.NOT_LIVE.name,
+          "confidence" to confidence,
+          "sessionId" to sessionId,
+        ),
+      )
+    }
+
     // Extract the reference image bytes from the session
     val referenceImage = livenessResult.referenceImage()
     val imageBytes = referenceImage?.bytes()?.asByteArray()
     if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {
       LOGGER.warn("Liveness session {} has no reference image for face comparison", sessionId)
+      eventAuditService.recordFaceMatchFailed(
+        checkin,
+        AutomatedIdVerificationResult.ERROR.name,
+        attemptNotes(
+          "result" to AutomatedIdVerificationResult.ERROR.name,
+          "reason" to "no reference image from liveness session",
+          "sessionId" to sessionId,
+        ),
+      )
       checkin.livenessResult = livenessStatus
       checkin.livenessConfidence = confidence
       checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
+      checkin.autoIdCheckScore = null
       checkinRepository.save(checkin)
       return LivenessVerificationResponse(
         isLive = isLive,
@@ -635,18 +720,32 @@ class CheckinV2Service(
     LOGGER.info("Uploaded liveness reference image for checkin {} ({} bytes)", uuid, imageBytes.size)
 
     // Perform face comparison (slow I/O, no DB transaction held)
-    val result = performFacialRecognition(checkin, numSnapshots = 1)
+    val outcome = performFacialRecognition(checkin, numSnapshots = 1)
+
+    // Record every non-MATCH outcome so retries leave an audit trail.
+    if (outcome.result != AutomatedIdVerificationResult.MATCH) {
+      eventAuditService.recordFaceMatchFailed(
+        checkin,
+        outcome.result.name,
+        attemptNotes(
+          "result" to outcome.result.name,
+          "similarity" to outcome.topSimilarity,
+          "sessionId" to sessionId,
+        ),
+      )
+    }
 
     // Persist both results in a single short write transaction
     checkin.livenessResult = livenessStatus
     checkin.livenessConfidence = confidence
-    checkin.autoIdCheck = result
+    checkin.autoIdCheck = outcome.result
+    checkin.autoIdCheckScore = outcome.topSimilarity
     checkinRepository.save(checkin)
 
     return LivenessVerificationResponse(
       isLive = isLive,
       livenessConfidence = confidence,
-      result = result,
+      result = outcome.result,
     )
   }
 
@@ -655,18 +754,19 @@ class CheckinV2Service(
   // ========================================
 
   /**
-   * Run the face-compare call against Rekognition and return the result.
+   * Run the face-compare call against Rekognition and return the outcome (result + score).
    *
-   * Does NOT persist — callers are responsible for saving the result to the checkin in
-   * their own short transaction. Called from non-transactional code so the Rekognition
-   * wait never holds a DB connection.
+   * Does NOT persist — callers are responsible for saving to the checkin in their own
+   * short transaction. Called from non-transactional code so the Rekognition wait never
+   * holds a DB connection. I/O failures (timeout / Rekognition error) are recorded as
+   * CHECKIN_FACE_MATCH_FAILED audit rows here before the exception propagates.
    *
    * @param numSnapshots Number of snapshots to compare (indices 0 to numSnapshots-1)
    */
   private fun performFacialRecognition(
     checkin: OffenderCheckinV2,
     numSnapshots: Int,
-  ): AutomatedIdVerificationResult {
+  ): FacialRecognitionOutcome {
     val offender = checkin.offender
 
     // Check setup photo exists
@@ -690,18 +790,30 @@ class CheckinV2Service(
         snapshots = snapshotCoordinates,
       )
 
-    val result = awaitRekognition(
+    val outcome = awaitRekognition(
       future = compareFacesService.verifyCheckinImages(images, faceSimilarityThreshold),
       action = "compare faces",
       checkinUuid = checkin.uuid,
+      onFailure = { kind, errorCode, elapsedMs ->
+        eventAuditService.recordFaceMatchFailed(
+          checkin,
+          AutomatedIdVerificationResult.ERROR.name,
+          attemptNotes(
+            "result" to failureResultLabel(kind),
+            "errorCode" to errorCode,
+            "action" to "compare faces",
+            "elapsedMs" to elapsedMs,
+          ),
+        )
+      },
     )
 
-    when (result) {
+    when (outcome.result) {
       AutomatedIdVerificationResult.MATCH -> {
-        LOGGER.info("Facial recognition MATCH for checkin {}", checkin.uuid)
+        LOGGER.info("Facial recognition MATCH for checkin {} (similarity={})", checkin.uuid, outcome.topSimilarity)
       }
       AutomatedIdVerificationResult.NO_MATCH -> {
-        LOGGER.info("Facial recognition NO_MATCH for checkin {}", checkin.uuid)
+        LOGGER.info("Facial recognition NO_MATCH for checkin {} (topSimilarity={})", checkin.uuid, outcome.topSimilarity)
       }
       AutomatedIdVerificationResult.NO_FACE_DETECTED -> {
         LOGGER.warn("Facial recognition NO_FACE_DETECTED for checkin {}", checkin.uuid)
@@ -711,7 +823,7 @@ class CheckinV2Service(
       }
     }
 
-    return result
+    return outcome
   }
 
   @Transactional
@@ -906,6 +1018,8 @@ data class CheckinReviewInfo(
   val comment: String,
   val logEntryType: LogEntryType,
 )
+
+private enum class RekognitionFailureKind { TIMEOUT, REKOG_ERROR, OTHER }
 
 /**
  * @return log entry comment appropriate for this checkin (depends on checkin status), and new status (possibly unchanged)

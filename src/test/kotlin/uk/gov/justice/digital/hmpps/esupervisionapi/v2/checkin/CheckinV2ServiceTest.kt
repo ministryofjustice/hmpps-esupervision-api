@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -70,6 +71,7 @@ class CheckinV2ServiceTest {
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
   private val eventAuditService: EventAuditV2Service = mock()
+  private val objectMapper = jacksonObjectMapper()
 
   private lateinit var service: CheckinV2Service
 
@@ -94,6 +96,7 @@ class CheckinV2ServiceTest {
       livenessConfidenceThreshold,
       30,
       eventAuditService,
+      objectMapper,
       3,
     )
 

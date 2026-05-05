@@ -212,6 +212,9 @@ open class OffenderCheckinV2(
   @Enumerated(EnumType.STRING)
   open var autoIdCheck: AutomatedIdVerificationResult? = null,
 
+  @Column(name = "auto_id_check_score", nullable = true)
+  open var autoIdCheckScore: Float? = null,
+
   @Column(name = "liveness_result", nullable = true, length = 10)
   @Enumerated(EnumType.STRING)
   open var livenessResult: LivenessResult? = null,
@@ -258,6 +261,7 @@ open class OffenderCheckinV2(
       reviewedBy = reviewedBy,
       checkinStartedAt = checkinStartedAt,
       autoIdCheck = autoIdCheck,
+      autoIdCheckScore = autoIdCheckScore,
       livenessResult = livenessResult,
       livenessConfidence = livenessConfidence,
       livenessEnabled = livenessEnabled,

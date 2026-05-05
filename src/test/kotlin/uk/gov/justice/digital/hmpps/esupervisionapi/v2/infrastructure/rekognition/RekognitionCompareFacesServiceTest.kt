@@ -29,7 +29,7 @@ class RekognitionCompareFacesServiceTest {
   }
 
   @Test
-  fun `verifyCheckinImages - returns MATCH when faces match`() {
+  fun `verifyCheckinImages - returns MATCH and surfaces top similarity when faces match`() {
     val images = createTestImages(snapshotCount = 1)
     val response = createMatchResponse(similarity = 95.0f)
 
@@ -38,7 +38,8 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.MATCH, result.result)
+    assertEquals(95.0f, result.topSimilarity)
   }
 
   @Test
@@ -51,7 +52,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
   }
 
   @Test
@@ -66,7 +67,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result)
+    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result.result)
   }
 
   @Test
@@ -81,7 +82,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.ERROR, result)
+    assertEquals(AutomatedIdVerificationResult.ERROR, result.result)
   }
 
   @Test
@@ -93,7 +94,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
   }
 
   @Test
@@ -110,7 +111,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.MATCH, result.result)
   }
 
   @Test
@@ -125,7 +126,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result)
+    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result.result)
   }
 
   @Test
@@ -143,7 +144,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
   }
 
   private fun createTestImages(snapshotCount: Int) = CheckinVerificationImages(
