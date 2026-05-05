@@ -107,8 +107,7 @@ databaseChangeLog:
       file: db/changelog/changesets/53_add_sensitive_flags.sql
   - include:
       file: db/changelog/changesets/54_question_fixes.sql
-
   - include:
-      file: db/changelog/changesets/53_update_provider_month_mv.sql
+      file: db/changelog/changesets/55_update_provider_month_mv.sql
   - include:
-      file: db/changelog/changesets/54_update_monthly_feedback_mv.sql
+      file: db/changelog/changesets/56_update_monthly_feedback_mv.sql
