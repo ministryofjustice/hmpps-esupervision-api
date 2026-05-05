@@ -41,8 +41,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.UUID
+import kotlin.jvm.optionals.getOrNull
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestClockConfiguration::class)
@@ -159,8 +159,8 @@ class QuestionsIT : IntegrationTestBase() {
     assertTrue(qlitems.size > 1)
 
     val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnV2Request("BARRY.WHITE", offender.crn, clock.today()))
-    val assignment = questionService.upcomingAssignment(offender.crn)
-    assertNull(assignment.questionList, "*Upcoming* assignment should flip to null after a checkin is created")
+    val assignment = questionService.upcomingAssignment(offender)
+    assertNotNull(assignment.questionList, "*Upcoming* assignment should not flip to null after a checkin is created")
 
     val checkinEntity = offenderCheckinV2Repository.findByUuid(checkin.uuid)
     val checkinQuestions = questionListAssignmentRepository.checkinAssignment(checkinEntity.get().id)
@@ -172,8 +172,8 @@ class QuestionsIT : IntegrationTestBase() {
     clock.advanceBy(Duration.ofHours(4))
     offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
 
-    val assignmentAfterSubmission = questionService.upcomingAssignment(offender.crn)
-    assertNull(assignmentAfterSubmission.questionList)
+    val assignmentAfterSubmission = questionService.upcomingAssignment(offender)
+    assertNull(assignmentAfterSubmission.questionList, "Upcoming assignment should flip to null after a checkin is submitted")
   }
 
   @Test
@@ -220,8 +220,10 @@ class QuestionsIT : IntegrationTestBase() {
     clock.advanceBy(Duration.ofHours(1))
     val submission1 = offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
 
-    questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    assertNotNull(questionListAssignmentRepository.upcomingAssignment(offender.id))
+    val assignment1 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
+    assertNotNull(upcoming1)
+    assertEquals(assignment1.listId, upcoming1.questionListId)
 
     // ----- DAY 2
     clock.advanceBy(Duration.ofDays(1))
@@ -233,21 +235,26 @@ class QuestionsIT : IntegrationTestBase() {
       ),
     )
     // the assignment should have the checkin set
-    val upcoming2 = questionListAssignmentRepository.upcomingAssignment(offender.id)
-    assertNull(upcoming2, "No assignment should be present after checkin2 was submitted: $upcoming2")
+    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
+    assertNotNull(upcoming2, "Assignment should be present until checkin2 is submitted: $upcoming2")
+    assertEquals(assignment1.listId, upcoming2.questionListId)
 
-    // We can assign questions to the _next_ checkin now
-    val assignment3 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    assertThrows(BadArgumentException::class.java, {
+      questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    }, "We can't assign questions until check-in is submitted/expired")
 
-    val upcoming3 = questionService.upcomingAssignment(offender.crn)
-    assertEquals(assignment3.listId, upcoming3.questionList)
-    assertEquals(offender.firstCheckin.plus(offender.checkinInterval.toDays(), ChronoUnit.DAYS), assignment3.expectedCheckinDate)
+    // Verify out assignment hasn't changed
+    val upcoming3 = questionService.upcomingAssignment(offender)
+    assertEquals(upcoming2.questionListId, upcoming3.questionList)
 
     val submission2 = offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
+    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
+    assertNull(upcoming4)
 
-    // the assignment should have the checkin set
-    val assignment = questionListAssignmentRepository.upcomingAssignment(offender.id)
-    assertNotNull(assignment, "New assignment should be there after a submission of checkin2: $assignment")
+    val assignment2 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id)
+    assertNotNull(assignment2.listId)
+    assertEquals(assignment2.listId, upcoming5.getOrNull()?.questionListId)
   }
 
   @Test
