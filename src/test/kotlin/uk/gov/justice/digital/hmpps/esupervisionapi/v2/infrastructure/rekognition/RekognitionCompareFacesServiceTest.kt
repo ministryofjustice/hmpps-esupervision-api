@@ -56,7 +56,7 @@ class RekognitionCompareFacesServiceTest {
   }
 
   @Test
-  fun `verifyCheckinImages - returns NO_FACE_DETECTED when InvalidParameterException thrown`() {
+  fun `verifyCheckinImages - returns NO_FACE_DETECTED with errorCode when InvalidParameterException thrown`() {
     val images = createTestImages(snapshotCount = 1)
     val exception = InvalidParameterException.builder()
       .message("No face detected in source image")
@@ -68,10 +68,11 @@ class RekognitionCompareFacesServiceTest {
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
     assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result.result)
+    assertEquals("InvalidParameterException", result.errorCode)
   }
 
   @Test
-  fun `verifyCheckinImages - returns ERROR when RekognitionException thrown`() {
+  fun `verifyCheckinImages - returns ERROR with errorCode when RekognitionException thrown`() {
     val images = createTestImages(snapshotCount = 1)
     val exception = RekognitionException.builder()
       .message("Service unavailable")
@@ -83,6 +84,7 @@ class RekognitionCompareFacesServiceTest {
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
     assertEquals(AutomatedIdVerificationResult.ERROR, result.result)
+    assertEquals("RekognitionException", result.errorCode)
   }
 
   @Test

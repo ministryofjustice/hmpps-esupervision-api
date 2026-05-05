@@ -144,6 +144,15 @@ data class LivenessVerifyRequest(
   val sessionId: String,
 )
 
+/** Client-side liveness failure report */
+data class LivenessClientFailureRequest(
+  @Schema(
+    description = "Amplify FaceLivenessDetector error state (e.g. TIMEOUT, MULTIPLE_FACES_ERROR, CAMERA_ACCESS_ERROR). Free-form so we don't break if the SDK adds new states.",
+    required = false,
+  )
+  val state: String? = null,
+)
+
 /** Liveness verification response */
 data class LivenessVerificationResponse(
   @Schema(description = "Whether the session passed liveness detection", required = true)

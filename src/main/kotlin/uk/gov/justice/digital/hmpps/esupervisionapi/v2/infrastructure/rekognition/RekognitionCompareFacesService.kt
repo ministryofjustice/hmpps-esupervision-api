@@ -20,11 +20,15 @@ interface OffenderIdVerifier {
  * Outcome of a facial verification call. [topSimilarity] is the highest similarity score
  * Rekognition reported across the compared snapshots — populated for MATCH (the matched
  * score) and for NO_MATCH (the best below-threshold score, useful for tuning), null when
- * no faces were detected or an error occurred.
+ * no faces were detected or an error occurred. [errorCode] carries the AWS error code
+ * (e.g. ThrottlingException, InvalidImageFormatException) for ERROR / NO_FACE_DETECTED
+ * results so we can tell different failure modes apart in audit rows; null on MATCH /
+ * NO_MATCH and when no AWS error was reported.
  */
 data class FacialRecognitionOutcome(
   val result: AutomatedIdVerificationResult,
   val topSimilarity: Float?,
+  val errorCode: String? = null,
 )
 
 /**
@@ -84,15 +88,31 @@ open class RekognitionCompareFacesService(
         // Check if all failed due to no face detected
         val allNoFace = results.all { it.result == AutomatedIdVerificationResult.NO_FACE_DETECTED }
         if (allNoFace) {
-          LOGGER.warn("Facial verification failed: NO_FACE_DETECTED in any snapshot")
-          return@thenApply FacialRecognitionOutcome(AutomatedIdVerificationResult.NO_FACE_DETECTED, topSimilarity = null)
+          val firstErrorCode = results.firstNotNullOfOrNull { it.errorCode }
+          LOGGER.warn(
+            "Facial verification failed: NO_FACE_DETECTED in any snapshot (errorCode={})",
+            firstErrorCode,
+          )
+          return@thenApply FacialRecognitionOutcome(
+            AutomatedIdVerificationResult.NO_FACE_DETECTED,
+            topSimilarity = null,
+            errorCode = firstErrorCode,
+          )
         }
 
         // Check if any had errors
         val errorResult = results.find { it.result == AutomatedIdVerificationResult.ERROR }
         if (errorResult != null) {
-          LOGGER.error("Facial verification failed with ERROR at snapshot index {}", errorResult.snapshotIndex)
-          return@thenApply FacialRecognitionOutcome(AutomatedIdVerificationResult.ERROR, topSimilarity = null)
+          LOGGER.error(
+            "Facial verification failed with ERROR at snapshot index {} (errorCode={})",
+            errorResult.snapshotIndex,
+            errorResult.errorCode,
+          )
+          return@thenApply FacialRecognitionOutcome(
+            AutomatedIdVerificationResult.ERROR,
+            topSimilarity = null,
+            errorCode = errorResult.errorCode,
+          )
         }
 
         // Otherwise it's a NO_MATCH (faces found but didn't match)
@@ -204,31 +224,37 @@ open class RekognitionCompareFacesService(
     return when (cause) {
       is InvalidParameterException -> {
         // Rekognition could not find any faces in the photo
+        val errorCode = cause.awsErrorDetails()?.errorCode() ?: "InvalidParameterException"
         LOGGER.warn(
-          "Rekognition NO_FACE_DETECTED [{}]: reference={}, snapshot={}, message={}",
+          "Rekognition NO_FACE_DETECTED [{}]: reference={}, snapshot={}, errorCode={}, message={}",
           snapshotIndex,
           referenceCoord.key,
           comparisonCoord.key,
+          errorCode,
           cause.message,
         )
         ComparisonResult(
           snapshotIndex = snapshotIndex,
           result = AutomatedIdVerificationResult.NO_FACE_DETECTED,
           topSimilarity = null,
+          errorCode = errorCode,
         )
       }
       is RekognitionException -> {
+        val errorCode = cause.awsErrorDetails()?.errorCode() ?: cause.javaClass.simpleName
         LOGGER.error(
-          "Rekognition ERROR [{}]: reference={}, snapshot={}, message={}",
+          "Rekognition ERROR [{}]: reference={}, snapshot={}, errorCode={}, message={}",
           snapshotIndex,
           referenceCoord.key,
           comparisonCoord.key,
+          errorCode,
           cause.message,
         )
         ComparisonResult(
           snapshotIndex = snapshotIndex,
           result = AutomatedIdVerificationResult.ERROR,
           topSimilarity = null,
+          errorCode = errorCode,
         )
       }
       else -> {
@@ -263,4 +289,5 @@ private data class ComparisonResult(
   val snapshotIndex: Int,
   val result: AutomatedIdVerificationResult,
   val topSimilarity: Float?,
+  val errorCode: String? = null,
 )

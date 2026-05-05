@@ -295,12 +295,13 @@ class CheckinV2Service(
 
     // Record every non-MATCH outcome so retries leave an audit trail.
     if (outcome.result != AutomatedIdVerificationResult.MATCH) {
-      eventAuditService.recordFaceMatchFailed(
+      recordRekognitionFailure(
         checkin,
-        outcome.result.name,
+        LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
         attemptNotes(
           "result" to outcome.result.name,
           "similarity" to outcome.topSimilarity,
+          "errorCode" to outcome.errorCode,
         ),
       )
     }
@@ -484,9 +485,9 @@ class CheckinV2Service(
       action = "create liveness session",
       checkinUuid = uuid,
       onFailure = { kind, errorCode, elapsedMs ->
-        eventAuditService.recordLivenessFailed(
+        recordRekognitionFailure(
           checkin,
-          LivenessResult.ERROR.name,
+          LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
           attemptNotes(
             "result" to failureResultLabel(kind),
             "errorCode" to errorCode,
@@ -584,7 +585,7 @@ class CheckinV2Service(
   private fun elapsedMs(startNanos: Long): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos)
 
   /**
-   * Build a small JSON object for the audit row's notes column from the supplied
+   * Build a small JSON object for the event log entry's comment column from the supplied
    * key/value pairs. Null values are omitted so the JSON only carries meaningful fields.
    */
   private fun attemptNotes(vararg fields: Pair<String, Any?>): String {
@@ -595,6 +596,58 @@ class CheckinV2Service(
   private fun failureResultLabel(kind: RekognitionFailureKind): String = when (kind) {
     RekognitionFailureKind.TIMEOUT -> "TIMEOUT"
     RekognitionFailureKind.REKOG_ERROR, RekognitionFailureKind.OTHER -> "ERROR"
+  }
+
+  /**
+   * Append a system-originated entry to [offender_event_log_v2] capturing a failed
+   * Rekognition attempt. The practitioner-facing checkin log filters by an explicit
+   * type-set and ignores these entries, so they don't surface in the timeline.
+   *
+   * Wrapped in try/catch + log so a logging failure can never break the user flow —
+   * the verification result must still surface, even if the audit row write fails.
+   */
+  private fun recordRekognitionFailure(
+    checkin: OffenderCheckinV2,
+    type: LogEntryType,
+    notes: String,
+  ) {
+    try {
+      offenderEventLogRepository.save(
+        OffenderEventLogV2(
+          comment = notes,
+          sensitive = false,
+          createdAt = clock.instant(),
+          logEntryType = type,
+          practitioner = SYSTEM_PRACTITIONER,
+          uuid = UUID.randomUUID(),
+          checkin = checkin.id,
+          offender = checkin.offender,
+        ),
+      )
+      LOGGER.info("Recorded {} event log entry for checkin={}", type, checkin.uuid)
+    } catch (e: Exception) {
+      LOGGER.error("Failed to record {} event log entry for checkin={}: {}", type, checkin.uuid, e.message, e)
+    }
+  }
+
+  /**
+   * Record a client-side liveness failure reported by the browser. The Amplify
+   * FaceLivenessDetector raises onError before the session reaches Rekognition for
+   * cases like CAMERA_ACCESS_ERROR, MULTIPLE_FACES_ERROR, TIMEOUT etc. — the server
+   * never sees those otherwise.
+   */
+  fun recordLivenessClientFailure(uuid: UUID, state: String?) {
+    val checkin = checkinRepository.findByUuid(uuid).orElseThrow {
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    }
+    recordRekognitionFailure(
+      checkin,
+      LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
+      attemptNotes(
+        "result" to "CLIENT_ERROR",
+        "state" to state,
+      ),
+    )
   }
 
   /** Get scoped temporary AWS credentials for the browser liveness detector */
@@ -641,9 +694,9 @@ class CheckinV2Service(
       action = "get liveness session results",
       checkinUuid = uuid,
       onFailure = { kind, errorCode, elapsedMs ->
-        eventAuditService.recordLivenessFailed(
+        recordRekognitionFailure(
           checkin,
-          LivenessResult.ERROR.name,
+          LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
           attemptNotes(
             "result" to failureResultLabel(kind),
             "errorCode" to errorCode,
@@ -667,9 +720,9 @@ class CheckinV2Service(
     )
 
     if (!isLive) {
-      eventAuditService.recordLivenessFailed(
+      recordRekognitionFailure(
         checkin,
-        LivenessResult.NOT_LIVE.name,
+        LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
         attemptNotes(
           "result" to LivenessResult.NOT_LIVE.name,
           "confidence" to confidence,
@@ -683,9 +736,9 @@ class CheckinV2Service(
     val imageBytes = referenceImage?.bytes()?.asByteArray()
     if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {
       LOGGER.warn("Liveness session {} has no reference image for face comparison", sessionId)
-      eventAuditService.recordFaceMatchFailed(
+      recordRekognitionFailure(
         checkin,
-        AutomatedIdVerificationResult.ERROR.name,
+        LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
         attemptNotes(
           "result" to AutomatedIdVerificationResult.ERROR.name,
           "reason" to "no reference image from liveness session",
@@ -724,12 +777,13 @@ class CheckinV2Service(
 
     // Record every non-MATCH outcome so retries leave an audit trail.
     if (outcome.result != AutomatedIdVerificationResult.MATCH) {
-      eventAuditService.recordFaceMatchFailed(
+      recordRekognitionFailure(
         checkin,
-        outcome.result.name,
+        LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
         attemptNotes(
           "result" to outcome.result.name,
           "similarity" to outcome.topSimilarity,
+          "errorCode" to outcome.errorCode,
           "sessionId" to sessionId,
         ),
       )
@@ -795,9 +849,9 @@ class CheckinV2Service(
       action = "compare faces",
       checkinUuid = checkin.uuid,
       onFailure = { kind, errorCode, elapsedMs ->
-        eventAuditService.recordFaceMatchFailed(
+        recordRekognitionFailure(
           checkin,
-          AutomatedIdVerificationResult.ERROR.name,
+          LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
           attemptNotes(
             "result" to failureResultLabel(kind),
             "errorCode" to errorCode,
@@ -1010,6 +1064,7 @@ class CheckinV2Service(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinV2Service::class.java)
+    private const val SYSTEM_PRACTITIONER = "system"
   }
 }
 
