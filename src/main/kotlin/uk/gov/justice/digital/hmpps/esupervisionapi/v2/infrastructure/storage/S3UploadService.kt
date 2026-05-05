@@ -26,6 +26,40 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.UUID
 
+/** A presigned URL together with the headers a client must echo on the PUT. */
+data class PresignedUpload(
+  val url: URL,
+  val requiredHeaders: Map<String, String>,
+)
+
+/**
+ * Resolve a client-supplied base64 SHA-256 to forward to S3.
+ *
+ * - `require=true` rejects with HTTP 400 when the hash is missing (post-rollout state).
+ * - Otherwise: returns the trimmed value if present, null if absent (dual-mode rollout).
+ *
+ * The value is passed verbatim to the AWS SDK's `.checksumSHA256(...)`. The SDK / S3 will
+ * reject malformed values at PUT time, so we don't validate format here beyond non-empty.
+ * The slot label is included in the error message so multi-file callers can identify which input failed.
+ */
+fun resolveUploadHash(
+  sha256Base64: String?,
+  require: Boolean,
+  slot: String = "file",
+): String? {
+  val trimmed = sha256Base64?.trim()
+  if (trimmed.isNullOrEmpty()) {
+    if (require) {
+      throw org.springframework.web.server.ResponseStatusException(
+        org.springframework.http.HttpStatus.BAD_REQUEST,
+        "Missing content hash for $slot",
+      )
+    }
+    return null
+  }
+  return trimmed
+}
+
 sealed class S3Keyable {
   fun toKey(): String {
     when (this) {
@@ -74,13 +108,15 @@ class S3UploadService(
   @Value("\${aws.s3.video-uploads}") private val videoUploadBucket: String,
 ) {
 
-  private fun putObjectRequest(bucket: String, key: String, contentType: String): PutObjectRequest {
-    val request = PutObjectRequest.builder()
+  private fun putObjectRequest(bucket: String, key: String, contentType: String, checksumSha256Base64: String? = null): PutObjectRequest {
+    val builder = PutObjectRequest.builder()
       .bucket(bucket)
       .key(key)
       .contentType(contentType)
-      .build()
-    return request
+    if (checksumSha256Base64 != null) {
+      builder.checksumSHA256(checksumSha256Base64)
+    }
+    return builder.build()
   }
 
   @CircuitBreaker(name = "awsS3")
@@ -178,13 +214,26 @@ class S3UploadService(
     keyable: S3Keyable,
     contentType: String = "application/octet-stream",
     duration: Duration,
-  ): URL {
-    val putRequest = putObjectRequest(bucketFor(keyable), keyable.toKey(), contentType)
+  ): URL = generatePresignedUpload(keyable, contentType, duration, checksumSha256Base64 = null).url
+
+  private fun generatePresignedUpload(
+    keyable: S3Keyable,
+    contentType: String,
+    duration: Duration,
+    checksumSha256Base64: String?,
+  ): PresignedUpload {
+    val putRequest = putObjectRequest(bucketFor(keyable), keyable.toKey(), contentType, checksumSha256Base64)
     val presignRequest = PutObjectPresignRequest.builder()
       .putObjectRequest(putRequest)
       .signatureDuration(duration)
       .build()
-    return s3Presigner.presignPutObject(presignRequest).url()
+    val url = s3Presigner.presignPutObject(presignRequest).url()
+    val headers = if (checksumSha256Base64 != null) {
+      mapOf("x-amz-checksum-sha256" to checksumSha256Base64)
+    } else {
+      emptyMap()
+    }
+    return PresignedUpload(url, headers)
   }
 
   // ============================================================
@@ -201,6 +250,16 @@ class S3UploadService(
   ): URL = generatePresignedUploadUrl(SetupPhotoKey(setup.offender.uuid), contentType, duration)
 
   /**
+   * V2 Setup - generates presigned upload, optionally signed with a content hash.
+   */
+  fun generatePresignedUpload(
+    setup: OffenderSetupV2,
+    contentType: String = "application/octet-stream",
+    duration: Duration,
+    checksumSha256Base64: String? = null,
+  ): PresignedUpload = generatePresignedUpload(SetupPhotoKey(setup.offender.uuid), contentType, duration, checksumSha256Base64)
+
+  /**
    * V2 Offender - generates presigned upload URL for updating offender photo
    */
   fun generatePresignedUploadUrl(
@@ -208,6 +267,16 @@ class S3UploadService(
     contentType: String = "application/octet-stream",
     duration: Duration,
   ): URL = generatePresignedUploadUrl(SetupPhotoKey(offender.uuid), contentType, duration)
+
+  /**
+   * V2 Offender - generates presigned upload, optionally signed with a content hash.
+   */
+  fun generatePresignedUpload(
+    offender: OffenderV2,
+    contentType: String = "application/octet-stream",
+    duration: Duration,
+    checksumSha256Base64: String? = null,
+  ): PresignedUpload = generatePresignedUpload(SetupPhotoKey(offender.uuid), contentType, duration, checksumSha256Base64)
 
   /**
    * V2 Setup - checks if setup photo is uploaded
@@ -262,6 +331,16 @@ class S3UploadService(
   ): URL = generatePresignedUploadUrl(CheckinVideoKey(checkin.uuid), contentType, duration)
 
   /**
+   * V2 Checkin - generates presigned video upload, optionally signed with a content hash.
+   */
+  fun generatePresignedUpload(
+    checkin: OffenderCheckinV2,
+    contentType: String = "application/octet-stream",
+    duration: Duration,
+    checksumSha256Base64: String? = null,
+  ): PresignedUpload = generatePresignedUpload(CheckinVideoKey(checkin.uuid), contentType, duration, checksumSha256Base64)
+
+  /**
    * V2 Checkin - generates presigned upload URL for snapshot at index
    */
   fun generatePresignedUploadUrl(
@@ -270,6 +349,17 @@ class S3UploadService(
     index: Int,
     duration: Duration,
   ): URL = generatePresignedUploadUrl(CheckinPhotoKey(checkin.uuid, index), contentType, duration)
+
+  /**
+   * V2 Checkin - generates presigned snapshot upload, optionally signed with a content hash.
+   */
+  fun generatePresignedUpload(
+    checkin: OffenderCheckinV2,
+    contentType: String = "application/octet-stream",
+    index: Int,
+    duration: Duration,
+    checksumSha256Base64: String? = null,
+  ): PresignedUpload = generatePresignedUpload(CheckinPhotoKey(checkin.uuid, index), contentType, duration, checksumSha256Base64)
 
   /**
    * V2 Checkin - checks if video is uploaded

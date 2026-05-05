@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
@@ -37,8 +38,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
 import java.time.Clock
@@ -61,6 +64,7 @@ class OffenderV2Resource(
   private val offenderSetupRepository: OffenderSetupV2Repository,
   private val offenderSetupV2Service: OffenderSetupV2Service,
   private val questionService: QuestionService,
+  private val appConfig: AppConfig,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -127,6 +131,7 @@ class OffenderV2Resource(
     @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
     @Parameter(description = "Content type of the image", required = true)
     @RequestParam(name = "content-type") contentType: String,
+    @RequestBody(required = false) hashRequest: UploadHashRequest?,
   ): ResponseEntity<UploadLocationResponse> {
     val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
 
@@ -154,14 +159,26 @@ class OffenderV2Resource(
       )
     }
 
+    val hash = resolveUploadHash(
+      sha256Base64 = hashRequest?.sha256,
+      require = appConfig.uploadContentHashRequire,
+      slot = "offender-photo",
+    )
+    LOGGER.info("upload_hash.received endpoint=/v2/offenders/upload_location received={}", hash != null)
+
     val duration = Duration.ofMinutes(5)
-    val url = s3UploadService.generatePresignedUploadUrl(offender, contentType, duration)
+    val presigned = s3UploadService.generatePresignedUpload(offender, contentType, duration, hash)
 
     LOGGER.info("Generated photo upload URL for offender uuid={}, crn={}", uuid, offender.crn)
 
     return ResponseEntity.ok(
       UploadLocationResponse(
-        locationInfo = LocationInfo(url, contentType, duration.toString()),
+        locationInfo = LocationInfo(
+          url = presigned.url,
+          contentType = contentType,
+          duration = duration.toString(),
+          requiredHeaders = presigned.requiredHeaders.takeIf { it.isNotEmpty() },
+        ),
       ),
     )
   }

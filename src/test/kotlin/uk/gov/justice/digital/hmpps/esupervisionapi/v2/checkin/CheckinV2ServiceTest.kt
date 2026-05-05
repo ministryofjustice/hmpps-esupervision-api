@@ -18,6 +18,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
@@ -70,6 +71,7 @@ class CheckinV2ServiceTest {
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
   private val eventAuditService: EventAuditV2Service = mock()
+  private val appConfig: AppConfig = mock()
 
   private lateinit var service: CheckinV2Service
 
@@ -95,6 +97,7 @@ class CheckinV2ServiceTest {
       30,
       eventAuditService,
       3,
+      appConfig,
     )
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())

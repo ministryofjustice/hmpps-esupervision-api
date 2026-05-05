@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCollectionV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCaseV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNotificationV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
@@ -137,8 +138,9 @@ class CheckinV2Resource(
     @Parameter(description = "Snapshot content types", required = false)
     @RequestParam(name = "snapshots", required = false)
     snapshotContentTypes: List<String> = listOf("image/jpeg"),
+    @RequestBody(required = false) hashes: CheckinUploadHashesRequest?,
   ): ResponseEntity<UploadLocationsV2Response> {
-    val locations = checkinService.getUploadLocations(uuid, videoContentType, snapshotContentTypes)
+    val locations = checkinService.getUploadLocations(uuid, videoContentType, snapshotContentTypes, hashes)
     return ResponseEntity.ok(locations)
   }
 
