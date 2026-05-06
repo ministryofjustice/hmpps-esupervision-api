@@ -56,6 +56,22 @@ class RekognitionCompareFacesServiceTest {
   }
 
   @Test
+  fun `verifyCheckinImages - returns NO_MATCH with topSimilarity when faces detected but below threshold`() {
+    val images = createTestImages(snapshotCount = 1)
+    // Service asks AWS for threshold=0, so a 65 similarity face comes back in faceMatches;
+    // the NO_MATCH decision is made client-side against the 80 threshold.
+    val response = createMatchResponse(similarity = 65.0f)
+
+    whenever(asyncClient.compareFaces(any<Consumer<software.amazon.awssdk.services.rekognition.model.CompareFacesRequest.Builder>>()))
+      .thenReturn(CompletableFuture.completedFuture(response))
+
+    val result = service.verifyCheckinImages(images, 80.0f).join()
+
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
+    assertEquals(65.0f, result.topSimilarity)
+  }
+
+  @Test
   fun `verifyCheckinImages - returns NO_FACE_DETECTED with errorCode when InvalidParameterException thrown`() {
     val images = createTestImages(snapshotCount = 1)
     val exception = InvalidParameterException.builder()

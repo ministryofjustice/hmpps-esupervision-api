@@ -141,23 +141,27 @@ open class RekognitionCompareFacesService(
       comparisonCoord.key,
     )
 
+    // Ask AWS to return every candidate (similarity >= 0) rather than only ones at or above
+    // our confidence threshold. We then decide MATCH/NO_MATCH ourselves. This means a NO_MATCH
+    // result still carries the best below-threshold similarity score, which is useful for
+    // tuning the threshold and for monitoring near-misses.
     val future = asyncClient.compareFaces { builder ->
       builder
         .sourceImage(reference)
         .targetImage(comparison)
-        .similarityThreshold(requiredConfidence)
+        .similarityThreshold(0.0f)
     }
 
     return future.handle { response, throwable ->
       if (throwable != null) {
         handleComparisonError(throwable, referenceCoord, comparisonCoord, snapshotIndex)
       } else {
-        handleComparisonSuccess(response, snapshotIndex)
+        handleComparisonSuccess(response, requiredConfidence, snapshotIndex)
       }
     }
   }
 
-  private fun handleComparisonSuccess(response: CompareFacesResponse, snapshotIndex: Int): ComparisonResult {
+  private fun handleComparisonSuccess(response: CompareFacesResponse, requiredConfidence: Float, snapshotIndex: Int): ComparisonResult {
     // Debug logging for Rekognition response
     LOGGER.debug(
       "Rekognition response [{}] - sourceImageFace: boundingBox={}, confidence={}",
@@ -194,16 +198,19 @@ open class RekognitionCompareFacesService(
       )
     }
 
-    val isMatch = response.faceMatches().isNotEmpty()
+    // AWS returns all candidates (we ask for threshold=0); the MATCH/NO_MATCH decision
+    // is ours, against requiredConfidence.
     val topSimilarity = response.faceMatches().maxOfOrNull { it.similarity() }
+    val isMatch = topSimilarity != null && topSimilarity >= requiredConfidence
 
     LOGGER.info(
-      "Facial comparison result [{}]: isMatch={}, faceMatches={}, unmatchedFaces={}, topSimilarity={}",
+      "Facial comparison result [{}]: isMatch={}, faceMatches={}, unmatchedFaces={}, topSimilarity={}, threshold={}",
       snapshotIndex,
       isMatch,
       response.faceMatches().size,
       response.unmatchedFaces().size,
       topSimilarity,
+      requiredConfidence,
     )
 
     return ComparisonResult(

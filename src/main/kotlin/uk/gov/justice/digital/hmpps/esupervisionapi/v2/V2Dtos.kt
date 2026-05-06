@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -146,9 +147,11 @@ data class LivenessVerifyRequest(
 
 /** Client-side liveness failure report */
 data class LivenessClientFailureRequest(
+  @field:Size(max = 100, message = "state must be 100 characters or fewer")
   @Schema(
-    description = "Amplify FaceLivenessDetector error state (e.g. TIMEOUT, MULTIPLE_FACES_ERROR, CAMERA_ACCESS_ERROR). Free-form so we don't break if the SDK adds new states.",
+    description = "Amplify FaceLivenessDetector error state (e.g. TIMEOUT, MULTIPLE_FACES_ERROR, CAMERA_ACCESS_ERROR). Free-form so we don't break if the SDK adds new states. Capped at 100 characters.",
     required = false,
+    maxLength = 100,
   )
   val state: String? = null,
 )

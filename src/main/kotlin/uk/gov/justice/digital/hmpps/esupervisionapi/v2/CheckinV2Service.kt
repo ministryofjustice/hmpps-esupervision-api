@@ -478,6 +478,7 @@ class CheckinV2Service(
     checkin.livenessResult = null
     checkin.livenessConfidence = null
     checkin.autoIdCheck = null
+    checkin.autoIdCheckScore = null
     checkinRepository.save(checkin)
 
     val sessionId = awaitRekognition(
