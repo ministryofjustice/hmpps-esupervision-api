@@ -566,6 +566,49 @@ class CheckinV2ServiceTest {
 
     assertEquals(true, checkin.sensitive)
     verify(checkinRepository, never()).save(checkin)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true && comment == "Note"
+      },
+    )
+  }
+
+  @Test
+  fun `reviewCheckin - sensitive log entry stays true when check in was already marked as true`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+      sensitive = true,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.reviewCheckin(
+      uuid,
+      ReviewCheckinV2Request(
+        reviewedBy = "PRACT001",
+        manualIdCheck = ManualIdVerificationResult.MATCH,
+        notes = "Some note",
+        sensitive = false,
+      ),
+    )
+
+    assertEquals(true, checkin.sensitive)
+    assertEquals(true, result.sensitive)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true
+      },
+    )
   }
 
   @Test
