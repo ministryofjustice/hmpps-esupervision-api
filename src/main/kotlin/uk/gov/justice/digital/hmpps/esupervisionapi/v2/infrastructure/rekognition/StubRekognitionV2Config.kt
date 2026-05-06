@@ -49,13 +49,15 @@ class StubOffenderIdVerifier : OffenderIdVerifier {
   override fun verifyCheckinImages(
     snapshots: CheckinVerificationImages,
     requiredConfidence: Float,
-  ): CompletableFuture<AutomatedIdVerificationResult> {
+  ): CompletableFuture<FacialRecognitionOutcome> {
     LOGGER.info(
       "STUB: Returning MATCH for facial verification (reference={}, snapshots={})",
       snapshots.reference.key,
       snapshots.snapshots.size,
     )
-    return CompletableFuture.completedFuture(AutomatedIdVerificationResult.MATCH)
+    return CompletableFuture.completedFuture(
+      FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, topSimilarity = 99.5f),
+    )
   }
 
   companion object {
