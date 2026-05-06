@@ -333,10 +333,11 @@ class CheckinV2Service(
       }
 
     val reviewInfo = request.appliedTo(checkin)
+    val effectiveSensitive = checkin.sensitive || request.sensitive
     offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = reviewInfo.comment,
-        sensitive = request.sensitive,
+        sensitive = effectiveSensitive,
         createdAt = clock.instant(),
         logEntryType = reviewInfo.logEntryType,
         practitioner = request.reviewedBy,
@@ -352,9 +353,7 @@ class CheckinV2Service(
     checkin.reviewedBy = request.reviewedBy
     checkin.manualIdCheck = request.manualIdCheck
     checkin.riskFeedback = request.riskManagementFeedback
-    if (!checkin.sensitive && request.sensitive) {
-      checkin.sensitive = true
-    }
+    checkin.sensitive = effectiveSensitive
     checkinRepository.save(checkin)
 
     LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
@@ -386,14 +385,15 @@ class CheckinV2Service(
       )
     }
     // if check in was already marked as sensitive, it cannot be then marked as not sensitive
-    if (checkin.sensitive != true && request.sensitive == true) {
-      checkin.sensitive = true
+    val effectiveSensitive = checkin.sensitive || request.sensitive
+    if (checkin.sensitive != effectiveSensitive) {
+      checkin.sensitive = effectiveSensitive
       checkinRepository.save(checkin)
     }
     val annotation = offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = request.notes,
-        sensitive = request.sensitive,
+        sensitive = effectiveSensitive,
         createdAt = clock.instant(),
         logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
         practitioner = request.updatedBy,
