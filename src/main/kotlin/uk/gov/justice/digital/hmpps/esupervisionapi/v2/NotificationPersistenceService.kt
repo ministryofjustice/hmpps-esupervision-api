@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTemplateConfig
@@ -11,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContextV2
 import java.time.Clock
+import java.time.Duration
 import java.util.UUID
 
 /**
@@ -23,6 +25,7 @@ class NotificationPersistenceService(
   private val genericNotificationV2Repository: GenericNotificationV2Repository,
   private val transactionTemplate: TransactionTemplate,
   private val clock: Clock,
+  @Value("\${app.env}") val env: String,
 ) {
   /** Build notification records for offender (SMS and/or Email) */
   fun buildOffenderNotifications(
@@ -52,7 +55,7 @@ class NotificationPersistenceService(
           offender = offender,
           practitionerId = null,
           status = "created",
-          reference = NotificationContextV2.generateReference(notificationType, clock),
+          reference = NotificationContextV2.generateReference(notificationType, clock, env),
           createdAt = clock.instant(),
           errorMessage = null,
           templateId = smsTemplateId,
@@ -82,7 +85,7 @@ class NotificationPersistenceService(
           offender = offender,
           practitionerId = null,
           status = "created",
-          reference = NotificationContextV2.generateReference(notificationType, clock),
+          reference = NotificationContextV2.generateReference(notificationType, clock, env),
           createdAt = clock.instant(),
           errorMessage = null,
           templateId = emailTemplateId,
@@ -118,7 +121,7 @@ class NotificationPersistenceService(
     }
 
     val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
-    val reference = NotificationContextV2.generateReference(notificationType, clock)
+    val reference = NotificationContextV2.generateReference(notificationType, clock, env)
     val notification = GenericNotificationV2(
       notificationId = UUID.randomUUID(),
       eventType = notificationType.name,
