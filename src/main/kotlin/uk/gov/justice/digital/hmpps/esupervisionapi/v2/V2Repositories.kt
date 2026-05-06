@@ -594,7 +594,7 @@ class QuestionRepository(
    */
   fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
-      "select * from get_question_templates(?::text_language, ?)",
+      "select * from get_question_templates(?::text_language, ?) order by question_id",
       { rs, idx -> questionTemplateRowMapper(rs, idx) },
       language.dbString,
       author,
