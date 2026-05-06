@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
@@ -306,7 +307,6 @@ class CheckinV2Service(
       )
     }
 
-    // Persist result in a short write transaction
     checkin.autoIdCheck = outcome.result
     checkin.autoIdCheckScore = outcome.topSimilarity
     checkinRepository.save(checkin)
@@ -600,12 +600,7 @@ class CheckinV2Service(
   }
 
   /**
-   * Append a system-originated entry to [offender_event_log_v2] capturing a failed
-   * Rekognition attempt. The practitioner-facing checkin log filters by an explicit
-   * type-set and ignores these entries, so they don't surface in the timeline.
-   *
-   * Wrapped in try/catch + log so a logging failure can never break the user flow —
-   * the verification result must still surface, even if the audit row write fails.
+   * Append an entry to [offender_event_log_v2] capturing a failed Rekognition attempt.
    */
   private fun recordRekognitionFailure(
     checkin: OffenderCheckinV2,
@@ -673,41 +668,9 @@ class CheckinV2Service(
    * repository. The outer flow is: load → validate → Rekognition → S3 → face compare → persist.
    */
   fun verifyLiveness(uuid: UUID, sessionId: String): LivenessVerificationResponse {
-    val checkin =
-      checkinRepository.findByUuid(uuid).orElseThrow {
-        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-      }
+    val checkin = loadCheckinForLivenessVerify(uuid)
 
-    if (checkin.status != CheckinV2Status.CREATED) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin already submitted")
-    }
-
-    if (checkin.offender.status != OffenderStatus.VERIFIED) {
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Offender setup not completed - cannot perform liveness verification",
-      )
-    }
-
-    // Get liveness session results from Rekognition (slow I/O, no DB transaction held)
-    val livenessResult = awaitRekognition(
-      future = livenessSessionService.getSessionResults(sessionId),
-      action = "get liveness session results",
-      checkinUuid = uuid,
-      onFailure = { kind, errorCode, elapsedMs ->
-        recordRekognitionFailure(
-          checkin,
-          LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
-          attemptNotes(
-            "result" to failureResultLabel(kind),
-            "errorCode" to errorCode,
-            "action" to "get liveness session results",
-            "sessionId" to sessionId,
-            "elapsedMs" to elapsedMs,
-          ),
-        )
-      },
-    )
+    val livenessResult = fetchLivenessSessionResults(checkin, sessionId)
     val confidence = livenessResult.confidence()
     val isLive = confidence >= livenessConfidenceThreshold
     val livenessStatus = if (isLive) LivenessResult.LIVE else LivenessResult.NOT_LIVE
@@ -732,46 +695,13 @@ class CheckinV2Service(
       )
     }
 
-    // Extract the reference image bytes from the session
     val referenceImage = livenessResult.referenceImage()
     val imageBytes = referenceImage?.bytes()?.asByteArray()
     if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {
-      LOGGER.warn("Liveness session {} has no reference image for face comparison", sessionId)
-      recordRekognitionFailure(
-        checkin,
-        LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
-        attemptNotes(
-          "result" to AutomatedIdVerificationResult.ERROR.name,
-          "reason" to "no reference image from liveness session",
-          "sessionId" to sessionId,
-        ),
-      )
-      checkin.livenessResult = livenessStatus
-      checkin.livenessConfidence = confidence
-      checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
-      checkin.autoIdCheckScore = null
-      checkinRepository.save(checkin)
-      return LivenessVerificationResponse(
-        isLive = isLive,
-        livenessConfidence = confidence,
-        result = AutomatedIdVerificationResult.ERROR,
-      )
+      return handleMissingReferenceImage(checkin, sessionId, livenessStatus, confidence, isLive)
     }
 
-    // S3 uploads (slow I/O, no DB transaction held)
-    if (livenessResult.hasAuditImages()) {
-      livenessResult.auditImages().forEachIndexed { index, image ->
-        val auditBytes = image.bytes().asByteArray()
-        if (auditBytes != null && auditBytes.isNotEmpty()) {
-          s3UploadService.uploadCheckinSnapshot(checkin, index + 1, auditBytes, "image/jpeg")
-          LOGGER.info("Uploaded liveness audit image for checkin {} ({} bytes)", uuid, auditBytes.size)
-        }
-      }
-    }
-
-    // Upload reference image to S3 as checkin snapshot so compareFaces can access it
-    s3UploadService.uploadCheckinSnapshot(checkin, 0, imageBytes, "image/jpeg")
-    LOGGER.info("Uploaded liveness reference image for checkin {} ({} bytes)", uuid, imageBytes.size)
+    uploadLivenessImagesToS3(checkin, livenessResult, imageBytes)
 
     // Perform face comparison (slow I/O, no DB transaction held)
     val outcome = performFacialRecognition(checkin, numSnapshots = 1)
@@ -802,6 +732,109 @@ class CheckinV2Service(
       livenessConfidence = confidence,
       result = outcome.result,
     )
+  }
+
+  /**
+   * Load the checkin and assert it's in a state where liveness verification is meaningful:
+   * still CREATED (not already submitted) and the offender has completed setup.
+   */
+  private fun loadCheckinForLivenessVerify(uuid: UUID): OffenderCheckinV2 {
+    val checkin = checkinRepository.findByUuid(uuid).orElseThrow {
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    }
+    if (checkin.status != CheckinV2Status.CREATED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin already submitted")
+    }
+    if (checkin.offender.status != OffenderStatus.VERIFIED) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Offender setup not completed - cannot perform liveness verification",
+      )
+    }
+    return checkin
+  }
+
+  /**
+   * Fetch the Rekognition liveness session results, recording a liveness-failed audit row
+   * if the AWS call itself errors or times out.
+   */
+  private fun fetchLivenessSessionResults(
+    checkin: OffenderCheckinV2,
+    sessionId: String,
+  ): GetFaceLivenessSessionResultsResponse = awaitRekognition(
+    future = livenessSessionService.getSessionResults(sessionId),
+    action = "get liveness session results",
+    checkinUuid = checkin.uuid,
+    onFailure = { kind, errorCode, elapsedMs ->
+      recordRekognitionFailure(
+        checkin,
+        LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
+        attemptNotes(
+          "result" to failureResultLabel(kind),
+          "errorCode" to errorCode,
+          "action" to "get liveness session results",
+          "sessionId" to sessionId,
+          "elapsedMs" to elapsedMs,
+        ),
+      )
+    },
+  )
+
+  /**
+   * Handle the (rare) case where Rekognition succeeded but didn't return a reference image
+   * we can compare. We can't run face match, so persist liveness state, mark autoIdCheck
+   * as ERROR, and surface that to the UI.
+   */
+  private fun handleMissingReferenceImage(
+    checkin: OffenderCheckinV2,
+    sessionId: String,
+    livenessStatus: LivenessResult,
+    confidence: Float,
+    isLive: Boolean,
+  ): LivenessVerificationResponse {
+    LOGGER.warn("Liveness session {} has no reference image for face comparison", sessionId)
+    recordRekognitionFailure(
+      checkin,
+      LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
+      attemptNotes(
+        "result" to AutomatedIdVerificationResult.ERROR.name,
+        "reason" to "no reference image from liveness session",
+        "sessionId" to sessionId,
+      ),
+    )
+    checkin.livenessResult = livenessStatus
+    checkin.livenessConfidence = confidence
+    checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
+    checkin.autoIdCheckScore = null
+    checkinRepository.save(checkin)
+    return LivenessVerificationResponse(
+      isLive = isLive,
+      livenessConfidence = confidence,
+      result = AutomatedIdVerificationResult.ERROR,
+    )
+  }
+
+  /**
+   * Upload the liveness reference image (as snapshot 0, where compareFaces will read it)
+   * plus any audit images Rekognition returned. Slow I/O, intentionally outside any DB
+   * transaction.
+   */
+  private fun uploadLivenessImagesToS3(
+    checkin: OffenderCheckinV2,
+    livenessResult: GetFaceLivenessSessionResultsResponse,
+    referenceImageBytes: ByteArray,
+  ) {
+    if (livenessResult.hasAuditImages()) {
+      livenessResult.auditImages().forEachIndexed { index, image ->
+        val auditBytes = image.bytes().asByteArray()
+        if (auditBytes != null && auditBytes.isNotEmpty()) {
+          s3UploadService.uploadCheckinSnapshot(checkin, index + 1, auditBytes, "image/jpeg")
+          LOGGER.info("Uploaded liveness audit image for checkin {} ({} bytes)", checkin.uuid, auditBytes.size)
+        }
+      }
+    }
+    s3UploadService.uploadCheckinSnapshot(checkin, 0, referenceImageBytes, "image/jpeg")
+    LOGGER.info("Uploaded liveness reference image for checkin {} ({} bytes)", checkin.uuid, referenceImageBytes.size)
   }
 
   // ========================================
