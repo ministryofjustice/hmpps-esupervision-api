@@ -631,11 +631,17 @@ class CheckinV2Service(
    * FaceLivenessDetector raises onError before the session reaches Rekognition for
    * cases like CAMERA_ACCESS_ERROR, MULTIPLE_FACES_ERROR, TIMEOUT etc. — the server
    * never sees those otherwise.
+   *
+   * State validation matches sibling liveness endpoints: rejects calls against a
+   * non-CREATED checkin or an unverified offender, so a caller who knows a stale UUID
+   * can't add noise to a finished checkin's log.
+   *
+   * Note: this endpoint has no rate limiting (consistent with other liveness endpoints)
+   * — a misbehaving but authenticated session could spam rows. Blast radius is limited
+   * to that offender's own log entries; addressing this would be a project-wide change.
    */
   fun recordLivenessClientFailure(uuid: UUID, state: String?) {
-    val checkin = checkinRepository.findByUuid(uuid).orElseThrow {
-      ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-    }
+    val checkin = loadCheckinForLivenessVerify(uuid)
     recordRekognitionFailure(
       checkin,
       LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
