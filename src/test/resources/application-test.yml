@@ -1,4 +1,5 @@
 app:
+  env: "test-local"
   hostedAt: "http://localhost:3000"
   mpopUrl: "http://localhost-mpop:3000"
   checkinUrl: "http://localhost-checkin:3000"
