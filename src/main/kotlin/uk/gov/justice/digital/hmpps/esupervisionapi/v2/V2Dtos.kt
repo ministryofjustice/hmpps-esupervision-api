@@ -192,22 +192,6 @@ data class OffenderV2Dto(
   val personalDetails: ContactDetails? = null,
 )
 
-/** V2 Offender creation request */
-data class CreateOffenderV2Request(
-  @Schema(description = "Case Reference Number", required = true, example = "X123456")
-  @field:NotBlank
-  @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
-  val crn: String,
-  @Schema(description = "Practitioner ID", required = true)
-  @field:NotBlank
-  val practitionerId: ExternalUserId,
-  @Schema(description = "Date of first checkin", required = true)
-  @JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
-  @Schema(description = "Interval between checkins", required = true)
-  val checkinInterval: CheckinInterval,
-)
-
 // ========================================
 // V2 Offender Setup DTOs
 // ========================================
