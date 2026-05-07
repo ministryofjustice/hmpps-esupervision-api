@@ -111,13 +111,7 @@ class OffenderSetupV2Service(
       saved.uuid,
     )
 
-    return OffenderSetupV2Dto(
-      uuid = saved.uuid,
-      practitionerId = saved.practitionerId,
-      offenderUuid = saved.offender.uuid,
-      createdAt = saved.createdAt,
-      startedAt = saved.startedAt,
-    )
+    return saved.dto()
   }
 
   /**
