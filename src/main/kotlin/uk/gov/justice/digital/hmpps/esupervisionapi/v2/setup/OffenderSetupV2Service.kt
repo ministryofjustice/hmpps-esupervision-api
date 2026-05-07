@@ -328,4 +328,5 @@ private fun OffenderInfoInitial.toOffenderInfoV2(): OffenderInfoV2 = OffenderInf
   checkinInterval = checkinInterval,
   contactPreference = contactPreference,
   startedAt = startedAt,
+  eligibilityChoice = eligibilityChoice
 )

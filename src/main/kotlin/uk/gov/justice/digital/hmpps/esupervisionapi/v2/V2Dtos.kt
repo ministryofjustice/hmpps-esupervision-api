@@ -231,8 +231,8 @@ data class OffenderInfoV2(
   val contactPreference: ContactPreference,
   @get:Schema(description = "Setup start timestamp (optional)", required = false)
   val startedAt: Instant? = null,
-  @get:Schema(description = "Eligibility choice", required = true)
-  val eligibilityChoice: EligibilityChoice,
+  @get:Schema(description = "Eligibility choice", required = false)
+  val eligibilityChoice: EligibilityChoice?,
 )
 
 /**
