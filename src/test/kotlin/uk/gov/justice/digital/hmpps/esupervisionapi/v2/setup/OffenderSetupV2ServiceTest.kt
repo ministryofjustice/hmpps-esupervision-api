@@ -14,10 +14,11 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityChoice
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
@@ -75,12 +76,14 @@ class OffenderSetupV2ServiceTest {
     val practitionerId = "PRACT001"
     val firstCheckin = LocalDate.now(clock).plusDays(7)
 
-    val offenderInfo = OffenderInfoInitial(
+    val offenderInfo = OffenderInfoV2(
+      setupUuid = UUID.randomUUID(),
       practitionerId = practitionerId,
       crn = crn,
       firstCheckin = firstCheckin,
       checkinInterval = CheckinInterval.WEEKLY,
       contactPreference = ContactPreference.EMAIL,
+      eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
     )
 
     val savedOffender = OffenderV2(
@@ -96,23 +99,24 @@ class OffenderSetupV2ServiceTest {
       contactPreference = ContactPreference.EMAIL,
     )
 
-    val savedSetup = OffenderSetupV2(
-      uuid = UUID.randomUUID(),
+    val expectedSetup = OffenderSetupV2(
+      uuid = offenderInfo.setupUuid,
       offender = savedOffender,
       practitionerId = practitionerId,
       createdAt = clock.instant(),
-      startedAt = null,
+      startedAt = offenderInfo.startedAt,
+      eligibilityChoice = offenderInfo.eligibilityChoice,
     )
 
     whenever(offenderRepository.save(any())).thenReturn(savedOffender)
-    whenever(offenderSetupRepository.save(any())).thenReturn(savedSetup)
+    whenever(offenderSetupRepository.save(any())).thenReturn(expectedSetup)
 
     // When
     val result = service.startOffenderSetup(offenderInfo)
 
     // Then
     assertNotNull(result)
-    assertEquals(savedSetup.uuid, result.uuid)
+    assertEquals(offenderInfo.setupUuid, result.uuid)
     assertEquals(practitionerId, result.practitionerId)
     assertEquals(savedOffender.uuid, result.offenderUuid)
 
@@ -277,24 +281,29 @@ class OffenderSetupV2ServiceTest {
     )
 
     whenever(offenderSetupRepository.findByCrn(offender.crn)).thenReturn(Optional.of(setup))
+    whenever(offenderSetupRepository.save(any())).thenReturn(setup)
 
     val first = service.startOffenderSetup(
-      OffenderInfoInitial(
+      OffenderInfoV2(
+        setupUuid = UUID.randomUUID(),
         crn = offender.crn,
         practitionerId = "PRACT001",
         firstCheckin = offender.firstCheckin,
         checkinInterval = CheckinInterval.WEEKLY,
         contactPreference = offender.contactPreference,
+        eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
       ),
     )
 
     val second = service.startOffenderSetup(
-      OffenderInfoInitial(
+      OffenderInfoV2(
+        setupUuid = UUID.randomUUID(),
         crn = offender.crn,
         practitionerId = "PRACT001",
         firstCheckin = offender.firstCheckin,
         checkinInterval = CheckinInterval.WEEKLY,
         contactPreference = offender.contactPreference,
+        eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
       ),
     )
 
