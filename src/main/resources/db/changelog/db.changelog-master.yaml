@@ -111,3 +111,6 @@ databaseChangeLog:
       file: db/changelog/changesets/55_add_face_match_score_to_checkin_v2.sql
   - include:
       file: db/changelog/changesets/56_add_rekognition_log_entry_types.sql
+  - include:
+      file: db/changelog/changesets/57_add_eligibility_column.sql
+
