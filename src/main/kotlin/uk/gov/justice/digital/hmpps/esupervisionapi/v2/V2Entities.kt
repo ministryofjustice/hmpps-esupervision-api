@@ -103,6 +103,11 @@ open class OffenderV2(
   )
 }
 
+enum class EligibilityChoice {
+  REPLACE_F2F,
+  SUPPLEMENT_F2F,
+}
+
 /**
  * V2 Offender Setup Entity
  */
@@ -133,6 +138,9 @@ open class OffenderSetupV2(
 
   @Column(name = "setup_counter", nullable = false)
   open var setupCounter: Int = 1,
+
+  @Column(name = "eligibility_choice", nullable = true)
+  open var eligibilityChoice: EligibilityChoice? = null,
 ) : V2BaseEntity() {
   fun setupId(): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
 
@@ -146,6 +154,7 @@ open class OffenderSetupV2(
     offenderUuid = offender.uuid,
     createdAt = createdAt,
     startedAt = startedAt,
+    eligibilityChoice = eligibilityChoice,
   )
 }
 
