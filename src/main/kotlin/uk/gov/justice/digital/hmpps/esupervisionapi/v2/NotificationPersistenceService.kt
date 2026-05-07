@@ -12,7 +12,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContextV2
 import java.time.Clock
-import java.time.Duration
 import java.util.UUID
 
 /**
