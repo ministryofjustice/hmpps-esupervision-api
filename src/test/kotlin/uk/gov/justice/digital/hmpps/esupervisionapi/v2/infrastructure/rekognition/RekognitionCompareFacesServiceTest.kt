@@ -29,7 +29,7 @@ class RekognitionCompareFacesServiceTest {
   }
 
   @Test
-  fun `verifyCheckinImages - returns MATCH when faces match`() {
+  fun `verifyCheckinImages - returns MATCH and surfaces top similarity when faces match`() {
     val images = createTestImages(snapshotCount = 1)
     val response = createMatchResponse(similarity = 95.0f)
 
@@ -38,7 +38,8 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.MATCH, result.result)
+    assertEquals(95.0f, result.topSimilarity)
   }
 
   @Test
@@ -51,11 +52,27 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
   }
 
   @Test
-  fun `verifyCheckinImages - returns NO_FACE_DETECTED when InvalidParameterException thrown`() {
+  fun `verifyCheckinImages - returns NO_MATCH with topSimilarity when faces detected but below threshold`() {
+    val images = createTestImages(snapshotCount = 1)
+    // Service asks AWS for threshold=0, so a 65 similarity face comes back in faceMatches;
+    // the NO_MATCH decision is made client-side against the 80 threshold.
+    val response = createMatchResponse(similarity = 65.0f)
+
+    whenever(asyncClient.compareFaces(any<Consumer<software.amazon.awssdk.services.rekognition.model.CompareFacesRequest.Builder>>()))
+      .thenReturn(CompletableFuture.completedFuture(response))
+
+    val result = service.verifyCheckinImages(images, 80.0f).join()
+
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
+    assertEquals(65.0f, result.topSimilarity)
+  }
+
+  @Test
+  fun `verifyCheckinImages - returns NO_FACE_DETECTED with errorCode when InvalidParameterException thrown`() {
     val images = createTestImages(snapshotCount = 1)
     val exception = InvalidParameterException.builder()
       .message("No face detected in source image")
@@ -66,11 +83,12 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result)
+    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result.result)
+    assertEquals("InvalidParameterException", result.errorCode)
   }
 
   @Test
-  fun `verifyCheckinImages - returns ERROR when RekognitionException thrown`() {
+  fun `verifyCheckinImages - returns ERROR with errorCode when RekognitionException thrown`() {
     val images = createTestImages(snapshotCount = 1)
     val exception = RekognitionException.builder()
       .message("Service unavailable")
@@ -81,7 +99,8 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.ERROR, result)
+    assertEquals(AutomatedIdVerificationResult.ERROR, result.result)
+    assertEquals("RekognitionException", result.errorCode)
   }
 
   @Test
@@ -93,7 +112,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
   }
 
   @Test
@@ -110,7 +129,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.MATCH, result.result)
   }
 
   @Test
@@ -125,7 +144,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result)
+    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, result.result)
   }
 
   @Test
@@ -143,7 +162,7 @@ class RekognitionCompareFacesServiceTest {
 
     val result = service.verifyCheckinImages(images, 80.0f).join()
 
-    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result)
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, result.result)
   }
 
   private fun createTestImages(snapshotCount: Int) = CheckinVerificationImages(

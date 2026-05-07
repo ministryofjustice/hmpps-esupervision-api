@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -142,6 +143,17 @@ data class LivenessSessionResponse(
 data class LivenessVerifyRequest(
   @Schema(description = "Liveness session ID to verify", required = true)
   val sessionId: String,
+)
+
+/** Client-side liveness failure report */
+data class LivenessClientFailureRequest(
+  @field:Size(max = 100, message = "state must be 100 characters or fewer")
+  @Schema(
+    description = "Amplify FaceLivenessDetector error state (e.g. TIMEOUT, MULTIPLE_FACES_ERROR, CAMERA_ACCESS_ERROR). Free-form so we don't break if the SDK adds new states. Capped at 100 characters.",
+    required = false,
+    maxLength = 100,
+  )
+  val state: String? = null,
 )
 
 /** Liveness verification response */
@@ -311,6 +323,8 @@ data class CheckinV2Dto(
   val checkinStartedAt: Instant? = null,
   @field:Schema(description = "Auto ID check result", required = false)
   val autoIdCheck: AutomatedIdVerificationResult? = null,
+  @field:Schema(description = "Top similarity score (0-100) reported by Rekognition CompareFaces; null when no face detected or on error", required = false)
+  val autoIdCheckScore: Float? = null,
   @field:Schema(description = "Liveness check result (null for video-based check-ins)", required = false)
   val livenessResult: LivenessResult? = null,
   @field:Schema(description = "Liveness confidence score 0-100 (null for video-based check-ins)", required = false)

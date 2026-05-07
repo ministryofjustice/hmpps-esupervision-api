@@ -27,6 +27,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Reque
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.FacialRecognitionResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessClientFailureRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessSessionResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerificationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerifyRequest
@@ -212,6 +213,26 @@ class CheckinV2Resource(
   ): ResponseEntity<LivenessVerificationResponse> {
     val result = checkinService.verifyLiveness(uuid, request.sessionId)
     return ResponseEntity.ok(result)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/liveness/client-failure")
+  @Operation(
+    summary = "Record a client-side liveness failure",
+    description =
+    "Called by the browser when the AWS Amplify FaceLivenessDetector fails before " +
+      "the session reaches Rekognition (e.g. camera error, multiple faces, timeout). " +
+      "Records an OFFENDER_CHECKIN_LIVENESS_FAILED event so client-side failures are " +
+      "captured alongside server-side ones.",
+  )
+  @ApiResponse(responseCode = "204", description = "Failure recorded")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun recordLivenessClientFailure(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: LivenessClientFailureRequest,
+  ): ResponseEntity<Void> {
+    checkinService.recordLivenessClientFailure(uuid, request.state)
+    return ResponseEntity.noContent().build()
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
