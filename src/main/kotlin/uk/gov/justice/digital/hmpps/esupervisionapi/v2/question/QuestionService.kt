@@ -84,8 +84,9 @@ class QuestionService(
   fun upcomingAssignment(offender: OffenderV2): UpcomingQuestionAssignmentInfo {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender status is ${offender.status}" }
     val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
+    val today = clock.today()
     return UpcomingQuestionAssignmentInfo(
-      info?.dueDate ?: nextCheckinDay(offender, clock.today()),
+      info?.dueDate ?: if (isCheckinDay(offender, today)) today else nextCheckinDay(offender, today),
       info?.questionListId,
     )
   }

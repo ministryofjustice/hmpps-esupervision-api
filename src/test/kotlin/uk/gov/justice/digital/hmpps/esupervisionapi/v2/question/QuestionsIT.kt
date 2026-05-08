@@ -197,6 +197,50 @@ class QuestionsIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `QuestionService - no checkin, correct expected check in date returned`() {
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val dueDate = clock.today().plusDays(1)
+    val offender = offenderTemplate.copy(crn = "A000003", firstCheckin = dueDate).toEntity()
+    offenderV2Repository.save(offender)
+
+    // Day before due date
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    val assignment1 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    assertEquals(dueDate, assignment1.expectedCheckinDate)
+
+    clock.advanceBy(Duration.ofDays(1))
+
+    // Day = due date
+    val assignment2 = questionService.upcomingAssignment(offender)
+    assertEquals(dueDate, assignment2.expectedCheckinDate)
+
+    val upcomingList = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate, upcomingList.expectedCheckinDate)
+
+    val checkin = offenderCheckinService.createCheckinByCrn(
+      CreateCheckinByCrnV2Request(
+        "BARRY.WHITE",
+        offender.crn,
+        clock.today(),
+      ),
+    )
+
+    val upcomingListWithCheckin = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate, upcomingListWithCheckin.expectedCheckinDate)
+
+    clock.advanceBy(Duration.ofDays(1))
+
+    // Day = due date + 1 day
+    val upcomingDayAfterDueDate = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate, upcomingDayAfterDueDate.expectedCheckinDate)
+
+    offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
+
+    val upcomingAfterSubmission = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), upcomingAfterSubmission.expectedCheckinDate)
+  }
+
+  @Test
   fun `QuestionService - assign custom questions when prev checkin had custom qs - success`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
