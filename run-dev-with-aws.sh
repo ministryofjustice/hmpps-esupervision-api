@@ -29,6 +29,8 @@ export MPOP_URL=http://localhost:3001
 export AWS_S3_PROFILE=default
 export AWS_REKOGNITION_PROFILE=default
 
+export APP_ENV=local
+
 echo "✅ Environment variables set"
 echo "📦 Starting API with Gradle..."
 echo ""
