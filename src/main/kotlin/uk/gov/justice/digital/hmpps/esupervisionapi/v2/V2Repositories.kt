@@ -714,7 +714,8 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
 
   interface AssignmentInfo {
     val questionListId: Long
-    val dueDate: LocalDate?
+    val dueDate: LocalDate
+    val explicitAssignment: Boolean
   }
 
   @Query(
@@ -732,20 +733,13 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
 
   /**
-   * Returns list id if any, and a due date of already awaiting check-in, if any.
+   * In case of no explicit assignment, question list id will be set to the default list id.
    */
   @Query(
-    """
-      select qla.question_list_id, c.due_date
-      from question_list_assignment qla
-      left join offender_checkin_v2 c on qla.checkin_id = c.id
-      where qla.offender_id = :offenderId 
-      and (qla.checkin_id is null or c.status = 'CREATED')
-      limit 1
-  """,
+    """select * from get_upcoming_assignment_info(:offenderId, cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignmentAndDueDate(offenderId: Long): Optional<AssignmentInfo>
+  fun upcomingAssignmentAndDueDate(offenderId: Long, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.
