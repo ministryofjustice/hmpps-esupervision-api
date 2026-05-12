@@ -365,6 +365,8 @@ enum class LogEntryType {
   OFFENDER_CHECKIN_ANNOTATED,
   OFFENDER_CHECKIN_RESCHEDULED,
   OFFENDER_CHECKIN_OUTSIDE_ACCESS,
+  OFFENDER_CHECKIN_LIVENESS_FAILED,
+  OFFENDER_CHECKIN_FACE_MATCH_FAILED,
 }
 
 /**
@@ -599,7 +601,7 @@ class QuestionRepository(
    */
   fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
-      "select * from get_question_templates(?::text_language, ?)",
+      "select * from get_question_templates(?::text_language, ?) order by question_id",
       { rs, idx -> questionTemplateRowMapper(rs, idx) },
       language.dbString,
       author,
@@ -715,6 +717,11 @@ class QuestionRepository(
 @Repository
 interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignment, Long> {
 
+  interface AssignmentInfo {
+    val questionListId: Long
+    val dueDate: LocalDate?
+  }
+
   @Query(
     """
     insert into question_list_assignment (question_list_id, offender_id, checkin_id, updated_at)
@@ -729,14 +736,21 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   @Modifying
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
 
+  /**
+   * Returns list id if any, and a due date of already awaiting check-in, if any.
+   */
   @Query(
     """
-    select qla.question_list_id from question_list_assignment qla
-    where qla.offender_id = :offenderId and qla.checkin_id is null
+      select qla.question_list_id, c.due_date
+      from question_list_assignment qla
+      left join offender_checkin_v2 c on qla.checkin_id = c.id
+      where qla.offender_id = :offenderId 
+      and (qla.checkin_id is null or c.status = 'CREATED')
+      limit 1
   """,
     nativeQuery = true,
   )
-  fun upcomingAssignment(offenderId: Long): Long?
+  fun upcomingAssignmentAndDueDate(offenderId: Long): Optional<AssignmentInfo>
 
   /**
    * Returns the question list id for the checkin, if any.

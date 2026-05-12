@@ -108,6 +108,10 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/54_question_fixes.sql
   - include:
+      file: db/changelog/changesets/55_add_face_match_score_to_checkin_v2.sql
+  - include:
+      file: db/changelog/changesets/56_add_rekognition_log_entry_types.sql
+  - include:
       file: db/changelog/changesets/57_update_provider_month_mv.sql
   - include:
       file: db/changelog/changesets/58_update_monthly_feedback_mv.sql

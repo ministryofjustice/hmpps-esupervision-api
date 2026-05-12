@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -18,15 +20,21 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import software.amazon.awssdk.core.SdkBytes
+import software.amazon.awssdk.services.rekognition.model.AuditImage
+import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
+import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
@@ -39,9 +47,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.FacialRecognitionOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.S3ObjectCoordinate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.net.URI
 import java.time.Clock
@@ -70,6 +80,7 @@ class CheckinV2ServiceTest {
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
   private val eventAuditService: EventAuditV2Service = mock()
+  private val objectMapper = jacksonObjectMapper()
 
   private lateinit var service: CheckinV2Service
 
@@ -94,6 +105,7 @@ class CheckinV2ServiceTest {
       livenessConfidenceThreshold,
       30,
       eventAuditService,
+      objectMapper,
       3,
     )
 
@@ -566,6 +578,49 @@ class CheckinV2ServiceTest {
 
     assertEquals(true, checkin.sensitive)
     verify(checkinRepository, never()).save(checkin)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true && comment == "Note"
+      },
+    )
+  }
+
+  @Test
+  fun `reviewCheckin - sensitive log entry stays true when check in was already marked as true`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+      sensitive = true,
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.reviewCheckin(
+      uuid,
+      ReviewCheckinV2Request(
+        reviewedBy = "PRACT001",
+        manualIdCheck = ManualIdVerificationResult.MATCH,
+        notes = "Some note",
+        sensitive = false,
+      ),
+    )
+
+    assertEquals(true, checkin.sensitive)
+    assertEquals(true, result.sensitive)
+    verify(offenderEventLogRepository).save(
+      argThat {
+        sensitive == true
+      },
+    )
   }
 
   @Test
@@ -646,6 +701,7 @@ class CheckinV2ServiceTest {
       livenessResult = LivenessResult.NOT_LIVE,
       livenessConfidence = 42.0f,
       autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+      autoIdCheckScore = 71.4f,
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
@@ -658,6 +714,7 @@ class CheckinV2ServiceTest {
     assertNull(checkin.livenessResult)
     assertNull(checkin.livenessConfidence)
     assertNull(checkin.autoIdCheck)
+    assertNull(checkin.autoIdCheckScore)
   }
 
   @Test
@@ -675,6 +732,7 @@ class CheckinV2ServiceTest {
       livenessResult = LivenessResult.LIVE,
       livenessConfidence = 95.0f,
       autoIdCheck = AutomatedIdVerificationResult.MATCH,
+      autoIdCheckScore = 96.2f,
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
@@ -687,6 +745,347 @@ class CheckinV2ServiceTest {
     assertNull(checkin.livenessResult)
     assertNull(checkin.livenessConfidence)
     assertNull(checkin.autoIdCheck)
+    assertNull(checkin.autoIdCheckScore)
+  }
+
+  // ----- Failure logging via OffenderEventLogV2 -----
+
+  @Test
+  fun `recordLivenessClientFailure - writes a CLIENT_ERROR row carrying the Amplify state`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    service.recordLivenessClientFailure(uuid, "MULTIPLE_FACES_ERROR")
+
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED &&
+          notes["result"] == "CLIENT_ERROR" &&
+          notes["state"] == "MULTIPLE_FACES_ERROR"
+      },
+    )
+  }
+
+  @Test
+  fun `recordLivenessClientFailure - omits state from comment JSON when null`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    service.recordLivenessClientFailure(uuid, null)
+
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED &&
+          notes["result"] == "CLIENT_ERROR" &&
+          !notes.containsKey("state")
+      },
+    )
+  }
+
+  @Test
+  fun `recordLivenessClientFailure - throws NOT_FOUND when checkin does not exist`() {
+    val uuid = UUID.randomUUID()
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.empty())
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.recordLivenessClientFailure(uuid, "TIMEOUT")
+    }
+    assertEquals(HttpStatus.NOT_FOUND, ex.statusCode)
+    verify(offenderEventLogRepository, never()).save(any())
+  }
+
+  @Test
+  fun `recordLivenessClientFailure - rejects a checkin that's already submitted`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid).apply { status = CheckinV2Status.SUBMITTED }
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.recordLivenessClientFailure(uuid, "TIMEOUT")
+    }
+    assertEquals(HttpStatus.BAD_REQUEST, ex.statusCode)
+    verify(offenderEventLogRepository, never()).save(any())
+  }
+
+  @Test
+  fun `verifyFace - MATCH persists score and writes no failure row`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    stubFaceMatchPrereqs(checkin)
+    whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
+      .thenReturn(CompletableFuture.completedFuture(FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, topSimilarity = 95.5f)))
+
+    service.verifyFace(uuid, numSnapshots = 1)
+
+    assertEquals(AutomatedIdVerificationResult.MATCH, checkin.autoIdCheck)
+    assertEquals(95.5f, checkin.autoIdCheckScore)
+    verify(offenderEventLogRepository, never()).save(any())
+  }
+
+  @Test
+  fun `verifyFace - NO_MATCH persists score and writes a failure row with similarity in comment`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    stubFaceMatchPrereqs(checkin)
+    whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
+      .thenReturn(CompletableFuture.completedFuture(FacialRecognitionOutcome(AutomatedIdVerificationResult.NO_MATCH, topSimilarity = 67.3f)))
+
+    service.verifyFace(uuid, numSnapshots = 1)
+
+    assertEquals(AutomatedIdVerificationResult.NO_MATCH, checkin.autoIdCheck)
+    assertEquals(67.3f, checkin.autoIdCheckScore)
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED &&
+          notes["result"] == "NO_MATCH" &&
+          notesNumber(notes, "similarity") == 67.3f
+      },
+    )
+  }
+
+  @Test
+  fun `verifyFace - NO_FACE_DETECTED writes a failure row carrying the AWS errorCode`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    stubFaceMatchPrereqs(checkin)
+    whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
+      .thenReturn(
+        CompletableFuture.completedFuture(
+          FacialRecognitionOutcome(
+            AutomatedIdVerificationResult.NO_FACE_DETECTED,
+            topSimilarity = null,
+            errorCode = "InvalidParameterException",
+          ),
+        ),
+      )
+
+    service.verifyFace(uuid, numSnapshots = 1)
+
+    assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, checkin.autoIdCheck)
+    assertNull(checkin.autoIdCheckScore)
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED &&
+          notes["result"] == "NO_FACE_DETECTED" &&
+          notes["errorCode"] == "InvalidParameterException"
+      },
+    )
+  }
+
+  @Test
+  fun `verifyFace - ERROR writes a failure row carrying the AWS errorCode`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    stubFaceMatchPrereqs(checkin)
+    whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
+      .thenReturn(
+        CompletableFuture.completedFuture(
+          FacialRecognitionOutcome(AutomatedIdVerificationResult.ERROR, topSimilarity = null, errorCode = "ThrottlingException"),
+        ),
+      )
+
+    service.verifyFace(uuid, numSnapshots = 1)
+
+    assertEquals(AutomatedIdVerificationResult.ERROR, checkin.autoIdCheck)
+    assertNull(checkin.autoIdCheckScore)
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED &&
+          notes["result"] == "ERROR" &&
+          notes["errorCode"] == "ThrottlingException"
+      },
+    )
+  }
+
+  @Test
+  fun `verifyLiveness - NOT_LIVE writes a liveness failure row carrying the confidence`() {
+    val uuid = UUID.randomUUID()
+    val sessionId = "session-abc"
+    val checkin = createCreatedCheckin(uuid, livenessEnabled = true)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(livenessSessionService.getSessionResults(sessionId))
+      .thenReturn(CompletableFuture.completedFuture(buildLivenessResponse(sessionId, confidence = 42.5f, withReferenceImage = true)))
+    stubFaceMatchPrereqs(checkin)
+    whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
+      .thenReturn(CompletableFuture.completedFuture(FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, topSimilarity = 95.0f)))
+
+    service.verifyLiveness(uuid, sessionId)
+
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED &&
+          notes["result"] == "NOT_LIVE" &&
+          notesNumber(notes, "confidence") == 42.5f &&
+          notes["sessionId"] == sessionId
+      },
+    )
+  }
+
+  @Test
+  fun `verifyLiveness - non-MATCH face match writes a face-match failure row`() {
+    val uuid = UUID.randomUUID()
+    val sessionId = "session-xyz"
+    val checkin = createCreatedCheckin(uuid, livenessEnabled = true)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(livenessSessionService.getSessionResults(sessionId))
+      .thenReturn(CompletableFuture.completedFuture(buildLivenessResponse(sessionId, confidence = 99.0f, withReferenceImage = true)))
+    stubFaceMatchPrereqs(checkin)
+    whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
+      .thenReturn(
+        CompletableFuture.completedFuture(
+          FacialRecognitionOutcome(AutomatedIdVerificationResult.NO_MATCH, topSimilarity = 51.2f),
+        ),
+      )
+
+    service.verifyLiveness(uuid, sessionId)
+
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED &&
+          notes["result"] == "NO_MATCH" &&
+          notesNumber(notes, "similarity") == 51.2f &&
+          notes["sessionId"] == sessionId
+      },
+    )
+    assertEquals(51.2f, checkin.autoIdCheckScore)
+  }
+
+  @Test
+  fun `verifyLiveness - missing reference image writes a face-match failure row and persists ERROR`() {
+    val uuid = UUID.randomUUID()
+    val sessionId = "session-no-img"
+    val checkin = createCreatedCheckin(uuid, livenessEnabled = true)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(livenessSessionService.getSessionResults(sessionId))
+      .thenReturn(CompletableFuture.completedFuture(buildLivenessResponse(sessionId, confidence = 99.0f, withReferenceImage = false)))
+
+    val response = service.verifyLiveness(uuid, sessionId)
+
+    assertEquals(AutomatedIdVerificationResult.ERROR, response.result)
+    assertEquals(AutomatedIdVerificationResult.ERROR, checkin.autoIdCheck)
+    assertNull(checkin.autoIdCheckScore)
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED &&
+          notes["result"] == "ERROR" &&
+          notes["reason"] == "no reference image from liveness session" &&
+          notes["sessionId"] == sessionId
+      },
+    )
+  }
+
+  @Test
+  fun `verifyLiveness - Rekognition error during getSessionResults writes a liveness failure row before propagating`() {
+    val uuid = UUID.randomUUID()
+    val sessionId = "session-bad"
+    val checkin = createCreatedCheckin(uuid, livenessEnabled = true)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    val rekogError = RekognitionException.builder().message("Service unavailable").build()
+    whenever(livenessSessionService.getSessionResults(sessionId))
+      .thenReturn(CompletableFuture.failedFuture(rekogError))
+
+    assertThrows(ResponseStatusException::class.java) {
+      service.verifyLiveness(uuid, sessionId)
+    }
+
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED &&
+          notes["result"] == "ERROR" &&
+          notes["action"] == "get liveness session results" &&
+          notes["sessionId"] == sessionId
+      },
+    )
+  }
+
+  @Test
+  fun `createLivenessSession - Rekognition error writes a liveness failure row before propagating`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    val rekogError = RekognitionException.builder().message("Throttled").build()
+    whenever(livenessSessionService.createSession())
+      .thenReturn(CompletableFuture.failedFuture(rekogError))
+
+    assertThrows(ResponseStatusException::class.java) {
+      service.createLivenessSession(uuid)
+    }
+
+    verify(offenderEventLogRepository).save(
+      argThat<OffenderEventLogV2> {
+        val notes = parseNotes(comment)
+        logEntryType == LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED &&
+          notes["result"] == "ERROR" &&
+          notes["action"] == "create liveness session"
+      },
+    )
+  }
+
+  // ----- Failure-logging test helpers -----
+
+  private fun createCreatedCheckin(uuid: UUID, livenessEnabled: Boolean = false) = OffenderCheckinV2(
+    uuid = uuid,
+    offender = createOffender(),
+    status = CheckinV2Status.CREATED,
+    dueDate = LocalDate.now(clock),
+    createdAt = clock.instant(),
+    createdBy = "SYSTEM",
+    livenessEnabled = livenessEnabled,
+  )
+
+  /** Mock just enough of `findByUuid` and S3 prereqs to let `performFacialRecognition` reach the verifier. */
+  private fun stubFaceMatchPrereqs(checkin: OffenderCheckinV2) {
+    whenever(checkinRepository.findByUuid(checkin.uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(s3UploadService.isCheckinSnapshotUploaded(eq(checkin), any())).thenReturn(true)
+    whenever(s3UploadService.isSetupPhotoUploaded(eq(checkin.offender))).thenReturn(true)
+    whenever(s3UploadService.setupPhotoObjectCoordinate(eq(checkin.offender)))
+      .thenReturn(S3ObjectCoordinate("bucket", "setup.jpg"))
+    whenever(s3UploadService.checkinObjectCoordinate(eq(checkin), any()))
+      .thenReturn(S3ObjectCoordinate("bucket", "snapshot.jpg"))
+    whenever(s3UploadService.uploadCheckinSnapshot(eq(checkin), any(), any(), any()))
+      .thenReturn(S3ObjectCoordinate("bucket", "uploaded.jpg"))
+  }
+
+  /** Parse the JSON the service writes into the comment column so assertions can match on keys/values. */
+  private fun parseNotes(comment: String): Map<String, Any?> = objectMapper.readValue(comment)
+
+  /**
+   * Pull a numeric value out of parsed notes as a Float. Jackson reads JSON numbers as Double
+   * by default; converting back to Float makes comparison with the original Float values clean
+   * even when the decimal isn't exactly representable in binary (e.g. 51.2f).
+   */
+  private fun notesNumber(notes: Map<String, Any?>, key: String): Float? = (notes[key] as? Number)?.toFloat()
+
+  private fun buildLivenessResponse(
+    sessionId: String,
+    confidence: Float,
+    withReferenceImage: Boolean,
+  ): GetFaceLivenessSessionResultsResponse {
+    val builder = GetFaceLivenessSessionResultsResponse.builder()
+      .sessionId(sessionId)
+      .confidence(confidence)
+      .status("SUCCEEDED")
+    if (withReferenceImage) {
+      // Tiny non-empty byte array — the service only checks isEmpty().
+      builder.referenceImage(AuditImage.builder().bytes(SdkBytes.fromByteArray(byteArrayOf(1, 2, 3))).build())
+    }
+    return builder.build()
   }
 
   private fun createOffender() = OffenderV2(

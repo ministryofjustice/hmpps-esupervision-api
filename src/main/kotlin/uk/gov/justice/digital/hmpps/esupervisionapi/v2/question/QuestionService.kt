@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
@@ -14,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestionList
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListItemDto
@@ -29,8 +31,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
+import java.time.Duration
 import java.util.UUID
 import kotlin.collections.emptyMap
+import kotlin.jvm.optionals.getOrNull
 
 @Service
 @Validated
@@ -41,6 +45,7 @@ class QuestionService(
   private val checkinService: CheckinV2Service,
   private val checkinRepository: OffenderCheckinV2Repository,
   private val clock: Clock,
+  @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) {
 
   private val crnRegex = Regex("[A-Z]\\d{6}")
@@ -52,7 +57,7 @@ class QuestionService(
   fun offenderQuestionList(listId: Long, language: Language): OffenderQuestionList {
     require(listId > 0)
 
-    val questions = questionsRepository.getListItems(listId).map { it.evalTemplate() }
+    val questions = questionsRepository.getListItems(listId, language).map { it.evalTemplate() }
     return OffenderQuestionList(listId, questions)
   }
 
@@ -67,7 +72,7 @@ class QuestionService(
       throw BadArgumentException("Offender status is ${offender.status}")
     }
 
-    val upcoming = upcomingAssignment(crn)
+    val upcoming = upcomingAssignment(offender)
     val items = if (upcoming.questionList != null) questionsRepository.getListItems(upcoming.questionList, language) else questionsRepository.defaultListItems(language)
     return UpcomingQuestionListItems(upcoming.expectedCheckinDate, items)
   }
@@ -76,22 +81,13 @@ class QuestionService(
    * Returns a minimal set of information about the upcoming question list assignment.
    */
   @Transactional(readOnly = true)
-  fun upcomingAssignment(crn: CRN): UpcomingQuestionAssignmentInfo {
-    require(crn.matches(crnRegex))
-    val offender = offenderRepository.findByCrn(crn).orElseThrow { BadArgumentException("Offender not found for CRN=$crn") }
-    if (offender.status != OffenderStatus.VERIFIED) {
-      throw BadArgumentException("Offender status is ${offender.status}")
-    }
-
-    val listId = questionListAssignmentRepository.upcomingAssignment(offender.id)
+  fun upcomingAssignment(offender: OffenderV2): UpcomingQuestionAssignmentInfo {
+    require(offender.status == OffenderStatus.VERIFIED) { "Offender status is ${offender.status}" }
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
     val today = clock.today()
-    val checkinDay = isCheckinDay(offender, today)
-    val checkinForTodayExists = if (checkinDay) checkinRepository.existsByOffenderAndDueDate(offender, today) else null
-    val nextCheckinDay = if (checkinForTodayExists == false) today else nextCheckinDay(offender, today)
-
     return UpcomingQuestionAssignmentInfo(
-      nextCheckinDay,
-      listId,
+      info?.dueDate ?: if (isCheckinDay(offender, today)) today else nextCheckinDay(offender, today),
+      info?.questionListId,
     )
   }
 
@@ -112,8 +108,9 @@ class QuestionService(
     if (offender.status != OffenderStatus.VERIFIED) {
       throw BadArgumentException("Can't add question to offender with status ${offender.status}")
     }
-    val maybeCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
-    if (maybeCheckin.isEmpty && isCheckinDay(offender, clock.today())) {
+    val today = clock.today()
+    val checkin = checkinRepository.findByOffenderAndDueDate(offender, today).getOrNull()
+    if ((checkin == null && isCheckinDay(offender, today)) || (checkin != null && checkin.status == CheckinV2Status.CREATED)) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
@@ -136,7 +133,7 @@ class QuestionService(
       throw BadArgumentException("Too late to assign questions. Checkin possibly CREATED for offender=$crn: firstCheckin=${offender.firstCheckin}, interval=${offender.checkinInterval}")
     }
 
-    return AssignCustomQuestionsResponse(nextCheckinDay(offender, clock.today()), listId)
+    return AssignCustomQuestionsResponse(nextCheckinDay(offender, today), listId)
   }
 
   @Transactional
