@@ -49,6 +49,13 @@ app:
     migration-event-replay:
       cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
       batch-size: 50
+    # One-off cleanup of legacy checkin S3 assets (ESUP-1770 + pre-liveness videos).
+    # Disabled by default. Enable per env, observe with dry-run=true, flip dry-run off,
+    # then disable again.
+    checkin-legacy-cleanup:
+      enabled: ${CHECKIN_LEGACY_CLEANUP_ENABLED:false}
+      dry-run: ${CHECKIN_LEGACY_CLEANUP_DRY_RUN:true}
+      cron: ${CHECKIN_LEGACY_CLEANUP_CRON:0 */15 * * * *}
   features:
     # publish media proxy links to NDelius
     esup-1239: true
