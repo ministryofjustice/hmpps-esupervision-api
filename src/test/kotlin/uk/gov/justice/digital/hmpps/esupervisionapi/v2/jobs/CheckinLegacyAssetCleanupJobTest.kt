@@ -33,14 +33,11 @@ class CheckinLegacyAssetCleanupJobTest {
     on { saveAndFlush(any<JobLogV2>()) } doAnswer { it.arguments[0] as JobLogV2 }
   }
 
-  private fun job(s3: S3Client, dryRun: Boolean = false) =
-    CheckinLegacyAssetCleanupJob(clock, s3, jobLogRepository, bucket, dryRun)
+  private fun job(s3: S3Client, dryRun: Boolean = false) = CheckinLegacyAssetCleanupJob(clock, s3, jobLogRepository, bucket, dryRun)
 
-  private fun version(key: String, versionId: String = "v1") =
-    ObjectVersion.builder().key(key).versionId(versionId).build()
+  private fun version(key: String, versionId: String = "v1") = ObjectVersion.builder().key(key).versionId(versionId).build()
 
-  private fun deleteMarker(key: String, versionId: String = "dm1") =
-    DeleteMarkerEntry.builder().key(key).versionId(versionId).build()
+  private fun deleteMarker(key: String, versionId: String = "dm1") = DeleteMarkerEntry.builder().key(key).versionId(versionId).build()
 
   private fun listPage(
     versions: List<ObjectVersion> = emptyList(),

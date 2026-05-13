@@ -60,7 +60,9 @@ class CheckinLegacyAssetCleanupJob(
     val logEntry = jobLogRepository.saveAndFlush(JobLogV2(jobType = "V2_CHECKIN_LEGACY_CLEANUP", createdAt = started))
     LOGGER.info(
       "Checkin Legacy Asset Cleanup Job(id={}) started: bucket={}, dryRun={}",
-      logEntry.id, bucket, dryRun,
+      logEntry.id,
+      bucket,
+      dryRun,
     )
 
     var total = Stats(0, 0L, 0L, 0L, 0L)
@@ -69,7 +71,13 @@ class CheckinLegacyAssetCleanupJob(
         val stats = cleanupCheckinFile(filename)
         LOGGER.info(
           "Checkin Legacy Asset Cleanup Job(id={}) filename={} pages={} scanned={} matched={} deleted={} failed={}",
-          logEntry.id, filename, stats.pages, stats.scanned, stats.matched, stats.deleted, stats.failed,
+          logEntry.id,
+          filename,
+          stats.pages,
+          stats.scanned,
+          stats.matched,
+          stats.deleted,
+          stats.failed,
         )
         total += stats
       }
@@ -122,7 +130,10 @@ class CheckinLegacyAssetCleanupJob(
           matched++
           batch += ObjectIdentifier.builder().key(v.key()).versionId(v.versionId()).build()
           if (batch.size >= BATCH_SIZE) {
-            val (ok, ko) = flushBatch(batch); deleted += ok; failed += ko; batch.clear()
+            val (ok, ko) = flushBatch(batch)
+            deleted += ok
+            failed += ko
+            batch.clear()
           }
         }
       }
@@ -132,7 +143,10 @@ class CheckinLegacyAssetCleanupJob(
           matched++
           batch += ObjectIdentifier.builder().key(dm.key()).versionId(dm.versionId()).build()
           if (batch.size >= BATCH_SIZE) {
-            val (ok, ko) = flushBatch(batch); deleted += ok; failed += ko; batch.clear()
+            val (ok, ko) = flushBatch(batch)
+            deleted += ok
+            failed += ko
+            batch.clear()
           }
         }
       }
@@ -143,7 +157,10 @@ class CheckinLegacyAssetCleanupJob(
     }
 
     if (batch.isNotEmpty()) {
-      val (ok, ko) = flushBatch(batch); deleted += ok; failed += ko; batch.clear()
+      val (ok, ko) = flushBatch(batch)
+      deleted += ok
+      failed += ko
+      batch.clear()
     }
 
     return Stats(pages, scanned, matched, deleted, failed)
