@@ -52,6 +52,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.offender.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.offender.isPastSubmissionDate
 import uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.Practitioner
 import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.RekognitionCompareFacesService
+import uk.gov.justice.digital.hmpps.esupervisionapi.rekognition.S3ObjectCoordinate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinReviewRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CheckinUploadLocationResponse
@@ -159,6 +160,11 @@ class OffenderCheckinTest : IntegrationTestBase() {
       .thenAnswer { URL("https://mock-s3/checkin-snapshot-${counter.incrementAndGet()}}") }
     Mockito.`when`(s3UploadService.getOffenderPhoto(any()))
       .thenAnswer { URL("https://mock-s3/offender-photo-${counter.incrementAndGet()}}") }
+    Mockito.`when`(s3UploadService.checkinObjectCoordinate(any(), Mockito.anyInt()))
+      .thenAnswer { invocation ->
+        val index = invocation.getArgument<Int>(1)
+        S3ObjectCoordinate(bucket = "mock-bucket", key = "checkin/$index")
+      }
 
     reset(domainEventPublisher)
   }
