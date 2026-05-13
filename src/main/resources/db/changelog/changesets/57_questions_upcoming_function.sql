@@ -20,8 +20,7 @@ BEGIN
             SELECT qla.question_list_id, qla.offender_id, qla.checkin_id AS assigned_checkin,
                    c.id AS checkin, c.due_date
             FROM question_list_assignment qla
-                     JOIN offender_v2 o ON qla.offender_id = o.id
-                     LEFT JOIN offender_checkin_v2 c ON qla.checkin_id = c.id
+            LEFT JOIN offender_checkin_v2 c ON qla.checkin_id = c.id
             WHERE qla.offender_id = p_offender_id
               AND (qla.checkin_id IS NULL OR c.status = 'CREATED')
             ORDER BY qla.created_at DESC
