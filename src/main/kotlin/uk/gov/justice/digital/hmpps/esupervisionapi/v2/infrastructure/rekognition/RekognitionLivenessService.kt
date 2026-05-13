@@ -35,7 +35,7 @@ open class RekognitionLivenessService(
 
     val settings = CreateFaceLivenessSessionRequestSettings.builder()
       .challengePreferences(movementOnly)
-      .auditImagesLimit(1)
+      .auditImagesLimit(0)
       .build()
 
     val request = CreateFaceLivenessSessionRequest.builder().settings(settings).build()
