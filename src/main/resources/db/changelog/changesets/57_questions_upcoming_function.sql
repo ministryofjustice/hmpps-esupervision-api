@@ -44,7 +44,7 @@ BEGIN
               AND c.status = 'CREATED'::offender_checkin_status_v2)
                OR (((p_next_checkin_date - c.due_date) < p_checkin_window_days)
                    AND MOD(c.due_date - the_offender.first_checkin,
-                           EXTRACT(DAY FROM the_offender.checkin_interval)) = 0)
+                           (EXTRACT(EPOCH FROM the_offender.checkin_interval)) / 86400) = 0)
             ORDER BY c.created_at DESC
             LIMIT 1
         )
