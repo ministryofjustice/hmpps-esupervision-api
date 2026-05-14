@@ -189,10 +189,10 @@ class EventAuditV2Service(
   fun OffenderCheckinV2.toAudit(event: CheckinAuditEventType, contactDetails: ContactDetails): EventAuditV2 {
     val checkin = this
     return when (event) {
-      CheckinAuditEventType.CHECKIN_CREATED -> buildAudit("CHECKIN_CREATED", checkin.offender, contactDetails, checkin, notes = "Created by scheduled job")
+      CheckinAuditEventType.CHECKIN_CREATED -> buildAudit(event.name, checkin.offender, contactDetails, checkin, notes = "Created by scheduled job")
 
       CheckinAuditEventType.CHECKIN_SUBMITTED -> buildAudit(
-        "CHECKIN_SUBMITTED",
+        event.name,
         checkin.offender,
         contactDetails,
         checkin,
@@ -208,7 +208,7 @@ class EventAuditV2Service(
           null
         }
         buildAudit(
-          CheckinAuditEventType.CHECKIN_REVIEWED.name,
+          event.name,
           checkin.offender,
           contactDetails,
           checkin,
@@ -221,7 +221,7 @@ class EventAuditV2Service(
       }
 
       CheckinAuditEventType.CHECKIN_EXPIRED -> buildAudit(
-        CheckinAuditEventType.CHECKIN_EXPIRED.name,
+        event.name,
         checkin.offender,
         contactDetails,
         checkin,
@@ -229,7 +229,7 @@ class EventAuditV2Service(
       )
 
       CheckinAuditEventType.CHECKIN_REMINDER -> buildAudit(
-        CheckinAuditEventType.CHECKIN_REMINDER.name,
+        event.name,
         checkin.offender,
         contactDetails,
         checkin,
