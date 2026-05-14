@@ -113,7 +113,7 @@ class EventAuditV2Service(
 
   private fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderV2, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
     if (contactDetails?.practitioner == null) {
-      LOGGER.warn("Cannot record audit for setup {}: practitioner details not found", offender.crn)
+      LOGGER.warn("Cannot record audit event {} for CRN {}: practitioner details not found", eventType.name,  offender.crn)
       return
     }
 
