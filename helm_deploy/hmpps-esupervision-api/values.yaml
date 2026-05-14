@@ -47,7 +47,6 @@ generic-service:
 
     hmpps-esupervision-rekog-aws:
       REKOG_AWS_REGION: 'region'
-      REKOG_S3_DATA_BUCKET: 'bucket_name'
 
     hmpps-esupervision-rekog-role:
       REKOG_ROLE_ARN: 'role_arn'
