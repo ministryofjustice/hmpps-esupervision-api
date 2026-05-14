@@ -26,6 +26,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -250,7 +251,8 @@ class OffenderV2ResourceTest {
 
     assertEquals(HttpStatus.OK, result.statusCode)
 
-    verify(eventAuditV2Service).recordOffenderDeactivated(
+    verify(eventAuditV2Service).recordOffenderEvent(
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
       eq(offender),
       eq(contactDetails),
       eq("Safety concerns disclosed"),
@@ -279,7 +281,8 @@ class OffenderV2ResourceTest {
 
     resource.deactivateOffender(uuid, request)
 
-    verify(eventAuditV2Service).recordOffenderDeactivated(
+    verify(eventAuditV2Service).recordOffenderEvent(
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
       eq(offender),
       eq(contactDetails),
       eq("Standard deactivation"),

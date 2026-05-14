@@ -45,7 +45,7 @@ class EventAuditV2Service(
   /**
    * Record setup completed event
    */
-  fun recordSetupCompleted(offender: OffenderV2, contactDetails: ContactDetails?) = recordOffenderEvent(OffenderAuditEventType.SETUP_COMPLETED, offender, contactDetails, null, sensitive = true)
+  fun recordSetupCompleted(offender: OffenderV2, contactDetails: ContactDetails?) = recordOffenderEvent(OffenderAuditEventType.SETUP_COMPLETED, offender, contactDetails, null, sensitive = false)
 
   fun recordCheckinEvent(event: CheckinAuditEventType, checkin: OffenderCheckinV2, contactDetails: ContactDetails?) {
     if (contactDetails?.practitioner == null) {
@@ -111,7 +111,7 @@ class EventAuditV2Service(
    */
   fun recordCheckinReminded(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) = recordCheckinEvents(CheckinAuditEventType.CHECKIN_REMINDER, checkins)
 
-  private fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderV2, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
+  fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderV2, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
     if (contactDetails?.practitioner == null) {
       LOGGER.warn("Cannot record audit event {} for CRN {}: practitioner details not found", eventType.name, offender.crn)
       return
@@ -121,16 +121,8 @@ class EventAuditV2Service(
       transactionTemplate.execute { auditRepository.save(offender.toAudit(eventType, contactDetails, notes, sensitive)) }
       LOGGER.info("Recorded {} event audit for offender {}", eventType.name, offender.crn)
     } catch (e: Exception) {
-      LOGGER.error("Failed to record {} audit event for CRN={}: {}", eventType, offender.crn, PiiSanitizer.sanitizeException(e, offender.crn))
+      LOGGER.error("Failed to record {} audit event for CRN={}: {}", eventType.name, offender.crn, PiiSanitizer.sanitizeException(e, offender.crn))
     }
-  }
-
-  fun recordOffenderDeactivated(offender: OffenderV2, contactDetails: ContactDetails, notes: String, sensitive: Boolean = false) {
-    recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, contactDetails, notes, sensitive)
-  }
-
-  fun recordOffenderReactivated(offender: OffenderV2, contactDetails: ContactDetails, notes: String) {
-    recordOffenderEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, offender, contactDetails, notes)
   }
 
   private fun buildAudit(
@@ -170,7 +162,7 @@ class EventAuditV2Service(
     sensitive = sensitive,
   )
 
-  fun OffenderV2.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails, notes: String?, sensitive: Boolean = false): EventAuditV2 {
+  private fun OffenderV2.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails, notes: String?, sensitive: Boolean = false): EventAuditV2 {
     val offender = this
     return when (eventType) {
       OffenderAuditEventType.SETUP_COMPLETED,
@@ -186,7 +178,7 @@ class EventAuditV2Service(
     }
   }
 
-  fun OffenderCheckinV2.toAudit(event: CheckinAuditEventType, contactDetails: ContactDetails): EventAuditV2 {
+  private fun OffenderCheckinV2.toAudit(event: CheckinAuditEventType, contactDetails: ContactDetails): EventAuditV2 {
     val checkin = this
     return when (event) {
       CheckinAuditEventType.CHECKIN_CREATED -> buildAudit(event.name, checkin.offender, contactDetails, checkin, notes = "Created by scheduled job")
