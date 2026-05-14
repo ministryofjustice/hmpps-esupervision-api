@@ -643,6 +643,30 @@ open class MigrationControl(
 ) : V2BaseEntity()
 
 @Entity
+@Table(
+  name = "setup_event_backfill_v2",
+  indexes = [
+    Index(name = "idx_setup_event_backfill_v2_offender", columnList = "offender_id", unique = true),
+  ],
+)
+open class SetupEventBackfillV2(
+  @Column(name = "offender_id", nullable = false, unique = true)
+  open var offenderId: Long,
+
+  @Column(name = "setup_row_created", nullable = false)
+  open var setupRowCreated: Boolean = false,
+
+  @Column(name = "event_sent", nullable = false)
+  open var eventSent: Boolean = false,
+
+  @Column(name = "event_sent_at", nullable = true)
+  open var eventSentAt: Instant? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var createdAt: Instant,
+) : V2BaseEntity()
+
+@Entity
 @Table(name = "migration_events_to_send")
 open class MigrationEventsToSend(
   @Column()
