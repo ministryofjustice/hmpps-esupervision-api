@@ -3,16 +3,17 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
-import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -25,16 +26,20 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinScheduleLowerBound
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
@@ -42,11 +47,12 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
-import kotlin.jvm.optionals.getOrNull
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestClockConfiguration::class)
-class QuestionsIT : IntegrationTestBase() {
+class QuestionsIT(
+  @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+) : IntegrationTestBase() {
 
   @Autowired lateinit var questionRepository: QuestionRepository
 
@@ -148,6 +154,8 @@ class QuestionsIT : IntegrationTestBase() {
   fun `Checkin status change causes assignment update`() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderV2Repository.save(offender)
+    val defaultListId = questionListItemRepository.findDefaultListId()
+    assertNotNull(defaultListId)
 
     val templates = questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     assertEquals(1, templates.size)
@@ -160,7 +168,7 @@ class QuestionsIT : IntegrationTestBase() {
 
     val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnV2Request("BARRY.WHITE", offender.crn, clock.today()))
     val assignment = questionService.upcomingAssignment(offender)
-    assertNotNull(assignment.questionList, "*Upcoming* assignment should not flip to null after a checkin is created")
+    assertNotEquals(defaultListId, assignment.questionList, "Upcoming assignment should not flip to default list immediately after a checkin is created")
 
     val checkinEntity = offenderCheckinV2Repository.findByUuid(checkin.uuid)
     val checkinQuestions = questionListAssignmentRepository.checkinAssignment(checkinEntity.get().id)
@@ -173,7 +181,7 @@ class QuestionsIT : IntegrationTestBase() {
     offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
 
     val assignmentAfterSubmission = questionService.upcomingAssignment(offender)
-    assertNull(assignmentAfterSubmission.questionList, "Upcoming assignment should flip to null after a checkin is submitted")
+    assertEquals(defaultListId, assignmentAfterSubmission.questionList, "Upcoming assignment should flip to default list after a checkin is submitted")
   }
 
   @Test
@@ -197,6 +205,40 @@ class QuestionsIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `QuestionService - submitted checkin on due date, correct expected check in date returned`() {
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val dueDate = clock.today().plusDays(1)
+    val offender = offenderTemplate.copy(crn = "A000003", firstCheckin = dueDate).toEntity()
+    offenderV2Repository.save(offender)
+
+    // Day before due date
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+
+    clock.advanceBy(Duration.ofDays(1))
+
+    // Day = due date
+    val checkin = offenderCheckinService.debugCreateCheckin(offender, clock)
+    val upcomingListWithCheckin = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate, upcomingListWithCheckin.expectedCheckinDate)
+
+    offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
+
+    val upcomingAfterSubmission = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), upcomingAfterSubmission.expectedCheckinDate)
+
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    // assertNull(info.dueDate)
+    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), info.dueDate)
+
+    clock.advanceBy(Duration.ofDays(1))
+
+    // Day = due date + 1 day
+    val upcomingDayAfterDueDate = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), upcomingDayAfterDueDate.expectedCheckinDate)
+  }
+
+  @Test
   fun `QuestionService - no checkin, correct expected check in date returned`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val dueDate = clock.today().plusDays(1)
@@ -217,14 +259,7 @@ class QuestionsIT : IntegrationTestBase() {
     val upcomingList = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate, upcomingList.expectedCheckinDate)
 
-    val checkin = offenderCheckinService.createCheckinByCrn(
-      CreateCheckinByCrnV2Request(
-        "BARRY.WHITE",
-        offender.crn,
-        clock.today(),
-      ),
-    )
-
+    val checkin = offenderCheckinService.debugCreateCheckin(offender, clock)
     val upcomingListWithCheckin = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate, upcomingListWithCheckin.expectedCheckinDate)
 
@@ -241,11 +276,39 @@ class QuestionsIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `QuestionService - submitted previous checkin, correct expected check in date returned`() {
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val offender = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(1)).toEntity()
+    offenderV2Repository.save(offender)
+
+    clock.advanceBy(Duration.ofDays(1))
+
+    // Day = 1st due date
+    val checkin1 = offenderCheckinService.debugCreateCheckin(offender, clock)
+    offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
+
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+
+    clock.advanceBy(offender.checkinInterval)
+
+    // Day = 2nd due date
+    val nextDueDate = nextCheckinDay(offender, clock.today(), CheckinScheduleLowerBound.INCLUDE_TODAY)
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, nextDueDate, checkinWindow.toDays())
+    assertEquals(nextDueDate, info.dueDate)
+
+    val assignment = questionService.upcomingAssignment(offender)
+    assertEquals(nextDueDate, assignment.expectedCheckinDate)
+  }
+
+  @Test
   fun `QuestionService - assign custom questions when prev checkin had custom qs - success`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    val defaultListId = questionListItemRepository.findDefaultListId()
 
     // ----- DAY 1
+    val dueDate = clock.today()
     val offender = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today()).toEntity()
     offenderV2Repository.save(offender)
 
@@ -254,34 +317,22 @@ class QuestionsIT : IntegrationTestBase() {
       questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
     }
 
-    val checkin1 = offenderCheckinService.createCheckinByCrn(
-      CreateCheckinByCrnV2Request(
-        "BARRY.WHITE",
-        offender.crn,
-        clock.today(),
-      ),
-    )
+    val checkin1 = offenderCheckinService.debugCreateCheckin(offender, clock)
     clock.advanceBy(Duration.ofHours(1))
-    val submission1 = offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
+    offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
 
     val assignment1 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
+    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
     assertNotNull(upcoming1)
     assertEquals(assignment1.listId, upcoming1.questionListId)
 
     // ----- DAY 2
     clock.advanceBy(Duration.ofDays(1))
-    val checkin2 = offenderCheckinService.createCheckinByCrn(
-      CreateCheckinByCrnV2Request(
-        "BARRY.WHITE",
-        offender.crn,
-        clock.today(),
-      ),
-    )
+    val checkin2 = offenderCheckinService.debugCreateCheckin(offender, clock)
     // the assignment should have the checkin set
-    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
-    assertNotNull(upcoming2, "Assignment should be present until checkin2 is submitted: $upcoming2")
+    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
     assertEquals(assignment1.listId, upcoming2.questionListId)
+    assertNotEquals(defaultListId, upcoming2.questionListId)
 
     assertThrows(BadArgumentException::class.java, {
       questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
@@ -292,13 +343,13 @@ class QuestionsIT : IntegrationTestBase() {
     assertEquals(upcoming2.questionListId, upcoming3.questionList)
 
     val submission2 = offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinV2Request(mapOf("version" to "whatever")))
-    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
-    assertNull(upcoming4)
+    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    assertEquals(defaultListId, upcoming4.questionListId)
 
     val assignment2 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
-    assertNotNull(assignment2.listId)
-    assertEquals(assignment2.listId, upcoming5?.questionListId)
+    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    assertNotEquals(defaultListId, upcoming5.questionListId)
+    assertEquals(assignment2.listId, upcoming5.questionListId)
   }
 
   @Test
@@ -343,4 +394,12 @@ private fun makeAssignCustomQuestionsRequest(
     dto.placeholders().forEach { paramsPlaceholders[it] = "$it value $index" }
     CustomQuestionItem(id = dto.id, params = mapOf("placeholders" to paramsPlaceholders))
   },
+)
+
+private fun CheckinV2Service.debugCreateCheckin(offender: OffenderV2, clock: Clock): CheckinV2Dto = this.createCheckinByCrn(
+  CreateCheckinByCrnV2Request(
+    "BARRY.WHITE",
+    offender.crn,
+    clock.today(),
+  ),
 )

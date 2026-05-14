@@ -49,10 +49,20 @@ fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
  * But I'd like this function to not require an extra DB call (to see if the checkin already exists). So we will
  * assume that today is excluded from the possible "next checkin day."
  */
-fun nextCheckinDay(offender: CheckinSchedule, today: LocalDate): LocalDate {
-  if (today < offender.firstCheckin) return offender.firstCheckin
+fun nextCheckinDay(schedule: CheckinSchedule, today: LocalDate): LocalDate {
+  if (today < schedule.firstCheckin) return schedule.firstCheckin
 
-  val days = offender.firstCheckin.until(today, ChronoUnit.DAYS)
-  val rem = days % offender.checkinInterval.toDays()
-  return today.plusDays(offender.checkinInterval.toDays() - rem)
+  val days = schedule.firstCheckin.until(today, ChronoUnit.DAYS)
+  val rem = days % schedule.checkinInterval.toDays()
+  return today.plusDays(schedule.checkinInterval.toDays() - rem)
+}
+
+enum class CheckinScheduleLowerBound {
+  INCLUDE_TODAY,
+  EXCLUDE_TODAY,
+}
+
+fun nextCheckinDay(schedule: CheckinSchedule, today: LocalDate, bounds: CheckinScheduleLowerBound): LocalDate = when (bounds) {
+  CheckinScheduleLowerBound.EXCLUDE_TODAY -> nextCheckinDay(schedule, today)
+  CheckinScheduleLowerBound.INCLUDE_TODAY -> nextCheckinDay(schedule, today.minusDays(1))
 }

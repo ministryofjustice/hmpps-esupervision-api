@@ -25,6 +25,8 @@ class DebugQuestionsRepository(
     return jdbcTemplate.query(sql, rowMapper, id).firstOrNull()
   }
 
+  fun findDefaultListId(): Long? = jdbcTemplate.queryForObject("SELECT id FROM question_list WHERE author = 'SYSTEM' AND name = 'Default'", Long::class.java)
+
   private val rowMapper = org.springframework.jdbc.core.RowMapper { rs, _ ->
     QuestionListItem(
       questionList = rs.getLong("question_list_id"),
