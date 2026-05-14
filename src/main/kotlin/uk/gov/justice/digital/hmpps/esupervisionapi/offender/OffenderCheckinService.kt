@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.offender
 
 import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
@@ -78,7 +77,6 @@ class OffenderCheckinService(
   private val s3UploadService: S3UploadService,
   private val notificationService: NotificationService,
   private val notificationRepository: CheckinNotificationRepository,
-  @Qualifier("rekognitionS3") private val rekogS3UploadService: S3UploadService,
   private val compareFacesService: OffenderIdVerifier,
   @Value("\${app.scheduling.checkin-notification.window:72h}") val checkinWindow: Duration,
   @Value("\${rekognition.face-similarity.threshold}") val faceSimilarityThreshold: Float,
@@ -289,11 +287,11 @@ class OffenderCheckinService(
 
   fun getCheckinVerificationImages(checkin: OffenderCheckin, numSnapshots: Int): CheckinVerificationImages {
     // reference image is at index 0
-    val reference = rekogS3UploadService.checkinObjectCoordinate(checkin, 0)
+    val reference = s3UploadService.checkinObjectCoordinate(checkin, 0)
 
     // snapshot locations are at index 1 to numSnapshots+1
     val snapshots = (1..numSnapshots).map {
-      rekogS3UploadService.checkinObjectCoordinate(checkin, it)
+      s3UploadService.checkinObjectCoordinate(checkin, it)
     }
 
     return CheckinVerificationImages(reference, snapshots)
@@ -331,8 +329,8 @@ class OffenderCheckinService(
     validateCheckinUpdatable(checkin)
     val urls = mutableListOf<URL>()
     for (index in indices) {
-      val rekogUrl = rekogS3UploadService.generatePresignedUploadUrl(checkin, contentType, index, duration)
-      urls.add(rekogUrl)
+      val url = s3UploadService.generatePresignedUploadUrl(checkin, contentType, index, duration)
+      urls.add(url)
     }
     return urls
   }
@@ -498,33 +496,11 @@ class OffenderCheckinService(
         try {
           LOG.info("updating checking with automated id check result: {}, checkin={}", result, checkinUuid)
           checkin.autoIdCheck = result
-          val saved = checkinRepository.saveAndFlush(checkin)
-          copySnapshotsOutOfRekognition(saved)
+          checkinRepository.saveAndFlush(checkin)
         } catch (e: Exception) {
           LOG.error("Failed to persist async verification result for checkin={} (will not retry)", checkinUuid, e)
         }
       }
-  }
-
-  /**
-   * As of 11 Aug 2025, the Rekognition service and related S3 data are accessed through
-   * a different set of credentials than the MOJ S3 bucket. For ID verification,
-   * the client uploaded the data straight to Rekog bucket (using presigned URLs).
-   * We now want to copy the video frames used for verification back to MOJ bucket
-   * where it will be accessed by practitioners via the checkin details page.
-   */
-  private fun copySnapshotsOutOfRekognition(checkin: OffenderCheckin) {
-    try {
-      val url = rekogS3UploadService.getCheckinSnapshot(checkin, true)
-      if (url != null) {
-        s3UploadService.copyFromPresignedGet(url, s3UploadService.checkinObjectCoordinate(checkin, 1))
-      } else {
-        LOG.info("no video snapshot URL for checkin={}", checkin.uuid)
-      }
-    } catch (e: Exception) {
-      // the images are used only for presentation, we can proceed if copy fails
-      LOG.warn("Failed to copy checkin snapshots to image bucket, checkin={}", checkin.uuid, e)
-    }
   }
 
   fun checkinEvent(uuid: UUID, request: CheckinEventRequest): UUID {
