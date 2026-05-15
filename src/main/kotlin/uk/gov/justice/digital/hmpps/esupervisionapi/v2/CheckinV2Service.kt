@@ -707,7 +707,7 @@ class CheckinV2Service(
       return handleMissingReferenceImage(checkin, sessionId, livenessStatus, confidence, isLive)
     }
 
-    uploadLivenessImagesToS3(checkin, livenessResult, imageBytes)
+    uploadLivenessImagesToS3(checkin, imageBytes)
 
     // Perform face comparison (slow I/O, no DB transaction held)
     val outcome = performFacialRecognition(checkin, numSnapshots = 1)
@@ -821,24 +821,13 @@ class CheckinV2Service(
   }
 
   /**
-   * Upload the liveness reference image (as snapshot 0, where compareFaces will read it)
-   * plus any audit images Rekognition returned. Slow I/O, intentionally outside any DB
-   * transaction.
+   * Upload the liveness reference image as snapshot 0, where compareFaces will read it.
+   * Slow I/O, intentionally outside any DB transaction.
    */
   private fun uploadLivenessImagesToS3(
     checkin: OffenderCheckinV2,
-    livenessResult: GetFaceLivenessSessionResultsResponse,
     referenceImageBytes: ByteArray,
   ) {
-    if (livenessResult.hasAuditImages()) {
-      livenessResult.auditImages().forEachIndexed { index, image ->
-        val auditBytes = image.bytes().asByteArray()
-        if (auditBytes != null && auditBytes.isNotEmpty()) {
-          s3UploadService.uploadCheckinSnapshot(checkin, index + 1, auditBytes, "image/jpeg")
-          LOGGER.info("Uploaded liveness audit image for checkin {} ({} bytes)", checkin.uuid, auditBytes.size)
-        }
-      }
-    }
     s3UploadService.uploadCheckinSnapshot(checkin, 0, referenceImageBytes, "image/jpeg")
     LOGGER.info("Uploaded liveness reference image for checkin {} ({} bytes)", checkin.uuid, referenceImageBytes.size)
   }

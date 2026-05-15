@@ -31,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -218,7 +219,7 @@ class OffenderV2Resource(
       LOGGER.info("Cancelled ${pendingCheckins.size} created/pending check ins for CRN ${saved.crn} due to offender deactivation")
     }
 
-    recordOffenderAuditEvent("OFFENDER_DEACTIVATED", offender, request.reason, request.sensitive)
+    recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, request.reason, request.sensitive)
 
     val photoUrl = getOffenderPhotoUrl(saved)
 
@@ -331,7 +332,7 @@ class OffenderV2Resource(
       request.reason,
     )
 
-    recordOffenderAuditEvent("OFFENDER_REACTIVATED", savedOffender, request.reason)
+    recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, savedOffender, request.reason)
     return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
   }
 
@@ -395,8 +396,8 @@ class OffenderV2Resource(
     }
   }
 
-  private fun recordOffenderAuditEvent(eventType: String, offender: OffenderV2, reason: String, sensitive: Boolean = false) {
-    assert(eventType in listOf("OFFENDER_DEACTIVATED", "OFFENDER_REACTIVATED"))
+  private fun recordOffenderAuditEvent(eventType: OffenderAuditEventType, offender: OffenderV2, reason: String, sensitive: Boolean = false) {
+    assert(eventType in listOf(OffenderAuditEventType.OFFENDER_DEACTIVATED, OffenderAuditEventType.OFFENDER_REACTIVATED))
     var contactDetails: ContactDetails? = null
     try {
       contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
@@ -404,10 +405,7 @@ class OffenderV2Resource(
       // exception already logged and sanitised elswhere
       LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
     }
-    when (eventType) {
-      "OFFENDER_DEACTIVATED" -> eventAuditService.recordOffenderDeactivated(offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
-      "OFFENDER_REACTIVATED" -> eventAuditService.recordOffenderReactivated(offender, contactDetails ?: missingDetails(offender.crn), reason)
-    }
+    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {
