@@ -113,3 +113,5 @@ databaseChangeLog:
       file: db/changelog/changesets/56_add_rekognition_log_entry_types.sql
   - include:
       file: db/changelog/changesets/57_questions_upcoming_function.sql
+  - include:
+      file: db/changelog/changesets/58_add_checkin_legacy_cleanup_job_enum.sql
