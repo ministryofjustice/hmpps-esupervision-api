@@ -20,7 +20,7 @@ generic-service:
     MPOP_URL: "https://manage-people-on-probation-dev.hmpps.service.justice.gov.uk"
     POP_UI_URL: "https://probation-check-in-dev.hmpps.service.justice.gov.uk"
     APP_ENV: "DEV"
-    APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
+    APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "0 */15 * * * *"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_ENABLED: "false"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_CRON: "-"
     APP_SCHEDULING_OFFENDER_CHECKIN_EXPIRY_CRON: "-"
