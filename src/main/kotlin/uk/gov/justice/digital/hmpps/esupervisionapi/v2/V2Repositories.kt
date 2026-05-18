@@ -558,6 +558,27 @@ interface StatsSummaryProviderMonthRepository : JpaRepository<StatsSummaryProvid
 }
 
 @Repository
+interface SetupEventBackfillV2Repository : JpaRepository<SetupEventBackfillV2, Long> {
+  @Query(
+    """
+    SELECT b FROM SetupEventBackfillV2 b
+    WHERE b.setupRowCreated = false
+    ORDER BY b.id
+    """,
+  )
+  fun findPendingSetupRowCreation(pageable: Pageable): List<SetupEventBackfillV2>
+
+  @Query(
+    """
+    SELECT b FROM SetupEventBackfillV2 b
+    WHERE b.eventSent = false
+    ORDER BY b.id
+    """,
+  )
+  fun findPendingEventSend(pageable: Pageable): List<SetupEventBackfillV2>
+}
+
+@Repository
 interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
 
 @Repository

@@ -65,7 +65,7 @@ databaseChangeLog:
       file: db/changelog/changesets/32_drop_monthly_feedback_fk.sql
   - include: 
       file: db/changelog/changesets/33_add_provider_to_monthly_stats.sql
-  - include: 
+  - include:
       file: db/changelog/changesets/34_update_refresh_monthly_stats_for_provider.sql
   - include: 
       file: db/changelog/changesets/35_update_stats_summary_mv_add_provider_rows.sql
@@ -115,3 +115,5 @@ databaseChangeLog:
       file: db/changelog/changesets/57_questions_upcoming_function.sql
   - include:
       file: db/changelog/changesets/58_add_checkin_legacy_cleanup_job_enum.sql
+  - include:
+      file: db/changelog/changesets/59_setup_event_backfill_v2.sql
