@@ -21,7 +21,7 @@ generic-service:
     POP_UI_URL: "https://probation-check-in-preprod.hmpps.service.justice.gov.uk"
     NDILIUS_API_URL: "https://esupervision-and-delius-preprod.hmpps.service.justice.gov.uk"
     APP_ENV: "PREPROD"
-    APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
+    APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "0 * * * * *"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_ENABLED: "false"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_CRON: "-"
     APP_SCHEDULING_V2_CHECKIN_REMINDER_CRON: "-"
