@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -10,12 +11,12 @@ import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.FacialRecognitionOutcome
@@ -382,8 +383,15 @@ class CheckinV2Service(
 
     eventAuditService.recordCheckinReviewed(checkin, contactDetails)
 
-    val videoUrl = s3UploadService.getCheckinVideo(checkin)
+    LOGGER.info("Manual ID check : {} by {}", uuid, request.reviewedBy)
+    if (checkin.manualIdCheck == ManualIdVerificationResult.MATCH) {
+      s3UploadService.deleteCheckinSnapshot(uuid, 0)
+      s3UploadService.deleteCheckinVideo(uuid)
+      return checkin.dto(contactDetails, null, null, clock = clock, checkinWindow = checkinWindowPeriod)
+    }
+
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
+    val videoUrl = s3UploadService.getCheckinVideo(checkin)
     return checkin.dto(contactDetails, videoUrl, snapshotUrl, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
@@ -1054,7 +1062,7 @@ class CheckinV2Service(
     practitionerId: ExternalUserId,
     offenderUuid: UUID?,
     useCase: CheckinListUseCaseV2?,
-    pageRequest: org.springframework.data.domain.PageRequest,
+    pageRequest: PageRequest,
   ): CheckinCollectionV2Response {
     val page =
       when (useCase) {
