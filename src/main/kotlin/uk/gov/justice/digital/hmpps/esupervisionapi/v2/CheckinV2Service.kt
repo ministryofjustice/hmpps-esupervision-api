@@ -1,16 +1,18 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -50,16 +52,18 @@ class CheckinV2Service(
   private val compareFacesService: OffenderIdVerifier,
   private val livenessSessionService: LivenessSessionService,
   private val livenessCredentialsService: LivenessCredentialsProvider,
-  @Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
-  @Value("\${rekognition.face-similarity.threshold:90.0}")
+  private val checkinPersistenceService: CheckinPersistenceService,
+  private val transactionTemplate: TransactionTemplate,
+  @param:Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
+  @param:Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
-  @Value("\${rekognition.liveness.confidence-threshold:90.0}")
+  @param:Value("\${rekognition.liveness.confidence-threshold:90.0}")
   private val livenessConfidenceThreshold: Float,
-  @Value("\${rekognition.call-timeout-seconds:30}")
+  @param:Value("\${rekognition.call-timeout-seconds:30}")
   private val rekognitionCallTimeoutSeconds: Long,
   private val eventAuditService: EventAuditV2Service,
   private val objectMapper: ObjectMapper,
-  @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
+  @param:Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
 ) {
 
@@ -200,13 +204,24 @@ class CheckinV2Service(
   }
 
   /** Submit checkin with survey responses */
-  @Transactional
   fun submitCheckin(uuid: UUID, request: SubmitCheckinV2Request): CheckinV2Dto {
-    val checkin =
-      checkinRepository.findByUuid(uuid).orElseThrow {
-        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-      }
+    val maybeCheckin = checkinPersistenceService.findCheckin(uuid)
+    val checkin = validateCheckinForSubmission(uuid, maybeCheckin)
+    checkin.applyRequest(request, clock)
 
+    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val event = checkin.toCheckinSubmittedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    checkinPersistenceService.submitCheckinPersist(checkin, event)
+
+    LOGGER.info("Checkin submitted: {}, submission started at {}", uuid, checkin.checkinStartedAt)
+    return event.checkin
+  }
+
+  /**
+   * Returns the validated value or throws.
+   */
+  private fun validateCheckinForSubmission(uuid: UUID, maybeCheckin: OffenderCheckinV2?): OffenderCheckinV2 {
+    val checkin = maybeCheckin ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
     if (checkin.status != CheckinV2Status.CREATED) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't submit checkin with status: ${checkin.status}")
     }
@@ -219,28 +234,7 @@ class CheckinV2Service(
     if (!checkin.livenessEnabled && !s3UploadService.isCheckinVideoUploaded(checkin)) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Video not uploaded")
     }
-
-    // Note: Facial recognition should be called via /video/verify endpoint BEFORE submit
-    // This matches V1 behavior where facial recognition was a separate explicit step
-    // The result is stored in checkin.autoIdCheck by verifyFace()
-
-    // Update checkin
-    checkin.surveyResponse = request.survey
-    checkin.submittedAt = clock.instant()
-    checkin.status = CheckinV2Status.SUBMITTED
-    checkinRepository.save(checkin)
-
-    LOGGER.info("Checkin submitted: {}, submission started at {}", uuid, checkin.checkinStartedAt)
-
-    // Send notifications
-    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    if (contactDetails != null) {
-      notificationService.sendCheckinSubmittedNotifications(checkin, contactDetails)
-    }
-
-    eventAuditService.recordCheckinSubmitted(checkin, contactDetails)
-
-    return checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    return checkin
   }
 
   /**
@@ -248,11 +242,10 @@ class CheckinV2Service(
    * video/snapshot upload but before checkin submission Allows user to see result and re-record if
    * NO_MATCH
    *
-   * @param numSnapshots Number of snapshots to compare against setup photo (default 1)
-   */
-  /**
    * This method is intentionally NOT @Transactional. The Rekognition call is done outside
    * any DB transaction, and the result is persisted via a single short write at the end.
+   *
+   * @param numSnapshots Number of snapshots to compare against setup photo (default 1)
    */
   fun verifyFace(uuid: UUID, numSnapshots: Int = 1): FacialRecognitionResult {
     val checkin =
@@ -343,56 +336,29 @@ class CheckinV2Service(
   }
 
   /** Complete checkin review */
-  @Transactional
   fun reviewCheckin(uuid: UUID, request: ReviewCheckinV2Request): CheckinV2Dto {
-    val checkin =
-      checkinRepository.findByUuid(uuid).orElseThrow {
-        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-      }
-
-    val reviewInfo = request.appliedTo(checkin)
-    val effectiveSensitive = checkin.sensitive || request.sensitive
-    offenderEventLogRepository.save(
-      OffenderEventLogV2(
-        comment = reviewInfo.comment,
-        sensitive = effectiveSensitive,
-        createdAt = clock.instant(),
-        logEntryType = reviewInfo.logEntryType,
-        practitioner = request.reviewedBy,
-        uuid = UUID.randomUUID(),
-        checkin = checkin.id,
-        offender = checkin.offender,
-      ),
-    )
-
-    // Update checkin
-    checkin.status = reviewInfo.newStatus
-    checkin.reviewedAt = clock.instant()
-    checkin.reviewedBy = request.reviewedBy
-    checkin.manualIdCheck = request.manualIdCheck
-    checkin.riskFeedback = request.riskManagementFeedback
-    checkin.sensitive = effectiveSensitive
-    checkinRepository.save(checkin)
-
-    LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
-
-    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    if (contactDetails != null) {
-      notificationService.sendCheckinReviewedNotifications(checkin, contactDetails)
+    val checkin = checkinPersistenceService.findCheckin(uuid) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    if (checkin.status != CheckinV2Status.SUBMITTED && checkin.status != CheckinV2Status.EXPIRED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin must be submitted or expired before being reviewed. Current status: ${checkin.status}")
     }
 
-    eventAuditService.recordCheckinReviewed(checkin, contactDetails)
+    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val videoUrl = s3UploadService.getCheckinVideo(checkin)
+    val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
 
-    LOGGER.info("Manual ID check : {} by {}", uuid, request.reviewedBy)
+    val reviewInfo = request.newValuesFor(checkin.status)
+    checkin.applyRequest(request, clock)
+    val event = checkin.toCheckinReviewedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod, videoUrl = videoUrl, snapshotUrl = snapshotUrl)
+    checkinPersistenceService.reviewCheckinPersist(checkin, event, reviewInfo)
+
     if (checkin.manualIdCheck == ManualIdVerificationResult.MATCH) {
       s3UploadService.deleteCheckinSnapshot(uuid, 0)
       s3UploadService.deleteCheckinVideo(uuid)
       return checkin.dto(contactDetails, null, null, clock = clock, checkinWindow = checkinWindowPeriod)
-    }
+    }    
 
-    val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
-    val videoUrl = s3UploadService.getCheckinVideo(checkin)
-    return checkin.dto(contactDetails, videoUrl, snapshotUrl, clock = clock, checkinWindow = checkinWindowPeriod)
+    LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
+    return event.checkin
   }
 
   /** Annotate a checkin */
@@ -1100,7 +1066,7 @@ class CheckinV2Service(
   }
 
   companion object {
-    private val LOGGER = LoggerFactory.getLogger(CheckinV2Service::class.java)
+    private val LOGGER = logger<CheckinV2Service>()
     private const val SYSTEM_PRACTITIONER = "system"
   }
 }
@@ -1117,11 +1083,11 @@ private enum class RekognitionFailureKind { TIMEOUT, REKOG_ERROR, OTHER }
  * @return log entry comment appropriate for this checkin (depends on checkin status), and new status (possibly unchanged)
  * @throws ResponseStatusException on missing/blank comment or invalid checkin state
  */
-fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewInfo {
+fun ReviewCheckinV2Request.newValuesFor(status: CheckinV2Status): CheckinReviewInfo {
   var errorMessage: String? = null
   var newStatus: CheckinV2Status
   var logEntryType: LogEntryType
-  val comment = when (checkin.status) {
+  val comment = when (status) {
     CheckinV2Status.EXPIRED -> {
       errorMessage = "Reason for missed checkin not given"
       newStatus = CheckinV2Status.EXPIRED
@@ -1133,12 +1099,59 @@ fun ReviewCheckinV2Request.appliedTo(checkin: OffenderCheckinV2): CheckinReviewI
       logEntryType = LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED
       notes?.trim()
     }
-    else -> throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't review checkin withs status ${checkin.status}")
+    else -> throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't review checkin withs status $status")
   } ?: ""
-  if (checkin.status == CheckinV2Status.EXPIRED && comment.isBlank()) {
+  if (status == CheckinV2Status.EXPIRED && comment.isBlank()) {
     throw ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)
   }
 
-  assert(checkin.status.canTransitionTo(newStatus))
+  assert(status.canTransitionTo(newStatus))
   return CheckinReviewInfo(newStatus, comment, logEntryType)
 }
+
+object CheckinRequestApplicator {
+  fun OffenderCheckinV2.applyRequest(request: SubmitCheckinV2Request, clock: Clock) {
+    assert(this.status == CheckinV2Status.CREATED)
+    this.surveyResponse = request.survey
+    this.submittedAt = clock.instant()
+    this.status = CheckinV2Status.SUBMITTED
+  }
+
+  fun OffenderCheckinV2.applyRequest(request: ReviewCheckinV2Request, clock: Clock) {
+    // assert()
+    this.status = CheckinV2Status.REVIEWED
+    this.reviewedAt = clock.instant()
+    this.reviewedBy = request.reviewedBy
+    this.manualIdCheck = request.manualIdCheck
+    this.riskFeedback = request.riskManagementFeedback
+    this.sensitive = this.sensitive || request.sensitive
+  }
+}
+
+private fun OffenderCheckinV2.toCheckinSubmittedEvent(
+  contactDetails: ContactDetails?,
+  clock: Clock,
+  checkinWindow: Period,
+  videoUrl: URL? = null,
+  snapshotUrl: URL? = null,
+) = CheckinSubmittedEvent(
+  checkinId = this.id,
+  offenderId = this.offender.id,
+  checkin = this.dto(contactDetails, clock = clock, checkinWindow = checkinWindow, videoUrl = videoUrl, snapshotUrl = snapshotUrl),
+  practitionerId = this.offender.practitionerId,
+  offenderContactPreference = this.offender.contactPreference,
+)
+
+private fun OffenderCheckinV2.toCheckinReviewedEvent(
+  contactDetails: ContactDetails?,
+  clock: Clock,
+  checkinWindow: Period,
+  videoUrl: URL? = null,
+  snapshotUrl: URL? = null,
+) = CheckinReviewedEvent(
+  checkinId = this.id,
+  offenderId = this.offender.id,
+  checkin = this.dto(contactDetails, clock = clock, checkinWindow = checkinWindow, videoUrl = videoUrl, snapshotUrl = snapshotUrl),
+  practitionerId = this.offender.practitionerId,
+  offenderContactPreference = this.offender.contactPreference,
+)

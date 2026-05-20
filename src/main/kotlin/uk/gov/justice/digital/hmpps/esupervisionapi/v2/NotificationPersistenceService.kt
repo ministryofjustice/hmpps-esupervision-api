@@ -5,9 +5,13 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTemplateConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.MessageTypeTemplateConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.NotificationChannelsConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.Email
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMethod
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContextV2
@@ -24,67 +28,96 @@ class NotificationPersistenceService(
   private val genericNotificationV2Repository: GenericNotificationV2Repository,
   private val transactionTemplate: TransactionTemplate,
   private val clock: Clock,
-  @Value("\${app.env}") val env: String,
+  @param:Value("\${app.env}") private val env: String,
 ) {
   /** Build notification records for offender (SMS and/or Email) */
   fun buildOffenderNotifications(
-    offender: OffenderV2,
+    offenderId: Long,
+    crn: CRN,
+    contactPreference: ContactPreference,
     contactDetails: ContactDetails,
     notificationType: NotificationType,
   ): List<NotificationWithRecipient> {
     val notifications = mutableListOf<NotificationWithRecipient>()
     val channels = templateConfig.channels
 
-    // SMS notification
-    if (channels.offenderSmsEnabled && offender.contactPreference == ContactPreference.PHONE) {
-      if (contactDetails.mobile == null) {
-        LOGGER.error(
-          "NOTIFICATION_UNDELIVERABLE: Offender has no mobile number [type={}, crn={}, offenderUuid={}]",
-          notificationType,
-          offender.crn,
-          offender.uuid,
-        )
-      } else {
-        val smsTemplateId = templateConfig.templatesFor(PhoneNumber(contactDetails.mobile)).getTemplate(notificationType)
-        val notification = GenericNotificationV2(
+    if (!channels.enabledFor(contactPreference)) {
+      return notifications
+    }
+
+    fun createNotificationRecord(details: ContactDetails): Pair<GenericNotificationV2, NotificationMethod>? {
+      val templates = templateConfig.templatesFor(contactPreference, details)
+      val notification = if (templates != null) {
+        GenericNotificationV2(
           notificationId = UUID.randomUUID(),
           eventType = notificationType.name,
           recipientType = "OFFENDER",
-          channel = "SMS",
-          offender = offender,
+          channel = when (contactPreference) {
+            ContactPreference.PHONE -> "SMS"
+            ContactPreference.EMAIL -> "EMAIL"
+          },
+          offenderId = offenderId,
+          // offender = offender,
           practitionerId = null,
           status = "created",
           reference = NotificationContextV2.generateReference(notificationType, clock, env),
           createdAt = clock.instant(),
           errorMessage = null,
-          templateId = smsTemplateId,
+          templateId = templates.first.getTemplate(notificationType),
           sentAt = null,
           updatedAt = null,
         )
-        notifications.add(NotificationWithRecipient(notification, contactDetails.mobile))
+      } else {
+        LOGGER.warn("NOTIFICATION_UNDELIVERABLE: Unsupported contact preference [type={}, crn={}, preference={}]", notificationType, crn, contactPreference)
+        return null
       }
+
+      return Pair(notification, templates.second)
     }
 
-    // Email notification
-    if (channels.offenderEmailEnabled && offender.contactPreference == ContactPreference.EMAIL) {
-      if (contactDetails.email == null) {
-        LOGGER.error(
-          "NOTIFICATION_UNDELIVERABLE: Offender has no email address [type={}, crn={}, offenderUuid={}]",
-          notificationType,
-          offender.crn,
-          offender.uuid,
-        )
+    val pair = createNotificationRecord(contactDetails)
+    if (pair != null) {
+      notifications.add(
+        NotificationWithRecipient(
+          pair.first,
+          when (contactPreference) {
+            ContactPreference.PHONE -> (pair.second as PhoneNumber).phoneNumber
+            ContactPreference.EMAIL -> (pair.second as Email).email
+          },
+        ),
+      )
+    }
+
+    return notifications
+  }
+
+  /** Build notification records for practitioner (Email only) */
+  fun buildPractitionerNotifications(
+    offenderId: Long?,
+    crn: CRN?,
+    contactDetails: PractitionerDetails?,
+    checkin: CheckinV2Dto?,
+    notificationType: NotificationType,
+    practitionerId: ExternalUserId,
+  ): List<NotificationWithRecipient> {
+    val notifications = mutableListOf<NotificationWithRecipient>()
+    val channels = templateConfig.channels
+    if (channels.practitionerEmailEnabled) {
+      if (contactDetails?.email == null) {
+        val reason = if (contactDetails == null) "details missing" else "no email"
+        LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}]", reason, notificationType, crn)
       } else {
         val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
+        val reference = NotificationContextV2.generateReference(notificationType, clock, env)
         val notification = GenericNotificationV2(
           notificationId = UUID.randomUUID(),
           eventType = notificationType.name,
-          recipientType = "OFFENDER",
+          recipientType = "PRACTITIONER",
           channel = "EMAIL",
-          offender = offender,
-          practitionerId = null,
+          offenderId = offenderId,
+          practitionerId = practitionerId,
           status = "created",
-          reference = NotificationContextV2.generateReference(notificationType, clock, env),
+          reference = reference,
           createdAt = clock.instant(),
           errorMessage = null,
           templateId = emailTemplateId,
@@ -94,49 +127,6 @@ class NotificationPersistenceService(
         notifications.add(NotificationWithRecipient(notification, contactDetails.email))
       }
     }
-
-    return notifications
-  }
-
-  /** Build notification records for practitioner (Email only) */
-  fun buildPractitionerNotifications(
-    offender: OffenderV2?,
-    contactDetails: PractitionerDetails?,
-    checkin: OffenderCheckinV2?,
-    notificationType: NotificationType,
-    practitionerId: ExternalUserId,
-  ): List<NotificationWithRecipient> {
-    val notifications = mutableListOf<NotificationWithRecipient>()
-    val channels = templateConfig.channels
-
-    if (!channels.practitionerEmailEnabled) {
-      return notifications
-    }
-
-    if (contactDetails?.email == null) {
-      val reason = if (contactDetails == null) "details missing" else "no email"
-      LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}, offenderUuid={}]", reason, notificationType, offender?.crn, offender?.uuid)
-      return notifications
-    }
-
-    val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
-    val reference = NotificationContextV2.generateReference(notificationType, clock, env)
-    val notification = GenericNotificationV2(
-      notificationId = UUID.randomUUID(),
-      eventType = notificationType.name,
-      recipientType = "PRACTITIONER",
-      channel = "EMAIL",
-      offender = offender,
-      practitionerId = practitionerId,
-      status = "created",
-      reference = reference,
-      createdAt = clock.instant(),
-      errorMessage = null,
-      templateId = emailTemplateId,
-      sentAt = null,
-      updatedAt = null,
-    )
-    notifications.add(NotificationWithRecipient(notification, contactDetails.email))
 
     return notifications
   }
@@ -183,3 +173,15 @@ data class SendResult(
   val success: Boolean,
   val error: String? = null,
 )
+
+private fun NotificationChannelsConfig.enabledFor(preference: ContactPreference): Boolean {
+  when (preference) {
+    ContactPreference.PHONE -> return offenderSmsEnabled
+    ContactPreference.EMAIL -> return offenderEmailEnabled
+  }
+}
+
+private fun MessageTemplateConfig.templatesFor(preference: ContactPreference, contactDetails: ContactDetails): Pair<MessageTypeTemplateConfig, NotificationMethod>? = when (preference) {
+  ContactPreference.PHONE -> if (contactDetails.mobile == null) null else Pair(this.templatesFor(PhoneNumber(contactDetails.mobile)), PhoneNumber(contactDetails.mobile))
+  ContactPreference.EMAIL -> if (contactDetails.email == null) null else Pair(this.templatesFor(Email(contactDetails.email)), Email(contactDetails.email))
+}

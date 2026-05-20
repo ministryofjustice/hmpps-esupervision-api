@@ -79,7 +79,9 @@ class NotificationOrchestratorV2Service(
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
-            offender = offender,
+            offenderId = offender.id,
+            crn = offender.crn,
+            contactPreference = offender.contactPreference,
             contactDetails = details,
             notificationType = NotificationType.RegistrationConfirmation,
           )
@@ -131,7 +133,9 @@ class NotificationOrchestratorV2Service(
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
-            offender = offender,
+            offenderId = offender.id,
+            crn = offender.crn,
+            contactPreference = offender.contactPreference,
             contactDetails = details,
             notificationType = NotificationType.OffenderCheckinsRestarted,
           )
@@ -181,7 +185,9 @@ class NotificationOrchestratorV2Service(
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
-            offender = offender,
+            offenderId = offender.id,
+            crn = offender.crn,
+            contactPreference = offender.contactPreference,
             contactDetails = details,
             notificationType = NotificationType.OffenderCheckinsStopped,
           )
@@ -238,7 +244,9 @@ class NotificationOrchestratorV2Service(
       // V1 only notifies offender for checkin invite (no practitioner template)
       val notificationsWithRecipients =
         notificationPersistence.buildOffenderNotifications(
-          offender = checkin.offender,
+          offenderId = checkin.offender.id,
+          crn = checkin.offender.crn,
+          contactPreference = checkin.offender.contactPreference,
           contactDetails = contactDetails,
           notificationType = NotificationType.OffenderCheckinInvite,
         )
@@ -270,7 +278,9 @@ class NotificationOrchestratorV2Service(
 
       val notificationsWithRecipients =
         notificationPersistence.buildOffenderNotifications(
-          offender = checkin.offender,
+          offenderId = checkin.offender.id,
+          crn = checkin.offender.crn,
+          contactPreference = checkin.offender.contactPreference,
           contactDetails = contactDetails,
           notificationType = NotificationType.OffenderCheckinReminder,
         )
@@ -287,20 +297,22 @@ class NotificationOrchestratorV2Service(
   }
 
   /** Send notifications for checkin submitted event */
-  fun sendCheckinSubmittedNotifications(
-    checkin: OffenderCheckinV2,
-    details: ContactDetails,
-  ) {
+  fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
+    val checkin = event.checkin
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
       uuid = checkin.uuid,
-      crn = checkin.offender.crn,
-      description = "Check-in submitted for ${checkin.offender.crn}",
+      crn = checkin.crn,
+      description = "Check-in submitted for ${checkin.crn}",
     )
 
+    if (event.checkin.personalDetails == null) {
+      LOGGER.debug("Skipping checkin submitted notifications for checkin {}: personal details not found", event.checkin.uuid)
+      return
+    }
+
     try {
-      val checkinDto = checkin.dto(details)
-      val flaggedResponses = checkinDto.flaggedResponses
+      val flaggedResponses = checkin.flaggedResponses
       // Calculate flags (survey flags + 1 if auto ID check failed/missing)
       val surveyFlags = flaggedResponses.size
       val autoIdFailed = checkin.autoIdCheck == null ||
@@ -309,29 +321,32 @@ class NotificationOrchestratorV2Service(
       // If "callback" is flagged, show the text within notify by sending 'yes'.
       val contactRequestFlag = if (flaggedResponses.contains("callback")) "yes" else "no"
       // Include all params needed by both offender and practitioner templates
-      val personalisation = checkinSubmittedPersonalisationDetails(details, checkin, totalFlags, contactRequestFlag)
+      val personalisation = checkinSubmittedPersonalisationDetails(event.checkin.personalDetails, checkin, totalFlags, contactRequestFlag)
 
       val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
       notificationsWithRecipients.addAll(
         notificationPersistence.buildOffenderNotifications(
-          offender = checkin.offender,
-          contactDetails = details,
+          offenderId = event.offenderId,
+          crn = event.checkin.crn,
+          contactPreference = event.offenderContactPreference,
+          contactDetails = event.checkin.personalDetails,
           notificationType = NotificationType.OffenderCheckinSubmitted,
         ),
       )
       notificationsWithRecipients.addAll(
         notificationPersistence.buildPractitionerNotifications(
-          offender = checkin.offender,
-          contactDetails = details.practitioner,
+          offenderId = event.offenderId,
+          crn = checkin.crn,
+          contactDetails = event.checkin.personalDetails.practitioner,
           checkin = checkin,
           notificationType = NotificationType.PractitionerCheckinSubmitted,
-          practitionerId = checkin.offender.practitionerId,
+          practitionerId = event.practitionerId,
         ),
       )
 
       processAndSendNotifications(notificationsWithRecipients, personalisation)
     } catch (e: Exception) {
-      val sanitized = PiiSanitizer.sanitizeException(e, checkin.offender.crn, checkin.offender.uuid)
+      val sanitized = PiiSanitizer.sanitizeException(e, checkin.crn, checkin.uuid)
       LOGGER.error(
         "Failed to send checkin submitted notifications for checkin {}: {}",
         checkin.uuid,
@@ -342,7 +357,7 @@ class NotificationOrchestratorV2Service(
 
   fun checkinSubmittedPersonalisationDetails(
     details: ContactDetails,
-    checkin: OffenderCheckinV2,
+    checkin: CheckinV2Dto,
     totalFlags: Int,
     contactRequestFlag: String,
   ): Map<String, String> {
@@ -351,25 +366,23 @@ class NotificationOrchestratorV2Service(
     val personalisation =
       mapOf(
         "name" to "${details.name.forename} ${details.name.surname}",
-        "practitionerName" to (details.practitioner?.name?.forename ?: checkin.offender.practitionerId),
+        "practitionerName" to (details.practitioner?.name?.forename ?: "Practitioner"),
         "number" to totalFlags.toString(),
         "contactRequestFlag" to contactRequestFlag,
-        "dashboardSubmissionUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.offender.crn).toString(),
+        "dashboardSubmissionUrl" to appConfig.checkinReviewUrlV2(checkin.uuid, checkin.crn).toString(),
         "feedbackUrl" to appConfig.feedbackUrl().toString(),
       )
     return personalisation
   }
 
   /** Send notifications for checkin reviewed event */
-  fun sendCheckinReviewedNotifications(
-    checkin: OffenderCheckinV2,
-    details: ContactDetails,
-  ) {
+  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) {
+    val checkin = event.checkin
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_REVIEWED,
       uuid = checkin.uuid,
-      crn = checkin.offender.crn,
-      description = "Check-in reviewed for ${checkin.offender.crn} by ${checkin.reviewedBy}",
+      crn = checkin.crn,
+      description = "Check-in reviewed for ${checkin.crn} by ${checkin.reviewedBy}",
     )
   }
 
@@ -382,9 +395,10 @@ class NotificationOrchestratorV2Service(
 
     val notificationsWithRecipients =
       notificationPersistence.buildPractitionerNotifications(
-        offender = checkin.offender,
+        offenderId = checkin.offender.id,
+        crn = checkin.offender.crn,
         contactDetails = details.practitioner,
-        checkin = checkin,
+        checkin = checkin.dto(details, checkinWindow = checkinWindowPeriod, clock = clock),
         notificationType = NotificationType.PractitionerCheckinMissed,
         practitionerId = checkin.offender.practitionerId,
       )
@@ -431,7 +445,8 @@ class NotificationOrchestratorV2Service(
       "dashboardUrl" to appConfig.addQuestionsUrl(info.offenderUuid, info.contactDetails.crn).toString(),
     )
     val notificationsWithRecipients = notificationPersistence.buildPractitionerNotifications(
-      null,
+      offenderId = null,
+      crn = null,
       info.contactDetails.practitioner,
       null,
       NotificationType.PractitionerCustomQuestionsReminder,

@@ -62,7 +62,7 @@ class NotificationOrchestratorV2ServiceTest {
     val offender = createOffender()
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
@@ -93,14 +93,14 @@ class NotificationOrchestratorV2ServiceTest {
     val checkin = createCheckin(offender)
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendCheckinCreatedNotifications(checkin, contactDetails)
 
     // V1 only notifies offender for checkin invite (no practitioner template)
-    verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinInvite))
-    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any())
+    verify(notificationPersistence).buildOffenderNotifications(any(), any(), any(), any(), eq(NotificationType.OffenderCheckinInvite))
+    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
     verify(ndiliusApiClient, never()).getContactDetails(any())
   }
@@ -111,13 +111,13 @@ class NotificationOrchestratorV2ServiceTest {
     val checkin = createCheckin(offender)
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendReminderCheckinNotifications(checkin, contactDetails)
 
-    verify(notificationPersistence).buildOffenderNotifications(any(), any(), eq(NotificationType.OffenderCheckinReminder))
-    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any())
+    verify(notificationPersistence).buildOffenderNotifications(any(), any(), any(), any(), eq(NotificationType.OffenderCheckinReminder))
+    verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
     verify(ndiliusApiClient, never()).getContactDetails(any())
   }
 
@@ -127,12 +127,13 @@ class NotificationOrchestratorV2ServiceTest {
     val checkin = createCheckin(offender, status = CheckinV2Status.SUBMITTED)
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
-    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
-    service.sendCheckinSubmittedNotifications(checkin, contactDetails)
+    val event = CheckinSubmittedEvent(checkin.id, offender.id, offender.practitionerId, checkin.dto(contactDetails, clock = clock), offender.contactPreference)
+    service.sendCheckinSubmittedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
     verify(eventAuditService, never()).recordCheckinSubmitted(checkin, contactDetails)
@@ -144,7 +145,7 @@ class NotificationOrchestratorV2ServiceTest {
     val checkin = createCheckin(offender, status = CheckinV2Status.SUBMITTED)
     val contactDetails = createContactDetails()
 
-    val personalisation = service.checkinSubmittedPersonalisationDetails(contactDetails, checkin, 4, "no")
+    val personalisation = service.checkinSubmittedPersonalisationDetails(contactDetails, checkin.dto(contactDetails, clock = clock), 4, "no")
     assertEquals("Jane", personalisation["practitionerName"])
     assertEquals("John Smith", personalisation["name"])
   }
@@ -155,14 +156,14 @@ class NotificationOrchestratorV2ServiceTest {
     val checkin = createCheckin(offender, status = CheckinV2Status.EXPIRED)
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
     service.sendCheckinExpiredNotifications(checkin, contactDetails)
 
-    verify(notificationPersistence, never()).buildOffenderNotifications(any(), any(), any())
-    verify(notificationPersistence).buildPractitionerNotifications(any(), any(), eq(checkin), eq(NotificationType.PractitionerCheckinMissed), any())
+    verify(notificationPersistence, never()).buildOffenderNotifications(any(), any(), any(), any(), any())
+    verify(notificationPersistence).buildPractitionerNotifications(any(), any(), any(), eq(checkin.dto(contactDetails)), eq(NotificationType.PractitionerCheckinMissed), any())
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
   }
 
@@ -174,7 +175,8 @@ class NotificationOrchestratorV2ServiceTest {
 
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
-    service.sendCheckinReviewedNotifications(checkin, contactDetails)
+    val event = CheckinReviewedEvent(checkin.id, offender.id, offender.practitionerId, checkin.dto(contactDetails, clock = clock), offender.contactPreference)
+    service.sendCheckinReviewedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
     verify(eventAuditService, never()).recordCheckinReviewed(checkin, contactDetails)
@@ -195,7 +197,7 @@ class NotificationOrchestratorV2ServiceTest {
       ),
     )
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any()))
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
       .thenReturn(notifications.map { NotificationWithRecipient(it, "07700900123") })
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(notifications)
     whenever(notifyGateway.send(any(), any(), any(), any(), any()))
@@ -212,7 +214,7 @@ class NotificationOrchestratorV2ServiceTest {
     val offender = createOffender()
     val contactDetails = createContactDetailsWithEvents()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendSetupCompletedNotifications(offender, contactDetails)
@@ -232,7 +234,7 @@ class NotificationOrchestratorV2ServiceTest {
     val offender = createOffender()
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendSetupCompletedNotifications(offender, contactDetails)
@@ -252,7 +254,7 @@ class NotificationOrchestratorV2ServiceTest {
     val offender = createOffender()
     val contactDetails = createContactDetailsWithEvents()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendReactivationCompletedNotifications(offender, contactDetails)
@@ -272,7 +274,7 @@ class NotificationOrchestratorV2ServiceTest {
     val offender = createOffender()
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendReactivationCompletedNotifications(offender, contactDetails)
@@ -292,7 +294,7 @@ class NotificationOrchestratorV2ServiceTest {
     val offender = createOffender()
     val contactDetails = createContactDetailsWithEvents()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendDeactivationCompletedNotifications(offender, contactDetails)
@@ -312,7 +314,7 @@ class NotificationOrchestratorV2ServiceTest {
     val offender = createOffender()
     val contactDetails = createContactDetails()
 
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     service.sendDeactivationCompletedNotifications(offender, contactDetails)

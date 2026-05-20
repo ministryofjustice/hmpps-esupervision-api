@@ -3,12 +3,15 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -138,6 +141,7 @@ interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
  */
 @Repository
 interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
+  @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckinV2>
   fun findAllByOffender(offender: OffenderV2, pageable: Pageable): Page<OffenderCheckinV2>
   fun findAllByOffenderAndStatus(offender: OffenderV2, status: CheckinV2Status): List<OffenderCheckinV2>
@@ -782,4 +786,26 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   )
   @Modifying
   fun deleteUpcomingAssignment(offenderId: Long): Int
+}
+
+typealias OutboxItemStatusString = String
+val x = OutboxItemStatus.SENT
+
+@Repository
+interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
+
+  @Query(
+    """
+      update outbox_items
+      set status = 'SENT'::OutboxItemStatus, updated_at = now()
+      where type = cast(:type as text)::OutboxItemType and entity_id = :entityId
+    """,
+    nativeQuery = true,
+  )
+  @Modifying
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  fun markAsSent(type: OutboxItemStatusString, entityId: Long): Int
+
+  @Query
+  fun findByTypeAndEntityId(type: OutboxItemType, entityId: Long): Optional<OutboxItem>
 }

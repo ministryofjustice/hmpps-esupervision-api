@@ -48,7 +48,7 @@ class NdiliusApiClient(
         .bodyToMono(ContactDetails::class.java)
         .block()
     } catch (e: WebClientResponseException.NotFound) {
-      LOGGER.error("Contact details not found for CRN: {}", crn)
+      LOGGER.warn("Contact details not found for CRN: {}", crn)
       null
     } catch (e: Exception) {
       LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))

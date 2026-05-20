@@ -1,0 +1,122 @@
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events
+
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+import org.mockito.kotlin.mock
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Primary
+import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
+import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SurveyVersion
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
+import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
+import java.util.UUID
+
+class CheckinEventsListenerIntegrationTest : IntegrationTestBase() {
+
+  @Autowired
+  private lateinit var checkinEventsListener: CheckinEventsListener
+
+  @Autowired
+  private lateinit var offenderV2Repository: OffenderV2Repository
+
+  @Autowired
+  private lateinit var checkinV2Repository: OffenderCheckinV2Repository
+
+  @Autowired
+  private lateinit var outboxItemRepository: OutboxItemRepository
+
+  @Autowired
+  private lateinit var clock: Clock
+
+  @AfterEach
+  fun cleanUp() {
+    outboxItemRepository.deleteAll()
+    checkinV2Repository.deleteAll()
+    offenderV2Repository.deleteAll()
+  }
+
+  @Test
+  fun `processEvent - checkin submission - mark outbox item as sent - success`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now()).toEntity()
+    offenderV2Repository.save(offender)
+
+    val checkin = checkinV2Repository.save(createCheckin(offender))
+    checkin.surveyResponse = mapOf("version" to SurveyVersion.V20260416Questions)
+    checkin.status = CheckinV2Status.SUBMITTED
+    checkin.submittedAt = Instant.now()
+    checkinV2Repository.save(checkin) // this will trigger the creation of outbox item
+
+    val event = CheckinSubmittedEvent(
+      checkinId = checkin.id,
+      offenderId = offender.id,
+      practitionerId = offender.practitionerId,
+      checkin = checkin.dto(null, clock = clock),
+      offenderContactPreference = ContactPreference.PHONE,
+    )
+
+    checkinEventsListener.processEvent(event)
+
+    val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_SUBMITTED, checkin.id).orElseThrow()
+    assertEquals(OutboxItemStatus.SENT, outboxItem.status)
+  }
+
+  @Test
+  fun `processEvent - checkin review - mark outbox item as sent - success`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now()).toEntity()
+    offenderV2Repository.save(offender)
+
+    val checkin = checkinV2Repository.save(createCheckin(offender))
+    checkin.surveyResponse = mapOf("version" to SurveyVersion.V20260416Questions)
+    checkin.status = CheckinV2Status.REVIEWED
+    checkin.reviewedAt = Instant.now()
+    checkin.reviewedBy = offender.practitionerId
+    checkinV2Repository.save(checkin) // this will trigger the creation of outbox item
+
+    val event = CheckinReviewedEvent(
+      checkinId = checkin.id,
+      offenderId = offender.id,
+      practitionerId = offender.practitionerId,
+      checkin = checkin.dto(null, clock = clock),
+      offenderContactPreference = ContactPreference.PHONE,
+    )
+
+    checkinEventsListener.processEvent(event)
+
+    val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_REVIEWED, checkin.id).orElseThrow()
+    assertEquals(OutboxItemStatus.SENT, outboxItem.status)
+  }
+
+  private fun createCheckin(offender: OffenderV2): OffenderCheckinV2 = OffenderCheckinV2(
+    uuid = UUID.randomUUID(),
+    offender = offender,
+    status = CheckinV2Status.CREATED,
+    dueDate = LocalDate.now(),
+    createdAt = Instant.now(),
+    createdBy = offender.practitionerId,
+  )
+
+  @TestConfiguration
+  class TestConfig {
+    @Bean
+    @Primary
+    fun notificationV2Service(): NotificationV2Service = mock()
+  }
+}
