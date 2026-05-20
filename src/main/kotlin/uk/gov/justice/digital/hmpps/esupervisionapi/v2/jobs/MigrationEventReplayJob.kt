@@ -77,6 +77,13 @@ class MigrationEventReplayJob(
       replaySelectedCheckinEvents(checkinUuids)
     }
 
+    try {
+      migrationEventReplayService.createMissingSetupV2Rows(batchSize = batchSize)
+      migrationEventReplayService.replayActiveOffenderSetupEvents(batchSize = batchSize)
+    } catch (e: Exception) {
+      LOGGER.warn("Setup-completed event backfill failed: {}", e.message, e)
+    }
+
     val endTime = clock.instant()
     logEntry.endedAt = endTime
     jobLogRepository.saveAndFlush(logEntry)

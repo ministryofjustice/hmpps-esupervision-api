@@ -212,6 +212,9 @@ open class OffenderCheckinV2(
   @Enumerated(EnumType.STRING)
   open var autoIdCheck: AutomatedIdVerificationResult? = null,
 
+  @Column(name = "auto_id_check_score", nullable = true)
+  open var autoIdCheckScore: Float? = null,
+
   @Column(name = "liveness_result", nullable = true, length = 10)
   @Enumerated(EnumType.STRING)
   open var livenessResult: LivenessResult? = null,
@@ -258,6 +261,7 @@ open class OffenderCheckinV2(
       reviewedBy = reviewedBy,
       checkinStartedAt = checkinStartedAt,
       autoIdCheck = autoIdCheck,
+      autoIdCheckScore = autoIdCheckScore,
       livenessResult = livenessResult,
       livenessConfidence = livenessConfidence,
       livenessEnabled = livenessEnabled,
@@ -636,6 +640,30 @@ open class MigrationControl(
   open var checkinReviewed: Boolean = false,
   @Column(name = "checkin_expired", nullable = false)
   open var checkinExpired: Boolean = false,
+) : V2BaseEntity()
+
+@Entity
+@Table(
+  name = "setup_event_backfill_v2",
+  indexes = [
+    Index(name = "idx_setup_event_backfill_v2_offender", columnList = "offender_id", unique = true),
+  ],
+)
+open class SetupEventBackfillV2(
+  @Column(name = "offender_id", nullable = false, unique = true)
+  open var offenderId: Long,
+
+  @Column(name = "setup_row_created", nullable = false)
+  open var setupRowCreated: Boolean = false,
+
+  @Column(name = "event_sent", nullable = false)
+  open var eventSent: Boolean = false,
+
+  @Column(name = "event_sent_at", nullable = true)
+  open var eventSentAt: Instant? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var createdAt: Instant,
 ) : V2BaseEntity()
 
 @Entity

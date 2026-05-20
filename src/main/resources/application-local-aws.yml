@@ -50,6 +50,5 @@ aws:
     profile: ${AWS_S3_PROFILE:default}
 
 rekognition:
-  s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
   role_session_name: development
   profile: ${AWS_REKOGNITION_PROFILE:default}

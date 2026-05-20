@@ -19,7 +19,8 @@ generic-service:
     MANAGE_USERS_API: "https://manage-users-api-dev.hmpps.service.justice.gov.uk/"
     MPOP_URL: "https://manage-people-on-probation-dev.hmpps.service.justice.gov.uk"
     POP_UI_URL: "https://probation-check-in-dev.hmpps.service.justice.gov.uk"
-    APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
+    APP_ENV: "DEV"
+    APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "0 */15 * * * *"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_ENABLED: "false"
     APP_SCHEDULING_CHECKIN_NOTIFICATION_CRON: "-"
     APP_SCHEDULING_OFFENDER_CHECKIN_EXPIRY_CRON: "-"
@@ -27,6 +28,8 @@ generic-service:
     APP_SCHEDULING_V2_CHECKIN_REMINDER_ENABLED: "true"
     APP_SCHEDULING_V2_CHECKIN_EXPIRY_CRON: "0 30 9,11,16 * * *"
     APP_SCHEDULING_V2_PRACTITIONER_CUSTOM_QUESTIONS_REMINDER_CRON: "0 15 8,11,16 * * *"
+    CHECKIN_LEGACY_CLEANUP_ENABLED: "true"
+    CHECKIN_LEGACY_CLEANUP_DRY_RUN: "false"
     APP_FEATURES_ESUP_1239: "true"
     APP_FEATURES_ESUP_1183: "true"
 

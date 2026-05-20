@@ -7,19 +7,28 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControl
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationEventsToSend
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupEventBackfillV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Clock
+import java.util.UUID
 
 @Service
 class MigrationEventReplayService(
   private val checkinRepository: OffenderCheckinV2Repository,
   private val offenderRepository: OffenderV2Repository,
+  private val offenderSetupRepository: OffenderSetupV2Repository,
+  private val backfillRepository: SetupEventBackfillV2Repository,
+  private val ndiliusApiClient: INdiliusApiClient,
   private val domainEventService: DomainEventService,
   private val eventAuditLogRepository: EventAuditV2Repository,
   private val clock: Clock,
@@ -263,5 +272,119 @@ class MigrationEventReplayService(
       occurredAt = checkin.dueDate.plusDays(3).atStartOfDay(clock.zone),
       additionalInformation = additionalInformation(checkin),
     )
+  }
+
+  /**
+   * Phase 1 of the setup-completed event backfill: create missing offender_setup_v2 rows for
+   * VERIFIED offenders that pre-date the V2 setup flow (e.g. V1-migrated).
+   */
+  fun createMissingSetupV2Rows(batchSize: Int = 50): Int {
+    logger.info("Starting offender_setup_v2 backfill")
+    var totalProcessed = 0
+    while (true) {
+      val batch = backfillRepository.findPendingSetupRowCreation(PageRequest.of(0, batchSize))
+      if (batch.isEmpty()) break
+      for (row in batch) {
+        try {
+          val offender = offenderRepository.findById(row.offenderId).orElse(null)
+          if (offender == null) {
+            logger.warn("Backfill row id={} references missing offender_id={}", row.id, row.offenderId)
+            row.setupRowCreated = true
+            continue
+          }
+          if (offenderSetupRepository.findByOffender(offender).isEmpty) {
+            offenderSetupRepository.save(
+              OffenderSetupV2(
+                uuid = UUID.randomUUID(),
+                offender = offender,
+                practitionerId = offender.practitionerId,
+                createdAt = offender.createdAt,
+                startedAt = offender.createdAt,
+                setupCounter = 1,
+              ),
+            )
+            logger.info("Created backfilled offender_setup_v2 for offender uuid={} crn={}", offender.uuid, offender.crn)
+            totalProcessed++
+          }
+          row.setupRowCreated = true
+        } catch (e: Exception) {
+          logger.error("Failed to create setup row for backfill id={} offender_id={}", row.id, row.offenderId, e)
+        }
+      }
+      backfillRepository.saveAllAndFlush(batch)
+      if (batch.size < batchSize) break
+    }
+    logger.info("offender_setup_v2 backfill complete: {} rows created", totalProcessed)
+    return totalProcessed
+  }
+
+  /**
+   * Phase 2 of the setup-completed event backfill: publish V2_SETUP_COMPLETED for VERIFIED
+   * offenders with at least one active Delius event. Phase 1 must run first so every offender
+   * has a setup row to provide setupId.
+   */
+  fun replayActiveOffenderSetupEvents(batchSize: Int = 50, eventsPerSecond: Double = 10.0): Int {
+    logger.info("Starting V2_SETUP_COMPLETED backfill")
+    val rateLimiter = RateLimiter.create(eventsPerSecond)
+    var totalProcessed = 0
+    while (true) {
+      val batch = backfillRepository.findPendingEventSend(PageRequest.of(0, batchSize))
+      if (batch.isEmpty()) break
+
+      val offendersById = offenderRepository.findAllById(batch.map { it.offenderId }).associateBy { it.id }
+      val crns = offendersById.values.map { it.crn }
+
+      val contactsByCrn = try {
+        ndiliusApiClient.getContactDetailsForMultiple(crns).associateBy { it.crn }
+      } catch (e: Exception) {
+        logger.warn("Failed to fetch contact details for batch of {} crns - aborting this run, will retry next cron tick", crns.size, e)
+        break
+      }
+
+      for (row in batch) {
+        val offender = offendersById[row.offenderId]
+        if (offender == null) {
+          logger.warn("Backfill row id={} references missing offender_id={}", row.id, row.offenderId)
+          row.eventSent = true
+          row.eventSentAt = clock.instant()
+          continue
+        }
+        try {
+          val details = contactsByCrn[offender.crn]
+          if (details == null || details.events.isNullOrEmpty()) {
+            logger.info("Skipping V2_SETUP_COMPLETED for crn={}: no active Delius events", offender.crn)
+            row.eventSent = true
+            row.eventSentAt = clock.instant()
+            continue
+          }
+          val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+          if (setup == null) {
+            logger.warn("No offender_setup_v2 row for offender uuid={} crn={} - expected Phase 1 to have created one; skipping", offender.uuid, offender.crn)
+            continue
+          }
+          rateLimiter.acquire()
+          domainEventService.publishDomainEvent(
+            eventType = DomainEventType.V2_SETUP_COMPLETED,
+            uuid = offender.uuid,
+            crn = offender.crn,
+            description = "Practitioner completed setup for offender ${offender.crn}",
+            occurredAt = offender.createdAt.atZone(clock.zone),
+            additionalInformation = AdditionalInformation(
+              eventNumber = activeEventNumber(offender, details),
+              setupId = setup.setupId(),
+            ),
+          )
+          row.eventSent = true
+          row.eventSentAt = clock.instant()
+          totalProcessed++
+        } catch (e: Exception) {
+          logger.error("Failed to publish V2_SETUP_COMPLETED for backfill id={} crn={}", row.id, offender.crn, e)
+        }
+      }
+      backfillRepository.saveAllAndFlush(batch)
+      if (batch.size < batchSize) break
+    }
+    logger.info("V2_SETUP_COMPLETED backfill complete: {} events published", totalProcessed)
+    return totalProcessed
   }
 }

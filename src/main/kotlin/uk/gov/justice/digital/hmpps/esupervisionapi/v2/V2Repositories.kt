@@ -365,6 +365,8 @@ enum class LogEntryType {
   OFFENDER_CHECKIN_ANNOTATED,
   OFFENDER_CHECKIN_RESCHEDULED,
   OFFENDER_CHECKIN_OUTSIDE_ACCESS,
+  OFFENDER_CHECKIN_LIVENESS_FAILED,
+  OFFENDER_CHECKIN_FACE_MATCH_FAILED,
 }
 
 /**
@@ -556,6 +558,27 @@ interface StatsSummaryProviderMonthRepository : JpaRepository<StatsSummaryProvid
 }
 
 @Repository
+interface SetupEventBackfillV2Repository : JpaRepository<SetupEventBackfillV2, Long> {
+  @Query(
+    """
+    SELECT b FROM SetupEventBackfillV2 b
+    WHERE b.setupRowCreated = false
+    ORDER BY b.id
+    """,
+  )
+  fun findPendingSetupRowCreation(pageable: Pageable): List<SetupEventBackfillV2>
+
+  @Query(
+    """
+    SELECT b FROM SetupEventBackfillV2 b
+    WHERE b.eventSent = false
+    ORDER BY b.id
+    """,
+  )
+  fun findPendingEventSend(pageable: Pageable): List<SetupEventBackfillV2>
+}
+
+@Repository
 interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
 
 @Repository
@@ -594,7 +617,7 @@ class QuestionRepository(
    */
   fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
-      "select * from get_question_templates(?::text_language, ?)",
+      "select * from get_question_templates(?::text_language, ?) order by question_id",
       { rs, idx -> questionTemplateRowMapper(rs, idx) },
       language.dbString,
       author,
@@ -710,6 +733,12 @@ class QuestionRepository(
 @Repository
 interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignment, Long> {
 
+  interface AssignmentInfo {
+    val questionListId: Long
+    val dueDate: LocalDate
+    val explicitAssignment: Boolean
+  }
+
   @Query(
     """
     insert into question_list_assignment (question_list_id, offender_id, checkin_id, updated_at)
@@ -724,14 +753,14 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   @Modifying
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
 
+  /**
+   * In case of no explicit assignment, question list id will be set to the default list id.
+   */
   @Query(
-    """
-    select qla.question_list_id from question_list_assignment qla
-    where qla.offender_id = :offenderId and qla.checkin_id is null
-  """,
+    """select * from get_upcoming_assignment_info(:offenderId, cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignment(offenderId: Long): Long?
+  fun upcomingAssignmentAndDueDate(offenderId: Long, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.

@@ -9,6 +9,7 @@ api:
       ndilius-api: ${NDILIUS_API_URL:https://esupervision-and-delius-dev.hmpps.service.justice.gov.uk}
 
 app:
+  env: ${APP_ENV}
   hostedAt: ${HOSTED_AT}
   mpopUrl: ${MPOP_URL}
   checkinUrl: ${POP_UI_URL}
@@ -48,6 +49,13 @@ app:
     migration-event-replay:
       cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
       batch-size: 50
+    # One-off cleanup of legacy checkin S3 assets (ESUP-1770 + pre-liveness videos).
+    # Disabled by default. Enable per env, observe with dry-run=true, flip dry-run off,
+    # then disable again.
+    checkin-legacy-cleanup:
+      enabled: ${CHECKIN_LEGACY_CLEANUP_ENABLED:false}
+      dry-run: ${CHECKIN_LEGACY_CLEANUP_DRY_RUN:true}
+      cron: ${CHECKIN_LEGACY_CLEANUP_CRON:0 * * * * *}
   features:
     # publish media proxy links to NDelius
     esup-1239: true
@@ -59,6 +67,29 @@ app:
     upload-content-hash:
       # if true, reject upload_location requests that don't carry a hash
       require: ${UPLOAD_CONTENT_HASH_REQUIRE:false}
+  offender-survey:
+    # expand form values into human-readable strings in NDelius notes
+    expansions:
+      YES: "Yes"
+      NO: "No"
+      EMPLOYMENT_EDU: "Employment and education"
+      SUPPORT_SYSTEM: "Relationships (family, friends, partner)"
+      NO_HELP: "No, I do not need any support"
+      OTHER: "Something else"
+    custom-labels:
+      mentalHealth: "How they have been feeling"
+      mentalHealthComment: "What they want us to know about how they have been feeling"
+      assistance: "Anything they need support with or to let us know"
+      mentalHealthSupport: "What they want us to know about mental health"
+      alcoholSupport: "What they want us to know about alcohol"
+      drugsSupport: "What they want us to know about drugs"
+      moneySupport: "What they want us to know about money"
+      housingSupport: "What they want us to know about housing"
+      employmentEduSupport: "What they want us to know about employment and education"
+      supportSystemSupport: "What they want us to know about their relationships"
+      otherSupport: "What they want us to know about (something else)"
+      callback: "If they need us to contact them before their next appointment"
+      callbackDetails: "What they want to talk about"
 
 spring:
   application:
@@ -209,7 +240,6 @@ rekognition:
   region: ${REKOG_AWS_REGION}
   role_arn: ${REKOG_ROLE_ARN}
   role_session_name: ${REKOG_ROLE_SESSION_NAME}
-  s3_bucket_name: ${REKOG_S3_DATA_BUCKET}
   max-concurrency: 10
   read-timeout-seconds: 20
   # Upper bound on how long we will wait for an async Rekognition call to complete

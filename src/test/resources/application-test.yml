@@ -1,4 +1,5 @@
 app:
+  env: "test-local"
   hostedAt: "http://localhost:3000"
   mpopUrl: "http://localhost-mpop:3000"
   checkinUrl: "http://localhost-checkin:3000"
@@ -46,7 +47,6 @@ notify:
 
 rekognition:
   region: eu-west-2
-  s3_bucket_name: rekog-bucket
   role_arn: rn:aws:iam::55555555555:role/rekognition-role
   role_session_name: development
 

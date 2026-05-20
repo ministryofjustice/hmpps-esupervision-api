@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.SurveyValueExpansionsConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.appendQuestionsAndAnswers
@@ -22,6 +23,7 @@ class EventDetailV2Service(
   private val eventLogRepository: OffenderEventLogV2Repository,
   private val proxyLinkCreator: ProxyLinkCreator,
   private val appConfig: AppConfig,
+  val expansionsConfig: SurveyValueExpansionsConfig,
 ) {
 
   fun getEventDetail(detailUrl: String): EventDetailResponse? {
@@ -137,7 +139,7 @@ class EventDetailV2Service(
         }
         checkin.surveyResponse?.let { survey ->
           sb.appendLine()
-          sb.appendQuestionsAndAnswers(survey)
+          sb.appendQuestionsAndAnswers(survey, expansionsConfig)
         }
       }
       DomainEventType.V2_CHECKIN_REVIEWED -> {
