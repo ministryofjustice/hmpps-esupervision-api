@@ -20,11 +20,11 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.rekognition.model.AuditImage
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
