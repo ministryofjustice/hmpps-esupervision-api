@@ -345,7 +345,7 @@ class CheckinV2ServiceTest {
     assertNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
-    verify(checkinPersistenceService).reviewCheckinPersist(any(), any(), any())
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
     verify(s3UploadService).deleteCheckinSnapshot(uuid, 0)
     verify(s3UploadService).deleteCheckinVideo(uuid)
   }
@@ -373,7 +373,7 @@ class CheckinV2ServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
-    verify(checkinPersistenceService).reviewCheckinPersist(any(), any(), any())
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
 
     val result = service.reviewCheckin(uuid, request)
 
@@ -383,7 +383,7 @@ class CheckinV2ServiceTest {
     assertNotNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH_WITH_CONCERN, result.manualIdCheck)
-    verify(checkinPersistenceService).reviewCheckinPersist(any(), any(), any())
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
     verify(s3UploadService, never()).deleteCheckinVideo(any())
     verify(s3UploadService, never()).deleteCheckinSnapshot(any(), any())
   }

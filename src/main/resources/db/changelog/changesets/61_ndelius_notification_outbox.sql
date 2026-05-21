@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset roland.sadowski:58_ndelius_notification_outbox-1 splitStatements:false
+--changeset roland.sadowski:61_ndelius_notification_outbox-1 splitStatements:false
 
 create type OutboxItemStatus as enum ('INITIAL', 'SENT');
 
@@ -29,7 +29,7 @@ create table outbox_items(
 --rollback drop type OutboxItemType;
 --rollback drop type OutboxItemStatus;
 
---changeset roland.sadowski:58_ndelius_notification_outbox-2 splitStatements:false
+--changeset roland.sadowski:61_ndelius_notification_outbox-2 splitStatements:false
 
 CREATE OR REPLACE FUNCTION fn_add_outbox_record_on_checkin_status_update()
     RETURNS TRIGGER AS $$
