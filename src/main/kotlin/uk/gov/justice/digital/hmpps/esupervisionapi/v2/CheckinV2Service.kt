@@ -6,14 +6,12 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
@@ -53,7 +51,6 @@ class CheckinV2Service(
   private val livenessSessionService: LivenessSessionService,
   private val livenessCredentialsService: LivenessCredentialsProvider,
   private val checkinPersistenceService: CheckinPersistenceService,
-  private val transactionTemplate: TransactionTemplate,
   @param:Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
   @param:Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
@@ -61,7 +58,6 @@ class CheckinV2Service(
   private val livenessConfidenceThreshold: Float,
   @param:Value("\${rekognition.call-timeout-seconds:30}")
   private val rekognitionCallTimeoutSeconds: Long,
-  private val eventAuditService: EventAuditV2Service,
   private val objectMapper: ObjectMapper,
   @param:Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
@@ -347,7 +343,7 @@ class CheckinV2Service(
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
 
     val reviewInfo = request.newValuesFor(checkin.status)
-    checkin.applyRequest(request, clock)
+    checkin.applyRequest(request, reviewInfo, clock)
     val event = checkin.toCheckinReviewedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod, videoUrl = videoUrl, snapshotUrl = snapshotUrl)
     checkinPersistenceService.checkinReview(checkin, event, reviewInfo)
 
@@ -355,7 +351,7 @@ class CheckinV2Service(
       s3UploadService.deleteCheckinSnapshot(uuid, 0)
       s3UploadService.deleteCheckinVideo(uuid)
       return checkin.dto(contactDetails, null, null, clock = clock, checkinWindow = checkinWindowPeriod)
-    }    
+    }
 
     LOGGER.info("Checkin reviewed: {} by {}", uuid, request.reviewedBy)
     return event.checkin
@@ -1117,9 +1113,9 @@ object CheckinRequestApplicator {
     this.status = CheckinV2Status.SUBMITTED
   }
 
-  fun OffenderCheckinV2.applyRequest(request: ReviewCheckinV2Request, clock: Clock) {
-    // assert()
-    this.status = CheckinV2Status.REVIEWED
+  fun OffenderCheckinV2.applyRequest(request: ReviewCheckinV2Request, reviewInfo: CheckinReviewInfo, clock: Clock) {
+    assert(this.status == CheckinV2Status.SUBMITTED || this.status == CheckinV2Status.EXPIRED)
+    this.status = reviewInfo.newStatus
     this.reviewedAt = clock.instant()
     this.reviewedBy = request.reviewedBy
     this.manualIdCheck = request.manualIdCheck

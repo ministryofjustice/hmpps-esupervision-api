@@ -19,7 +19,6 @@ import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
-import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.rekognition.model.AuditImage
@@ -43,7 +42,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -80,11 +78,9 @@ class CheckinV2ServiceTest {
   private val livenessSessionService: LivenessSessionService = mock()
   private val livenessCredentialsProvider: LivenessCredentialsProvider = mock()
   private val checkinPersistenceService: CheckinPersistenceService = mock()
-  private val transactionTemplate: TransactionTemplate = mock()
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
-  private val eventAuditService: EventAuditV2Service = mock()
   private val objectMapper = jacksonObjectMapper()
 
   private lateinit var service: CheckinV2Service
@@ -106,12 +102,10 @@ class CheckinV2ServiceTest {
       livenessSessionService,
       livenessCredentialsProvider,
       checkinPersistenceService,
-      transactionTemplate,
       uploadTtlMinutes,
       faceSimilarityThreshold,
       livenessConfidenceThreshold,
       30,
-      eventAuditService,
       objectMapper,
       3,
     )
@@ -373,7 +367,6 @@ class CheckinV2ServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
-    verify(checkinPersistenceService).checkinReview(any(), any(), any())
 
     val result = service.reviewCheckin(uuid, request)
 
