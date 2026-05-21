@@ -28,6 +28,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class CheckinEventsListenerIT : IntegrationTestBase() {
 
@@ -72,7 +73,7 @@ class CheckinEventsListenerIT : IntegrationTestBase() {
       offenderContactPreference = ContactPreference.PHONE,
     )
 
-    checkinEventsListener.processEvent(event)
+    checkinEventsListener.processEvent(event).get(2, TimeUnit.SECONDS)
 
     val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_SUBMITTED, checkin.id).orElseThrow()
     assertEquals(OutboxItemStatus.SENT, outboxItem.status)
@@ -98,7 +99,7 @@ class CheckinEventsListenerIT : IntegrationTestBase() {
       offenderContactPreference = ContactPreference.PHONE,
     )
 
-    checkinEventsListener.processEvent(event)
+    checkinEventsListener.processEvent(event).get(2, TimeUnit.SECONDS)
 
     val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_REVIEWED, checkin.id).orElseThrow()
     assertEquals(OutboxItemStatus.SENT, outboxItem.status)

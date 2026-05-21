@@ -11,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ICheckinEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
+import java.util.concurrent.CompletableFuture
 
 @Service
 class CheckinEventsListener(
@@ -21,7 +22,7 @@ class CheckinEventsListener(
 
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-  fun processEvent(event: ICheckinEvent) {
+  fun processEvent(event: ICheckinEvent): CompletableFuture<Void> {
     LOGGER.debug("processing checkin event for checkin uuid={} with status={}", event.checkin.uuid, event.checkin.status)
     when (event) {
       is CheckinSubmittedEvent -> notificationService.sendCheckinSubmittedNotifications(event)
@@ -31,6 +32,7 @@ class CheckinEventsListener(
       val result = outboxItemRepository.markAsSent(type.name, id)
       LOGGER.info("checkin={}, marked outbox item {} as sent, updated records: {}", event.checkin.uuid, type to id, result)
     }
+    return CompletableFuture.completedFuture(null)
   }
 
   companion object {
