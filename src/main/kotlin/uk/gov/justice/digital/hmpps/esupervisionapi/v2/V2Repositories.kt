@@ -788,7 +788,7 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   fun deleteUpcomingAssignment(offenderId: Long): Int
 }
 
-typealias OutboxItemStatusString = String
+typealias OutboxItemTypeString = String
 
 @Repository
 interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
@@ -803,7 +803,7 @@ interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
   )
   @Modifying
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  fun markAsSent(type: OutboxItemStatusString, entityId: Long): Int
+  fun markAsSent(type: OutboxItemTypeString, entityId: Long): Int
 
   @Query
   fun findByTypeAndEntityId(type: OutboxItemType, entityId: Long): Optional<OutboxItem>
