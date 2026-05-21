@@ -789,7 +789,6 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
 }
 
 typealias OutboxItemStatusString = String
-val x = OutboxItemStatus.SENT
 
 @Repository
 interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
