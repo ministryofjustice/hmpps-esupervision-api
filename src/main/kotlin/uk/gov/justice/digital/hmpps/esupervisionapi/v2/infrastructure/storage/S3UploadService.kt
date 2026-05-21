@@ -349,6 +349,8 @@ class S3UploadService(
   /**
    * V2 Checkin - deletes S3 object for checkin snapshot
    */
+  @CircuitBreaker(name = "awsS3")
+  @Retry(name = "awsS3")
   fun deleteCheckinSnapshot(uuid: UUID, index: Int): DeleteObjectResponse? {
     val key = CheckinPhotoKey(uuid, index)
     val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
@@ -358,6 +360,8 @@ class S3UploadService(
   /**
    * V2 Checkin - deletes S3 object for checkin video
    */
+  @CircuitBreaker(name = "awsS3")
+  @Retry(name = "awsS3")
   fun deleteCheckinVideo(uuid: UUID): DeleteObjectResponse? {
     val key = CheckinVideoKey(uuid)
     val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
