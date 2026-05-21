@@ -340,6 +340,8 @@ class CheckinV2ServiceTest {
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
     verify(checkinRepository).save(any())
+    verify(s3UploadService).deleteCheckinSnapshot(uuid, 0)
+    verify(s3UploadService).deleteCheckinVideo(uuid)
   }
 
   @Test
@@ -376,6 +378,8 @@ class CheckinV2ServiceTest {
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH_WITH_CONCERN, result.manualIdCheck)
     verify(checkinRepository).save(any())
+    verify(s3UploadService, never()).deleteCheckinVideo(any())
+    verify(s3UploadService, never()).deleteCheckinSnapshot(any(), any())
   }
 
   @Test
