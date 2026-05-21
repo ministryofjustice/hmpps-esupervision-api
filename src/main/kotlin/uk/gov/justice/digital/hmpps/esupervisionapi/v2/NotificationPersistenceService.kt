@@ -57,7 +57,6 @@ class NotificationPersistenceService(
             ContactPreference.EMAIL -> "EMAIL"
           },
           offenderId = offenderId,
-          // offender = offender,
           practitionerId = null,
           status = "created",
           reference = NotificationContextV2.generateReference(notificationType, clock, env),

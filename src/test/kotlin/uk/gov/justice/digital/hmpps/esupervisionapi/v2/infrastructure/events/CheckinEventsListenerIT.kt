@@ -29,7 +29,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-class CheckinEventsListenerIntegrationTest : IntegrationTestBase() {
+class CheckinEventsListenerIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var checkinEventsListener: CheckinEventsListener
