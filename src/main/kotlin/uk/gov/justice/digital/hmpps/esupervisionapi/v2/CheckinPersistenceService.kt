@@ -26,7 +26,7 @@ class CheckinPersistenceService(
   fun findCheckin(uuid: UUID): OffenderCheckinV2? = checkinRepository.findByUuid(uuid).orElse(null)
 
   @Transactional
-  fun submitCheckinPersist(checkin: OffenderCheckinV2, event: CheckinSubmittedEvent) {
+  fun checkinSubmission(checkin: OffenderCheckinV2, event: CheckinSubmittedEvent) {
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event.checkin.personalDetails)
 
@@ -34,7 +34,7 @@ class CheckinPersistenceService(
   }
 
   @Transactional
-  fun reviewCheckinPersist(checkin: OffenderCheckinV2, event: CheckinReviewedEvent, reviewInfo: CheckinReviewInfo) {
+  fun checkinReview(checkin: OffenderCheckinV2, event: CheckinReviewedEvent, reviewInfo: CheckinReviewInfo) {
     require(event.checkin.reviewedBy != null)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinReviewed(checkin, event.checkin.personalDetails)

@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import jdk.javadoc.internal.doclets.formats.html.markup.RawHtml.comment
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -220,7 +219,7 @@ class CheckinV2ServiceTest {
     assertNotNull(result.submittedAt)
     assertNull(result.videoUrl, "Submission result should not contain media URLs")
     assertNull(result.snapshotUrl, "Submission result should not contain media URLs")
-    verify(checkinPersistenceService).submitCheckinPersist(any(), any())
+    verify(checkinPersistenceService).checkinSubmission(any(), any())
   }
 
   @Test
@@ -444,7 +443,7 @@ class CheckinV2ServiceTest {
 
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
-    verify(checkinPersistenceService).reviewCheckinPersist(
+    verify(checkinPersistenceService).checkinReview(
       any(),
       any(),
       eq(
@@ -480,7 +479,7 @@ class CheckinV2ServiceTest {
 
     assertEquals(false, checkin.sensitive)
     assertEquals(false, result.sensitive)
-    verify(checkinPersistenceService).reviewCheckinPersist(
+    verify(checkinPersistenceService).checkinReview(
       argThat { !sensitive },
       any(),
       eq(
@@ -665,7 +664,7 @@ class CheckinV2ServiceTest {
 
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
-    verify(checkinPersistenceService).reviewCheckinPersist(any(), any(), any())
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
   }
 
   @Test

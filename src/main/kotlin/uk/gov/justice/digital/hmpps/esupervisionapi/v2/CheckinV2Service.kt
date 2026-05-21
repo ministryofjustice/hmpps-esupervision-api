@@ -211,7 +211,7 @@ class CheckinV2Service(
 
     val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
     val event = checkin.toCheckinSubmittedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
-    checkinPersistenceService.submitCheckinPersist(checkin, event)
+    checkinPersistenceService.checkinSubmission(checkin, event)
 
     LOGGER.info("Checkin submitted: {}, submission started at {}", uuid, checkin.checkinStartedAt)
     return event.checkin
@@ -349,7 +349,7 @@ class CheckinV2Service(
     val reviewInfo = request.newValuesFor(checkin.status)
     checkin.applyRequest(request, clock)
     val event = checkin.toCheckinReviewedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod, videoUrl = videoUrl, snapshotUrl = snapshotUrl)
-    checkinPersistenceService.reviewCheckinPersist(checkin, event, reviewInfo)
+    checkinPersistenceService.checkinReview(checkin, event, reviewInfo)
 
     if (checkin.manualIdCheck == ManualIdVerificationResult.MATCH) {
       s3UploadService.deleteCheckinSnapshot(uuid, 0)
