@@ -335,11 +335,51 @@ class CheckinV2ServiceTest {
 
     assertEquals(CheckinV2Status.REVIEWED, result.status)
     assertNotNull(result.reviewedAt)
-    assertNotNull(result.videoUrl)
-    assertNotNull(result.snapshotUrl)
+    assertNull(result.videoUrl)
+    assertNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
     verify(checkinRepository).save(any())
+    verify(s3UploadService).deleteCheckinSnapshot(uuid, 0)
+    verify(s3UploadService).deleteCheckinVideo(uuid)
+  }
+
+  @Test
+  fun `reviewCheckin - happy path - completes review, manual id check MATCH_WITH_CONCERN`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+      reviewStartedAt = clock.instant(),
+      reviewStartedBy = "PRACT001",
+    )
+
+    val request = ReviewCheckinV2Request(
+      reviewedBy = "PRACT001",
+      manualIdCheck = ManualIdVerificationResult.MATCH_WITH_CONCERN,
+      notes = "Approved",
+    )
+
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.reviewCheckin(uuid, request)
+
+    assertEquals(CheckinV2Status.REVIEWED, result.status)
+    assertNotNull(result.reviewedAt)
+    assertNotNull(result.videoUrl)
+    assertNotNull(result.snapshotUrl)
+    assertEquals("PRACT001", result.reviewedBy)
+    assertEquals(ManualIdVerificationResult.MATCH_WITH_CONCERN, result.manualIdCheck)
+    verify(checkinRepository).save(any())
+    verify(s3UploadService, never()).deleteCheckinVideo(any())
+    verify(s3UploadService, never()).deleteCheckinSnapshot(any(), any())
   }
 
   @Test
