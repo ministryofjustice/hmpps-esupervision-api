@@ -119,3 +119,5 @@ databaseChangeLog:
       file: db/changelog/changesets/59_setup_event_backfill_v2.sql
   - include:
       file: db/changelog/changesets/60_alter_verify_id_manual_result_v2.sql
+  - include:
+      file: db/changelog/changesets/61_ndelius_notification_outbox.sql

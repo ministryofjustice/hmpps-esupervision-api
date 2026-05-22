@@ -165,7 +165,7 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
 
     val notification = uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2(
       notificationId = UUID.randomUUID(),
-      offender = notifiedOffender,
+      offenderId = notifiedOffender.id,
       eventType = NotificationType.OffenderCheckinReminder.name,
       createdAt = Instant.now(),
       reference = "REF123",

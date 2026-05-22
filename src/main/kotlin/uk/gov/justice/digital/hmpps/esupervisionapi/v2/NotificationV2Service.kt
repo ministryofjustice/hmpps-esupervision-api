@@ -45,15 +45,15 @@ class NotificationV2Service(
   /**
    * Send notifications for checkin submitted event
    */
-  fun sendCheckinSubmittedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
-    orchestrator.sendCheckinSubmittedNotifications(checkin, contactDetails)
+  fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
+    orchestrator.sendCheckinSubmittedNotifications(event)
   }
 
   /**
    * Send notifications for checkin reviewed event
    */
-  fun sendCheckinReviewedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
-    orchestrator.sendCheckinReviewedNotifications(checkin, contactDetails)
+  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) {
+    orchestrator.sendCheckinReviewedNotifications(event)
   }
 
   /**
