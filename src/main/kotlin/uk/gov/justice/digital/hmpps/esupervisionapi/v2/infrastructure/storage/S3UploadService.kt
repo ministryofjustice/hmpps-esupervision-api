@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
+import software.amazon.awssdk.services.s3.model.DeleteObjectResponse
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
@@ -236,6 +238,14 @@ class S3UploadService(
     return PresignedUpload(url, headers)
   }
 
+  private fun deleteObjectRequest(bucket: String, key: String): DeleteObjectRequest {
+    val request = DeleteObjectRequest.builder()
+      .bucket(bucket)
+      .key(key)
+      .build()
+    return request
+  }
+
   // ============================================================
   // V2 Public API - Setup Photo Operations
   // ============================================================
@@ -424,6 +434,28 @@ class S3UploadService(
       bucket = videoUploadBucket,
       key = key.toKey(),
     )
+  }
+
+  /**
+   * V2 Checkin - deletes S3 object for checkin snapshot
+   */
+  @CircuitBreaker(name = "awsS3")
+  @Retry(name = "awsS3")
+  fun deleteCheckinSnapshot(uuid: UUID, index: Int): DeleteObjectResponse? {
+    val key = CheckinPhotoKey(uuid, index)
+    val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
+    return s3uploadClient.deleteObject(delReq)
+  }
+
+  /**
+   * V2 Checkin - deletes S3 object for checkin video
+   */
+  @CircuitBreaker(name = "awsS3")
+  @Retry(name = "awsS3")
+  fun deleteCheckinVideo(uuid: UUID): DeleteObjectResponse? {
+    val key = CheckinVideoKey(uuid)
+    val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
+    return s3uploadClient.deleteObject(delReq)
   }
 
   companion object {

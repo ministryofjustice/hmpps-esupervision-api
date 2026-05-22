@@ -27,6 +27,8 @@ import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
@@ -41,7 +43,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -77,10 +78,10 @@ class CheckinV2ServiceTest {
   private val compareFacesService: OffenderIdVerifier = mock()
   private val livenessSessionService: LivenessSessionService = mock()
   private val livenessCredentialsProvider: LivenessCredentialsProvider = mock()
+  private val checkinPersistenceService: CheckinPersistenceService = mock()
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
-  private val eventAuditService: EventAuditV2Service = mock()
   private val appConfig: AppConfig = mock()
   private val objectMapper = jacksonObjectMapper()
 
@@ -102,11 +103,11 @@ class CheckinV2ServiceTest {
       compareFacesService,
       livenessSessionService,
       livenessCredentialsProvider,
+      checkinPersistenceService,
       uploadTtlMinutes,
       faceSimilarityThreshold,
       livenessConfidenceThreshold,
       30,
-      eventAuditService,
       objectMapper,
       3,
       appConfig,
@@ -204,8 +205,7 @@ class CheckinV2ServiceTest {
     val surveyData = mapOf("question1" to "answer1")
     val request = SubmitCheckinV2Request(survey = surveyData)
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
     whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
     whenever(s3UploadService.isSetupPhotoUploaded(offender)).thenReturn(false)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
@@ -216,7 +216,7 @@ class CheckinV2ServiceTest {
     assertNotNull(result.submittedAt)
     assertNull(result.videoUrl, "Submission result should not contain media URLs")
     assertNull(result.snapshotUrl, "Submission result should not contain media URLs")
-    verify(checkinRepository).save(any())
+    verify(checkinPersistenceService).checkinSubmission(any(), any())
   }
 
   @Test
@@ -249,7 +249,7 @@ class CheckinV2ServiceTest {
 
     val request = SubmitCheckinV2Request(survey = emptyMap())
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       service.submitCheckin(uuid, request)
@@ -275,7 +275,7 @@ class CheckinV2ServiceTest {
 
     val request = SubmitCheckinV2Request(survey = emptyMap())
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       service.submitCheckin(uuid, request)
@@ -331,8 +331,45 @@ class CheckinV2ServiceTest {
       notes = "Approved",
     )
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
     whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.reviewCheckin(uuid, request)
+
+    assertEquals(CheckinV2Status.REVIEWED, result.status)
+    assertNotNull(result.reviewedAt)
+    assertNull(result.videoUrl)
+    assertNull(result.snapshotUrl)
+    assertEquals("PRACT001", result.reviewedBy)
+    assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
+    verify(s3UploadService).deleteCheckinSnapshot(uuid, 0)
+    verify(s3UploadService).deleteCheckinVideo(uuid)
+  }
+
+  @Test
+  fun `reviewCheckin - happy path - completes review, manual id check MATCH_WITH_CONCERN`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+      reviewStartedAt = clock.instant(),
+      reviewStartedBy = "PRACT001",
+    )
+
+    val request = ReviewCheckinV2Request(
+      reviewedBy = "PRACT001",
+      manualIdCheck = ManualIdVerificationResult.MATCH_WITH_CONCERN,
+      notes = "Approved",
+    )
+
+    whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
 
     val result = service.reviewCheckin(uuid, request)
 
@@ -341,8 +378,10 @@ class CheckinV2ServiceTest {
     assertNotNull(result.videoUrl)
     assertNotNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewedBy)
-    assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
-    verify(checkinRepository).save(any())
+    assertEquals(ManualIdVerificationResult.MATCH_WITH_CONCERN, result.manualIdCheck)
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
+    verify(s3UploadService, never()).deleteCheckinVideo(any())
+    verify(s3UploadService, never()).deleteCheckinSnapshot(any(), any())
   }
 
   @Test
@@ -363,7 +402,7 @@ class CheckinV2ServiceTest {
       manualIdCheck = ManualIdVerificationResult.MATCH,
     )
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       service.reviewCheckin(uuid, request)
@@ -393,18 +432,19 @@ class CheckinV2ServiceTest {
       sensitive = true,
     )
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
     whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
 
     val result = service.reviewCheckin(uuid, request)
 
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
-    verify(checkinRepository).save(checkin)
-    verify(offenderEventLogRepository).save(
-      argThat {
-        sensitive == true && comment == "Contains private health info"
-      },
+    verify(checkinPersistenceService).checkinReview(
+      any(),
+      any(),
+      eq(
+        CheckinReviewInfo(CheckinV2Status.REVIEWED, "Contains private health info", LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED),
+      ),
     )
   }
 
@@ -428,18 +468,19 @@ class CheckinV2ServiceTest {
       notes = "Test note",
     )
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
+    // whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
 
     val result = service.reviewCheckin(uuid, request)
 
     assertEquals(false, checkin.sensitive)
     assertEquals(false, result.sensitive)
-    verify(checkinRepository).save(checkin)
-    verify(offenderEventLogRepository).save(
-      argThat {
-        sensitive == false && comment == "Test note"
-      },
+    verify(checkinPersistenceService).checkinReview(
+      argThat { !sensitive },
+      any(),
+      eq(
+        CheckinReviewInfo(CheckinV2Status.REVIEWED, "Test note", LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED),
+      ),
     )
   }
 
@@ -603,7 +644,7 @@ class CheckinV2ServiceTest {
       sensitive = true,
     )
 
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
     whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
     whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
 
@@ -619,11 +660,7 @@ class CheckinV2ServiceTest {
 
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
-    verify(offenderEventLogRepository).save(
-      argThat {
-        sensitive == true
-      },
-    )
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
   }
 
   @Test
