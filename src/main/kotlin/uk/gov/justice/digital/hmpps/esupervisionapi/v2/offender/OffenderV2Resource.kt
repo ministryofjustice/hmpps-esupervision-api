@@ -483,7 +483,7 @@ data class ReactivateOffenderRequest(
 /** Request to update offender check in schedule */
 data class CheckinScheduleUpdateRequest(
   @field:Schema(description = "Id of the user requesting the change", required = true)
-  val requestedBy: uk.gov.justice.digital.hmpps.esupervisionapi.practitioner.ExternalUserId,
+  val requestedBy: ExternalUserId,
   @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
   val checkinInterval: CheckinInterval,
 )
