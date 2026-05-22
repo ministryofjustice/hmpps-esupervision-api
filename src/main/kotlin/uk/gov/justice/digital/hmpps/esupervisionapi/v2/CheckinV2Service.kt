@@ -11,7 +11,6 @@ import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionR
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -179,7 +178,7 @@ class CheckinV2Service(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin is past submission date")
     }
 
-    val require = appConfig.uploadContentHashRequire
+    val requireHash = appConfig.uploadContentHashRequire
 
     val ttl = Duration.ofMinutes(uploadTtlMinutes)
     val ttlString = "PT${uploadTtlMinutes}M"
@@ -189,7 +188,7 @@ class CheckinV2Service(
       snapshotContentTypes.mapIndexed { index, contentType ->
         val snapHash = resolveUploadHash(
           hashes?.snapshots?.getOrNull(index)?.sha256,
-          require,
+          requireHash,
           "snapshot[$index]",
         )
         LOGGER.info(
