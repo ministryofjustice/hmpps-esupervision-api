@@ -10,6 +10,7 @@ import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
@@ -178,7 +179,7 @@ class CheckinV2Service(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin is past submission date")
     }
 
-    val requireHash = appConfig.uploadContentHashRequire
+    val requireHash = appConfig.enabledFeatures.contains(Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH)
 
     val ttl = Duration.ofMinutes(uploadTtlMinutes)
     val ttlString = "PT${uploadTtlMinutes}M"

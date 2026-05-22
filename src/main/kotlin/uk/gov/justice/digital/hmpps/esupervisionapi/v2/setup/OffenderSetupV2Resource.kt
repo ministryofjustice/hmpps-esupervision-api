@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Dto
@@ -102,7 +103,7 @@ class OffenderSetupV2Resource(
 
     val hash = resolveUploadHash(
       sha256Base64 = hashRequest?.sha256,
-      require = appConfig.uploadContentHashRequire,
+      require = appConfig.enabledFeatures.contains(Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH),
       slot = "setup-photo",
     )
     LOGGER.info("upload_hash.received endpoint=/v2/offender_setup/upload_location received={}", hash != null)

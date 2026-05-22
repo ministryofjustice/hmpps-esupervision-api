@@ -18,6 +18,7 @@ class AppConfig(
   val enabledFeatures: Set<Feature> = listOfNotNull(
     if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
     if (esup1183SendInviteOnlyWhenActiveEvent) Feature.ESUP_1183 else null,
+    if (uploadContentHashRequire) Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH else null,
   ).toSet(),
 ) {
 
