@@ -499,6 +499,7 @@ open class OffenderEventLogV2(
 @Entity
 @Table(name = "feedback")
 open class Feedback(
+  @JdbcTypeCode(SqlTypes.JSON)
   @Column(nullable = false)
   open var feedback: Map<String, Any>,
 
