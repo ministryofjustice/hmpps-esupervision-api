@@ -12,6 +12,7 @@ import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.rekognition.RekognitionAsyncClient
 import software.amazon.awssdk.services.sts.StsClient
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
 import java.time.Duration
 
 /**
@@ -30,6 +31,22 @@ class RekognitionV2Config(
   @Value("\${rekognition.max-concurrency}") private val maxConcurrency: Int,
   @Value("\${rekognition.read-timeout-seconds}") private val readTimeoutSeconds: Long,
 ) {
+
+  @Bean
+  fun rekognitionCredentialsProvider(): AwsCredentialsProvider {
+    val stsClient = StsClient.builder().region(Region.of(region))
+      .credentialsProvider(DefaultCredentialsProvider.builder().build())
+      .build()
+
+    return StsAssumeRoleCredentialsProvider.builder()
+      .stsClient(stsClient)
+      .refreshRequest { assumeRoleRequestBuilder ->
+        LOGGER.info("Assuming role {}", roleArn)
+        assumeRoleRequestBuilder
+          .roleArn(roleArn)
+          .roleSessionName(roleSessionName)
+      }.build()
+  }
 
   @Bean
   fun offenderIdVerifierV2(rekognitionAsyncClient: RekognitionAsyncClient): OffenderIdVerifier {
