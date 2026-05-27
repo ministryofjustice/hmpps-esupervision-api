@@ -315,8 +315,11 @@ open class GenericNotificationV2(
   open var channel: String, // SMS or EMAIL
 
   @ManyToOne(cascade = [CascadeType.DETACH])
-  @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true)
+  @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true, insertable = false, updatable = false)
   open var offender: OffenderV2? = null,
+
+  @Column(name = "offender_id", nullable = true)
+  open var offenderId: Long? = null,
 
   @Column(name = "practitioner_id", nullable = true)
   open var practitionerId: String? = null,
@@ -496,6 +499,7 @@ open class OffenderEventLogV2(
 @Entity
 @Table(name = "feedback")
 open class Feedback(
+  @JdbcTypeCode(SqlTypes.JSON)
   @Column(nullable = false)
   open var feedback: Map<String, Any>,
 
@@ -643,6 +647,30 @@ open class MigrationControl(
 ) : V2BaseEntity()
 
 @Entity
+@Table(
+  name = "setup_event_backfill_v2",
+  indexes = [
+    Index(name = "idx_setup_event_backfill_v2_offender", columnList = "offender_id", unique = true),
+  ],
+)
+open class SetupEventBackfillV2(
+  @Column(name = "offender_id", nullable = false, unique = true)
+  open var offenderId: Long,
+
+  @Column(name = "setup_row_created", nullable = false)
+  open var setupRowCreated: Boolean = false,
+
+  @Column(name = "event_sent", nullable = false)
+  open var eventSent: Boolean = false,
+
+  @Column(name = "event_sent_at", nullable = true)
+  open var eventSentAt: Instant? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var createdAt: Instant,
+) : V2BaseEntity()
+
+@Entity
 @Table(name = "migration_events_to_send")
 open class MigrationEventsToSend(
   @Column()
@@ -705,4 +733,44 @@ open class QuestionListAssignment(
 
   @Column(name = "updated_at", nullable = false)
   open val updatedAt: Instant,
+) : V2BaseEntity()
+
+enum class OutboxItemType {
+  OFFENDER_SETUP_COMPLETE,
+  OFFENDER_DEACTIVATED,
+  CHECKIN_CREATED,
+  CHECKIN_SUBMITTED,
+  CHECKIN_REVIEWED,
+  CHECKIN_EXPIRED,
+}
+
+enum class OutboxItemStatus {
+  INITIAL,
+  SENT,
+}
+
+/**
+ * Keeps track of the delivery status of NDelius messages.
+ *
+ * For the delivery status of GOV.UK Notify messages, see [GenericNotificationV2].
+ */
+@Entity
+@Table(name = "outbox_items")
+open class OutboxItem(
+  @Column("type", nullable = false)
+  @Enumerated(EnumType.STRING)
+  open var type: OutboxItemType,
+
+  @Column("entity_id", nullable = false)
+  open var entityId: Long,
+
+  @Column("status")
+  @Enumerated(EnumType.STRING)
+  open var status: OutboxItemStatus,
+
+  @Column("created_at", nullable = false)
+  open var createdAt: Instant,
+
+  @Column("updated_at", nullable = true)
+  open var updatedAt: Instant? = null,
 ) : V2BaseEntity()

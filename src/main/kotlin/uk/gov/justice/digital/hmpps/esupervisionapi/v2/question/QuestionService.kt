@@ -24,6 +24,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UpcomingQuestionAssignmentInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UpcomingQuestionListItems
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinScheduleLowerBound
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.isCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
@@ -83,11 +84,13 @@ class QuestionService(
   @Transactional(readOnly = true)
   fun upcomingAssignment(offender: OffenderV2): UpcomingQuestionAssignmentInfo {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender status is ${offender.status}" }
-    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id).getOrNull()
     val today = clock.today()
+    val next = nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY)
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, next, checkinWindow.toDays())
+
     return UpcomingQuestionAssignmentInfo(
-      info?.dueDate ?: if (isCheckinDay(offender, today)) today else nextCheckinDay(offender, today),
-      info?.questionListId,
+      info.dueDate,
+      info.questionListId,
     )
   }
 

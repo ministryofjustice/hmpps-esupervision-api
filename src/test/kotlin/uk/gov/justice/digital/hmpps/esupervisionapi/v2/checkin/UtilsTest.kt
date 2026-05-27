@@ -16,8 +16,9 @@ class UtilsTest {
   fun `next checkin day`() {
     val today = clock.today()
     val offender = offenderTemplate.copy(firstCheckin = today.minusDays(6)).toEntity()
-    val next = nextCheckinDay(offender, today)
-    assertEquals(today.plusDays(1), next)
+    assertEquals(today.plusDays(1), nextCheckinDay(offender, today))
+
+    assertEquals(today.plusDays(1), nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY))
   }
 
   @Test
@@ -25,6 +26,8 @@ class UtilsTest {
     val today = clock.today()
     val offender = offenderTemplate.copy(firstCheckin = today).toEntity()
     assertEquals(today.plusDays(7), nextCheckinDay(offender, today))
+
+    assertEquals(today, nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY))
   }
 
   @Test
@@ -32,5 +35,7 @@ class UtilsTest {
     val today = clock.today()
     val offender = offenderTemplate.copy(firstCheckin = today.minusDays(7)).toEntity()
     assertEquals(today.plusDays(7), nextCheckinDay(offender, today))
+
+    assertEquals(today, nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY))
   }
 }

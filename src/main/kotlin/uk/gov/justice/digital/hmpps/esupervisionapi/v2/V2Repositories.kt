@@ -3,12 +3,15 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -138,6 +141,7 @@ interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
  */
 @Repository
 interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
+  @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckinV2>
   fun findAllByOffender(offender: OffenderV2, pageable: Pageable): Page<OffenderCheckinV2>
   fun findAllByOffenderAndStatus(offender: OffenderV2, status: CheckinV2Status): List<OffenderCheckinV2>
@@ -563,6 +567,27 @@ interface StatsSummaryProviderMonthRepository : JpaRepository<StatsSummaryProvid
 }
 
 @Repository
+interface SetupEventBackfillV2Repository : JpaRepository<SetupEventBackfillV2, Long> {
+  @Query(
+    """
+    SELECT b FROM SetupEventBackfillV2 b
+    WHERE b.setupRowCreated = false
+    ORDER BY b.id
+    """,
+  )
+  fun findPendingSetupRowCreation(pageable: Pageable): List<SetupEventBackfillV2>
+
+  @Query(
+    """
+    SELECT b FROM SetupEventBackfillV2 b
+    WHERE b.eventSent = false
+    ORDER BY b.id
+    """,
+  )
+  fun findPendingEventSend(pageable: Pageable): List<SetupEventBackfillV2>
+}
+
+@Repository
 interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
 
 @Repository
@@ -719,7 +744,8 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
 
   interface AssignmentInfo {
     val questionListId: Long
-    val dueDate: LocalDate?
+    val dueDate: LocalDate
+    val explicitAssignment: Boolean
   }
 
   @Query(
@@ -737,20 +763,13 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
 
   /**
-   * Returns list id if any, and a due date of already awaiting check-in, if any.
+   * In case of no explicit assignment, question list id will be set to the default list id.
    */
   @Query(
-    """
-      select qla.question_list_id, c.due_date
-      from question_list_assignment qla
-      left join offender_checkin_v2 c on qla.checkin_id = c.id
-      where qla.offender_id = :offenderId 
-      and (qla.checkin_id is null or c.status = 'CREATED')
-      limit 1
-  """,
+    """select * from get_upcoming_assignment_info(:offenderId, cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignmentAndDueDate(offenderId: Long): Optional<AssignmentInfo>
+  fun upcomingAssignmentAndDueDate(offenderId: Long, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.
@@ -772,4 +791,25 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   )
   @Modifying
   fun deleteUpcomingAssignment(offenderId: Long): Int
+}
+
+typealias OutboxItemTypeString = String
+
+@Repository
+interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
+
+  @Query(
+    """
+      update outbox_items
+      set status = 'SENT'::OutboxItemStatus, updated_at = now()
+      where type = cast(:type as text)::OutboxItemType and entity_id = :entityId
+    """,
+    nativeQuery = true,
+  )
+  @Modifying
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  fun markAsSent(type: OutboxItemTypeString, entityId: Long): Int
+
+  @Query
+  fun findByTypeAndEntityId(type: OutboxItemType, entityId: Long): Optional<OutboxItem>
 }
