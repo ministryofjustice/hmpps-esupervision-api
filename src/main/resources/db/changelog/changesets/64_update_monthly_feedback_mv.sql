@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset dave.iles:42_update_monthly_feedback_mv-1 splitStatements:false
+--changeset dave.iles:64_update_monthly_feedback_mv-1 splitStatements:false
 DROP FUNCTION get_summary(date,date,text);
 
 CREATE OR REPLACE FUNCTION get_summary(from_month DATE, to_month DATE, p_row_type TEXT DEFAULT 'ALL')
