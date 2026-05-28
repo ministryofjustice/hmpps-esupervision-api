@@ -64,12 +64,17 @@ class StatsResourceV2Test {
     val totals =
       StatsTotalsDto(
         totalSignedUp = 10,
+        totalActiveUsers = 7,
+        totalInactiveUsers = 3,
+        signedUp = 10,
         activeUsers = 7,
         inactiveUsers = 3,
         completedCheckins = 20,
         notCompletedOnTime = 2,
         avgHoursToComplete = 5.5,
         avgCompletedCheckinsPerPerson = 2.86,
+        pctTotalActiveUsers = 0.7,
+        pctTotalInactiveUsers = 0.3,
         pctActiveUsers = 0.7,
         pctInactiveUsers = 0.3,
         pctCompletedCheckins = 1.0,
@@ -90,12 +95,17 @@ class StatsResourceV2Test {
         providerCode = "WPTNWS",
         providerDescription = "North Wales",
         totalSignedUp = 4,
+        totalActiveUsers = 3,
+        totalInactiveUsers = 1,
+        signedUp = 4,
         activeUsers = 3,
         inactiveUsers = 1,
         completedCheckins = 8,
         notCompletedOnTime = 1,
         avgHoursToComplete = 4.25,
         avgCompletedCheckinsPerPerson = 2.00,
+        pctTotalActiveUsers = 0.75,
+        pctTotalInactiveUsers = 0.25,
         pctActiveUsers = 0.75,
         pctInactiveUsers = 0.25,
         pctCompletedCheckins = 0.8889,
@@ -109,12 +119,17 @@ class StatsResourceV2Test {
         providerCode = "N07ALL",
         providerDescription = "All London",
         totalSignedUp = 6,
+        totalActiveUsers = 4,
+        totalInactiveUsers = 2,
+        signedUp = 6,
         activeUsers = 4,
         inactiveUsers = 2,
         completedCheckins = 12,
         notCompletedOnTime = 1,
         avgHoursToComplete = 6.00,
         avgCompletedCheckinsPerPerson = 3.00,
+        pctTotalActiveUsers = 0.6667,
+        pctTotalInactiveUsers = 0.3333,
         pctActiveUsers = 0.6667,
         pctInactiveUsers = 0.3333,
         pctCompletedCheckins = 0.9231,
@@ -139,12 +154,17 @@ class StatsResourceV2Test {
     // totals mapping
     val total = body.total
     assertEquals(10L, total.totalSignedUp)
+    assertEquals(7L, total.totalActiveUsers)
+    assertEquals(3L, total.totalInactiveUsers)
+    assertEquals(10L, total.signedUp)
     assertEquals(7L, total.activeUsers)
     assertEquals(3L, total.inactiveUsers)
     assertEquals(20L, total.completedCheckins)
     assertEquals(2L, total.notCompletedOnTime)
     assertEquals(5.5, total.avgHoursToComplete)
     assertEquals(2.86, total.avgCompletedCheckinsPerPerson)
+    assertEquals(0.7, total.pctTotalActiveUsers)
+    assertEquals(0.3, total.pctTotalInactiveUsers)
     assertEquals(0.7, total.pctActiveUsers)
     assertEquals(0.3, total.pctInactiveUsers)
     assertEquals(1.0, total.pctCompletedCheckins)
@@ -167,12 +187,17 @@ class StatsResourceV2Test {
     assertEquals("WPTNWS", first.providerCode)
     assertEquals("North Wales", first.providerDescription)
     assertEquals(4L, first.totalSignedUp)
+    assertEquals(3L, first.totalActiveUsers)
+    assertEquals(1L, first.totalInactiveUsers)
+    assertEquals(4L, first.signedUp)
     assertEquals(3L, first.activeUsers)
     assertEquals(1L, first.inactiveUsers)
     assertEquals(8L, first.completedCheckins)
     assertEquals(1L, first.notCompletedOnTime)
     assertEquals(4.25, first.avgHoursToComplete)
     assertEquals(2.0, first.avgCompletedCheckinsPerPerson)
+    assertEquals(0.75, first.pctTotalActiveUsers)
+    assertEquals(0.25, first.pctTotalInactiveUsers)
     assertEquals(0.75, first.pctActiveUsers)
     assertEquals(0.25, first.pctInactiveUsers)
     assertEquals(0.8889, first.pctCompletedCheckins)
@@ -184,12 +209,17 @@ class StatsResourceV2Test {
     assertEquals("N07ALL", second.providerCode)
     assertEquals("All London", second.providerDescription)
     assertEquals(6L, second.totalSignedUp)
+    assertEquals(4L, second.totalActiveUsers)
+    assertEquals(2L, second.totalInactiveUsers)
+    assertEquals(6L, second.signedUp)
     assertEquals(4L, second.activeUsers)
     assertEquals(2L, second.inactiveUsers)
     assertEquals(12L, second.completedCheckins)
     assertEquals(1L, second.notCompletedOnTime)
     assertEquals(6.0, second.avgHoursToComplete)
     assertEquals(3.0, second.avgCompletedCheckinsPerPerson)
+    assertEquals(0.6667, second.pctTotalActiveUsers)
+    assertEquals(0.3333, second.pctTotalInactiveUsers)
     assertEquals(0.6667, second.pctActiveUsers)
     assertEquals(0.3333, second.pctInactiveUsers)
     assertEquals(0.9231, second.pctCompletedCheckins)
@@ -205,12 +235,17 @@ class StatsResourceV2Test {
     val totals =
       StatsTotalsDto(
         totalSignedUp = 1,
+        totalActiveUsers = 1,
+        totalInactiveUsers = 0,
+        signedUp = 1,
         activeUsers = 1,
         inactiveUsers = 0,
         completedCheckins = 0,
         notCompletedOnTime = 0,
         avgHoursToComplete = 0.0,
         avgCompletedCheckinsPerPerson = 0.0,
+        pctTotalActiveUsers = 1.0,
+        pctTotalInactiveUsers = 0.0,
         pctActiveUsers = 1.0,
         pctInactiveUsers = 0.0,
         pctCompletedCheckins = 0.0,

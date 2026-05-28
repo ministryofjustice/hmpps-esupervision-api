@@ -123,3 +123,7 @@ databaseChangeLog:
       file: db/changelog/changesets/61_ndelius_notification_outbox.sql
   - include:
       file: db/changelog/changesets/62_v1_decomission.sql
+  - include:
+      file: db/changelog/changesets/63_update_provider_month_mv.sql
+  - include:
+      file: db/changelog/changesets/64_update_monthly_feedback_mv.sql
