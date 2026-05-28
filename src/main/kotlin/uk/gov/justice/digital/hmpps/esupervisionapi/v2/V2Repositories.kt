@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import java.lang.reflect.ParameterizedType
@@ -33,8 +32,6 @@ import java.util.stream.Stream
 interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
   fun findByUuid(uuid: UUID): Optional<OffenderV2>
   fun findByCrn(crn: String): Optional<OffenderV2>
-  fun findAllByPractitionerId(practitionerId: ExternalUserId, pageable: Pageable): Page<OffenderV2>
-  fun findAllByStatus(status: OffenderStatus): List<OffenderV2>
 
   /**
    * Find offenders eligible for checkin creation
@@ -99,9 +96,6 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
     @Param("reminderWindowStart") reminderWindowStart: Instant,
   ): Stream<OffenderV2>
 
-  @Query("SELECT o.crn FROM OffenderV2 o WHERE o IN :offenders")
-  fun getCrnsForOffenders(offenders: List<OffenderV2>): List<String>
-
   @Query(
     """
     SELECT o FROM OffenderV2 o
@@ -132,7 +126,6 @@ interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
   """,
   )
   fun findByOffender(offender: OffenderV2): Optional<OffenderSetupV2>
-  fun findAllByPractitionerId(practitionerId: ExternalUserId): List<OffenderSetupV2>
 
   @Query(
     """
@@ -140,6 +133,7 @@ interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
     JOIN FETCH s.offender o
     WHERE o.crn = :crn
     ORDER BY s.createdAt DESC
+    LIMIT 1
   """,
   )
   fun findByCrn(crn: String): Optional<OffenderSetupV2>
@@ -152,9 +146,7 @@ interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
 interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
   @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckinV2>
-  fun findAllByOffender(offender: OffenderV2, pageable: Pageable): Page<OffenderCheckinV2>
   fun findAllByOffenderAndStatus(offender: OffenderV2, status: CheckinV2Status): List<OffenderCheckinV2>
-  fun findAllByStatus(status: CheckinV2Status): List<OffenderCheckinV2>
 
   @Query(
     """
@@ -194,21 +186,6 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
     """,
   )
   fun findByOffenderAndDueDate(offender: OffenderV2, dueDate: LocalDate): Optional<OffenderCheckinV2>
-
-  /**
-   * Batch find checkins for multiple offenders on a specific due date
-   * Used to avoid N+1 queries in batch processing
-   */
-  @Query(
-    """
-    SELECT c FROM OffenderCheckinV2 c
-    WHERE c.offender IN :offenders
-      AND c.dueDate = :dueDate
-    """,
-  )
-  fun findByOffendersAndDueDate(offenders: List<OffenderV2>, dueDate: LocalDate): List<OffenderCheckinV2>
-
-  fun existsByOffenderAndDueDate(offender: OffenderV2, dueDate: LocalDate): Boolean
 
   /** Find all checkins by practitioner (created by) */
   @Query(
@@ -294,21 +271,6 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
  */
 @Repository
 interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2, Long> {
-  fun findByNotificationId(notificationId: UUID): Optional<GenericNotificationV2>
-  fun findAllByOffender(offender: OffenderV2): List<GenericNotificationV2>
-  fun findAllByEventType(eventType: String): List<GenericNotificationV2>
-  fun findAllByReference(reference: String): List<GenericNotificationV2>
-
-  @Query(
-    """
-    SELECT n FROM GenericNotificationV2 n
-    WHERE n.offender = :offender
-      AND n.eventType = :eventType
-    ORDER BY n.createdAt DESC
-    """,
-  )
-  fun findByOffenderAndEventType(offender: OffenderV2, eventType: String): List<GenericNotificationV2>
-
   @Query(
     """
       SELECT COUNT(n) > 0 
@@ -340,16 +302,6 @@ interface EventAuditV2Repository : JpaRepository<EventAuditV2, Long> {
     """,
   )
   fun findByCrnOrderByOccurredAt(crns: Set<String>): List<EventAuditV2>
-
-  @Query(
-    """
-    SELECT a FROM EventAuditV2 a
-    WHERE a.occurredAt >= :startDate
-      AND a.occurredAt <= :endDate
-    ORDER BY a.occurredAt
-    """,
-  )
-  fun findByOccurredAtBetween(startDate: Instant, endDate: Instant): List<EventAuditV2>
 }
 
 /**
@@ -357,18 +309,7 @@ interface EventAuditV2Repository : JpaRepository<EventAuditV2, Long> {
  * Separate from V1 job_log for complete decoupling
  */
 @Repository
-interface JobLogV2Repository : JpaRepository<JobLogV2, Long> {
-  fun findByJobType(jobType: String): List<JobLogV2>
-
-  @Query(
-    """
-    SELECT j FROM JobLogV2 j
-    WHERE j.jobType = :jobType
-    ORDER BY j.createdAt DESC
-    """,
-  )
-  fun findLatestByJobType(jobType: String): List<JobLogV2>
-}
+interface JobLogV2Repository : JpaRepository<JobLogV2, Long>
 
 enum class LogEntryType {
   OFFENDER_SETUP_COMPLETE,
@@ -432,21 +373,7 @@ interface FeedbackRepository : JpaRepository<Feedback, Long>
  * Repository for Monthly Feedback Stats
  */
 @Repository
-interface TotalFeedbackMonthlyRepository : JpaRepository<TotalFeedbackMonthly, LocalDate> {
-
-  /**
-   * @param fromMonth inclusive
-   * @param toMonth exclusive
-   */
-  @Query(
-    """
-    select f from TotalFeedbackMonthly f
-    where f.month >= :fromMonth and f.month < :toMonth
-    order by f.month asc
-  """,
-  )
-  fun findBetween(fromMonth: LocalDate, toMonth: LocalDate): List<TotalFeedbackMonthly>
-}
+interface TotalFeedbackMonthlyRepository : JpaRepository<TotalFeedbackMonthly, LocalDate>
 
 @Component
 class StatsSummaryRepository(
@@ -539,36 +466,7 @@ class StatsSummaryRepository(
 }
 
 @Repository
-interface StatsSummaryProviderMonthRepository : JpaRepository<StatsSummaryProviderMonth, StatsSummaryProviderMonthId> {
-
-  /**
-   * @param fromMonth inclusive
-   * @param toMonth exclusive
-   */
-  @Query(
-    """
-    select s from StatsSummaryProviderMonth s
-    where s.id.rowType = 'ALL'
-      and s.id.month >= :fromMonth and s.id.month < :toMonth
-    order by s.id.month asc
-  """,
-  )
-  fun findAllBetween(fromMonth: LocalDate, toMonth: LocalDate): List<StatsSummaryProviderMonth>
-
-  /**
-   * @param fromMonth inclusive
-   * @param toMonth exclusive
-   */
-  @Query(
-    """
-    select s from StatsSummaryProviderMonth s
-    where s.id.rowType = 'PROVIDER'
-      and s.id.month >= :fromMonth and s.id.month < :toMonth
-    order by s.id.providerCode asc, s.id.month asc
-  """,
-  )
-  fun findProvidersBetween(fromMonth: LocalDate, toMonth: LocalDate): List<StatsSummaryProviderMonth>
-}
+interface StatsSummaryProviderMonthRepository : JpaRepository<StatsSummaryProviderMonth, StatsSummaryProviderMonthId>
 
 @Repository
 interface SetupEventBackfillV2Repository : JpaRepository<SetupEventBackfillV2, Long> {
