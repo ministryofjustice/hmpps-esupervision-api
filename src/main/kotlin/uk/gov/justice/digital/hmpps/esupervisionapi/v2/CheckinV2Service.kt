@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
@@ -25,6 +27,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -61,6 +64,7 @@ class CheckinV2Service(
   private val objectMapper: ObjectMapper,
   @param:Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
+  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(gracePeriodDays)
@@ -160,6 +164,7 @@ class CheckinV2Service(
     uuid: UUID,
     videoContentType: String,
     snapshotContentTypes: List<String>,
+    hashes: CheckinUploadHashesRequest? = null,
   ): UploadLocationsV2Response {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
@@ -176,26 +181,42 @@ class CheckinV2Service(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin is past submission date")
     }
 
+    val requireHash = appConfig.enabledFeatures.contains(Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH)
+
     val ttl = Duration.ofMinutes(uploadTtlMinutes)
-    val videoUrl = s3UploadService.generatePresignedUploadUrl(checkin, videoContentType, ttl)
-    val snapshotUrls =
+    val ttlString = "PT${uploadTtlMinutes}M"
+    // Video URL is left unbound to a content hash — no client uploads videos via this endpoint.
+    val videoPresigned = s3UploadService.generatePresignedUpload(checkin, videoContentType, ttl, null)
+    val snapshotUploads =
       snapshotContentTypes.mapIndexed { index, contentType ->
-        val url = s3UploadService.generatePresignedUploadUrl(checkin, contentType, index, ttl)
+        val snapHash = resolveUploadHash(
+          hashes?.snapshots?.getOrNull(index)?.sha256,
+          requireHash,
+          "snapshot[$index]",
+        )
+        LOGGER.info(
+          "upload_hash.received endpoint=/v2/offender_checkins/upload_location slot=snapshot[{}] received={}",
+          index,
+          snapHash != null,
+        )
+        val presigned = s3UploadService.generatePresignedUpload(checkin, contentType, index, ttl, snapHash)
         UploadLocation(
-          url = url,
+          url = presigned.url,
           contentType = contentType,
-          ttl = "PT${uploadTtlMinutes}M",
+          ttl = ttlString,
+          requiredHeaders = presigned.requiredHeaders.takeIf { it.isNotEmpty() },
         )
       }
 
     return UploadLocationsV2Response(
       video =
       UploadLocation(
-        url = videoUrl,
+        url = videoPresigned.url,
         contentType = videoContentType,
-        ttl = "PT${uploadTtlMinutes}M",
+        ttl = ttlString,
+        requiredHeaders = videoPresigned.requiredHeaders.takeIf { it.isNotEmpty() },
       ),
-      snapshots = snapshotUrls,
+      snapshots = snapshotUploads,
     )
   }
 

@@ -16,6 +16,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -31,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
@@ -56,6 +58,7 @@ class OffenderV2ResourceTest {
   private val offenderSetupRepository: OffenderSetupV2Repository = mock()
   private val offenderSetupV2Service: OffenderSetupV2Service = mock()
   private val questionService: QuestionService = mock()
+  private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderV2Resource
 
@@ -73,6 +76,7 @@ class OffenderV2ResourceTest {
       offenderSetupRepository,
       offenderSetupV2Service,
       questionService,
+      appConfig,
     )
   }
 
@@ -614,10 +618,10 @@ class OffenderV2ResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(s3UploadService.generatePresignedUploadUrl(eq(offender), eq("image/jpeg"), any<Duration>()))
-      .thenReturn(presignedUrl)
+    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/jpeg"), any<Duration>(), isNull()))
+      .thenReturn(PresignedUpload(presignedUrl, emptyMap()))
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg")
+    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", null)
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertNotNull(result.body?.locationInfo)
@@ -631,7 +635,7 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.empty())
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg")
+    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", null)
 
     assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
   }
@@ -643,7 +647,7 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg")
+    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", null)
 
     assertEquals(HttpStatus.BAD_REQUEST, result.statusCode)
     assertNull(result.body?.locationInfo)
@@ -657,7 +661,7 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg")
+    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", null)
 
     assertEquals(HttpStatus.BAD_REQUEST, result.statusCode)
     assertNull(result.body?.locationInfo)
@@ -668,7 +672,7 @@ class OffenderV2ResourceTest {
   fun `getPhotoUploadLocation - unsupported content type - returns 400 with error message`() {
     val uuid = UUID.randomUUID()
 
-    val result = resource.getPhotoUploadLocation(uuid, "application/pdf")
+    val result = resource.getPhotoUploadLocation(uuid, "application/pdf", null)
 
     assertEquals(HttpStatus.BAD_REQUEST, result.statusCode)
     assertNull(result.body?.locationInfo)
@@ -682,10 +686,10 @@ class OffenderV2ResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.png?presigned=true").toURL()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(s3UploadService.generatePresignedUploadUrl(eq(offender), eq("image/png"), any<Duration>()))
-      .thenReturn(presignedUrl)
+    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/png"), any<Duration>(), isNull()))
+      .thenReturn(PresignedUpload(presignedUrl, emptyMap()))
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/png")
+    val result = resource.getPhotoUploadLocation(uuid, "image/png", null)
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertNotNull(result.body?.locationInfo)

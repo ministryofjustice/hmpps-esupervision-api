@@ -24,6 +24,7 @@ import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.rekognition.model.AuditImage
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
@@ -81,6 +82,7 @@ class CheckinV2ServiceTest {
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
+  private val appConfig: AppConfig = mock()
   private val objectMapper = jacksonObjectMapper()
 
   private lateinit var service: CheckinV2Service
@@ -108,6 +110,7 @@ class CheckinV2ServiceTest {
       30,
       objectMapper,
       3,
+      appConfig,
     )
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())

@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.serialization.LocalDateDeserializer
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidQuestionParams
 import java.net.URL
@@ -548,6 +549,11 @@ data class UploadLocation(
     example = "PT10M",
   )
   val ttl: String,
+  @Schema(
+    description = "Headers the client must echo on PUT (e.g. x-amz-checksum-sha256). Null if URL was not signed with a content hash.",
+    required = false,
+  )
+  val requiredHeaders: Map<String, String>? = null,
 )
 
 /** Upload locations response */
@@ -555,6 +561,15 @@ data class UploadLocationsV2Response(
   @Schema(description = "Video upload location", required = true) val video: UploadLocation,
   @Schema(description = "Snapshot upload locations", required = true)
   val snapshots: List<UploadLocation>,
+)
+
+/**
+ * Optional request body for the checkin upload_location endpoint.
+ * Carries SHA-256 hashes for each snapshot the client is about to upload.
+ */
+data class CheckinUploadHashesRequest(
+  @Schema(description = "SHA-256 hashes for each snapshot, ordered by index", required = false)
+  val snapshots: List<UploadHashRequest>? = null,
 )
 
 // ========================================

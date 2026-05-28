@@ -15,14 +15,18 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import java.time.Duration
 import java.util.UUID
 
@@ -33,6 +37,7 @@ import java.util.UUID
 class OffenderSetupV2Resource(
   private val offenderSetupService: OffenderSetupV2Service,
   private val s3UploadService: S3UploadService,
+  private val appConfig: AppConfig,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -67,6 +72,7 @@ class OffenderSetupV2Resource(
   fun setupPhotoLocation(
     @PathVariable uuid: UUID,
     @RequestParam(name = "content-type", required = true) contentType: String,
+    @RequestBody(required = false) hashRequest: UploadHashRequest?,
   ): ResponseEntity<UploadLocationResponse> {
     val supportedContentTypes = setOf("image/jpeg", "image/jpg", "image/png")
 
@@ -95,15 +101,26 @@ class OffenderSetupV2Resource(
       throw BadArgumentException("Setup process already completed or cancelled")
     }
 
-    // Generate presigned URL for photo upload
+    val hash = resolveUploadHash(
+      sha256Base64 = hashRequest?.sha256,
+      require = appConfig.enabledFeatures.contains(Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH),
+      slot = "setup-photo",
+    )
+    LOGGER.info("upload_hash.received endpoint=/v2/offender_setup/upload_location received={}", hash != null)
+
     val duration = Duration.ofMinutes(5)
-    val url = s3UploadService.generatePresignedUploadUrl(setup.get(), contentType, duration)
+    val presigned = s3UploadService.generatePresignedUpload(setup.get(), contentType, duration, hash)
 
     LOGGER.debug("Generated V2 setup photo upload URL for setup={}", uuid)
 
     return ResponseEntity.ok(
       UploadLocationResponse(
-        locationInfo = LocationInfo(url, contentType, duration.toString()),
+        locationInfo = LocationInfo(
+          url = presigned.url,
+          contentType = contentType,
+          duration = duration.toString(),
+          requiredHeaders = presigned.requiredHeaders.takeIf { it.isNotEmpty() },
+        ),
       ),
     )
   }
