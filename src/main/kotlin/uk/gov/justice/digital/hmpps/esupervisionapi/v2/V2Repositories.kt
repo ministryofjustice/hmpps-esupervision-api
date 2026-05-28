@@ -122,6 +122,15 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
 @Repository
 interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
   fun findByUuid(uuid: UUID): Optional<OffenderSetupV2>
+
+  @Query(
+    """
+    SELECT s FROM OffenderSetupV2 s
+    WHERE s.offender = :offender
+    ORDER BY s.createdAt DESC
+    LIMIT 1
+  """,
+  )
   fun findByOffender(offender: OffenderV2): Optional<OffenderSetupV2>
   fun findAllByPractitionerId(practitionerId: ExternalUserId): List<OffenderSetupV2>
 
