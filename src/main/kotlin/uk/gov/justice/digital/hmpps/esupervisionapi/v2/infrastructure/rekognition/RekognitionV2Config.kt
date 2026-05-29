@@ -49,10 +49,10 @@ class RekognitionV2Config(
   }
 
   /**
-   * Rekognition client for face matching (CompareFaces), in eu-west-2.
+   * Rekognition client for face matching (CompareFaces).
    * CompareFaces reads its images from S3, and Rekognition can only read a bucket
-   * in its own region, so this MUST be the same region as the image bucket (eu-west-2).
-   * Kept distinct from the eu-west-1 liveness client below.
+   * in its own region, so `rekognition.region` MUST match the image bucket's region.
+   * Kept distinct from the liveness client below, which runs in its own region.
    */
   @Bean(name = ["rekognitionAsyncClient"])
   fun rekognitionAsyncClient(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionAsyncClient {
