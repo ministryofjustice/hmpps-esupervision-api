@@ -48,8 +48,31 @@ class RekognitionV2Config(
       }.build()
   }
 
+  /**
+   * Rekognition client for face matching (CompareFaces), in eu-west-2.
+   * CompareFaces reads its images from S3, and Rekognition can only read a bucket
+   * in its own region, so this MUST be the same region as the image bucket (eu-west-2).
+   * Kept distinct from the eu-west-1 liveness client below.
+   */
+  @Bean(name = ["rekognitionAsyncClient"])
+  fun rekognitionAsyncClient(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionAsyncClient {
+    LOGGER.info("Creating Rekognition async client for face matching in region {}", region)
+    return RekognitionAsyncClient.builder()
+      .region(Region.of(region))
+      .credentialsProvider(rekognitionCredentialsProvider)
+      .httpClientBuilder {
+        NettyNioAsyncHttpClient.builder()
+          .maxConcurrency(maxConcurrency)
+          .readTimeout(Duration.ofSeconds(readTimeoutSeconds))
+          .build()
+      }
+      .build()
+  }
+
   @Bean
-  fun offenderIdVerifierV2(rekognitionAsyncClient: RekognitionAsyncClient): OffenderIdVerifier {
+  fun offenderIdVerifierV2(
+    @Qualifier("rekognitionAsyncClient") rekognitionAsyncClient: RekognitionAsyncClient,
+  ): OffenderIdVerifier {
     LOGGER.info("Creating V2 RekognitionCompareFacesService with real AWS Rekognition (async)")
     return RekognitionCompareFacesService(rekognitionAsyncClient)
   }
