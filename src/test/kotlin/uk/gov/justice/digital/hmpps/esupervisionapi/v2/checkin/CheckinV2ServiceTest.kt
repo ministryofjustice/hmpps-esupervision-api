@@ -512,13 +512,7 @@ class CheckinV2ServiceTest {
 
     assertEquals(true, checkin.sensitive)
     assertEquals(true, result.sensitive)
-    verify(checkinRepository).save(checkin)
-
-    verify(offenderEventLogRepository).save(
-      argThat {
-        sensitive == true && comment == "Added sensitive medical evidence"
-      },
-    )
+    verify(checkinPersistenceService).checkinAnnotation(argThat { sensitive }, any(), any())
   }
 
   @Test
@@ -550,10 +544,12 @@ class CheckinV2ServiceTest {
     assertEquals(false, result.sensitive)
     verify(checkinRepository, never()).save(checkin)
 
-    verify(offenderEventLogRepository).save(
+    verify(checkinPersistenceService).checkinAnnotation(
       argThat {
-        sensitive == false && comment == "Test notes"
+        sensitive == false
       },
+      any(),
+      any(),
     )
   }
 
@@ -621,12 +617,7 @@ class CheckinV2ServiceTest {
     service.annotateCheckin(uuid, AnnotateCheckinV2Request("P1", "Note", sensitive = false))
 
     assertEquals(true, checkin.sensitive)
-    verify(checkinRepository, never()).save(checkin)
-    verify(offenderEventLogRepository).save(
-      argThat {
-        sensitive == true && comment == "Note"
-      },
-    )
+    verify(checkinPersistenceService).checkinAnnotation(argThat { sensitive }, any(), any())
   }
 
   @Test

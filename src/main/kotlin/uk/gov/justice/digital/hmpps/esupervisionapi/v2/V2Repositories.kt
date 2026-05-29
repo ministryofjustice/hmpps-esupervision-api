@@ -144,6 +144,7 @@ interface OffenderSetupV2Repository : JpaRepository<OffenderSetupV2, Long> {
  */
 @Repository
 interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
+  @Transactional(readOnly = true)
   @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckinV2>
   fun findAllByOffenderAndStatus(offender: OffenderV2, status: CheckinV2Status): List<OffenderCheckinV2>
