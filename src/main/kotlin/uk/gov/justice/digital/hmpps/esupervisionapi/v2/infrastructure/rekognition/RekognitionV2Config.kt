@@ -24,7 +24,7 @@ import java.time.Duration
 @Profile("!test & !stubrekog")
 @Configuration
 class RekognitionV2Config(
-  @Value("\${rekognition.region}") private val region: String,
+  @Value("\${rekognition.region}") private val facematchRegion: String,
   @Value("\${rekognition.liveness.region}") private val livenessRegion: String,
   @Value("\${rekognition.role_arn}") private val roleArn: String,
   @Value("\${rekognition.role_session_name}") private val roleSessionName: String,
@@ -34,7 +34,7 @@ class RekognitionV2Config(
 
   @Bean
   fun rekognitionCredentialsProvider(): AwsCredentialsProvider {
-    val stsClient = StsClient.builder().region(Region.of(region))
+    val stsClient = StsClient.builder().region(Region.of(facematchRegion))
       .credentialsProvider(DefaultCredentialsProvider.builder().build())
       .build()
 
@@ -54,11 +54,11 @@ class RekognitionV2Config(
    * in its own region, so `rekognition.region` MUST match the image bucket's region.
    * Kept distinct from the liveness client below, which runs in its own region.
    */
-  @Bean(name = ["rekognitionAsyncClient"])
-  fun rekognitionAsyncClient(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionAsyncClient {
-    LOGGER.info("Creating Rekognition async client for face matching in region {}", region)
+  @Bean(name = ["facematchRekognitionAsyncClient"])
+  fun facematchRekognitionAsyncClient(rekognitionCredentialsProvider: AwsCredentialsProvider): RekognitionAsyncClient {
+    LOGGER.info("Creating Rekognition async client for face matching in region {}", facematchRegion)
     return RekognitionAsyncClient.builder()
-      .region(Region.of(region))
+      .region(Region.of(facematchRegion))
       .credentialsProvider(rekognitionCredentialsProvider)
       .httpClientBuilder {
         NettyNioAsyncHttpClient.builder()
@@ -71,10 +71,10 @@ class RekognitionV2Config(
 
   @Bean
   fun offenderIdVerifierV2(
-    @Qualifier("rekognitionAsyncClient") rekognitionAsyncClient: RekognitionAsyncClient,
+    @Qualifier("facematchRekognitionAsyncClient") facematchRekognitionAsyncClient: RekognitionAsyncClient,
   ): OffenderIdVerifier {
     LOGGER.info("Creating V2 RekognitionCompareFacesService with real AWS Rekognition (async)")
-    return RekognitionCompareFacesService(rekognitionAsyncClient)
+    return RekognitionCompareFacesService(facematchRekognitionAsyncClient)
   }
 
   /** Separate Rekognition client for Face Liveness in eu-west-1 */
