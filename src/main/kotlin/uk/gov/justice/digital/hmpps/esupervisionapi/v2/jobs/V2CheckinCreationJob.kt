@@ -9,8 +9,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
@@ -23,7 +21,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Reposito
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.BatchCheckinCreationException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationV2Service
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -33,6 +32,7 @@ import kotlin.streams.asSequence
 private class JobMetrics {
   var processed = 0
   var created = 0
+  var deactivated = 0
   var errors = 0
   var notifsSent = 0
   var chunks = 0
@@ -40,10 +40,11 @@ private class JobMetrics {
 
 private fun JobMetrics.info(logger: Logger, jobId: Long, duration: Duration) {
   logger.info(
-    "Checkin Creation Job(id={}) completed: processed={}, created={}, failed={}, notifications={}, chunks={}, took={}",
+    "Checkin Creation Job(id={}) completed: processed={}, created={}, deactivated={}, failed={}, notifications={}, chunks={}, took={}",
     jobId,
     this.processed,
     this.created,
+    this.deactivated,
     this.errors,
     this.notifsSent,
     this.chunks,
@@ -64,10 +65,10 @@ class V2CheckinCreationJob(
   private val ndiliusApiClient: INdiliusApiClient,
   private val checkinCreationService: CheckinCreationService,
   private val notificationService: NotificationV2Service,
+  private val offenderDeactivationV2Service: OffenderDeactivationV2Service,
   private val jobLogRepository: JobLogV2Repository,
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
-  private val appConfig: AppConfig,
 ) {
   @Scheduled(cron = "\${app.scheduling.v2-checkin-creation.cron}")
   @SchedulerLock(
@@ -105,17 +106,22 @@ class V2CheckinCreationJob(
 
               val checkinsToCreate = mutableListOf<Pair<OffenderCheckinV2, ContactDetails>>()
               for (crn in contactDetailsMap.keys) {
-                val checkin = checkinCreationService.prepareCheckinForOffender(offendersByCrn[crn]!!, today)
+                val offender = offendersByCrn[crn]!!
                 val contactDetails = contactDetailsMap[crn]!!
-                if (appConfig.enabledFeatures.contains(Feature.ESUP_1183)) {
-                  val eventNumber = activeEventNumber(checkin.offender, contactDetails)
-                  if (eventNumber != null) {
-                    checkinsToCreate.add(Pair(checkin, contactDetails))
-                    LOGGER.debug("Will create checkin for CRN {}: active event number is {}", crn, eventNumber)
-                  } else {
-                    LOGGER.info("Skipping checkin for CRN {}: no active events found", crn)
+                val ineligibility = checkinIneligibilityReason(offender, contactDetails)
+                if (ineligibility != null) {
+                  // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
+                  // Isolate failures per-offender so one bad deactivation doesn't abort the whole run.
+                  LOGGER.info("Deactivating CRN {} instead of creating checkin: {}", crn, ineligibility.name)
+                  try {
+                    offenderDeactivationV2Service.deactivateOffender(offender, ineligibility.auditNote, contactDetails)
+                    metrics.deactivated += 1
+                  } catch (e: Exception) {
+                    LOGGER.warn("Failed to deactivate CRN {} in chunk {}", crn, metrics.chunks, e)
+                    metrics.errors += 1
                   }
                 } else {
+                  val checkin = checkinCreationService.prepareCheckinForOffender(offender, today)
                   checkinsToCreate.add(Pair(checkin, contactDetails))
                 }
               }

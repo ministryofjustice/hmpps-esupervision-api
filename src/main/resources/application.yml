@@ -59,8 +59,6 @@ app:
   features:
     # publish media proxy links to NDelius
     esup-1239: true
-    # ensure a POP is still on probation before sending them a check in link
-    esup-1183: true
     # bind presigned upload URLs to the SHA-256 of the file content.
     # When a client supplies a hash the API always signs it into the URL and echoes
     # x-amz-checksum-sha256 in requiredHeaders. The flag below controls whether a hash is mandatory.
