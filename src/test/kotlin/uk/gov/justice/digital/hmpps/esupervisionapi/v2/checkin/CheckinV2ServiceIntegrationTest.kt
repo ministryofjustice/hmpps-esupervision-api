@@ -1,10 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -72,8 +72,8 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
   @MockitoBean
   private lateinit var checkinCreationService: CheckinCreationService
 
-  @BeforeEach
-  fun setUp() {
+  @AfterEach
+  fun tearDown() {
     offenderEventLogV2Repository.deleteAll()
     checkinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
