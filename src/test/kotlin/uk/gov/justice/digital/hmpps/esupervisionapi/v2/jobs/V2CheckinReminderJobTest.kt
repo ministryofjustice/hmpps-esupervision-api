@@ -8,6 +8,7 @@ import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.same
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionCallback
@@ -76,7 +77,7 @@ class V2CheckinReminderJobTest {
 
     job.process()
 
-    verify(notificationService).sendCheckinReminderNotifications(eq(checkin), eq(cd))
+    verify(notificationService).sendCheckinReminderNotifications(same(checkin), eq(cd))
     verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any())
   }
 
@@ -92,16 +93,19 @@ class V2CheckinReminderJobTest {
 
     job.process()
 
-    verify(deactivationService).deactivateOffender(eq(ineligible.offender), any(), any(), any())
-    verify(notificationService).sendCheckinReminderNotifications(eq(eligible), eq(eligibleCd))
-    verify(notificationService, never()).sendCheckinReminderNotifications(eq(ineligible), any())
+    // NB: V2BaseEntity.equals() is id-based and all unsaved test entities share id=0, so eq() cannot
+    // tell the instances apart - match by reference identity (same()/===) instead.
+    verify(deactivationService).deactivateOffender(same(ineligible.offender), any(), any(), any())
+    verify(notificationService).sendCheckinReminderNotifications(same(eligible), eq(eligibleCd))
+    verify(notificationService, never()).sendCheckinReminderNotifications(same(ineligible), any())
 
     // the deactivated checkin must NOT appear in any CHECKIN_REMINDER audit (it was cancelled)
     val captor = argumentCaptor<Iterable<Pair<OffenderCheckinV2, ContactDetails?>>>()
     verify(eventAuditService, org.mockito.kotlin.atLeastOnce()).recordCheckinReminded(captor.capture())
     val allAudited = captor.allValues.flatMap { it.toList() }.map { it.first }
-    assertThat(allAudited).contains(eligible, missing)
-    assertThat(allAudited).doesNotContain(ineligible)
+    assertThat(allAudited.any { it === eligible }).isTrue()
+    assertThat(allAudited.any { it === missing }).isTrue()
+    assertThat(allAudited.none { it === ineligible }).isTrue()
   }
 
   private fun stub(checkins: List<OffenderCheckinV2>, details: List<ContactDetails>) {

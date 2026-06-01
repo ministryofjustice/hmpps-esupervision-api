@@ -7,6 +7,7 @@ import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.same
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
@@ -125,9 +126,11 @@ class V2CheckinCreationJobTest {
 
     job.process()
 
-    // the failure on the ineligible offender is isolated; the eligible offender is still processed
-    verify(deactivationService).deactivateOffender(eq(ineligible), any(), any(), any())
-    verify(checkinCreationService).prepareCheckinForOffender(eq(eligible), any())
+    // the failure on the ineligible offender is isolated; the eligible offender is still processed.
+    // NB: V2BaseEntity.equals() is id-based and unsaved test offenders share id=0, so match by
+    // reference identity (same()) rather than eq() to assert the correct offender each time.
+    verify(deactivationService).deactivateOffender(same(ineligible), any(), any(), any())
+    verify(checkinCreationService).prepareCheckinForOffender(same(eligible), any())
     verify(notificationService).sendCheckinCreatedNotifications(any(), any())
   }
 
