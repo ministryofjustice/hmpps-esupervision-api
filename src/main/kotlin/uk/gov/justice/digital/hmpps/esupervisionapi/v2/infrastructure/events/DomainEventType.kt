@@ -5,12 +5,11 @@ internal const val V2_PREFIX = "esupervision"
 enum class DomainEventType(
   val type: String,
   val description: String,
-  val pathSegment: String,
+  val pathSegment: String? = null,
 ) {
   V2_SETUP_COMPLETED(
     "$V2_PREFIX.setup.completed",
     "An e-Supervision V2 offender setup was completed by practitioner",
-    "setup-completed",
   ),
   V2_CHECKIN_CREATED(
     "$V2_PREFIX.check-in.created",
@@ -31,6 +30,11 @@ enum class DomainEventType(
     "$V2_PREFIX.check-in.expired",
     "An e-Supervision V2 remote check-in was expired",
     "checkin-expired",
+  ),
+
+  V2_SETUP_REMOVED(
+    "$V2_PREFIX.setup.removed",
+    "An e-Supervision V2 offender's online check-ins were stopped",
   ),
 
   /** In esupervision we talk about "annotating a check-in" rather than "updating it",

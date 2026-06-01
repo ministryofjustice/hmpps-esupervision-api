@@ -1,28 +1,43 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonValue
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
+import jakarta.persistence.Embeddable
+import jakarta.persistence.EmbeddedId
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
+import org.hibernate.annotations.Immutable
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.persistence.V2BaseEntity
 import java.math.BigDecimal
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
+
+interface CheckinSchedule {
+  val firstCheckin: LocalDate
+  val checkinInterval: Duration
+}
 
 /**
  * V2 Offender Entity (no PII, only CRN)
@@ -51,10 +66,10 @@ open class OffenderV2(
   open var status: OffenderStatus = OffenderStatus.INITIAL,
 
   @Column(name = "first_checkin", nullable = false)
-  open var firstCheckin: LocalDate,
+  open override var firstCheckin: LocalDate,
 
   @Column(name = "checkin_interval", nullable = false)
-  open var checkinInterval: Duration,
+  open override var checkinInterval: Duration,
 
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
@@ -68,7 +83,11 @@ open class OffenderV2(
   @Column(name = "contact_preference", nullable = false)
   @Enumerated(EnumType.STRING)
   open var contactPreference: ContactPreference,
-) : V2BaseEntity() {
+
+  @Column(name = "current_event", nullable = true)
+  open var currentEvent: Long? = null,
+) : V2BaseEntity(),
+  CheckinSchedule {
   fun dto(personalDetails: ContactDetails? = null): OffenderV2Dto = OffenderV2Dto(
     uuid = uuid,
     crn = crn,
@@ -111,7 +130,24 @@ open class OffenderSetupV2(
 
   @Column(name = "started_at", nullable = true)
   open var startedAt: Instant? = null,
-) : V2BaseEntity()
+
+  @Column(name = "setup_counter", nullable = false)
+  open var setupCounter: Int = 1,
+) : V2BaseEntity() {
+  fun setupId(): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
+
+  fun incrementSetupCounter() {
+    setupCounter++
+  }
+
+  fun dto(): OffenderSetupV2Dto = OffenderSetupV2Dto(
+    uuid = uuid,
+    practitionerId = practitionerId,
+    offenderUuid = offender.uuid,
+    createdAt = createdAt,
+    startedAt = startedAt,
+  )
+}
 
 /**
  * V2 Checkin Entity
@@ -176,12 +212,27 @@ open class OffenderCheckinV2(
   @Enumerated(EnumType.STRING)
   open var autoIdCheck: AutomatedIdVerificationResult? = null,
 
+  @Column(name = "auto_id_check_score", nullable = true)
+  open var autoIdCheckScore: Float? = null,
+
+  @Column(name = "liveness_result", nullable = true, length = 10)
+  @Enumerated(EnumType.STRING)
+  open var livenessResult: LivenessResult? = null,
+
+  @Column(name = "liveness_confidence", nullable = true)
+  open var livenessConfidence: Float? = null,
+
+  @Column(name = "liveness_enabled", nullable = false)
+  open var livenessEnabled: Boolean = false,
+
   @Column(name = "manual_id_check", nullable = true, length = 50)
   @Enumerated(EnumType.STRING)
   open var manualIdCheck: ManualIdVerificationResult? = null,
 
   @Column(name = "risk_feedback", nullable = true)
   open var riskFeedback: Boolean? = null,
+  @Column(name = "sensitive", nullable = false)
+  open var sensitive: Boolean = false,
 ) : V2BaseEntity() {
   fun dto(
     personalDetails: ContactDetails? = null,
@@ -189,27 +240,51 @@ open class OffenderCheckinV2(
     snapshotUrl: java.net.URL? = null,
     checkinLogs: CheckinLogsV2Dto = CheckinLogsV2Dto(CheckinLogsHintV2.OMITTED, emptyList()),
     photoUrl: java.net.URL? = null,
-  ): CheckinV2Dto = CheckinV2Dto(
-    uuid = uuid,
-    crn = offender.crn,
-    status = status,
-    dueDate = dueDate,
-    createdAt = createdAt,
-    createdBy = createdBy,
-    submittedAt = submittedAt,
-    reviewedAt = reviewedAt,
-    reviewedBy = reviewedBy,
-    checkinStartedAt = checkinStartedAt,
-    autoIdCheck = autoIdCheck,
-    manualIdCheck = manualIdCheck,
-    riskFeedback = riskFeedback,
-    surveyResponse = surveyResponse,
-    personalDetails = personalDetails,
-    videoUrl = videoUrl,
-    snapshotUrl = snapshotUrl,
-    checkinLogs = checkinLogs,
-    photoUrl = photoUrl,
-  )
+    clock: Clock? = null,
+    checkinWindow: Period = Period.ofDays(3),
+  ): CheckinV2Dto {
+    var checkinStatus = status
+    if (clock != null && status == CheckinV2Status.CREATED && isPastSubmissionDate(clock, checkinWindow)) {
+      checkinStatus = CheckinV2Status.EXPIRED
+    }
+
+    return CheckinV2Dto(
+      uuid = uuid,
+      crn = offender.crn,
+      status = checkinStatus,
+      dueDate = dueDate,
+      createdAt = createdAt,
+      createdBy = createdBy,
+      submittedAt = submittedAt,
+      reviewedAt = reviewedAt,
+      reviewedBy = reviewedBy,
+      checkinStartedAt = checkinStartedAt,
+      autoIdCheck = autoIdCheck,
+      autoIdCheckScore = autoIdCheckScore,
+      livenessResult = livenessResult,
+      livenessConfidence = livenessConfidence,
+      livenessEnabled = livenessEnabled,
+      manualIdCheck = manualIdCheck,
+      riskFeedback = riskFeedback,
+      sensitive = sensitive,
+      surveyResponse = surveyResponse,
+      personalDetails = personalDetails,
+      videoUrl = videoUrl,
+      snapshotUrl = snapshotUrl,
+      checkinLogs = checkinLogs,
+      photoUrl = photoUrl,
+    )
+  }
+}
+
+fun OffenderCheckinV2.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
+  val submissionDate = clock.today()
+  val finalCheckinDate = if (checkinWindow.days <= 1) {
+    this.dueDate
+  } else {
+    this.dueDate.plus(checkinWindow.minusDays(1))
+  }
+  return finalCheckinDate < submissionDate
 }
 
 /**
@@ -238,8 +313,11 @@ open class GenericNotificationV2(
   open var channel: String, // SMS or EMAIL
 
   @ManyToOne(cascade = [CascadeType.DETACH])
-  @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true)
+  @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true, insertable = false, updatable = false)
   open var offender: OffenderV2? = null,
+
+  @Column(name = "offender_id", nullable = true)
+  open var offenderId: Long? = null,
 
   @Column(name = "practitioner_id", nullable = true)
   open var practitionerId: String? = null,
@@ -337,11 +415,17 @@ open class EventAuditV2(
   @Column(name = "auto_id_check_result", nullable = true, length = 50)
   open var autoIdCheckResult: String? = null,
 
+  @Column(name = "liveness_result", nullable = true, length = 10)
+  open var livenessResult: String? = null,
+
   @Column(name = "manual_id_check_result", nullable = true, length = 50)
   open var manualIdCheckResult: String? = null,
 
   @Column(name = "notes", nullable = true, columnDefinition = "TEXT")
   open var notes: String? = null,
+
+  @Column(name = "sensitive", nullable = false)
+  open val sensitive: Boolean = false,
 ) : V2BaseEntity()
 
 /**
@@ -383,6 +467,9 @@ open class OffenderEventLogV2(
   @Column(name = "comment", nullable = true)
   open var comment: String,
 
+  @Column(name = "sensitive", nullable = false)
+  open var sensitive: Boolean = false,
+
   @Column(name = "created_at", nullable = true)
   open var createdAt: Instant,
 
@@ -410,9 +497,278 @@ open class OffenderEventLogV2(
 @Entity
 @Table(name = "feedback")
 open class Feedback(
+  @JdbcTypeCode(SqlTypes.JSON)
   @Column(nullable = false)
   open var feedback: Map<String, Any>,
 
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
+) : V2BaseEntity()
+
+@Embeddable
+data class StatsSummaryId(
+  @Column(name = "row_type")
+  val rowType: String,
+
+  @Column(name = "provider_code")
+  val providerCode: String?,
+)
+
+@Immutable
+@Entity
+@Table(name = "total_feedback_monthly")
+open class TotalFeedbackMonthly(
+
+  @Id
+  @Column(name = "month", nullable = false)
+  open val month: LocalDate,
+
+  @Column(name = "feedback_total", nullable = false)
+  open val feedbackTotal: Long,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "how_easy_counts", nullable = false, columnDefinition = "jsonb")
+  open val howEasyCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "how_easy_pct", nullable = false, columnDefinition = "jsonb")
+  open val howEasyPct: Map<String, BigDecimal>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "getting_support_counts", nullable = false, columnDefinition = "jsonb")
+  open val gettingSupportCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "getting_support_pct", nullable = false, columnDefinition = "jsonb")
+  open val gettingSupportPct: Map<String, BigDecimal>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "improvements_counts", nullable = false, columnDefinition = "jsonb")
+  open val improvementsCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "improvements_pct", nullable = false, columnDefinition = "jsonb")
+  open val improvementsPct: Map<String, BigDecimal>,
+)
+
+data class TotalFeedbackSummary(
+  val feedbackTotal: Long,
+  val howEasyCounts: Map<String, Long>,
+  val howEasyPct: Map<String, BigDecimal>,
+  val gettingSupportCounts: Map<String, Long>,
+  val gettingSupportPct: Map<String, BigDecimal>,
+  val improvementsCounts: Map<String, Long>,
+  val improvementsPct: Map<String, BigDecimal>,
+)
+
+@Embeddable
+data class StatsSummaryProviderMonthId(
+  @Column(name = "row_type", nullable = false)
+  val rowType: String,
+
+  @Column(name = "month", nullable = false)
+  val month: LocalDate,
+
+  @Column(name = "provider_code", nullable = false)
+  val providerCode: String, // empty string for ALL rows
+)
+
+@Immutable
+@Entity
+@Table(name = "stats_summary_provider_month")
+open class StatsSummaryProviderMonth(
+
+  @EmbeddedId
+  open val id: StatsSummaryProviderMonthId,
+
+  @Column(name = "provider_description")
+  open val providerDescription: String?, // NULL for ALL rows
+
+  @Column(name = "active_users", nullable = false)
+  open val activeUsers: Long,
+
+  @Column(name = "inactive_users", nullable = false)
+  open val inactiveUsers: Long,
+
+  @Column(name = "total_signed_up", nullable = false)
+  open val totalSignedUp: Long,
+
+  @Column(name = "completed_checkins", nullable = false)
+  open val completedCheckins: Long,
+
+  @Column(name = "not_completed_on_time", nullable = false)
+  open val notCompletedOnTime: Long,
+
+  @Column(name = "total_hours_to_complete", nullable = false)
+  open val totalHoursToComplete: BigDecimal,
+
+  @Column(name = "unique_checkin_crns", nullable = false)
+  open val uniqueCheckinCrns: Long,
+
+  @Column(name = "avg_hours_to_complete", nullable = false)
+  open val avgHoursToComplete: BigDecimal,
+
+  @Column(name = "avg_completed_checkins_per_person", nullable = false)
+  open val avgCompletedCheckinsPerPerson: BigDecimal,
+
+  @Column(name = "pct_active_users", nullable = false)
+  open val pctActiveUsers: BigDecimal,
+
+  @Column(name = "pct_inactive_users", nullable = false)
+  open val pctInactiveUsers: BigDecimal,
+
+  @Column(name = "pct_completed_checkins", nullable = false)
+  open val pctCompletedCheckins: BigDecimal,
+
+  @Column(name = "pct_expired_checkins", nullable = false)
+  open val pctExpiredCheckins: BigDecimal,
+
+  @Column(name = "updated_at", nullable = false)
+  open val updatedAt: Instant,
+)
+
+@Entity
+@Table(name = "migration_control")
+open class MigrationControl(
+  @Column(nullable = false)
+  open var crn: String,
+  @Column(name = "offender_events", nullable = false)
+  open var offenderEvents: Boolean = false,
+  @Column(name = "checkin_created", nullable = false)
+  open var checkinCreated: Boolean = false,
+  @Column(name = "checkin_submitted", nullable = false)
+  open var checkinSubmitted: Boolean = false,
+  @Column(name = "checkin_reviewed", nullable = false)
+  open var checkinReviewed: Boolean = false,
+  @Column(name = "checkin_expired", nullable = false)
+  open var checkinExpired: Boolean = false,
+) : V2BaseEntity()
+
+@Entity
+@Table(
+  name = "setup_event_backfill_v2",
+  indexes = [
+    Index(name = "idx_setup_event_backfill_v2_offender", columnList = "offender_id", unique = true),
+  ],
+)
+open class SetupEventBackfillV2(
+  @Column(name = "offender_id", nullable = false, unique = true)
+  open var offenderId: Long,
+
+  @Column(name = "setup_row_created", nullable = false)
+  open var setupRowCreated: Boolean = false,
+
+  @Column(name = "event_sent", nullable = false)
+  open var eventSent: Boolean = false,
+
+  @Column(name = "event_sent_at", nullable = true)
+  open var eventSentAt: Instant? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var createdAt: Instant,
+) : V2BaseEntity()
+
+@Entity
+@Table(name = "migration_events_to_send")
+open class MigrationEventsToSend(
+  @Column()
+  open var checkin: UUID,
+  @Column(name = "sent_at")
+  open var sentAt: Instant? = null,
+  @Column
+  open var notes: String? = null,
+) : V2BaseEntity()
+
+enum class Language(@get:JsonValue val dbString: String) {
+  ENGLISH("en-GB"),
+  WELSH("cy-GB"),
+  ;
+
+  companion object {
+    /**
+     * value must be "en-GB" or "cy-GB"
+     */
+    @JvmStatic
+    @JsonCreator
+    fun fromString(value: String): Language = when (value) {
+      "en-GB" -> ENGLISH
+      "cy-GB" -> WELSH
+      else -> throw IllegalArgumentException("Invalid Language value: $value")
+    }
+  }
+}
+
+enum class QuestionResponseFormat {
+  TEXT,
+  SINGLE_CHOICE,
+  MULTIPLE_CHOICE,
+  ;
+
+  companion object {
+    fun fromString(value: String): QuestionResponseFormat = when (value) {
+      "TEXT" -> TEXT
+      "SINGLE_CHOICE" -> SINGLE_CHOICE
+      "MULTIPLE_CHOICE" -> MULTIPLE_CHOICE
+      else -> throw IllegalArgumentException("Invalid QuestionResponseFormat value: $value")
+    }
+  }
+}
+
+@Entity
+@Table(name = "question_list_assignment")
+open class QuestionListAssignment(
+  @Column("question_list_id", nullable = false)
+  open var questionListId: Long,
+
+  @Column("offender_id", nullable = false)
+  open var offenderId: Long,
+
+  @Column("checkin_id")
+  open var checkinId: Long? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var created_at: Instant,
+
+  @Column(name = "updated_at", nullable = false)
+  open val updatedAt: Instant,
+) : V2BaseEntity()
+
+enum class OutboxItemType {
+  OFFENDER_SETUP_COMPLETE,
+  OFFENDER_DEACTIVATED,
+  CHECKIN_CREATED,
+  CHECKIN_SUBMITTED,
+  CHECKIN_REVIEWED,
+  CHECKIN_EXPIRED,
+}
+
+enum class OutboxItemStatus {
+  INITIAL,
+  SENT,
+}
+
+/**
+ * Keeps track of the delivery status of NDelius messages.
+ *
+ * For the delivery status of GOV.UK Notify messages, see [GenericNotificationV2].
+ */
+@Entity
+@Table(name = "outbox_items")
+open class OutboxItem(
+  @Column("type", nullable = false)
+  @Enumerated(EnumType.STRING)
+  open var type: OutboxItemType,
+
+  @Column("entity_id", nullable = false)
+  open var entityId: Long,
+
+  @Column("status")
+  @Enumerated(EnumType.STRING)
+  open var status: OutboxItemStatus,
+
+  @Column("created_at", nullable = false)
+  open var createdAt: Instant,
+
+  @Column("updated_at", nullable = true)
+  open var updatedAt: Instant? = null,
 ) : V2BaseEntity()

@@ -12,9 +12,9 @@ The API has been refactored to **V2** with significant architectural improvement
 
 | Feature | Description |
 |---------|-------------|
-| **No PII Storage** | Personal data fetched on-demand from Ndilius (source of truth) |
+| **No PII Storage** | Personal data fetched on-demand from NDelius (source of truth) |
 | **Complete Isolation** | V2 code in separate `v2` package with `_v2` database tables |
-| **Domain Events** | Full integration with AWS SQS for event publishing to Ndilius |
+| **Domain Events** | Full integration with AWS SQS for event publishing to NDelius |
 | **Performance** | Batch operations, fetch joins, lazy loading for S3 URLs |
 
 ### Documentation
@@ -23,7 +23,7 @@ The API has been refactored to **V2** with significant architectural improvement
 |----------|-------------|
 | **[V2 Overview](docs/v2/README.md)** | Architecture overview and package structure |
 | **[User Journeys](docs/v2/USER_JOURNEYS.md)** | Setup, checkin, and review flows |
-| **[Domain Events](docs/v2/DOMAIN_EVENTS.md)** | Event publishing and Ndilius integration |
+| **[Domain Events](docs/v2/DOMAIN_EVENTS.md)** | Event publishing and NDelius integration |
 | **[Notifications](docs/v2/NOTIFICATIONS.md)** | SMS/Email notification system |
 | **[Background Jobs](docs/v2/BACKGROUND_JOBS.md)** | Scheduled jobs |
 | **[Data Model](docs/v2/DATA_MODEL.md)** | Entity relationships and schema |
@@ -36,7 +36,7 @@ The API has been refactored to **V2** with significant architectural improvement
 |----------|-----------|-------------|
 | Setup | `/v2/offender_setup` | Offender registration flow |
 | Checkins | `/v2/offender_checkins` | Check-in CRUD and lifecycle |
-| Events | `/v2/events` | Domain event callback endpoints for Ndilius |
+| Events | `/v2/events` | Domain event callback endpoints for NDelius |
 
 ### V2 Flows Overview
 
@@ -59,7 +59,7 @@ flowchart LR
 
     subgraph Events
         E -->|Publish| H[SQS]
-        H -->|Callback| I[Ndilius]
+        H -->|Callback| I[NDelius]
         I -->|Get Details| J[/v2/events]
     end
 ```
@@ -146,7 +146,6 @@ the following:
 
 * The ARN of the Rekognition role within the development modernisation platform
 * Credentials for accessing AWS
-* The name of the S3 data bucket used to store Rekognition images
 
 Login to the AWS console using the instructions in [this guide](https://user-guide.modernisation-platform.service.justice.gov.uk/user-guide/getting-aws-credentials.html#getting-aws-credentials).
 The role can be found in the development console under IAM -> Roles -> rekognition-role. Configure the `REKOG_ROLE_ARN` setting in your local `.env` file with the ARN of the role (this should look like
@@ -155,21 +154,9 @@ The role can be found in the development console under IAM -> Roles -> rekogniti
 From the same page you can obtain temporary credentials from AWS. Click `Access Keys` and copy the settings from `Option 1: Set AWS environment variables` into your local `.env` file (or configure them
 in your environment some other way). These should be the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` variables.
 
-Finally, the name of the S3 data bucket can be found in the AWS console, use this to configure the `REKOG_S3_DATA_BUCKET` setting in your `.env` file.
-
 #### Stub identity service
 
-If you include the `stubrekog` alongside the `dev` profile when running the API e.g. `SPRING_PROFILES_ACTIVE=dev,stubrekog ./gradlew bootRun` then a stub verification service will be configured which always succeeds. 
-Identity image snapshots will be uploaded to an S3 bucket in localstack. Create this local bucket and configure the CORS policy (see [here](#localstack) for the policy document to apply):
-
-```shell
-awslocal s3api create-bucket --bucket hmpps-esupervision-rekognition-uploads
-awslocal s3api put-bucket-cors --bucket hmpps-esupervision-rekognition-uploads --cors-configuration file://cors-config.json
-```
-
-configure the uploads bucket in the environment when running the API:
-
-    REKOG_S3_DATA_BUCKET=hmpps-esupervision-rekogntion-uploads
+If you include the `stubrekog` alongside the `dev` profile when running the API e.g. `SPRING_PROFILES_ACTIVE=dev,stubrekog ./gradlew bootRun` then a stub verification service will be configured which always succeeds.
 
 
 ### Postgres

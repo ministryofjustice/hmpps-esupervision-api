@@ -6,19 +6,23 @@ import java.time.Clock
 import java.time.format.DateTimeFormatter
 
 object NotificationContextV2 {
-  fun generateReference(notificationType: NotificationType, clock: Clock): String {
+  fun generateReference(notificationType: NotificationType, clock: Clock, env: String): String {
     val date = clock.today().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
     return when (notificationType) {
       // Offender notifications
-      NotificationType.OffenderCheckinSubmitted -> "OSUB-$date"
-      NotificationType.OffenderCheckinsStopped -> "OSTP-$date"
-      NotificationType.RegistrationConfirmation -> "OREG-$date"
-      NotificationType.OffenderCheckinInvite -> "OCHK-$date"
+      NotificationType.OffenderCheckinSubmitted -> "OSUB-$date-$env"
+      NotificationType.OffenderCheckinsStopped -> "OSTP-$date-$env"
+      NotificationType.OffenderCheckinsRestarted -> "ORES-$date-$env"
+      NotificationType.RegistrationConfirmation -> "OREG-$date-$env"
+      NotificationType.OffenderCheckinInvite -> "OCHK-$date-$env"
+      NotificationType.OffenderCheckinReminder -> "OREM-$date-$env"
 
       // Practitioner notifications
-      NotificationType.PractitionerCheckinSubmitted -> "PSUB-$date"
-      NotificationType.PractitionerCheckinMissed -> "PEXP-$date"
-      NotificationType.PractitionerInviteIssueGeneric -> "PING-$date"
+      NotificationType.PractitionerCheckinSubmitted -> "PSUB-$date-$env"
+      NotificationType.PractitionerCheckinMissed -> "PEXP-$date-$env"
+      NotificationType.PractitionerInviteIssueGeneric -> "PING-$date-$env"
+      NotificationType.PractitionerCustomQuestionsReminder -> "PCQR-$date-$env"
     }
   }
 }

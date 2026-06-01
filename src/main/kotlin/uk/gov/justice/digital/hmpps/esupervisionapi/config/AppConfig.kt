@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import java.net.URI
 import java.util.UUID
 
@@ -11,7 +12,20 @@ class AppConfig(
   @Value("\${app.mpopUrl}") private val mpopUrl: String,
   @Value("\${app.hostedAt}") private val hostedAt: String,
   @Value("\${app.scheduling.checkin-notification.cron}") val checkinNotificationCron: String,
+  @Value("\${app.features.esup-1239}") val esup1239ProxyLinks: Boolean,
+  @Value("\${app.features.esup-1183}") val esup1183SendInviteOnlyWhenActiveEvent: Boolean,
+  @Value("\${app.features.upload-content-hash.require:false}") val uploadContentHashRequire: Boolean,
+  val enabledFeatures: Set<Feature> = listOfNotNull(
+    if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
+    if (esup1183SendInviteOnlyWhenActiveEvent) Feature.ESUP_1183 else null,
+    if (uploadContentHashRequire) Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH else null,
+  ).toSet(),
 ) {
+
+  init {
+    LOG.info("Enabled features: $enabledFeatures")
+  }
+
   // WARNING: this depends on the routes in the UI!
   fun checkinSubmitUrl(checkinUuid: UUID): URI = URI(
     "$hostedAt/submission/$checkinUuid",
@@ -36,4 +50,18 @@ class AppConfig(
   fun checkinReviewUrlV2(checkinUuid: UUID, crn: String): URI = URI(
     "$mpopUrl/case/$crn/appointments/$checkinUuid/check-in/review/identity?back=/case/$crn/activity-log",
   )
+
+  fun feedbackUrl(): URI = URI(
+    "$checkinUrl/feedback",
+  )
+
+  fun addQuestionsUrl(offenderUuid: UUID, crn: CRN): URI = URI(
+    "$mpopUrl/case/$crn/appointments/check-in/manage/$offenderUuid/questions/start",
+  )
+
+  fun mediaProxyUrl(): URI = URI("$hostedAt/resolve")
+
+  companion object {
+    val LOG = org.slf4j.LoggerFactory.getLogger(this::class.java)
+  }
 }

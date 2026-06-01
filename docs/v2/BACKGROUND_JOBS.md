@@ -38,7 +38,7 @@ flowchart TB
     FILTER --> BATCH[Process in Batches<br/>of 50 CRNs]
 
     subgraph "Batch Processing"
-        BATCH --> FETCH[Fetch Contact Details<br/>from Ndilius]
+        BATCH --> FETCH[Fetch Contact Details<br/>from NDelius]
         FETCH --> PREPARE[Prepare Checkins<br/>for Creation]
         PREPARE --> SAVE[Batch Insert<br/>Checkins]
         SAVE --> NOTIFY[Send Notifications<br/>for Each Checkin]
@@ -94,7 +94,7 @@ flowchart TB
 
     CHECK -->|Yes| UPDATE[Batch Update Status<br/>to EXPIRED]
 
-    UPDATE --> FETCH[Batch Fetch Contact<br/>Details from Ndilius]
+    UPDATE --> FETCH[Batch Fetch Contact<br/>Details from NDelius]
 
     FETCH --> LOOP[For Each Checkin]
 
@@ -185,17 +185,17 @@ AND created_at < NOW() - INTERVAL '1 hour';
 
 ## Batch Processing
 
-### Ndilius API Batch Size
+### NDelius API Batch Size
 
-Contact details are fetched in batches to avoid overloading Ndilius:
+Contact details are fetched in batches to avoid overloading NDelius:
 
 ```kotlin
 companion object {
     const val MAX_BATCH_SIZE = 50
 }
 
-crns.chunked(NdiliusApiClient.MAX_BATCH_SIZE).forEach { batchCrns ->
-    val contactDetailsMap = ndiliusApiClient.getContactDetailsForMultiple(batchCrns)
+crns.chunked(NDeliusApiClient.MAX_BATCH_SIZE).forEach { batchCrns ->
+    val contactDetailsMap = NDeliusApiClient.getContactDetailsForMultiple(batchCrns)
     // Process batch...
 }
 ```
@@ -204,7 +204,7 @@ crns.chunked(NdiliusApiClient.MAX_BATCH_SIZE).forEach { batchCrns ->
 
 | Factor | Recommendation |
 |--------|----------------|
-| Batch size | 50 CRNs per Ndilius call |
+| Batch size | 50 CRNs per NDelius call |
 | Query streaming | Use `Stream<T>` for large result sets |
 | Transaction scope | Separate transactions per batch |
 | Memory | Process batches sequentially, not all in memory |

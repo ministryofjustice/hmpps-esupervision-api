@@ -15,7 +15,7 @@ sequenceDiagram
     participant MPOP as MPOP Dashboard
     participant API as eSupervision API V2
     participant S3 as AWS S3
-    participant Ndilius as Ndilius
+    participant NDelius as NDelius
     participant Notify as GOV.UK Notify
     participant SQS as AWS SQS
 
@@ -43,7 +43,7 @@ sequenceDiagram
         P->>MPOP: Confirm setup
         MPOP->>API: POST /v2/offender_setup/{uuid}/complete
         API->>S3: Verify photo exists
-        API->>Ndilius: GET /contact-details/{crn}
+        API->>NDelius: GET /contact-details/{crn}
         API->>API: Update status to VERIFIED
 
         alt First checkin due today
@@ -84,22 +84,22 @@ sequenceDiagram
     participant O as Offender
     participant UI as Check-in UI
     participant API as eSupervision API V2
-    participant Ndilius as Ndilius
+    participant NDelius as NDelius
     participant S3 as AWS S3
     participant Rekog as AWS Rekognition
     participant Notify as GOV.UK Notify
     participant SQS as AWS SQS
 
     rect rgb(230, 245, 255)
-        note over O,Ndilius: Step 1: Identity Verification
+        note over O,NDelius: Step 1: Identity Verification
         O->>UI: Click check-in link
         UI->>API: GET /v2/offender_checkins/{uuid}
         API-->>UI: Return checkin details
         UI-->>O: Display identity verification form
         O->>UI: Enter name, DOB, last 3 CRN digits
         UI->>API: POST /v2/offender_checkins/{uuid}/identity-verify
-        API->>Ndilius: Validate personal details
-        Ndilius-->>API: Validation result
+        API->>NDelius: Validate personal details
+        NDelius-->>API: Validation result
         API->>API: Mark checkinStartedAt
         API-->>UI: verified: true
     end
@@ -179,11 +179,11 @@ sequenceDiagram
     participant MPOP as MPOP Dashboard
     participant API as eSupervision API V2
     participant S3 as AWS S3
-    participant Ndilius as Ndilius
+    participant NDelius as NDelius
     participant SQS as AWS SQS
 
     rect rgb(230, 245, 255)
-        note over P,Ndilius: Step 1: View Checkin List
+        note over P,NDelius: Step 1: View Checkin List
         P->>MPOP: Open dashboard
         MPOP->>API: GET /v2/offender_checkins?useCase=NEEDS_ATTENTION
         API-->>MPOP: Return checkins needing review
@@ -196,7 +196,7 @@ sequenceDiagram
         MPOP->>API: POST /v2/offender_checkins/{uuid}/review-started
         API->>API: Record reviewStartedAt, reviewStartedBy
         MPOP->>API: GET /v2/offender_checkins/{uuid}?include-personal-details=true
-        API->>Ndilius: GET /contact-details/{crn}
+        API->>NDelius: GET /contact-details/{crn}
         API->>S3: Generate video read URL
         API->>S3: Generate snapshot read URL
         API-->>MPOP: Return full checkin details

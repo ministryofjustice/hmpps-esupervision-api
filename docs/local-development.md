@@ -1,15 +1,18 @@
 # Local Development
 
-The application relies on a number external services (e.g. NDilius, AWS Rekognition) to function. 
+The application relies on a number external services (e.g. NDelius, AWS Rekognition) to function. 
 But it's possible to configure it to use stubbed or containerised versions of them.
 
 Localstack is used for stubbing AWS services (execept AWS Rekognition). For other's please read on.
 
 ### HMPPS Auth (in a container)
 
-You should have the service running in a container.
+You should have the service running in a container from running docker compose.
 
 Log in at http://localhost:8090/auth/ui
+
+Default username: `AUTH_ADM`
+Default password: `password123456`
 
 In `hmpps-typescript-template` client, under "Authorities" add the following roles:
 - ESUPERVISION__PRACTITIONER__RW
@@ -39,9 +42,9 @@ API_CLIENT_SECRET=secret
 
 ### Stub NDelius API
 
-Add `stubndilius` Spring profile - replaces Ndilius client with one generating data based on the CRN in `src/test/resources/ndilius-responses/default.json`
+Add `stubNDelius` Spring profile - replaces NDelius client with one generating data based on the CRN in `src/test/resources/ndelius-responses/default.json`
 
-The data generated for `stubndilius` profile uses the CRN to generate offender and practitioner data (see `MultiSampleStubDataProvider` docs
+The data generated for `stubNDelius` profile uses the CRN to generate offender and practitioner data (see `MultiSampleStubDataProvider` docs
 for details). The data generator can reload the JSON file at runtime, so you can add/remove items without restarting the application.
 
 **Note**: the date of birth is not required on our side, so if CRN is in the stub JSON file, any date of birth will be accepted on the

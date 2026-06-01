@@ -29,7 +29,7 @@ Migrating existing V1 offenders and checkins to V2 tables with domain event publ
 ### Migration Goal
 Migrate V1 offenders and checkins to V2 tables while:
 1. Preserving all historical data
-2. Publishing domain events so Ndilius receives notes
+2. Publishing domain events so NDelius receives notes
 3. Maintaining S3 media file compatibility (via UUID preservation)
 4. Not disrupting current V2 operations
 
@@ -54,8 +54,8 @@ A pure SQL migration would:
 
 But it would **NOT**:
 - Publish domain events to SQS
-- Trigger Ndilius to fetch event details
-- Create case notes in Ndilius for historical checkins
+- Trigger NDelius to fetch event details
+- Create case notes in NDelius for historical checkins
 
 ### Domain Event Flow
 
@@ -64,17 +64,17 @@ flowchart LR
     subgraph "V2 Normal Flow"
         A[Checkin Submitted] --> B[Publish Domain Event]
         B --> C[SQS Queue]
-        C --> D[Ndilius Receives Event]
-        D --> E[Ndilius Calls /v2/events/*]
+        C --> D[NDelius Receives Event]
+        D --> E[NDelius Calls /v2/events/*]
         E --> F[Case Note Created]
     end
 ```
 
-For migrated data, we need to replay this flow so Ndilius has complete records.
+For migrated data, we need to replay this flow so NDelius has complete records.
 
-### What Ndilius Needs
+### What NDelius Needs
 
-When a domain event is published, Ndilius:
+When a domain event is published, NDelius:
 1. Receives the event from SQS
 2. Calls back to `/v2/events/{type}/{uuid}` to get formatted notes
 3. Creates a case note with the details
@@ -98,12 +98,12 @@ When a domain event is published, Ndilius:
 ### Phase 2: Domain Event Replay (API)
 - Migration service reads migrated records
 - Publishes domain events for each record
-- Ndilius receives events and creates case notes
+- NDelius receives events and creates case notes
 - Configurable batch size and rate limiting
 
 ### Phase 3: Validation
 - Verify record counts match
-- Spot-check case notes in Ndilius
+- Spot-check case notes in NDelius
 - Validate S3 media access still works
 
 ---
@@ -116,7 +116,7 @@ When a domain event is published, Ndilius:
 - [ ] V2 liquibase migrations applied
 - [ ] Identify offenders without CRN (will be skipped)
 - [ ] Resolve duplicate CRNs if any
-- [ ] Coordinate with Ndilius team for Phase 2 timing
+- [ ] Coordinate with NDelius team for Phase 2 timing
 
 ### SQL Migration Script
 
@@ -239,7 +239,7 @@ SELECT 'V2 Event Logs', COUNT(*) FROM offender_event_log_v2;
 ### Why This Phase is Needed
 
 After SQL migration, the data exists in V2 tables but:
-- Ndilius has no case notes for migrated checkins
+- NDelius has no case notes for migrated checkins
 - No audit trail in `event_audit_log_v2`
 - Domain events were never published
 
@@ -252,7 +252,7 @@ sequenceDiagram
     participant DB as V2 Database
     participant DomainSvc as DomainEventService
     participant SQS as AWS SQS
-    participant Ndilius as Ndilius
+    participant NDelius as NDelius
     participant EventAPI as /v2/events/*
 
     MigSvc->>DB: Query migrated records<br/>(batch of 50)
@@ -260,10 +260,10 @@ sequenceDiagram
     loop For each record
         MigSvc->>DomainSvc: publishDomainEvent(type, uuid, crn)
         DomainSvc->>SQS: Send event message
-        SQS-->>Ndilius: Deliver event
-        Ndilius->>EventAPI: GET /v2/events/{type}/{uuid}
-        EventAPI-->>Ndilius: EventDetailResponse
-        Ndilius->>Ndilius: Create case note
+        SQS-->>NDelius: Deliver event
+        NDelius->>EventAPI: GET /v2/events/{type}/{uuid}
+        EventAPI-->>NDelius: EventDetailResponse
+        NDelius->>NDelius: Create case note
     end
 
     MigSvc->>MigSvc: Wait (rate limit)
@@ -538,7 +538,7 @@ COMMIT;
 ### Phase 2 Rollback (Events)
 
 Domain events cannot be "un-published" from SQS. However:
-- Case notes in Ndilius can be manually deleted if needed
+- Case notes in NDelius can be manually deleted if needed
 - Audit log entries can be deleted from `event_audit_log_v2`
 
 ```sql
@@ -553,7 +553,7 @@ WHERE notes LIKE '[MIGRATION]%';
 
 ### Pre-Migration (Day Before)
 
-- [ ] Notify Ndilius team of migration window
+- [ ] Notify NDelius team of migration window
 - [ ] Take database backup
 - [ ] Verify V2 tables exist (liquibase applied)
 - [ ] Run pre-validation queries
@@ -595,7 +595,7 @@ curl -X POST "https://api.example.com/admin/migration/replay-checkin-events?batc
 ### Post-Migration
 
 - [ ] Run validation queries
-- [ ] Spot-check case notes in Ndilius (5-10 random CRNs)
+- [ ] Spot-check case notes in NDelius (5-10 random CRNs)
 - [ ] Verify S3 media access works for migrated checkins
 - [ ] Disable migration endpoints
 - [ ] Update documentation
@@ -604,7 +604,7 @@ curl -X POST "https://api.example.com/admin/migration/replay-checkin-events?batc
 
 | Issue | Resolution |
 |-------|------------|
-| Event not received by Ndilius | Check SQS DLQ, verify event format |
+| Event not received by NDelius | Check SQS DLQ, verify event format |
 | Case note missing | Re-publish individual event via admin API |
 | Wrong data in case note | Check EventDetailV2Service formatting |
 | Rate limit exceeded | Increase delay, reduce batch size |
@@ -625,5 +625,5 @@ Based on 100ms delay between events:
 
 Actual times will vary based on:
 - Network latency to SQS
-- Ndilius processing capacity
+- NDelius processing capacity
 - Database query performance

@@ -6,9 +6,13 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.SurveyValueExpansionsConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Instant
@@ -18,33 +22,29 @@ import java.util.UUID
 
 class EventDetailV2ServiceTest {
 
-  private val offenderRepository: OffenderV2Repository = mock()
   private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val eventLogRepository: OffenderEventLogV2Repository = mock()
+  private val proxyLinkCreator: ProxyLinkCreator = mock()
+  private val appConfig: AppConfig = mock()
+  private val surveyExpansionsConfig: SurveyValueExpansionsConfig = SurveyValueExpansionsConfig(
+    mapOf(),
+    mapOf(
+      "mentalHealth" to "How they have been feeling",
+      "callback" to "If they need us to contact them before their next appointment",
+      "callbackDetails" to "What they want to talk about",
+      "assistance" to "Anything they need support with or to let us know",
+    ),
+  )
 
   private lateinit var service: EventDetailV2Service
 
   @BeforeEach
   fun setUp() {
-    service = EventDetailV2Service(offenderRepository, checkinRepository, eventLogRepository)
+    service = EventDetailV2Service(checkinRepository, eventLogRepository, proxyLinkCreator, appConfig, surveyExpansionsConfig)
   }
 
   @Nested
   inner class GetEventDetail {
-
-    @Test
-    fun `returns setup-completed event detail`() {
-      val uuid = UUID.randomUUID()
-      val offender = createOffender(uuid)
-      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-
-      val result = service.getEventDetail("/v2/events/setup-completed/$uuid")
-
-      assertThat(result).isNotNull
-      assertThat(result!!.eventType).isEqualTo("SETUP_COMPLETED")
-      assertThat(result.crn).isEqualTo("X123456")
-      assertThat(result.offenderUuid).isEqualTo(uuid)
-    }
 
     @Test
     fun `returns checkin-submitted event detail with submittedAt timestamp`() {
@@ -81,7 +81,7 @@ class EventDetailV2ServiceTest {
   inner class CheckinNotesFormatting {
 
     @Test
-    fun `formats checkin notes with human-readable datetime`() {
+    fun `formats checkin notes for submitted event`() {
       val uuid = UUID.randomUUID()
       val offender = createOffender(UUID.randomUUID())
       val submittedAt = Instant.parse("2025-06-15T14:30:00Z")
@@ -91,7 +91,33 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Check in submitted: 15 June 2025 at 3:30pm")
+      assertThat(result!!.notes).contains("Check in status: Submitted")
+    }
+
+    @Test
+    fun `formats checkin notes for missed checkin event`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(uuid, offender, status = CheckinV2Status.EXPIRED)
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val logEntry = OffenderCheckinLogEntryV2Dto(
+        UUID.randomUUID(),
+        notes = "Technical error",
+        createdAt = Instant.now(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
+        practitioner = "PRACT001",
+        checkin = uuid,
+      )
+
+      whenever(eventLogRepository.findAllCheckinEvents(checkin, setOf(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED)))
+        .thenReturn(listOf(logEntry))
+
+      val result = service.getEventDetail("/v2/events/checkin-expired/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("Check in status: Missed")
+      assertThat(result.notes).contains("Why did they not complete their check in: Technical error")
     }
 
     @Test
@@ -104,7 +130,84 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Automated ID check: Match")
+      assertThat(result!!.notes).contains("System ID check result: Pass")
+    }
+
+    @Test
+    fun `passes when liveness enabled and both face match and liveness pass`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        livenessEnabled = true,
+        livenessResult = LivenessResult.LIVE,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Pass")
+      assertThat(result.notes).doesNotContain("System ID check result:")
+    }
+
+    @Test
+    fun `fails when liveness enabled and liveness fails even if face matches`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        livenessEnabled = true,
+        livenessResult = LivenessResult.NOT_LIVE,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Fail")
+    }
+
+    @Test
+    fun `fails when liveness enabled and face does not match even if liveness passes`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+        livenessEnabled = true,
+        livenessResult = LivenessResult.LIVE,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Fail")
+    }
+
+    @Test
+    fun `fails when liveness enabled but liveness result missing`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.MATCH,
+        livenessEnabled = true,
+        livenessResult = null,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("System ID and liveness check result: Fail")
     }
 
     @Test
@@ -117,7 +220,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Automated ID check: No face detected")
+      assertThat(result!!.notes).contains("System ID check result: Fail")
     }
 
     @Test
@@ -136,7 +239,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Manual ID check: Match")
+      assertThat(result!!.notes).contains("Is the person in the video the correct person: Yes")
     }
 
     @Test
@@ -155,7 +258,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).doesNotContain("Manual ID check")
+      assertThat(result!!.notes).doesNotContain("Is the person in the video the correct person")
     }
   }
 
@@ -176,7 +279,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Survey response:")
+      assertThat(result!!.notes).contains("Check in answers:")
       assertThat(result.notes).contains("How they have been feeling: Feeling Great")
       assertThat(result.notes).contains("If they need us to contact them before their next appointment: Yes")
     }
@@ -264,7 +367,7 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Anything they need support with: Mental Health, Need Housing")
+      assertThat(result!!.notes).contains("Anything they need support with or to let us know: Mental Health, Need Housing")
     }
   }
 
@@ -288,24 +391,91 @@ class EventDetailV2ServiceTest {
 
     assertThat(result).isNotNull
     assertThat(result!!.notes).contains("Some note")
-    assertThat(result.notes).contains("Annotated by: ${checkin.offender.practitionerId}")
   }
 
   @Nested
-  inner class SetupCompletedNotesFormatting {
+  inner class SensitiveFlagMapping {
 
     @Test
-    fun `formats setup completed notes`() {
+    fun `includes sensitive flag for reviewed events`() {
       val uuid = UUID.randomUUID()
-      val offender = createOffender(uuid)
-      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(uuid, offender, status = CheckinV2Status.REVIEWED).apply {
+        sensitive = true
+      }
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
 
-      val result = service.getEventDetail("/v2/events/setup-completed/$uuid")
+      val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Registration Completed")
-      assertThat(result.notes).contains("CRN: X123456")
-      assertThat(result.notes).contains("Practitioner: PRACT001")
+      assertThat(result!!.sensitive).isTrue()
+    }
+
+    @Test
+    fun `includes sensitive flag for annotated events`() {
+      val checkinUuid = UUID.randomUUID()
+      val annotationUuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+
+      val checkin = createCheckin(checkinUuid, offender, status = CheckinV2Status.REVIEWED).apply {
+        sensitive = true
+      }
+
+      val logEntry = OffenderCheckinLogEntryV2Dto(
+        annotationUuid,
+        notes = "Sensitive annotation",
+        createdAt = Instant.now(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+        practitioner = "PRACT001",
+        checkin = checkinUuid,
+      )
+
+      whenever(checkinRepository.findByUuid(checkinUuid)).thenReturn(Optional.of(checkin))
+      whenever(eventLogRepository.findCheckinLogByUuid(annotationUuid)).thenReturn(Optional.of(logEntry))
+
+      val result = service.getEventDetail("/v2/events/checkin-annotated/$annotationUuid")
+
+      assertThat(result!!.sensitive).isNotNull()
+      assertThat(result.sensitive).isTrue()
+    }
+
+    @Test
+    fun `sensitive flag is false when not explicitly set in check in reviewed`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(uuid, offender, status = CheckinV2Status.REVIEWED)
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.sensitive).isFalse()
+    }
+
+    @Test
+    fun `sensitive flag is false when not explicitly set in check in annotated`() {
+      val checkinUuid = UUID.randomUUID()
+      val annotationUuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+
+      val checkin = createCheckin(checkinUuid, offender, status = CheckinV2Status.REVIEWED)
+
+      val logEntry = OffenderCheckinLogEntryV2Dto(
+        annotationUuid,
+        notes = "Test note",
+        createdAt = Instant.now(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+        practitioner = "PRACT001",
+        checkin = checkinUuid,
+      )
+
+      whenever(eventLogRepository.findCheckinLogByUuid(annotationUuid)).thenReturn(Optional.of(logEntry))
+      whenever(checkinRepository.findByUuid(checkinUuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-annotated/$annotationUuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.sensitive).isFalse()
     }
   }
 
@@ -331,6 +501,9 @@ class EventDetailV2ServiceTest {
     autoIdCheck: AutomatedIdVerificationResult? = null,
     manualIdCheck: ManualIdVerificationResult? = null,
     surveyResponse: Map<String, Any>? = null,
+    sensitive: Boolean = false,
+    livenessEnabled: Boolean = false,
+    livenessResult: LivenessResult? = null,
   ) = OffenderCheckinV2(
     uuid = uuid,
     offender = offender,
@@ -343,5 +516,8 @@ class EventDetailV2ServiceTest {
     autoIdCheck = autoIdCheck,
     manualIdCheck = manualIdCheck,
     surveyResponse = surveyResponse,
+    sensitive = sensitive,
+    livenessEnabled = livenessEnabled,
+    livenessResult = livenessResult,
   )
 }

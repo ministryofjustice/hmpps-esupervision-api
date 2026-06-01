@@ -57,7 +57,7 @@ class CheckinCreationService(
   }
 
   /**
-   * Create a checkin for an offender (internal - used by job for batch processing)
+   * Create a checkin for an offender
    * @param offender Offender entity
    * @param dueDate Due date for checkin
    * @param createdBy Who created the checkin

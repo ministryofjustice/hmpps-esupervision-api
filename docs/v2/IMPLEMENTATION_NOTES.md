@@ -32,7 +32,7 @@ async getCheckin(checkinId: string): Promise<OffenderCheckinResponse> {
 ```
 
 **Changes:**
-1. Removed `includePersonalDetails` parameter (V2 fetches PII from Ndilius)
+1. Removed `includePersonalDetails` parameter (V2 fetches PII from NDelius)
 2. API returns `Checkin` directly instead of wrapped `{ checkin, checkinLogs }`
 3. UI wraps response to maintain backward compatibility with templates
 
@@ -149,7 +149,7 @@ Covers the full offender journey:
 | Event callback tests (`/v2/events/*`) | Missing | High |
 | Notification end-to-end with Notify mocks | Missing | Medium |
 | Batch job tests (creation/expiry) | Missing | Medium |
-| Error scenarios (Ndilius down, S3 failures) | Missing | High |
+| Error scenarios (NDelius down, S3 failures) | Missing | High |
 
 ---
 
@@ -202,7 +202,7 @@ UI uses GOV.UK Design System components (accessible by default).
 ### 5.3 Infrastructure
 
 - [ ] Set up V2-specific CloudWatch dashboards
-- [ ] Configure alerts for Ndilius API failures
+- [ ] Configure alerts for NDelius API failures
 - [ ] Document runbook for common issues
 
 ---
@@ -214,7 +214,7 @@ UI uses GOV.UK Design System components (accessible by default).
 | Step | V1 | V2 |
 |------|----|----|
 | Setup | Store PII in DB | Store only CRN |
-| Serve | Return PII from DB | Fetch from Ndilius on demand |
+| Serve | Return PII from DB | Fetch from NDelius on demand |
 | Sync | Manual sync issues | Always consistent |
 
 ### 6.2 Flagged Responses
@@ -226,7 +226,7 @@ val flaggedResponses: List<String>
   get() = computeFromSurvey(surveyResponse)
 ```
 
-**V2:** Computed in `EventDetailV2Service` for Ndilius notes
+**V2:** Computed in `EventDetailV2Service` for NDelius notes
 ```kotlin
 private fun computeFlaggedResponses(survey: Map<String, Any>): List<String> {
   val version = survey["version"] as? String ?: return emptyList()

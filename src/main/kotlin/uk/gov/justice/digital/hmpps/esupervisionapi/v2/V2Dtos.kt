@@ -5,41 +5,77 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.serialization.LocalDateDeserializer
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidQuestionParams
 import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
 // ========================================
-// Ndilius API DTOs (matching OpenAPI spec)
+// Delius API DTOs (matching OpenAPI spec)
 // ========================================
 
-/** Contact details from Ndilius API */
+data class CodedDescription(val code: String, val description: String)
+
+data class Event(
+  val number: Long,
+  val mainOffence: CodedDescription,
+  val sentence: Sentence?,
+) {
+  data class Sentence(
+    @field:JsonDeserialize(using = LocalDateDeserializer::class)
+    val date: LocalDate,
+
+    val description: String,
+  )
+}
+
+/** Contact details from Delius API
+ *
+ * See https://github.com/ministryofjustice/hmpps-probation-integration-services/blob/main/projects/esupervision-and-delius/src/main/kotlin/uk/gov/justice/digital/hmpps/model/ContactDetails.kt
+ * */
 data class ContactDetails(
-  @Schema(description = "Case Reference Number", required = true, example = "X123456")
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
   val crn: String,
-  @Schema(description = "Person's name", required = true) val name: Name,
-  @Schema(
+
+  @field:Schema(description = "Person's name", required = true)
+  val name: Name,
+
+  @field:Schema(
     description = "Mobile phone number (optional)",
     required = false,
     example = "07700900123",
   )
   val mobile: String? = null,
-  @Schema(
+
+  @field:Schema(
     description = "Email address (optional)",
     required = false,
     example = "john.smith@example.com",
   )
   val email: String? = null,
-  @Schema(description = "Practitioner details (optional)", required = false)
+
+  @field:Schema(description = "Practitioner details (optional)", required = false)
   val practitioner: PractitionerDetails? = null,
+
+  /**
+   * Note: no active events mean that the offender has no sentences at this moment.
+   */
+  @field:Schema(
+    description = "Collection of active events.",
+    required = false,
+  )
+  val events: List<Event>? = null,
 )
 
 /** Person's name from Ndilius */
@@ -95,6 +131,39 @@ data class IdentityValidationResponse(
 /** Facial recognition verification result */
 data class FacialRecognitionResult(
   @Schema(description = "Verification result: MATCH, NO_MATCH, NO_FACE_DETECTED, or ERROR", required = true)
+  val result: AutomatedIdVerificationResult,
+)
+
+/** Liveness session creation response */
+data class LivenessSessionResponse(
+  @Schema(description = "AWS Rekognition liveness session ID", required = true)
+  val sessionId: String,
+)
+
+/** Liveness verification request */
+data class LivenessVerifyRequest(
+  @Schema(description = "Liveness session ID to verify", required = true)
+  val sessionId: String,
+)
+
+/** Client-side liveness failure report */
+data class LivenessClientFailureRequest(
+  @field:Size(max = 100, message = "state must be 100 characters or fewer")
+  @Schema(
+    description = "Amplify FaceLivenessDetector error state (e.g. TIMEOUT, MULTIPLE_FACES_ERROR, CAMERA_ACCESS_ERROR). Free-form so we don't break if the SDK adds new states. Capped at 100 characters.",
+    required = false,
+    maxLength = 100,
+  )
+  val state: String? = null,
+)
+
+/** Liveness verification response */
+data class LivenessVerificationResponse(
+  @Schema(description = "Whether the session passed liveness detection", required = true)
+  val isLive: Boolean,
+  @Schema(description = "Liveness confidence score (0-100)", required = true)
+  val livenessConfidence: Float,
+  @Schema(description = "Face comparison result against setup photo", required = true)
   val result: AutomatedIdVerificationResult,
 )
 
@@ -165,6 +234,28 @@ data class OffenderInfoV2(
   val startedAt: Instant? = null,
 )
 
+/**
+ * Offender information required to start/resume the offender setup process.
+ */
+data class OffenderInfoInitial(
+  @field:Schema(description = "Practitioner ID", required = true)
+  @field:NotBlank
+  val practitionerId: ExternalUserId,
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
+  @field:NotBlank
+  @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
+  val crn: String,
+  @field:Schema(description = "Date of first checkin", required = true)
+  @field:JsonDeserialize(using = LocalDateDeserializer::class)
+  val firstCheckin: LocalDate,
+  @field:Schema(description = "Interval between checkins", required = true)
+  val checkinInterval: CheckinInterval,
+  @field:Schema(description = "POP contact preference", required = true)
+  val contactPreference: ContactPreference,
+  @field:Schema(description = "Setup start timestamp (optional)", required = false)
+  val startedAt: Instant? = null,
+)
+
 /** V2 Offender setup DTO (response) */
 data class OffenderSetupV2Dto(
   @Schema(description = "Setup unique identifier", required = true) val uuid: UUID,
@@ -198,6 +289,22 @@ enum class CheckinV2Status {
   }
 }
 
+enum class SurveyVersion(val version: String) {
+  V20250710pilot("2025-07-10@pilot"),
+
+  /**
+   * the one below was added to the UI repo with incorrect date formatting. Keeping it here in the mapping in case there are entries in dev that use the incorrect date.
+   */
+  V20260707Typo("2026-0-07@pre"),
+  V20260707Pre("2026-01-07@pre"),
+
+  /**
+   * the first release of custom questions will have a mix of previous survey format + custom questions,
+   * so we can use the existing flagging logic (flagging for custom questions is not in scope)
+   */
+  V20260416Questions("2026-04-16@questions"),
+}
+
 /** V2 Checkin DTO */
 data class CheckinV2Dto(
   @field:Schema(description = "Unique identifier", required = true) val uuid: UUID,
@@ -217,6 +324,14 @@ data class CheckinV2Dto(
   val checkinStartedAt: Instant? = null,
   @field:Schema(description = "Auto ID check result", required = false)
   val autoIdCheck: AutomatedIdVerificationResult? = null,
+  @field:Schema(description = "Top similarity score (0-100) reported by Rekognition CompareFaces; null when no face detected or on error", required = false)
+  val autoIdCheckScore: Float? = null,
+  @field:Schema(description = "Liveness check result (null for video-based check-ins)", required = false)
+  val livenessResult: LivenessResult? = null,
+  @field:Schema(description = "Liveness confidence score 0-100 (null for video-based check-ins)", required = false)
+  val livenessConfidence: Float? = null,
+  @field:Schema(description = "Whether liveness verification was enabled for this check-in", required = false)
+  val livenessEnabled: Boolean = false,
   @field:Schema(description = "Manual ID check result", required = false)
   val manualIdCheck: ManualIdVerificationResult? = null,
   @field:Schema(description = "Survey responses (JSONB)", required = false)
@@ -229,6 +344,8 @@ data class CheckinV2Dto(
   val snapshotUrl: URL? = null,
   @field:Schema(description = "Risk management feedback", required = false)
   val riskFeedback: Boolean? = null,
+  @field:Schema(description = "Whether the review/annotation contains sensitive information", required = false)
+  val sensitive: Boolean = false,
   @field:Schema(description = "Checkin logs with practitioner notes", required = true)
   val checkinLogs: CheckinLogsV2Dto,
   @field:Schema(description = "Presigned S3 URL for reference photo", required = false)
@@ -261,10 +378,10 @@ private typealias SurveyContents = Map<String, Any>
  * Add new survey versions here as they are created.
  */
 private val versionToFlaggingFn = mapOf<String, (SurveyContents) -> List<String>>(
-  "2025-07-10@pilot" to { flaggedFor20250710pilot(it) },
-  // the one below was added to the UI repo with incorrect date formatting. Keeping it here in the mapping in case there are entries in dev that use the incorrect date.
-  "2026-0-07@pre" to { flaggedFor20250710pilot(it) },
-  "2026-01-07@pre" to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20250710pilot.version to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20260707Typo.version to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20260707Pre.version to { flaggedFor20250710pilot(it) },
+  SurveyVersion.V20260416Questions.version to { flaggedFor20250710pilot(it) },
 )
 
 /**
@@ -310,6 +427,9 @@ data class ReviewCheckinV2Request(
   val missedCheckinComment: String? = null,
   @Schema(description = "Risk management feedback", required = false)
   val riskManagementFeedback: Boolean? = null,
+  @Schema(description = "Whether the review contains sensitive information", required = false)
+  @JsonDeserialize(using = StrictBooleanDeserializer::class)
+  val sensitive: Boolean = false,
 )
 
 /** Review started request */
@@ -327,6 +447,9 @@ data class AnnotateCheckinV2Request(
   @Schema(description = "Notes about the checkin", required = true)
   @field:NotBlank
   val notes: String,
+  @Schema(description = "Whether the annotation contains sensitive information", required = false)
+  @JsonDeserialize(using = StrictBooleanDeserializer::class)
+  val sensitive: Boolean = false,
 )
 
 /** Create checkin request (DEBUG ONLY) */
@@ -424,6 +547,11 @@ data class UploadLocation(
     example = "PT10M",
   )
   val ttl: String,
+  @Schema(
+    description = "Headers the client must echo on PUT (e.g. x-amz-checksum-sha256). Null if URL was not signed with a content hash.",
+    required = false,
+  )
+  val requiredHeaders: Map<String, String>? = null,
 )
 
 /** Upload locations response */
@@ -431,6 +559,15 @@ data class UploadLocationsV2Response(
   @Schema(description = "Video upload location", required = true) val video: UploadLocation,
   @Schema(description = "Snapshot upload locations", required = true)
   val snapshots: List<UploadLocation>,
+)
+
+/**
+ * Optional request body for the checkin upload_location endpoint.
+ * Carries SHA-256 hashes for each snapshot the client is about to upload.
+ */
+data class CheckinUploadHashesRequest(
+  @Schema(description = "SHA-256 hashes for each snapshot, ordered by index", required = false)
+  val snapshots: List<UploadHashRequest>? = null,
 )
 
 // ========================================
@@ -518,4 +655,157 @@ data class EventDetailResponse(
   @Schema(description = "Checkin UUID", required = false) val checkinUuid: UUID? = null,
   @Schema(description = "Offender UUID", required = false) val offenderUuid: UUID? = null,
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
+  @Schema(description = "Sensitive", required = false) val sensitive: Boolean = false,
+)
+
+enum class QuestionPolicy {
+  FIXED,
+  CUSTOMISABLE,
+  ;
+
+  companion object {
+    fun fromString(policy: String): QuestionPolicy = when (policy) {
+      "FIXED" -> FIXED
+      "CUSTOMISABLE" -> CUSTOMISABLE
+      else -> throw IllegalArgumentException("Invalid question policy: $policy")
+    }
+  }
+}
+
+data class QuestionTemplateDto(
+  @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
+  val id: Long,
+
+  internal val policy: QuestionPolicy,
+
+  @field:Schema(description = "Question template", required = true)
+  @field:NotBlank
+  val template: String,
+
+  @field:Schema(description = "Response format", required = true)
+  val responseFormat: QuestionResponseFormat,
+
+  @field:Schema(description = "Response spec", required = true)
+  val responseSpec: Map<String, Any>,
+
+  @field:Schema(description = "Placeholder examples to be presented in a table", required = false)
+  val example: String?,
+
+  @field:Schema(description = "Question examples", required = false)
+  val questionExamples: List<String>?,
+)
+
+/**
+ * Safely extract placeholder names (not including the "{{" or "}}" delimiters) from the response spec.
+ */
+fun questionTemplatePlaceholders(responseSpec: Map<String, Any>): List<String> {
+  val placeholders = responseSpec["placeholders"]
+  if (placeholders is List<*>) {
+    return placeholders.map { it.toString() }
+  }
+  return emptyList()
+}
+
+fun QuestionTemplateDto.placeholders(): List<String> = questionTemplatePlaceholders(responseSpec)
+
+/**
+ * Specifies parameters for a choice item of a custom question item
+ */
+data class CustomQuestionItem(
+  @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
+  val id: Long,
+
+  @field:Schema(description = "Params for the custom question. Depends on question's response format", required = true)
+  val params: Map<String, Any>,
+)
+
+/**
+ * Specifies custom questions to be added to a checkin.
+ */
+@ValidQuestionParams
+data class AssignCustomQuestionsRequest(
+  @field:Schema(description = "List of custom questions", required = true)
+  val questions: List<CustomQuestionItem>,
+
+  @field:Schema(description = "Language (en-GB or cy-GB)", required = true)
+  val language: Language,
+
+  @field:Schema(description = "Author", required = true)
+  val author: ExternalUserId,
+)
+
+data class AssignCustomQuestionsResponse(
+  val expectedCheckinDate: LocalDate,
+  @field:Schema(description = "List ID", required = true, exclusiveMinimumValue = 0)
+  val listId: Long,
+)
+
+/**
+ * Describes an already _customised_ question in a question list.
+ */
+data class QuestionListItemDto(
+  @field:Schema(description = "Question Template", required = true)
+  val template: QuestionTemplateDto,
+
+  @field:Schema(description = "Parameters", required = true)
+  val params: Map<String, Any>,
+)
+
+/**
+ * Question in a form ready to be displayed to the offender.
+ *
+ * Note: Any templates have already been evaluated, transformations done.
+ */
+data class OffenderQuestion(
+  val question: String,
+  val format: QuestionResponseFormat,
+  val spec: Map<String, Any>,
+)
+
+/**
+ * List of questions in a form ready to be displayed to the offender.
+ */
+data class OffenderQuestionList(
+  val listId: Long,
+  val questions: List<OffenderQuestion>,
+)
+
+data class UpcomingQuestionAssignmentInfo(
+  val expectedCheckinDate: LocalDate,
+  val questionList: Long?,
+)
+
+data class UpcomingQuestionAssignmentResponse(
+  val upcomingAssignment: UpcomingQuestionAssignmentInfo?,
+)
+
+data class UpcomingQuestionListItems(
+  val expectedCheckinDate: LocalDate,
+  val items: List<QuestionListItemDto>,
+)
+
+/**
+ * Returned when clients (e.g. MPOP) asks for a list of available questions
+ */
+data class ListQuestionTemplatesResponse(
+  val templates: List<QuestionTemplateDto>,
+)
+
+/**
+ * Contains upcoming question list items (templates + params)
+ */
+data class UpcomingQuestionItemsResponse(
+  val upcoming: UpcomingQuestionListItems,
+)
+
+data class UpcomingOffenderQuestions(
+  val expectedCheckinDate: LocalDate,
+  val questions: List<OffenderQuestion>,
+)
+
+/**
+ * Questions for a checkin. If no custom questions were assigned, returns the default list.
+ */
+data class OffenderCheckinQuestionsResponse(
+  val questions: List<OffenderQuestion>,
 )

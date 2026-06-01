@@ -1,0 +1,16 @@
+### V1 Offender setup
+POST {{HOST}}/v2/local-data/offender/setup
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+### V1 Checkin creation
+POST {{HOST}}/v2/local-data/checkin/create
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+### V1 Offender termination
+POST {{HOST}}/v2/local-data/offender/terminate?uuid=3f74daf3-0c7d-488f-8e08-fd35460d2297
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+

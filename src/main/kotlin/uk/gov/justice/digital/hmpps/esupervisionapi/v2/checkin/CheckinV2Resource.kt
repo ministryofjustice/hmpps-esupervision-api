@@ -21,12 +21,17 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCollectionV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCaseV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNotificationV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.FacialRecognitionResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessClientFailureRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessSessionResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerificationResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerifyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogCheckinEventV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinV2Request
@@ -34,6 +39,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewStartedRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UploadLocationsV2Response
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
 import java.util.UUID
 
 /** V2 Checkin REST Controller */
@@ -133,8 +139,9 @@ class CheckinV2Resource(
     @Parameter(description = "Snapshot content types", required = false)
     @RequestParam(name = "snapshots", required = false)
     snapshotContentTypes: List<String> = listOf("image/jpeg"),
+    @RequestBody(required = false) hashes: CheckinUploadHashesRequest?,
   ): ResponseEntity<UploadLocationsV2Response> {
-    val locations = checkinService.getUploadLocations(uuid, videoContentType, snapshotContentTypes)
+    val locations = checkinService.getUploadLocations(uuid, videoContentType, snapshotContentTypes, hashes)
     return ResponseEntity.ok(locations)
   }
 
@@ -158,6 +165,76 @@ class CheckinV2Resource(
   ): ResponseEntity<FacialRecognitionResult> {
     val result = checkinService.verifyFace(uuid, numSnapshots)
     return ResponseEntity.ok(result)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/liveness/session")
+  @Operation(
+    summary = "Create liveness session",
+    description = "Creates an AWS Rekognition Face Liveness session for browser-based liveness detection",
+  )
+  @ApiResponse(responseCode = "200", description = "Liveness session created")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid checkin state")
+  fun createLivenessSession(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<LivenessSessionResponse> {
+    val session = checkinService.createLivenessSession(uuid)
+    return ResponseEntity.ok(session)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/{uuid}/liveness/credentials")
+  @Operation(
+    summary = "Get liveness credentials",
+    description = "Returns scoped temporary AWS credentials for the browser FaceLivenessDetector component",
+  )
+  @ApiResponse(responseCode = "200", description = "Credentials returned")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun getLivenessCredentials(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<LivenessCredentialsResponse> {
+    val credentials = checkinService.getLivenessCredentials(uuid)
+    return ResponseEntity.ok(credentials)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/liveness/verify")
+  @Operation(
+    summary = "Verify liveness result",
+    description =
+    "Gets liveness session results from Rekognition, checks confidence, " +
+      "and compares the liveness reference image against the offender's setup photo.",
+  )
+  @ApiResponse(responseCode = "200", description = "Verification result")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state or missing data")
+  fun verifyLiveness(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: LivenessVerifyRequest,
+  ): ResponseEntity<LivenessVerificationResponse> {
+    val result = checkinService.verifyLiveness(uuid, request.sessionId)
+    return ResponseEntity.ok(result)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/liveness/client-failure")
+  @Operation(
+    summary = "Record a client-side liveness failure",
+    description =
+    "Called by the browser when the AWS Amplify FaceLivenessDetector fails before " +
+      "the session reaches Rekognition (e.g. camera error, multiple faces, timeout). " +
+      "Records an OFFENDER_CHECKIN_LIVENESS_FAILED event so client-side failures are " +
+      "captured alongside server-side ones.",
+  )
+  @ApiResponse(responseCode = "204", description = "Failure recorded")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun recordLivenessClientFailure(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: LivenessClientFailureRequest,
+  ): ResponseEntity<Void> {
+    checkinService.recordLivenessClientFailure(uuid, request.state)
+    return ResponseEntity.noContent().build()
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -307,6 +384,22 @@ class CheckinV2Resource(
     @RequestBody @Valid request: CheckinNotificationV2Request,
   ): ResponseEntity<CheckinV2Dto> {
     val checkin = checkinService.sendInvite(uuid, request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/reminder")
+  @Operation(
+    summary = "DEBUG: Manual reminder trigger",
+    description =
+    "DEBUG ONLY - Manually trigger a reminder notification for a checkin. Use for testing purposes.",
+  )
+  @ApiResponse(responseCode = "200", description = "Reminder sent")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun sendReminder(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<CheckinV2Dto> {
+    val checkin = checkinService.sendReminder(uuid)
     return ResponseEntity.ok(checkin)
   }
 

@@ -8,7 +8,7 @@ V2 is a complete architectural refactoring of the eSupervision API with improved
 
 | Aspect | V1 | V2 |
 |--------|----|----|
-| **PII Storage** | Stored in database | Fetched on-demand from Ndilius |
+| **PII Storage** | Stored in database | Fetched on-demand from NDelius |
 | **Code Isolation** | Shared with other modules | Separate `v2` package |
 | **Database Tables** | Shared tables | Dedicated `_v2` suffix tables |
 | **Performance** | N+1 queries | Batch operations, streaming |
@@ -21,7 +21,7 @@ V2 is a complete architectural refactoring of the eSupervision API with improved
 | Document | Description |
 |----------|-------------|
 | [User Journeys](USER_JOURNEYS.md) | Setup, checkin, and review flows with diagrams |
-| [Domain Events](DOMAIN_EVENTS.md) | Event types, publishing, Ndilius callbacks |
+| [Domain Events](DOMAIN_EVENTS.md) | Event types, publishing, NDelius callbacks |
 | [Notifications](NOTIFICATIONS.md) | SMS/Email notification system |
 | [Background Jobs](BACKGROUND_JOBS.md) | Scheduled checkin creation and expiry |
 | [Data Model](DATA_MODEL.md) | Entity relationships and schema |
@@ -54,7 +54,7 @@ flowchart LR
         end
 
         subgraph External
-            NDL[Ndilius]
+            NDL[NDelius]
             GOV[GOV.UK Notify]
         end
     end
@@ -111,7 +111,7 @@ uk.gov.justice.digital.hmpps.esupervisionapi.v2/
 | `POST` | `/v2/offender_checkins/{uuid}/submit` | Submit checkin |
 | `POST` | `/v2/offender_checkins/{uuid}/review` | Complete review |
 
-### Events (Ndilius Callbacks)
+### Events (NDelius Callbacks)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/v2/events/setup-completed/{uuid}` | Setup event details |
@@ -143,7 +143,7 @@ flowchart LR
 
     subgraph "Events"
         E -->|Publish| H[SQS]
-        H -->|Callback| I[Ndilius]
+        H -->|Callback| I[NDelius]
         I -->|Details| J[v2/events API]
     end
 

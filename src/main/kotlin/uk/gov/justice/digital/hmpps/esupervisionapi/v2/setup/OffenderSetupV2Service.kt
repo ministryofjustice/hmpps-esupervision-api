@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationFailureExcept
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
@@ -54,11 +55,24 @@ class OffenderSetupV2Service(
 
   /** Start offender setup (registration) Creates OffenderV2 and OffenderSetupV2 records */
   @Transactional
-  fun startOffenderSetup(offenderInfo: OffenderInfoV2): OffenderSetupV2Dto {
+  internal fun startOffenderSetup(offenderInfo: OffenderInfoV2): OffenderSetupV2Dto {
     val now = clock.instant()
 
-    // Create V2 offender (no PII, only CRN)
-    val offender =
+    val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)
+    val offender = if (offenderByCrn.isPresent) {
+      // somebody tried to onboard this CRN in the past, update the record with submitted options
+      val existing = offenderByCrn.get()
+      if (existing.status != OffenderStatus.INITIAL) {
+        throw BadArgumentException("Offender already exists.")
+      }
+      existing.practitionerId = offenderInfo.practitionerId
+      existing.firstCheckin = offenderInfo.firstCheckin
+      existing.checkinInterval = offenderInfo.checkinInterval.duration
+      existing.createdBy = offenderInfo.practitionerId
+      existing.updatedAt = now
+      existing.contactPreference = offenderInfo.contactPreference
+      existing
+    } else {
       OffenderV2(
         uuid = UUID.randomUUID(),
         crn = offenderInfo.crn.trim().uppercase(),
@@ -71,20 +85,19 @@ class OffenderSetupV2Service(
         updatedAt = now,
         contactPreference = offenderInfo.contactPreference,
       )
+    }
 
     raiseOnConstraintViolation("CRN ${offenderInfo.crn} already exists") {
       offenderRepository.save(offender)
     }
 
-    // Create setup record
-    val setup =
-      OffenderSetupV2(
-        uuid = offenderInfo.setupUuid,
-        offender = offender,
-        practitionerId = offenderInfo.practitionerId,
-        createdAt = now,
-        startedAt = offenderInfo.startedAt,
-      )
+    val setup = OffenderSetupV2(
+      uuid = offenderInfo.setupUuid,
+      offender = offender,
+      practitionerId = offenderInfo.practitionerId,
+      createdAt = now,
+      startedAt = offenderInfo.startedAt,
+    )
 
     val saved =
       raiseOnConstraintViolation("Setup with UUID ${offenderInfo.setupUuid} already exists") {
@@ -105,6 +118,46 @@ class OffenderSetupV2Service(
       createdAt = saved.createdAt,
       startedAt = saved.startedAt,
     )
+  }
+
+  /**
+   * Initiates or re-starts the setup process for an offender based on the provided offender information.
+   * Checks if an offender setup already exists for the given CRN. If no setup exists, a new setup is initiated.
+   * If a setup exists but the offender's status is not "INITIAL", an exception is thrown.
+   * Otherwise, the existing offender information is updated with the provided details.
+   *
+   * @param offenderInfo the initial information about the offender
+   * @return the updated offender setup
+   * @throws BadArgumentException if the offender exists but has a status other than "INITIAL"
+   */
+  @Transactional
+  fun startOffenderSetup(offenderInfo: OffenderInfoInitial): OffenderSetupV2Dto {
+    LOGGER.info("Initiating offender setup for CRN={}", offenderInfo.crn)
+    val setup = offenderSetupRepository.findByCrn(offenderInfo.crn).orElse(null)
+    if (setup == null) {
+      return startOffenderSetup(offenderInfo.toOffenderInfoV2())
+    } else if (setup.offender.status != OffenderStatus.INITIAL) {
+      throw BadArgumentException("Offender already exists.")
+    }
+
+    val now = clock.instant()
+    val offender = setup.offender
+    offender.practitionerId = offenderInfo.practitionerId
+    offender.firstCheckin = offenderInfo.firstCheckin
+    offender.checkinInterval = offenderInfo.checkinInterval.duration
+    offender.contactPreference = offenderInfo.contactPreference
+    offender.updatedAt = now
+
+    offenderRepository.save(offender)
+
+    LOGGER.info(
+      "Re-started V2 offender setup: offender={}, crn={}, setup={}",
+      offender.uuid,
+      offender.crn,
+      setup.uuid,
+    )
+
+    return setup.dto()
   }
 
   /**
@@ -158,7 +211,7 @@ class OffenderSetupV2Service(
       uuid,
       checkin?.uuid ?: "not due",
     )
-    notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails)
+    notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails, setup.setupId())
 
     checkin?.let {
       try {
@@ -171,6 +224,33 @@ class OffenderSetupV2Service(
     }
 
     return savedOffender.dto(contactDetails)
+  }
+
+  /**
+   * Atomically activate the offender and increment the setup counter.
+   * Only increments if the offender is currently INACTIVE, ensuring idempotency
+   * against concurrent or retried reactivation requests.
+   *
+   * @return the offender and setupId, or null setupId if no setup exists
+   */
+  @Transactional
+  fun activateOffenderAndIncrementSetupCounter(offender: OffenderV2): Pair<OffenderV2, UUID?> {
+    if (offender.status != OffenderStatus.INACTIVE) {
+      val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+      return Pair(offender, setup?.setupId())
+    }
+
+    offender.status = OffenderStatus.VERIFIED
+    offender.updatedAt = clock.instant()
+    val savedOffender = offenderRepository.save(offender)
+
+    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+    setup?.let {
+      it.incrementSetupCounter()
+      offenderSetupRepository.save(it)
+    }
+
+    return Pair(savedOffender, setup?.setupId())
   }
 
   /** Terminate offender setup (cancel registration) */
@@ -238,3 +318,13 @@ fun <T> raiseOnConstraintViolation(
     throw e
   }
 }
+
+private fun OffenderInfoInitial.toOffenderInfoV2(): OffenderInfoV2 = OffenderInfoV2(
+  setupUuid = UUID.randomUUID(),
+  practitionerId = practitionerId,
+  crn = crn,
+  firstCheckin = firstCheckin,
+  checkinInterval = checkinInterval,
+  contactPreference = contactPreference,
+  startedAt = startedAt,
+)

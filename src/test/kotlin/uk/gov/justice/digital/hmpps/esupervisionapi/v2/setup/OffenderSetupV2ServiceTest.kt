@@ -2,18 +2,22 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
@@ -44,7 +48,7 @@ class OffenderSetupV2ServiceTest {
   private val s3UploadService: S3UploadService = mock()
   private val notificationService: NotificationV2Service = mock()
   private val eventAuditService: EventAuditV2Service = mock()
-  private val ndiliusApiClient: NdiliusApiClient = mock()
+  private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
 
   private lateinit var service: OffenderSetupV2Service
@@ -67,13 +71,11 @@ class OffenderSetupV2ServiceTest {
   @Test
   fun `startOffenderSetup - happy path - creates offender and setup`() {
     // Given
-    val setupUuid = UUID.randomUUID()
     val crn = "X123456"
     val practitionerId = "PRACT001"
     val firstCheckin = LocalDate.now(clock).plusDays(7)
 
-    val offenderInfo = OffenderInfoV2(
-      setupUuid = setupUuid,
+    val offenderInfo = OffenderInfoInitial(
       practitionerId = practitionerId,
       crn = crn,
       firstCheckin = firstCheckin,
@@ -95,7 +97,7 @@ class OffenderSetupV2ServiceTest {
     )
 
     val savedSetup = OffenderSetupV2(
-      uuid = setupUuid,
+      uuid = UUID.randomUUID(),
       offender = savedOffender,
       practitionerId = practitionerId,
       createdAt = clock.instant(),
@@ -110,7 +112,7 @@ class OffenderSetupV2ServiceTest {
 
     // Then
     assertNotNull(result)
-    assertEquals(setupUuid, result.uuid)
+    assertEquals(savedSetup.uuid, result.uuid)
     assertEquals(practitionerId, result.practitionerId)
     assertEquals(savedOffender.uuid, result.offenderUuid)
 
@@ -121,7 +123,6 @@ class OffenderSetupV2ServiceTest {
   @Test
   fun `completeOffenderSetup - happy path with photo uploaded - completes setup`() {
     // Given
-    val setupUuid = UUID.randomUUID()
     val offender = OffenderV2(
       uuid = UUID.randomUUID(),
       crn = "X123456",
@@ -136,14 +137,14 @@ class OffenderSetupV2ServiceTest {
     )
 
     val setup = OffenderSetupV2(
-      uuid = setupUuid,
+      uuid = UUID.randomUUID(),
       offender = offender,
       practitionerId = "PRACT001",
       createdAt = clock.instant(),
       startedAt = null,
     )
 
-    whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.of(setup))
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<OffenderV2, Any?>>(any())).thenAnswer {
@@ -153,13 +154,15 @@ class OffenderSetupV2ServiceTest {
     whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
 
     // When
-    val result = service.completeOffenderSetup(setupUuid)
+    val result = service.completeOffenderSetup(setup.uuid)
 
     // Then
     assertNotNull(result)
     assertEquals(offender.uuid, result.uuid)
+    assertEquals(1, setup.setupCounter)
     verify(s3UploadService).isSetupPhotoUploaded(setup)
     verify(offenderRepository).save(any())
+    verify(notificationService).sendSetupCompletedNotifications(any(), isNull(), eq(setup.setupId()))
   }
 
   @Test
@@ -257,9 +260,148 @@ class OffenderSetupV2ServiceTest {
     val setupUuid = UUID.randomUUID()
     whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.empty())
 
-    // When / Then
     assertThrows(BadArgumentException::class.java) {
       service.terminateOffenderSetup(setupUuid)
     }
   }
+
+  @Test
+  fun `re-starting a setup for a CRN`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByCrn(offender.crn)).thenReturn(Optional.of(setup))
+
+    val first = service.startOffenderSetup(
+      OffenderInfoInitial(
+        crn = offender.crn,
+        practitionerId = "PRACT001",
+        firstCheckin = offender.firstCheckin,
+        checkinInterval = CheckinInterval.WEEKLY,
+        contactPreference = offender.contactPreference,
+      ),
+    )
+
+    val second = service.startOffenderSetup(
+      OffenderInfoInitial(
+        crn = offender.crn,
+        practitionerId = "PRACT001",
+        firstCheckin = offender.firstCheckin,
+        checkinInterval = CheckinInterval.WEEKLY,
+        contactPreference = offender.contactPreference,
+      ),
+    )
+
+    assertEquals(first.uuid, second.uuid)
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - INACTIVE offender - increments counter and activates`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.INACTIVE
+    }
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+    )
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetupV2>())).thenAnswer { it.getArgument(0) }
+
+    val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+
+    assertEquals(OffenderStatus.VERIFIED, savedOffender.status)
+    assertEquals(2, setup.setupCounter)
+    assertNotNull(setupId)
+    verify(offenderRepository).save(offender)
+    verify(offenderSetupRepository).save(setup)
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - already VERIFIED - does not increment counter`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.VERIFIED
+    }
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+    )
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
+
+    val (returnedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+
+    assertEquals(OffenderStatus.VERIFIED, returnedOffender.status)
+    assertEquals(1, setup.setupCounter)
+    assertNotNull(setupId)
+    verify(offenderRepository, never()).save(any())
+    verify(offenderSetupRepository, never()).save(any<OffenderSetupV2>())
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - no setup exists - returns null setupId`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.INACTIVE
+    }
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.empty())
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+
+    assertEquals(OffenderStatus.VERIFIED, savedOffender.status)
+    assertNull(setupId)
+    verify(offenderRepository).save(offender)
+    verify(offenderSetupRepository, never()).save(any<OffenderSetupV2>())
+  }
+
+  @Test
+  fun `activateOffenderAndIncrementSetupCounter - idempotent across lifecycle`() {
+    val offender = makeOffender(clock, LocalDate.now(clock)).apply {
+      status = OffenderStatus.INACTIVE
+    }
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+    )
+
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetupV2>())).thenAnswer { it.getArgument(0) }
+
+    // First call: INACTIVE -> VERIFIED, counter 1 -> 2
+    val (_, firstSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+    assertEquals(2, setup.setupCounter)
+
+    // Second call: already VERIFIED, counter stays at 2
+    val (_, secondSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
+    assertEquals(2, setup.setupCounter)
+    assertEquals(firstSetupId, secondSetupId)
+  }
 }
+
+fun makeOffender(clock: Clock, firstCheckin: LocalDate) = OffenderV2(
+  uuid = UUID.randomUUID(),
+  crn = "X123456",
+  practitionerId = "PRACT001",
+  status = OffenderStatus.INITIAL,
+  firstCheckin = firstCheckin,
+  checkinInterval = CheckinInterval.WEEKLY.duration,
+  createdAt = clock.instant(),
+  createdBy = "PRACT001",
+  updatedAt = clock.instant(),
+  contactPreference = ContactPreference.EMAIL,
+)

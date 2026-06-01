@@ -35,7 +35,7 @@ class StubServicesConfiguration {
  * The file can be edited at runtime and will be automatically reloaded.
  */
 class StubNdiliusApiClient(
-  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/ndilius-responses/default.json")),
+  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
   val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
 ) : INdiliusApiClient,
   DisposableBean {

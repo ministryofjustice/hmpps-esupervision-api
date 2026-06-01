@@ -1,6 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
+import java.util.UUID
 
 /**
  * V2 Notification Service
@@ -15,8 +17,22 @@ class NotificationV2Service(
   /**
    * Send notifications for setup completed event
    */
-  fun sendSetupCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null) {
-    orchestrator.sendSetupCompletedNotifications(offender, contactDetails)
+  fun sendSetupCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
+    orchestrator.sendSetupCompletedNotifications(offender, contactDetails, setupId)
+  }
+
+  /**
+   * Send notifications for deactivation completed event
+   */
+  fun sendDeactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
+    orchestrator.sendDeactivationCompletedNotifications(offender, contactDetails, setupId)
+  }
+
+  /**
+   * Send notifications for reactivation completed event
+   */
+  fun sendReactivationCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
+    orchestrator.sendReactivationCompletedNotifications(offender, contactDetails, setupId)
   }
 
   /**
@@ -29,15 +45,15 @@ class NotificationV2Service(
   /**
    * Send notifications for checkin submitted event
    */
-  fun sendCheckinSubmittedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
-    orchestrator.sendCheckinSubmittedNotifications(checkin, contactDetails)
+  fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
+    orchestrator.sendCheckinSubmittedNotifications(event)
   }
 
   /**
    * Send notifications for checkin reviewed event
    */
-  fun sendCheckinReviewedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
-    orchestrator.sendCheckinReviewedNotifications(checkin, contactDetails)
+  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) {
+    orchestrator.sendCheckinReviewedNotifications(event)
   }
 
   /**
@@ -45,6 +61,20 @@ class NotificationV2Service(
    */
   fun sendCheckinExpiredNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
     orchestrator.sendCheckinExpiredNotifications(checkin, contactDetails)
+  }
+
+  /**
+   * Send reminder notifications for checkin event
+   */
+  fun sendCheckinReminderNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
+    orchestrator.sendReminderCheckinNotifications(checkin, contactDetails)
+  }
+
+  /**
+   * Send reminder for practitioner to add custom questions
+   */
+  fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {
+    orchestrator.sendPractitionerCustomQuestionsReminder(info)
   }
 
   /**

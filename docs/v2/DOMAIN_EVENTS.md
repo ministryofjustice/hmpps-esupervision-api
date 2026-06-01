@@ -1,6 +1,6 @@
 # V2 Domain Events
 
-Domain events are published to AWS SQS for integration with Ndilius and other downstream systems.
+Domain events are published to AWS SQS for integration with NDelius and other downstream systems.
 
 ---
 
@@ -26,7 +26,7 @@ sequenceDiagram
     participant DES as DomainEventService
     participant Pub as DomainEventPublisher
     participant SQS as AWS SQS
-    participant Ndilius as Ndilius
+    participant NDelius as NDelius
 
     Service->>DES: publishDomainEvent(type, uuid, crn, description)
 
@@ -40,9 +40,9 @@ sequenceDiagram
     SQS-->>Pub: Message ID
     Pub-->>DES: Success
 
-    Note over SQS,Ndilius: Asynchronous Processing
-    SQS-->>Ndilius: Deliver event message
-    Ndilius->>Ndilius: Process event
+    Note over SQS,NDelius: Asynchronous Processing
+    SQS-->>NDelius: Deliver event message
+    NDelius->>NDelius: Process event
 ```
 
 ---
@@ -70,23 +70,23 @@ data class PersonIdentifier(
 
 ---
 
-## Ndilius Callback Flow
+## NDelius Callback Flow
 
-When Ndilius receives a domain event, it calls back to fetch formatted event details.
+When NDelius receives a domain event, it calls back to fetch formatted event details.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant SQS as AWS SQS
-    participant Ndilius as Ndilius
+    participant NDelius as NDelius
     participant API as eSupervision API V2
     participant EDS as EventDetailV2Service
     participant DB as Database
 
-    SQS->>Ndilius: Domain Event Message
+    SQS->>NDelius: Domain Event Message
     Note right of SQS: Contains detailUrl:<br/>/v2/events/checkin-submitted/{uuid}
 
-    Ndilius->>API: GET /v2/events/checkin-submitted/{uuid}
+    NDelius->>API: GET /v2/events/checkin-submitted/{uuid}
 
     API->>EDS: getEventDetail(detailUrl)
 
@@ -100,9 +100,9 @@ sequenceDiagram
     EDS-->>API: EventDetailResponse
     Note right of EDS: eventReferenceId,<br/>eventType, notes,<br/>crn, timestamps
 
-    API-->>Ndilius: 200 OK + EventDetailResponse
+    API-->>NDelius: 200 OK + EventDetailResponse
 
-    Ndilius->>Ndilius: Store event in case notes
+    NDelius->>NDelius: Store event in case notes
 ```
 
 ---

@@ -1,13 +1,17 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events
 
 import java.time.ZonedDateTime
+import java.util.UUID
+
+data class AdditionalInformation(val eventNumber: Long? = null, val setupId: UUID? = null)
 
 data class DomainEvent(
   val eventType: String,
-  val detailUrl: String,
+  val detailUrl: String? = null,
   val occurredAt: ZonedDateTime,
   val description: String,
   val personReference: PersonReference?,
+  val additionalInformation: AdditionalInformation? = null,
 )
 
 data class PersonReference(val identifiers: List<PersonIdentifier>) {
