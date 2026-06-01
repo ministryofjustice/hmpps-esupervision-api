@@ -99,7 +99,6 @@ class CheckinV2Service(
     )
     val checkinLogs = CheckinLogsV2Dto(hint = CheckinLogsHintV2.SUBSET, logs = events)
 
-
     return checkin.dto(
       personalDetails,
       videoUrl,
