@@ -14,6 +14,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import java.util.concurrent.CompletableFuture
 
+/**
+ * We rely on outbox items being inserted before processing the event.
+ * We typically insert them via triggers.
+ */
 @Service
 class CheckinEventsListener(
   private val notificationService: NotificationV2Service,
