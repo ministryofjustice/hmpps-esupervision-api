@@ -240,7 +240,6 @@ open class OffenderCheckinV2(
     snapshotUrl: java.net.URL? = null,
     checkinLogs: CheckinLogsV2Dto = CheckinLogsV2Dto(CheckinLogsHintV2.OMITTED, emptyList()),
     photoUrl: java.net.URL? = null,
-    furtherActions: String? = null,
     clock: Clock? = null,
     checkinWindow: Period = Period.ofDays(3),
   ): CheckinV2Dto {
@@ -274,7 +273,6 @@ open class OffenderCheckinV2(
       snapshotUrl = snapshotUrl,
       checkinLogs = checkinLogs,
       photoUrl = photoUrl,
-      furtherActions = furtherActions,
     )
   }
 }
