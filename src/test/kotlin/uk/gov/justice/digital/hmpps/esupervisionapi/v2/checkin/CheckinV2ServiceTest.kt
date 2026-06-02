@@ -25,6 +25,7 @@ import software.amazon.awssdk.services.rekognition.model.AuditImage
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
@@ -115,6 +116,7 @@ class CheckinV2ServiceTest {
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())
     whenever(s3UploadService.getCheckinVideo(any())).thenReturn(URI.create("https://video/1").toURL())
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_1763))
   }
 
   @Test
