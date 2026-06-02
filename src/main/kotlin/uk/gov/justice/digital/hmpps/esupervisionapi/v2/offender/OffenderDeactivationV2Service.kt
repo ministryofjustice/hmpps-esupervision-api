@@ -49,6 +49,9 @@ class OffenderDeactivationV2Service(
    * @param reason recorded against the deactivation audit event
    * @param contactDetails pre-fetched Delius details (avoids an extra call); fetched when null
    * @param sensitive whether the reason contains sensitive information
+   * @param auditEventType the audit event type to record; defaults to a manual practitioner
+   *   deactivation. Scheduled jobs pass a criterion-specific automated type so the reason an offender
+   *   was stopped (in reset vs no active events) is queryable via the audit event_type.
    * @return the (possibly unchanged) offender
    *
    * Runs in its own transaction (REQUIRES_NEW) so that a deactivation commits independently of any
@@ -64,6 +67,7 @@ class OffenderDeactivationV2Service(
     reason: String,
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
+    auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
   ): OffenderV2 {
     if (offender.status != OffenderStatus.VERIFIED) {
       LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
@@ -91,7 +95,7 @@ class OffenderDeactivationV2Service(
       null
     }
 
-    eventAuditService.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, saved, details, reason, sensitive)
+    eventAuditService.recordOffenderEvent(auditEventType, saved, details, reason, sensitive)
 
     val setup = offenderSetupRepository.findByOffender(saved).orElse(null)
     notificationService.sendDeactivationCompletedNotifications(saved, details, setup?.setupId())

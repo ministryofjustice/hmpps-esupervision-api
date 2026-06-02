@@ -117,7 +117,12 @@ class V2CheckinReminderJob(
               ineligibility != null -> {
                 // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
                 // Deactivation cancels this check-in, so it is NOT recorded as a reminder (notSent) below.
-                offenderDeactivationV2Service.deactivateOffender(checkin.offender, ineligibility.auditNote, contactDetails)
+                offenderDeactivationV2Service.deactivateOffender(
+                  checkin.offender,
+                  ineligibility.auditNote,
+                  contactDetails,
+                  auditEventType = ineligibility.auditEventType,
+                )
                 totalDeactivated += 1
                 "not sent (deactivated: ${ineligibility.name})"
               }

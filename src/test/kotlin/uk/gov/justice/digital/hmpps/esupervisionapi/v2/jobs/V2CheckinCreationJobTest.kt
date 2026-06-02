@@ -22,6 +22,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -73,7 +74,7 @@ class V2CheckinCreationJobTest {
     verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any())
     verify(checkinCreationService).batchCreateCheckins(any())
     verify(notificationService).sendCheckinCreatedNotifications(any(), any())
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
   }
 
   @Test
@@ -83,7 +84,7 @@ class V2CheckinCreationJobTest {
 
     job.process()
 
-    verify(deactivationService).deactivateOffender(eq(offender), any(), any(), any())
+    verify(deactivationService).deactivateOffender(eq(offender), any(), any(), any(), eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED))
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
     verify(notificationService, never()).sendCheckinCreatedNotifications(any(), any())
   }
@@ -95,7 +96,7 @@ class V2CheckinCreationJobTest {
 
     job.process()
 
-    verify(deactivationService).deactivateOffender(eq(offender), any(), any(), any())
+    verify(deactivationService).deactivateOffender(eq(offender), any(), any(), any(), eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS))
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
 
@@ -107,7 +108,7 @@ class V2CheckinCreationJobTest {
     job.process()
 
     verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any())
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
   }
 
   @Test
@@ -121,7 +122,7 @@ class V2CheckinCreationJobTest {
         eligible.crn to details(eligible.crn, events = listOf(anEvent)),
       ),
     )
-    whenever(deactivationService.deactivateOffender(any(), any(), any(), any()))
+    whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any()))
       .thenThrow(RuntimeException("boom"))
 
     job.process()
@@ -129,7 +130,7 @@ class V2CheckinCreationJobTest {
     // the failure on the ineligible offender is isolated; the eligible offender is still processed.
     // NB: V2BaseEntity.equals() is id-based and unsaved test offenders share id=0, so match by
     // reference identity (same()) rather than eq() to assert the correct offender each time.
-    verify(deactivationService).deactivateOffender(same(ineligible), any(), any(), any())
+    verify(deactivationService).deactivateOffender(same(ineligible), any(), any(), any(), any())
     verify(checkinCreationService).prepareCheckinForOffender(same(eligible), any())
     verify(notificationService).sendCheckinCreatedNotifications(any(), any())
   }
@@ -142,7 +143,7 @@ class V2CheckinCreationJobTest {
 
     job.process()
 
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
 
@@ -151,7 +152,7 @@ class V2CheckinCreationJobTest {
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
     whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenReturn(mock<OffenderCheckinV2>())
     whenever(checkinCreationService.batchCreateCheckins(any())).thenAnswer { it.getArgument(0) }
-    whenever(deactivationService.deactivateOffender(any(), any(), any(), any())).thenAnswer { it.getArgument<OffenderV2>(0) }
+    whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<OffenderV2>(0) }
   }
 
   private fun details(crn: String, events: List<Event>? = null, suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended)

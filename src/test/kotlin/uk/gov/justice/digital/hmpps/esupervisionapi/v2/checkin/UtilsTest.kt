@@ -10,6 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import java.time.Clock
 import java.time.ZoneId
 
@@ -74,6 +75,18 @@ class UtilsTest {
   fun `checkinIneligibilityReason - eligible when offender has a cached current event`() {
     val offender = offenderTemplate.toEntity().apply { currentEvent = 7L }
     assertNull(checkinIneligibilityReason(offender, contactDetails(events = emptyList())))
+  }
+
+  @Test
+  fun `ineligibility reasons map to criterion-specific audit event types`() {
+    assertEquals(
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      CheckinIneligibilityReason.CONTACT_SUSPENDED.auditEventType,
+    )
+    assertEquals(
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      CheckinIneligibilityReason.NO_ACTIVE_EVENTS.auditEventType,
+    )
   }
 
   @Test

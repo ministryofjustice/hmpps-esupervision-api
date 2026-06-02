@@ -26,6 +26,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -78,7 +79,7 @@ class V2CheckinReminderJobTest {
     job.process()
 
     verify(notificationService).sendCheckinReminderNotifications(same(checkin), eq(cd))
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
   }
 
   @Test
@@ -95,7 +96,7 @@ class V2CheckinReminderJobTest {
 
     // NB: V2BaseEntity.equals() is id-based and all unsaved test entities share id=0, so eq() cannot
     // tell the instances apart - match by reference identity (same()/===) instead.
-    verify(deactivationService).deactivateOffender(same(ineligible.offender), any(), any(), any())
+    verify(deactivationService).deactivateOffender(same(ineligible.offender), any(), any(), any(), eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED))
     verify(notificationService).sendCheckinReminderNotifications(same(eligible), eq(eligibleCd))
     verify(notificationService, never()).sendCheckinReminderNotifications(same(ineligible), any())
 
@@ -111,7 +112,7 @@ class V2CheckinReminderJobTest {
   private fun stub(checkins: List<OffenderCheckinV2>, details: List<ContactDetails>) {
     whenever(checkinRepository.findEligibleForReminder(any(), any(), any())).thenReturn(Stream.of(*checkins.toTypedArray()))
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(details)
-    whenever(deactivationService.deactivateOffender(any(), any(), any(), any())).thenAnswer { it.getArgument<OffenderV2>(0) }
+    whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<OffenderV2>(0) }
   }
 
   private fun details(crn: String, events: List<Event>? = null, suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended)

@@ -114,7 +114,12 @@ class V2CheckinCreationJob(
                   // Isolate failures per-offender so one bad deactivation doesn't abort the whole run.
                   LOGGER.info("Deactivating CRN {} instead of creating checkin: {}", crn, ineligibility.name)
                   try {
-                    offenderDeactivationV2Service.deactivateOffender(offender, ineligibility.auditNote, contactDetails)
+                    offenderDeactivationV2Service.deactivateOffender(
+                      offender,
+                      ineligibility.auditNote,
+                      contactDetails,
+                      auditEventType = ineligibility.auditEventType,
+                    )
                     metrics.deactivated += 1
                   } catch (e: Exception) {
                     LOGGER.warn("Failed to deactivate CRN {} in chunk {}", crn, metrics.chunks, e)

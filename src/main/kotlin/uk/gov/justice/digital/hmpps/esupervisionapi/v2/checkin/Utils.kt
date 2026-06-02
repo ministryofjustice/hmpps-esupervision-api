@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -28,12 +29,22 @@ fun activeEventNumber(offender: OffenderV2, details: ContactDetails): Long? {
  * Reasons a verified offender should no longer receive online check-ins.
  * The [auditNote] is recorded against the automated deactivation audit event.
  */
-enum class CheckinIneligibilityReason(val description: String) {
-  CONTACT_SUSPENDED("contact is suspended (in reset) in NDelius"),
-  NO_ACTIVE_EVENTS("there are no active probation events in NDelius"),
+enum class CheckinIneligibilityReason(
+  val description: String,
+  /** The audit event type recorded when a scheduled job stops check-ins for this reason. */
+  val auditEventType: OffenderAuditEventType,
+) {
+  CONTACT_SUSPENDED(
+    "contact is suspended (in reset) in NDelius",
+    OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+  ),
+  NO_ACTIVE_EVENTS(
+    "there are no active probation events in NDelius",
+    OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+  ),
   ;
 
-  /** Reason text recorded against an automated deactivation audit event. */
+  /** Human-readable reason text recorded in the audit event's notes. */
   val auditNote: String get() = "Automatically deactivated: $description"
 }
 

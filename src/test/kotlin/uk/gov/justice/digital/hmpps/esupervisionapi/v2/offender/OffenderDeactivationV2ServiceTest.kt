@@ -78,6 +78,28 @@ class OffenderDeactivationV2ServiceTest {
   }
 
   @Test
+  fun `records the supplied audit event type (automated deactivation)`() {
+    val offender = offender(OffenderStatus.VERIFIED)
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+
+    service.deactivateOffender(
+      offender,
+      "no active events",
+      contactDetails,
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+    )
+
+    verify(eventAuditService).recordOffenderEvent(
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+      eq(offender),
+      eq(contactDetails),
+      eq("no active events"),
+      eq(false),
+    )
+  }
+
+  @Test
   fun `cancels pending CREATED check-ins on deactivation`() {
     val offender = offender(OffenderStatus.VERIFIED)
     val pending = OffenderCheckinV2(

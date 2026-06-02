@@ -17,8 +17,16 @@ import java.util.UUID
 
 enum class OffenderAuditEventType {
   SETUP_COMPLETED,
+
+  /** Practitioner-initiated deactivation via the deactivate endpoint. */
   OFFENDER_DEACTIVATED,
   OFFENDER_REACTIVATED,
+
+  /** Automated deactivation by a scheduled job because the POP's NDelius contact is suspended (in reset). */
+  OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+
+  /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
+  OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
 }
 
 enum class CheckinAuditEventType {
@@ -173,6 +181,8 @@ class EventAuditV2Service(
       OffenderAuditEventType.SETUP_COMPLETED,
       OffenderAuditEventType.OFFENDER_REACTIVATED,
       OffenderAuditEventType.OFFENDER_DEACTIVATED,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       -> buildAudit(
         eventType.name,
         offender,

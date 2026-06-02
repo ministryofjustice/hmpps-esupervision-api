@@ -25,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Reposito
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -93,7 +94,7 @@ class OffenderV2ResourceTest {
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any())).thenAnswer {
+    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
       val o = it.getArgument<OffenderV2>(0)
       o.status = OffenderStatus.INACTIVE
       o
@@ -109,6 +110,7 @@ class OffenderV2ResourceTest {
       eq("No longer on supervision"),
       eq(contactDetails),
       eq(false),
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
     )
   }
 
@@ -129,7 +131,7 @@ class OffenderV2ResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any())).thenAnswer {
+    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
       it.getArgument<OffenderV2>(0)
     }
 
@@ -140,6 +142,7 @@ class OffenderV2ResourceTest {
       eq("Safety concerns disclosed"),
       eq(contactDetails),
       eq(true),
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
     )
   }
 
@@ -213,7 +216,7 @@ class OffenderV2ResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any())).thenAnswer {
+    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
       val o = it.getArgument<OffenderV2>(0)
       o.status = OffenderStatus.INACTIVE
       o
