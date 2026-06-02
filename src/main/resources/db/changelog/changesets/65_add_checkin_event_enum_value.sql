@@ -20,7 +20,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_checkin_status_change__outbox
+CREATE TRIGGER trg_offender_event_log_event__outbox
     AFTER INSERT on offender_event_log_v2
     FOR EACH ROW
     WHEN (NEW.log_entry_type in ('OFFENDER_CHECKIN_ANNOTATED'::log_entry_type_v2))
