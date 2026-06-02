@@ -91,14 +91,18 @@ class OffenderDeactivationV2Service(
     val details = contactDetails ?: try {
       ndiliusApiClient.getContactDetails(saved.crn)
     } catch (e: Exception) {
-      LOGGER.info("Failed to get contact details for CRN {} from NDelius during deactivation", saved.crn)
+      LOGGER.info("Failed to get contact details for CRN {} from NDelius during deactivation", saved.crn, e)
       null
     }
 
     eventAuditService.recordOffenderEvent(auditEventType, saved, details, reason, sensitive)
 
     val setup = offenderSetupRepository.findByOffender(saved).orElse(null)
-    notificationService.sendDeactivationCompletedNotifications(saved, details, setup?.setupId())
+    try {
+      notificationService.sendDeactivationCompletedNotifications(saved, details, setup?.setupId())
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to send deactivation completed notifications for offender {}", saved.uuid, e)
+    }
 
     return saved
   }
