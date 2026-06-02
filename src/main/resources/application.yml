@@ -55,7 +55,7 @@ app:
     checkin-legacy-cleanup:
       enabled: ${CHECKIN_LEGACY_CLEANUP_ENABLED:false}
       dry-run: ${CHECKIN_LEGACY_CLEANUP_DRY_RUN:true}
-      cron: ${CHECKIN_LEGACY_CLEANUP_CRON:0 * * * * *}
+      cron: ${CHECKIN_LEGACY_CLEANUP_CRON:0 20 */6 * * *}
   features:
     # publish media proxy links to NDelius
     esup-1239: true
