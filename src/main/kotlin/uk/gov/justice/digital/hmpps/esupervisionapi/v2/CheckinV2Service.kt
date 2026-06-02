@@ -376,7 +376,6 @@ class CheckinV2Service(
   }
 
   /** Annotate a checkin */
-  @Transactional
   fun annotateCheckin(uuid: UUID, request: AnnotateCheckinV2Request): CheckinV2Dto {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
@@ -389,31 +388,20 @@ class CheckinV2Service(
         "Checkin must be reviewed before being annotated",
       )
     }
-    // if check in was already marked as sensitive, it cannot be then marked as not sensitive
-    val effectiveSensitive = checkin.sensitive || request.sensitive
-    if (checkin.sensitive != effectiveSensitive) {
-      checkin.sensitive = effectiveSensitive
-      checkinRepository.save(checkin)
-    }
-    val annotation = offenderEventLogRepository.save(
-      OffenderEventLogV2(
-        comment = request.notes,
-        sensitive = effectiveSensitive,
-        createdAt = clock.instant(),
-        logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
-        practitioner = request.updatedBy,
-        uuid = UUID.randomUUID(),
-        offender = checkin.offender,
-        checkin = checkin.id,
-      ),
-    )
 
+    checkin.sensitive = checkin.sensitive || request.sensitive
+    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val event = PartialCheckinAnnotatedEvent(
+      checkinId = checkin.id,
+      offenderId = checkin.offender.id,
+      checkin = checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod),
+      practitionerId = request.updatedBy,
+      offenderContactPreference = checkin.offender.contactPreference,
+    )
+    checkinPersistenceService.checkinAnnotation(checkin, event, request)
     LOGGER.info("Checkin annotated: {} by {}", uuid, request.updatedBy)
 
-    notificationService.sendCheckinUpdatedNotifications(checkin, annotation)
-
-    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    return event.checkin
   }
 
   /** Get proxy URL for checkin video */
