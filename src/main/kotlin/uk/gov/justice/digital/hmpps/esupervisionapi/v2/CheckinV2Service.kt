@@ -365,7 +365,7 @@ class CheckinV2Service(
     val event = checkin.toCheckinReviewedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod, videoUrl = videoUrl, snapshotUrl = snapshotUrl)
     checkinPersistenceService.checkinReview(checkin, event, reviewInfo)
 
-    if (checkin.manualIdCheck == ManualIdVerificationResult.MATCH) {
+    if (appConfig.enabledFeatures.contains(Feature.ESUP_1763) && checkin.manualIdCheck == ManualIdVerificationResult.MATCH) {
       s3UploadService.deleteCheckinSnapshot(uuid, 0)
       s3UploadService.deleteCheckinVideo(uuid)
       return checkin.dto(contactDetails, null, null, clock = clock, checkinWindow = checkinWindowPeriod)

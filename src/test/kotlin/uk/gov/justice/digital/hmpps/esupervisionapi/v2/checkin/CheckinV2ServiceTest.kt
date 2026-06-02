@@ -25,6 +25,7 @@ import software.amazon.awssdk.services.rekognition.model.AuditImage
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
@@ -310,7 +311,46 @@ class CheckinV2ServiceTest {
   }
 
   @Test
-  fun `reviewCheckin - happy path - completes review and updates status`() {
+  fun `reviewCheckin - happy path & Feature ESUP_1763 TRUE - completes review and updates status`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender()
+    val checkin = OffenderCheckinV2(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinV2Status.SUBMITTED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      submittedAt = clock.instant(),
+      reviewStartedAt = clock.instant(),
+      reviewStartedBy = "PRACT001",
+    )
+
+    val request = ReviewCheckinV2Request(
+      reviewedBy = "PRACT001",
+      manualIdCheck = ManualIdVerificationResult.MATCH,
+      notes = "Approved",
+    )
+
+    whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
+    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_1763))
+
+    val result = service.reviewCheckin(uuid, request)
+
+    assertEquals(CheckinV2Status.REVIEWED, result.status)
+    assertNotNull(result.reviewedAt)
+    assertNull(result.videoUrl)
+    assertNull(result.snapshotUrl)
+    assertEquals("PRACT001", result.reviewedBy)
+    assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
+    verify(checkinPersistenceService).checkinReview(any(), any(), any())
+    verify(s3UploadService).deleteCheckinSnapshot(uuid, 0)
+    verify(s3UploadService).deleteCheckinVideo(uuid)
+  }
+
+  @Test
+  fun `reviewCheckin - happy path & Feature ESUP_1763 FALSE - completes review and updates status`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender()
     val checkin = OffenderCheckinV2(
@@ -338,13 +378,13 @@ class CheckinV2ServiceTest {
 
     assertEquals(CheckinV2Status.REVIEWED, result.status)
     assertNotNull(result.reviewedAt)
-    assertNull(result.videoUrl)
-    assertNull(result.snapshotUrl)
+    assertNotNull(result.videoUrl)
+    assertNotNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
     verify(checkinPersistenceService).checkinReview(any(), any(), any())
-    verify(s3UploadService).deleteCheckinSnapshot(uuid, 0)
-    verify(s3UploadService).deleteCheckinVideo(uuid)
+    verify(s3UploadService, never()).deleteCheckinSnapshot(any(), any())
+    verify(s3UploadService, never()).deleteCheckinVideo(any())
   }
 
   @Test
@@ -370,6 +410,7 @@ class CheckinV2ServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_1763))
 
     val result = service.reviewCheckin(uuid, request)
 
