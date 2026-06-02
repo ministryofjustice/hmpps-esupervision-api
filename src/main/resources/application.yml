@@ -65,6 +65,8 @@ app:
     upload-content-hash:
       # if true, reject upload_location requests that don't carry a hash
       require: ${UPLOAD_CONTENT_HASH_REQUIRE:false}
+    # remove the checkin snapshot if the manual id check confirms it is a match without concern
+    esup-1763: ${APP_FEATURES_ESUP_1763:false}
   offender-survey:
     # expand form values into human-readable strings in NDelius notes
     expansions:
