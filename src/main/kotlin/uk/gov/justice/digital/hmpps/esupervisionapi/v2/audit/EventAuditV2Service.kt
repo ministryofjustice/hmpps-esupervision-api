@@ -17,8 +17,16 @@ import java.util.UUID
 
 enum class OffenderAuditEventType {
   SETUP_COMPLETED,
+
+  /** Practitioner-initiated deactivation via the deactivate endpoint. */
   OFFENDER_DEACTIVATED,
   OFFENDER_REACTIVATED,
+
+  /** Automated deactivation by a scheduled job because the POP's NDelius contact is suspended (in reset). */
+  OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+
+  /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
+  OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
 }
 
 enum class CheckinAuditEventType {
@@ -112,9 +120,14 @@ class EventAuditV2Service(
   fun recordCheckinReminded(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) = recordCheckinEvents(CheckinAuditEventType.CHECKIN_REMINDER, checkins)
 
   fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderV2, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
-    if (contactDetails?.practitioner == null) {
-      LOGGER.warn("Cannot record audit event {} for CRN {}: practitioner details not found", eventType.name, offender.crn)
+    if (contactDetails == null) {
+      LOGGER.warn("Cannot record audit event {} for CRN {}: contact details not found", eventType.name, offender.crn)
       return
+    }
+    if (contactDetails.practitioner == null) {
+      // Still record the event (e.g. an automated deactivation of a POP in reset) - the practitioner
+      // org-unit columns are nullable, so we keep the audit trail rather than dropping it entirely.
+      LOGGER.warn("Recording audit event {} for CRN {} without practitioner organisation details", eventType.name, offender.crn)
     }
 
     try {
@@ -168,6 +181,8 @@ class EventAuditV2Service(
       OffenderAuditEventType.SETUP_COMPLETED,
       OffenderAuditEventType.OFFENDER_REACTIVATED,
       OffenderAuditEventType.OFFENDER_DEACTIVATED,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       -> buildAudit(
         eventType.name,
         offender,

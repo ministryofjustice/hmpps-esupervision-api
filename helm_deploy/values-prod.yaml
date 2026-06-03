@@ -27,7 +27,6 @@ generic-service:
     CHECKIN_LEGACY_CLEANUP_ENABLED: "true"
     CHECKIN_LEGACY_CLEANUP_DRY_RUN: "false"
     APP_FEATURES_ESUP_1239: "true"
-    APP_FEATURES_ESUP_1183: "true"
     APP_FEATURES_ESUP_1763: "false"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack

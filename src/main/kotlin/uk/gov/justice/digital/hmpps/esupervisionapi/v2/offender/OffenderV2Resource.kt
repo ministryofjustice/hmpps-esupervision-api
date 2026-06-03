@@ -29,12 +29,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
@@ -44,7 +44,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
 import java.time.Clock
 import java.time.Duration
@@ -63,9 +62,8 @@ class OffenderV2Resource(
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationV2Service: NotificationV2Service,
   private val checkinRepository: OffenderCheckinV2Repository,
-  private val offenderSetupRepository: OffenderSetupV2Repository,
   private val offenderSetupV2Service: OffenderSetupV2Service,
-  private val questionService: QuestionService,
+  private val offenderDeactivationV2Service: OffenderDeactivationV2Service,
   private val appConfig: AppConfig,
 ) {
 
@@ -221,25 +219,12 @@ class OffenderV2Resource(
       )
     }
 
-    offender.status = OffenderStatus.INACTIVE
-    offender.updatedAt = clock.instant()
-    val saved = offenderRepository.save(offender)
-
-    questionService.deleteUpcomingAssignment(offender.crn)
-
-    // set any pending check ins to cancelled
-    val pendingCheckins = checkinRepository.findAllByOffenderAndStatus(saved, CheckinV2Status.CREATED)
-    if (pendingCheckins.isNotEmpty()) {
-      pendingCheckins.forEach {
-        it.status = CheckinV2Status.CANCELLED
-      }
-      checkinRepository.saveAll(pendingCheckins)
-      LOGGER.info("Cancelled ${pendingCheckins.size} created/pending check ins for CRN ${saved.crn} due to offender deactivation")
-    }
-
-    recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, request.reason, request.sensitive)
-
-    val photoUrl = getOffenderPhotoUrl(saved)
+    val saved = offenderDeactivationV2Service.deactivateOffender(
+      offender,
+      reason = request.reason,
+      contactDetails = contactDetails,
+      sensitive = request.sensitive,
+    )
 
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",
@@ -250,10 +235,7 @@ class OffenderV2Resource(
       request.sensitive,
     )
 
-    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
-    notificationV2Service.sendDeactivationCompletedNotifications(offender, contactDetails, setup?.setupId())
-
-    return ResponseEntity.ok(saved.toSummaryDto(photoUrl))
+    return ResponseEntity.ok(saved.toSummaryDto(getOffenderPhotoUrl(saved)))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -294,6 +276,15 @@ class OffenderV2Resource(
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "Could not verify contact details in NDelius for ${offender.crn}.",
+      )
+    }
+
+    // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
+    // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
+    checkinIneligibilityReason(offender, contactDetails)?.let { reason ->
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot reactivate ${offender.crn}: ${reason.description}",
       )
     }
 

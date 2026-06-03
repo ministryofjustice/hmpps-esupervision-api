@@ -150,6 +150,17 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
 
   @Query(
     """
+    UPDATE OffenderCheckinV2 c
+    SET c.status = :newStatus
+    WHERE c.offender = :offender
+      AND c.status = :currentStatus
+    """,
+  )
+  @Modifying
+  fun updateStatusForOffender(offender: OffenderV2, currentStatus: CheckinV2Status, newStatus: CheckinV2Status): Int
+
+  @Query(
+    """
     SELECT c FROM OffenderCheckinV2 c
     JOIN FETCH c.offender
     WHERE c.status = 'CREATED'

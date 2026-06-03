@@ -14,7 +14,11 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
@@ -213,6 +217,103 @@ class OffenderSetupV2ServiceTest {
   }
 
   @Test
+  fun `completeOffenderSetup - blocked when contact suspended (in reset) in NDelius`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    // Suspended even though an active event is present - suspension wins.
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), contactSuspended = true),
+    )
+
+    assertThrows(BadArgumentException::class.java) {
+      service.completeOffenderSetup(setup.uuid)
+    }
+    verify(offenderRepository, never()).save(any())
+    verify(notificationService, never()).sendSetupCompletedNotifications(any(), any(), any())
+  }
+
+  @Test
+  fun `completeOffenderSetup - blocked when there are no active events in NDelius`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList()),
+    )
+
+    assertThrows(BadArgumentException::class.java) {
+      service.completeOffenderSetup(setup.uuid)
+    }
+    verify(offenderRepository, never()).save(any())
+    verify(notificationService, never()).sendSetupCompletedNotifications(any(), any(), any())
+  }
+
+  @Test
+  fun `completeOffenderSetup - completes when NDelius contact details are unavailable (does not block)`() {
+    // A transient NDelius failure must not block onboarding - the eligibility gate only applies
+    // when contact details are available. The daily job re-checks eligibility later.
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.completeOffenderSetup(setup.uuid)
+
+    assertEquals(OffenderStatus.VERIFIED, result.status)
+    verify(offenderRepository).save(any())
+  }
+
+  @Test
+  fun `completeOffenderSetup - completes when offender has an active event`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetupV2(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent)),
+    )
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+
+    val result = service.completeOffenderSetup(setup.uuid)
+
+    assertEquals(OffenderStatus.VERIFIED, result.status)
+    verify(offenderRepository).save(any())
+  }
+
+  @Test
   fun `terminateOffenderSetup - happy path - marks offender as inactive`() {
     // Given
     val setupUuid = UUID.randomUUID()
@@ -392,6 +493,8 @@ class OffenderSetupV2ServiceTest {
     assertEquals(firstSetupId, secondSetupId)
   }
 }
+
+private val activeEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
 
 fun makeOffender(clock: Clock, firstCheckin: LocalDate) = OffenderV2(
   uuid = UUID.randomUUID(),
