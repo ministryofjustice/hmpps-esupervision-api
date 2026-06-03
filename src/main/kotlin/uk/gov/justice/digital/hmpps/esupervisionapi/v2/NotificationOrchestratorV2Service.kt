@@ -414,12 +414,12 @@ class NotificationOrchestratorV2Service(
   )
 
   /** Send notifications for checkin updated event */
-  fun sendCheckinUpdatedNotifications(checkin: OffenderCheckinV2, annotation: OffenderEventLogV2) {
+  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_ANNOTATED,
-      uuid = annotation.uuid,
-      crn = checkin.offender.crn,
-      description = "Check-in updated for ${checkin.offender.crn}",
+      uuid = event.annotation.second,
+      crn = event.checkin.crn,
+      description = "Check-in updated for ${event.checkin.crn}",
     )
   }
 

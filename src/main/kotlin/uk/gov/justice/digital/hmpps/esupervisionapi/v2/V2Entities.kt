@@ -740,6 +740,7 @@ enum class OutboxItemType {
   CHECKIN_SUBMITTED,
   CHECKIN_REVIEWED,
   CHECKIN_EXPIRED,
+  CHECKIN_ANNOTATED,
 }
 
 enum class OutboxItemStatus {

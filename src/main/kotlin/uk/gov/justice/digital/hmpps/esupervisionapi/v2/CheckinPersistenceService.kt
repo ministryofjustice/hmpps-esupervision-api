@@ -53,4 +53,23 @@ class CheckinPersistenceService(
 
     appEventPublisher.publishEvent(event)
   }
+
+  @Transactional
+  fun checkinAnnotation(checkin: OffenderCheckinV2, event: PartialCheckinAnnotatedEvent, request: AnnotateCheckinV2Request) {
+    checkinRepository.save(checkin)
+    val logEntry = offenderEventLogRepository.save(
+      OffenderEventLogV2(
+        comment = request.notes,
+        sensitive = checkin.sensitive,
+        createdAt = clock.instant(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+        practitioner = request.updatedBy,
+        uuid = UUID.randomUUID(),
+        offender = checkin.offender,
+        checkin = checkin.id,
+      ),
+    )
+
+    appEventPublisher.publishEvent(event.finalise(logEntry))
+  }
 }

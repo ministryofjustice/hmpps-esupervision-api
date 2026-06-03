@@ -80,8 +80,8 @@ class NotificationV2Service(
   /**
    * Send notifications for checkin updated event
    */
-  fun sendCheckinUpdatedNotifications(checkin: OffenderCheckinV2, annotation: OffenderEventLogV2) {
-    orchestrator.sendCheckinUpdatedNotifications(checkin, annotation)
+  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
+    orchestrator.sendCheckinUpdatedNotifications(event)
   }
 
   /**
