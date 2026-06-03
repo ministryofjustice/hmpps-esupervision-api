@@ -6,7 +6,6 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
@@ -40,14 +39,13 @@ class OffenderDeactivationV2Service(
   private val questionService: QuestionService,
   private val eventAuditService: EventAuditV2Service,
   private val notificationService: NotificationV2Service,
-  private val ndiliusApiClient: INdiliusApiClient,
 ) {
 
   /**
    * Deactivate a VERIFIED offender. Idempotent: a no-op if the offender is not VERIFIED.
    *
    * @param reason recorded against the deactivation audit event
-   * @param contactDetails pre-fetched Delius details (avoids an extra call); fetched when null
+   * @param contactDetails Delius details fetched by the caller; downstream audit/notifications are skipped when null
    * @param sensitive whether the reason contains sensitive information
    * @param auditEventType the audit event type to record; defaults to a manual practitioner
    *   deactivation. Scheduled jobs pass a criterion-specific automated type so the reason an offender
@@ -81,25 +79,16 @@ class OffenderDeactivationV2Service(
     questionService.deleteUpcomingAssignment(saved.crn)
 
     // set any pending check ins to cancelled
-    val pendingCheckins = checkinRepository.findAllByOffenderAndStatus(saved, CheckinV2Status.CREATED)
-    if (pendingCheckins.isNotEmpty()) {
-      pendingCheckins.forEach { it.status = CheckinV2Status.CANCELLED }
-      checkinRepository.saveAll(pendingCheckins)
-      LOGGER.info("Cancelled {} created/pending check ins for CRN {} due to offender deactivation", pendingCheckins.size, saved.crn)
+    val cancelled = checkinRepository.updateStatusForOffender(saved, CheckinV2Status.CREATED, CheckinV2Status.CANCELLED)
+    if (cancelled > 0) {
+      LOGGER.info("Cancelled {} created/pending check ins for CRN {} due to offender deactivation", cancelled, saved.crn)
     }
 
-    val details = contactDetails ?: try {
-      ndiliusApiClient.getContactDetails(saved.crn)
-    } catch (e: Exception) {
-      LOGGER.info("Failed to get contact details for CRN {} from NDelius during deactivation", saved.crn, e)
-      null
-    }
-
-    eventAuditService.recordOffenderEvent(auditEventType, saved, details, reason, sensitive)
+    eventAuditService.recordOffenderEvent(auditEventType, saved, contactDetails, reason, sensitive)
 
     val setup = offenderSetupRepository.findByOffender(saved).orElse(null)
     try {
-      notificationService.sendDeactivationCompletedNotifications(saved, details, setup?.setupId())
+      notificationService.sendDeactivationCompletedNotifications(saved, contactDetails, setup?.setupId())
     } catch (e: Exception) {
       LOGGER.warn("Failed to send deactivation completed notifications for offender {}", saved.uuid, e)
     }
