@@ -2,10 +2,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
 import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationFailureException
@@ -26,7 +28,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDate
+import java.time.Period
 import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
@@ -50,7 +54,10 @@ class OffenderSetupV2Service(
   private val eventAuditService: EventAuditV2Service,
   private val ndiliusApiClient: INdiliusApiClient,
   private val transactionTemplate: TransactionTemplate,
+  @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) {
+
+  private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
 
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetupV2> = offenderSetupRepository.findByUuid(uuid)
 
@@ -229,7 +236,15 @@ class OffenderSetupV2Service(
 
     checkin?.let {
       try {
-        contactDetails?.let { notificationService.sendCheckinCreatedNotifications(checkin, contactDetails) }
+        val event = CheckinCreatedEvent(
+          checkinId = it.id,
+          offenderId = offender.id,
+          practitionerId = it.createdBy,
+          checkin = it.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
+          offenderContactPreference = it.offender.contactPreference,
+          currentEvent = it.offender.currentEvent,
+        )
+        contactDetails?.let { notificationService.sendCheckinCreatedNotifications(event) }
       } catch (e: NotificationFailureException) {
         LOGGER.info("Notification failure {}", e.message, e)
       } catch (e: Exception) {

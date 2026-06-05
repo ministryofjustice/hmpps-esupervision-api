@@ -209,21 +209,29 @@ class NotificationOrchestratorV2Service(
   }
 
   /** Send notifications for checkin created event */
-  fun sendCheckinCreatedNotifications(
-    checkin: OffenderCheckinV2,
-    contactDetails: ContactDetails,
-  ) {
-    domainEventService.publishDomainEvent(
-      eventType = DomainEventType.V2_CHECKIN_CREATED,
-      uuid = checkin.uuid,
-      crn = checkin.offender.crn,
-      description = "Check-in created for ${checkin.offender.crn} with due date ${checkin.dueDate}",
-    )
+  fun sendCheckinCreatedNotifications(event: CheckinCreatedEvent) {
+    // NOTE: there's a bit of confusion about what happens when we don't have the offender's contact details.
+    // In principle, we shouldn't get here in the first place (e.g., the service level code returns a 422 error
+    // to the client). But let's say checkin was created, and we somehow got here. We will publish domain event
+    // to reflect what happened in the database and possibly resolve any issues after investigating
+    val checkin = event.checkin
+    val activeEventNumber = if (checkin.personalDetails == null) event.currentEvent else activeEventNumber(event, checkin.personalDetails)
+    if (activeEventNumber == null) {
+      LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: no active events found", checkin.uuid, checkin.crn)
+      return
+    }
+
+    event.publish(domainEventService)
+
+    if (event.checkin.personalDetails == null) {
+      LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: personal details not found", checkin.uuid, checkin.crn)
+      return
+    }
 
     try {
-      // Calculate final checkin date (last day offender can submit)
+      // final checkin date == last day offender can submit
       val finalCheckinDate = checkin.dueDate.plus(checkinWindowPeriod).minusDays(1)
-
+      val contactDetails = checkin.personalDetails
       val personalisation =
         mapOf(
           "firstName" to contactDetails.name.forename,
@@ -232,19 +240,19 @@ class NotificationOrchestratorV2Service(
           "url" to appConfig.checkinSubmitUrlV2(checkin.uuid).toString(),
         )
 
-      // V1 only notifies offender for checkin invite (no practitioner template)
+      // we only notify the offender by sending them a checkin invite
       val notificationsWithRecipients =
         notificationPersistence.buildOffenderNotifications(
-          offenderId = checkin.offender.id,
-          crn = checkin.offender.crn,
-          contactPreference = checkin.offender.contactPreference,
+          offenderId = event.offenderId,
+          crn = checkin.crn,
+          contactPreference = event.offenderContactPreference,
           contactDetails = contactDetails,
           notificationType = NotificationType.OffenderCheckinInvite,
         )
 
       processAndSendNotifications(notificationsWithRecipients, personalisation)
     } catch (e: Exception) {
-      val sanitized = PiiSanitizer.sanitizeException(e, checkin.offender.crn, checkin.offender.uuid)
+      val sanitized = PiiSanitizer.sanitizeException(e, checkin.crn)
       LOGGER.warn(
         "Failed to send checkin created notifications for checkin {}: {}",
         checkin.uuid,
@@ -289,14 +297,9 @@ class NotificationOrchestratorV2Service(
 
   /** Send notifications for checkin submitted event */
   fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
-    val checkin = event.checkin
-    domainEventService.publishDomainEvent(
-      eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
-      uuid = checkin.uuid,
-      crn = checkin.crn,
-      description = "Check-in submitted for ${checkin.crn}",
-    )
+    event.publish(domainEventService)
 
+    val checkin = event.checkin
     if (event.checkin.personalDetails == null) {
       LOGGER.debug("Skipping checkin submitted notifications for checkin {}: personal details not found", event.checkin.uuid)
       return
@@ -367,15 +370,7 @@ class NotificationOrchestratorV2Service(
   }
 
   /** Send notifications for checkin reviewed event */
-  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) {
-    val checkin = event.checkin
-    domainEventService.publishDomainEvent(
-      eventType = DomainEventType.V2_CHECKIN_REVIEWED,
-      uuid = checkin.uuid,
-      crn = checkin.crn,
-      description = "Check-in reviewed for ${checkin.crn} by ${checkin.reviewedBy}",
-    )
-  }
+  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) = event.publish(domainEventService)
 
   /** Send notifications for checkin expired event */
   fun sendCheckinExpiredNotifications(
@@ -414,14 +409,7 @@ class NotificationOrchestratorV2Service(
   )
 
   /** Send notifications for checkin updated event */
-  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
-    domainEventService.publishDomainEvent(
-      eventType = DomainEventType.V2_CHECKIN_ANNOTATED,
-      uuid = event.annotation.second,
-      crn = event.checkin.crn,
-      description = "Check-in updated for ${event.checkin.crn}",
-    )
-  }
+  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) = event.publish(domainEventService)
 
   /** Send reminder for practitioner to add custom questions */
   fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {
@@ -533,4 +521,40 @@ class NotificationOrchestratorV2Service(
       CheckinInterval.EIGHT_WEEKS -> "eight weeks"
     }
   }
+}
+
+fun CheckinCreatedEvent.publish(domainEventService: DomainEventService) {
+  domainEventService.publishDomainEvent(
+    eventType = DomainEventType.V2_CHECKIN_CREATED,
+    uuid = checkin.uuid,
+    crn = checkin.crn,
+    description = "Check-in created for ${checkin.crn} with due date ${checkin.dueDate}",
+  )
+}
+
+fun CheckinSubmittedEvent.publish(domainEventService: DomainEventService) {
+  domainEventService.publishDomainEvent(
+    eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
+    uuid = checkin.uuid,
+    crn = checkin.crn,
+    description = "Check-in submitted for ${checkin.crn}",
+  )
+}
+
+fun CheckinReviewedEvent.publish(domainEventService: DomainEventService) {
+  domainEventService.publishDomainEvent(
+    eventType = DomainEventType.V2_CHECKIN_REVIEWED,
+    uuid = checkin.uuid,
+    crn = checkin.crn,
+    description = "Check-in reviewed for ${checkin.crn} by ${checkin.reviewedBy}",
+  )
+}
+
+fun CheckinAnnotatedEvent.publish(domainEventService: DomainEventService) {
+  domainEventService.publishDomainEvent(
+    eventType = DomainEventType.V2_CHECKIN_ANNOTATED,
+    uuid = annotation.second,
+    crn = checkin.crn,
+    description = "Check-in updated for ${checkin.crn}",
+  )
 }

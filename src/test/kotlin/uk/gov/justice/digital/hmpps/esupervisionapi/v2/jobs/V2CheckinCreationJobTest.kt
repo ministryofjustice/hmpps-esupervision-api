@@ -8,8 +8,14 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.same
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.data.domain.PageRequest
+import org.springframework.test.util.ReflectionTestUtils
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
@@ -17,32 +23,32 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationV2Service
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Optional
 import java.util.UUID
-import java.util.stream.Stream
+
 
 class V2CheckinCreationJobTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-10T09:00:00Z"), ZoneId.of("UTC"))
   private val offenderRepository: OffenderV2Repository = mock()
-  private val checkinRepository: OffenderCheckinV2Repository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val checkinCreationService: CheckinCreationService = mock()
-  private val notificationService: NotificationV2Service = mock()
+
   private val deactivationService: OffenderDeactivationV2Service = mock()
   private val jobLogRepository: JobLogV2Repository = mock {
     on { saveAndFlush(any<JobLogV2>()) } doAnswer { it.arguments[0] as JobLogV2 }
@@ -52,14 +58,13 @@ class V2CheckinCreationJobTest {
   private val job = V2CheckinCreationJob(
     clock,
     offenderRepository,
-    checkinRepository,
     ndiliusApiClient,
     checkinCreationService,
-    notificationService,
     deactivationService,
     jobLogRepository,
     entityManager,
     chunkSize = 100,
+    Duration.ofDays(3),
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -72,8 +77,7 @@ class V2CheckinCreationJobTest {
     job.process()
 
     verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any())
-    verify(checkinCreationService).batchCreateCheckins(any())
-    verify(notificationService).sendCheckinCreatedNotifications(any(), any())
+    verify(checkinCreationService).createCheckins(any())
     verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
   }
 
@@ -86,7 +90,6 @@ class V2CheckinCreationJobTest {
 
     verify(deactivationService).deactivateOffender(eq(offender), any(), any(), any(), eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED))
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
-    verify(notificationService, never()).sendCheckinCreatedNotifications(any(), any())
   }
 
   @Test
@@ -120,8 +123,7 @@ class V2CheckinCreationJobTest {
     // NB: V2BaseEntity.equals() is id-based and unsaved test offenders share id=0, so match by
     // reference identity (same()) rather than eq() to assert the correct offender each time.
     verify(deactivationService).deactivateOffender(same(ineligible), any(), any(), any(), any())
-    verify(checkinCreationService).prepareCheckinForOffender(same(eligible), any())
-    verify(notificationService).sendCheckinCreatedNotifications(any(), any())
+    verify(checkinCreationService, times(1)).prepareCheckinForOffender(any(), any())
   }
 
   @Test
@@ -137,10 +139,40 @@ class V2CheckinCreationJobTest {
   }
 
   private fun stubEligible(offenders: List<OffenderV2>, detailsByCrn: Map<String, ContactDetails>) {
-    whenever(offenderRepository.findEligibleForCheckinCreation(any(), any())).thenReturn(Stream.of(*offenders.toTypedArray()))
+    for (i in 0 until offenders.size) {
+      ReflectionTestUtils.setField(offenders[i], "id", i.toLong())
+      whenever(offenderRepository.findById(eq(i.toLong()))).thenReturn(Optional.of(offenders[i]))
+    }
+
+    data class CheckinCreationInfo(
+      override val id: Long,
+      override val crn: CRN,
+      override val practitionerId: ExternalUserId,
+      override val contactPreference: ContactPreference,
+      override val currentEvent: Long?,
+    ) : OffenderV2Repository.IOffenderCheckinCreationInfo
+    whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any()))
+      .thenReturn(
+        org.springframework.data.domain.SliceImpl(
+          offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.currentEvent) },
+          PageRequest.of(0, 10),
+          false,
+        ),
+      )
+    whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<OffenderV2>())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
-    whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenReturn(mock<OffenderCheckinV2>())
-    whenever(checkinCreationService.batchCreateCheckins(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenAnswer { arg ->
+      val offender = arg.getArgument<OffenderV2>(0)
+      OffenderCheckinV2(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinV2Status.CREATED,
+        dueDate = clock.today(),
+        createdAt = clock.instant(),
+        createdBy = "SYSTEM",
+      )
+    }
+    whenever(checkinCreationService.createCheckins(any())).thenAnswer { it.getArgument(0) }
     whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<OffenderV2>(0) }
   }
 

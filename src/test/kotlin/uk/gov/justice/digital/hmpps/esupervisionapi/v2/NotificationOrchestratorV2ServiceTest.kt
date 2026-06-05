@@ -96,9 +96,17 @@ class NotificationOrchestratorV2ServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendCheckinCreatedNotifications(checkin, contactDetails)
+    val event = CheckinCreatedEvent(
+      checkin = checkin.dto(contactDetails, clock = clock),
+      offenderId = offender.id,
+      checkinId = checkin.id,
+      practitionerId = offender.practitionerId,
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = null,
+    )
+    service.sendCheckinCreatedNotifications(event)
 
-    // V1 only notifies offender for checkin invite (no practitioner template)
+    // we only notify the offender about the checkin invite (no practitioner template)
     verify(notificationPersistence).buildOffenderNotifications(any(), any(), any(), any(), eq(NotificationType.OffenderCheckinInvite))
     verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))

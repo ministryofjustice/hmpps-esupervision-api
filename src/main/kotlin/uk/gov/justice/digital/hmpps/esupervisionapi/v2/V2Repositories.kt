@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Slice
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
@@ -12,7 +13,9 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
@@ -31,6 +34,8 @@ import java.util.stream.Stream
 @Repository
 interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
   fun findByUuid(uuid: UUID): Optional<OffenderV2>
+
+  @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<OffenderV2>
 
   /**
@@ -58,6 +63,36 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
     lowerBoundInclusive: LocalDate,
     upperBoundExclusive: LocalDate,
   ): Stream<OffenderV2>
+
+  @Query(
+    value = """
+    SELECT o.id, o.crn, o.practitioner_id, o.contact_preference, o.current_event FROM offender_v2 o
+    WHERE o.status = 'VERIFIED'
+      AND o.first_checkin <= :lowerBoundInclusive
+      AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+      AND NOT EXISTS (
+        SELECT 1 FROM offender_checkin_v2 c
+        WHERE c.offender_id = o.id
+          AND :lowerBoundInclusive <= c.due_date
+          AND c.due_date < :upperBoundExclusive
+          AND c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+      )
+    """,
+    nativeQuery = true,
+  )
+  fun findEligibleForCheckinCreation(
+    lowerBoundInclusive: LocalDate,
+    upperBoundExclusive: LocalDate,
+    pageable: Pageable,
+  ): Slice<IOffenderCheckinCreationInfo>
+
+  interface IOffenderCheckinCreationInfo : ActiveEvent {
+    val id: Long
+    val crn: CRN
+    val practitionerId: ExternalUserId
+    val contactPreference: ContactPreference
+    override val currentEvent: Long?
+  }
 
   /**
    * Find offenders whose next checkin due date matches specific offsets from :today
@@ -147,6 +182,21 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
   @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckinV2>
   fun findAllByOffenderAndStatus(offender: OffenderV2, status: CheckinV2Status): List<OffenderCheckinV2>
+
+  @Query("""select c from OffenderCheckinV2 c where c.id in :ids""")
+  @EntityGraph(attributePaths = ["offender"])
+  fun findAllByIds(ids: List<Long>): List<OffenderCheckinV2>
+
+  @Query(
+    """
+    select o.crn
+    from offender_checkin_v2 c
+    join offender_v2 o on o.id = c.offender_id
+    where c.id in :ids
+     """,
+    nativeQuery = true,
+  )
+  fun findCrnsByCheckinIds(ids: List<Long>): List<String>
 
   @Query(
     """
@@ -291,6 +341,7 @@ interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2,
         AND n.createdAt >= :cutoffTime
   """,
   )
+  @Transactional(readOnly = true)
   fun hasNotificationBeenSent(
     offender: OffenderV2,
     eventType: String,
@@ -730,4 +781,20 @@ interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
 
   @Query
   fun findByTypeAndEntityId(type: OutboxItemType, entityId: Long): Optional<OutboxItem>
+
+  @Query(
+    """
+    select item 
+    from OutboxItem item 
+    where item.type in :type and item.status in :status and cast(item.createdAt as date) >= :lowerBoundInclusive
+    order by item.createdAt desc
+    limit :limit
+  """,
+  )
+  fun findByTypeAndStatus(
+    type: Set<OutboxItemType>,
+    status: Set<OutboxItemStatus>,
+    lowerBoundInclusive: LocalDate,
+    limit: Int = 100,
+  ): List<OutboxItem>
 }

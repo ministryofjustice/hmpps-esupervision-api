@@ -11,7 +11,8 @@ import java.util.UUID
  * Handles composite operations related to checkins. It's meant to be a convenience layer for the [CheckinV2Service]
  * and should not be used anywhere else.
  *
- * The way to use this service is to pass all required data in a state that's ready to be persisted - don't put any logic here.
+ * The way to use this service is to pass all required data in a state that's ready to be persisted - don't put any logic here
+ * (apart from calls to .finalise() on certain events).
  */
 @Service
 class CheckinPersistenceService(
@@ -24,6 +25,14 @@ class CheckinPersistenceService(
 
   @Transactional
   fun findCheckin(uuid: UUID): OffenderCheckinV2? = checkinRepository.findByUuid(uuid).orElse(null)
+
+  @Transactional
+  fun checkinCreation(checkin: OffenderCheckinV2, event: PartialCheckinCreatedEvent) {
+    val savedCheckin = checkinRepository.saveAndFlush(checkin)
+    eventAuditService.recordCheckinCreated(savedCheckin, event.checkin.personalDetails)
+
+    appEventPublisher.publishEvent(event.finalise(savedCheckin))
+  }
 
   @Transactional
   fun checkinSubmission(checkin: OffenderCheckinV2, event: CheckinSubmittedEvent) {
@@ -57,7 +66,7 @@ class CheckinPersistenceService(
   @Transactional
   fun checkinAnnotation(checkin: OffenderCheckinV2, event: PartialCheckinAnnotatedEvent, request: AnnotateCheckinV2Request) {
     checkinRepository.save(checkin)
-    val logEntry = offenderEventLogRepository.save(
+    val logEntry = offenderEventLogRepository.saveAndFlush(
       OffenderEventLogV2(
         comment = request.notes,
         sensitive = checkin.sensitive,

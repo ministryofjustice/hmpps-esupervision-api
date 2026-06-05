@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationTy
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
@@ -31,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.re
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.time.Period
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -65,6 +67,7 @@ class CheckinV2Service(
   @param:Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
   private val appConfig: AppConfig,
+  private val transactionTemplate: TransactionTemplate,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(gracePeriodDays)
@@ -114,14 +117,12 @@ class CheckinV2Service(
    * Validate personal details against Ndilius This is called before offender can proceed with
    * checkin
    */
-  @Transactional
   fun validateIdentity(uuid: UUID, personalDetails: PersonalDetails): IdentityValidationResponse {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
-    // Verify CRN matches
     if (checkin.offender.crn != personalDetails.crn) {
       LOGGER.warn(
         "CRN mismatch for checkin {}: expected {}, got {}",
@@ -135,7 +136,6 @@ class CheckinV2Service(
       )
     }
 
-    // Validate against Ndilius
     val isValid = ndiliusApiClient.validatePersonalDetails(personalDetails)
 
     if (!isValid) {
@@ -146,10 +146,9 @@ class CheckinV2Service(
       )
     }
 
-    // Mark checkin as started
     if (checkin.checkinStartedAt == null) {
       checkin.checkinStartedAt = clock.instant()
-      checkinRepository.save(checkin)
+      transactionTemplate.executeWithoutResult { checkinRepository.save(checkin) }
     }
 
     LOGGER.info("Identity validated successfully for checkin {}", uuid)
@@ -323,7 +322,6 @@ class CheckinV2Service(
   }
 
   /** Mark checkin review as started */
-  @Transactional
   fun startReview(uuid: UUID, practitionerId: ExternalUserId): CheckinV2Dto {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
@@ -339,7 +337,7 @@ class CheckinV2Service(
 
     checkin.reviewStartedAt = clock.instant()
     checkin.reviewStartedBy = practitionerId
-    checkinRepository.save(checkin)
+    transactionTemplate.execute { checkinRepository.save(checkin) }
 
     LOGGER.info("Review started for checkin {} by {}", uuid, practitionerId)
 
@@ -808,10 +806,6 @@ class CheckinV2Service(
     LOGGER.info("Uploaded liveness reference image for checkin {} ({} bytes)", checkin.uuid, referenceImageBytes.size)
   }
 
-  // ========================================
-  // Private Helper Methods
-  // ========================================
-
   /**
    * Run the face-compare call against Rekognition and return the outcome (result + score).
    *
@@ -885,28 +879,19 @@ class CheckinV2Service(
     return outcome
   }
 
-  @Transactional
   fun createCheckin(request: CreateCheckinV2Request): CheckinV2Dto {
     LOGGER.info(
       "DEBUG: Manually creating checkin for offender {} with due date {}",
       request.offender,
       request.dueDate,
     )
+    val offender = offenderRepository.findByUuid(request.offender).orElseThrow {
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $request.offender")
+    }
 
-    // Use CheckinCreationService - single source of truth for checkin creation
-    val checkin =
-      checkinCreationService.createCheckin(
-        offenderUuid = request.offender,
-        dueDate = request.dueDate,
-        createdBy = request.practitioner,
-      )
-
-    // Fetch personal details for response
-    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    return createCheckin(offender, request.dueDate, request.practitioner)
   }
 
-  @Transactional
   fun createCheckinByCrn(request: CreateCheckinByCrnV2Request): CheckinV2Dto {
     LOGGER.info(
       "DEBUG: Manually creating checkin by crn for offender {} with due date {}",
@@ -918,25 +903,36 @@ class CheckinV2Service(
       ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $request.offender")
     }
 
-    // Use CheckinCreationService - single source of truth for checkin creation
-    val checkin =
-      checkinCreationService.createCheckin(
-        offenderUuid = offender.uuid,
-        dueDate = request.dueDate,
-        createdBy = request.practitioner,
-      )
+    return createCheckin(offender, request.dueDate, request.practitioner)
+  }
 
-    // Fetch personal details for response
-    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+  private fun createCheckin(offender: OffenderV2, dueDate: LocalDate, requestedBy: ExternalUserId): CheckinV2Dto {
+    if (offender.status != OffenderStatus.VERIFIED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender not verified")
+    }
+    if (dueDate.isBefore(LocalDate.now())) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Due date must be in the future")
+    }
+
+    val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
+    val currentEvent = if (personalDetails == null) offender.currentEvent else activeEventNumber(offender, personalDetails)
+    if (currentEvent == null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
+    }
+
+    val checkin = checkinCreationService.createCheckin(
+      offenderUuid = offender.uuid,
+      dueDate = dueDate,
+      createdBy = requestedBy,
+    )
+
     return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
-  @Transactional
   fun sendInvite(uuid: UUID, request: CheckinNotificationV2Request): CheckinV2Dto {
-    val checkin =
-      checkinRepository.findByUuid(uuid).orElseThrow {
-        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-      }
+    val checkin = checkinRepository.findByUuid(uuid).orElseThrow {
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    }
 
     LOGGER.info("DEBUG: Manually triggering notification for checkin {}", uuid)
 
@@ -948,8 +944,22 @@ class CheckinV2Service(
         null
       }
 
+    val offender = checkin.offender
+    val currentEvent = if (contactDetails == null) offender.currentEvent else activeEventNumber(offender, contactDetails)
+    if (currentEvent == null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
+    }
+
     if (contactDetails != null) {
-      notificationService.sendCheckinCreatedNotifications(checkin, contactDetails)
+      val event = CheckinCreatedEvent(
+        checkinId = checkin.id,
+        offenderId = checkin.offender.id,
+        practitionerId = checkin.createdBy,
+        checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
+        offenderContactPreference = checkin.offender.contactPreference,
+        checkin.offender.currentEvent,
+      )
+      notificationService.sendCheckinCreatedNotifications(event)
     } else {
       LOGGER.warn("Skipping manual notification for checkin {}: contact details not found", uuid)
     }
@@ -957,7 +967,6 @@ class CheckinV2Service(
     return checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
-  @Transactional
   fun sendReminder(uuid: UUID): CheckinV2Dto {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
@@ -994,12 +1003,10 @@ class CheckinV2Service(
     return checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
   }
 
-  @Transactional
   fun logCheckinEvent(uuid: UUID, request: LogCheckinEventV2Request): UUID {
-    val checkin =
-      checkinRepository.findByUuid(uuid).orElseThrow {
-        ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
-      }
+    checkinRepository.findByUuid(uuid).orElseThrow {
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    }
 
     val eventUuid = UUID.randomUUID()
 

@@ -19,6 +19,7 @@ import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.rekognition.model.AuditImage
@@ -85,6 +86,7 @@ class CheckinV2ServiceTest {
   private val livenessConfidenceThreshold = 90.0f
   private val appConfig: AppConfig = mock()
   private val objectMapper = jacksonObjectMapper()
+  private val transactionTemplate: TransactionTemplate = mock()
 
   private lateinit var service: CheckinV2Service
 
@@ -112,6 +114,7 @@ class CheckinV2ServiceTest {
       objectMapper,
       3,
       appConfig,
+      transactionTemplate,
     )
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())
