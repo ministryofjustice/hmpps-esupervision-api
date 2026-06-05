@@ -115,7 +115,7 @@ class V2CheckinReminderJobTest {
     whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<OffenderV2>(0) }
   }
 
-  private fun details(crn: String, events: List<Event>? = null, suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended)
+  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended)
 
   private fun checkin(crn: String) = OffenderCheckinV2(
     uuid = UUID.randomUUID(),

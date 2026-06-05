@@ -101,17 +101,6 @@ class V2CheckinCreationJobTest {
   }
 
   @Test
-  fun `absent events list is indeterminate - treated as eligible, not deactivated`() {
-    val offender = offender("X000004")
-    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = null)))
-
-    job.process()
-
-    verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any())
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
-  }
-
-  @Test
   fun `a deactivation failure for one offender does not abort the rest of the run`() {
     val ineligible = offender("X000005")
     val eligible = offender("X000006")
@@ -155,7 +144,7 @@ class V2CheckinCreationJobTest {
     whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<OffenderV2>(0) }
   }
 
-  private fun details(crn: String, events: List<Event>? = null, suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended)
+  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended)
 
   private fun offender(crn: String) = OffenderV2(
     uuid = UUID.randomUUID(),
