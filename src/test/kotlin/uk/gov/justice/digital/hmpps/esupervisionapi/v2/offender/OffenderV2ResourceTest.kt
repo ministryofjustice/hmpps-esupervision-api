@@ -19,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -57,6 +59,8 @@ class OffenderV2ResourceTest {
   private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderV2Resource
+
+  private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
 
   @BeforeEach
   fun setUp() {
@@ -254,6 +258,7 @@ class OffenderV2ResourceTest {
       crn = offender.crn,
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
+      events = listOf(anEvent),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -295,6 +300,7 @@ class OffenderV2ResourceTest {
       crn = offender.crn,
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      events = listOf(anEvent),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -377,6 +383,7 @@ class OffenderV2ResourceTest {
       crn = offender.crn,
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
+      events = listOf(anEvent),
     )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
@@ -406,6 +413,7 @@ class OffenderV2ResourceTest {
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = null,
+      events = listOf(anEvent),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -434,6 +442,7 @@ class OffenderV2ResourceTest {
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       email = "",
+      events = listOf(anEvent),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -461,6 +470,7 @@ class OffenderV2ResourceTest {
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
+      events = listOf(anEvent),
     )
 
     val completedCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
@@ -493,6 +503,7 @@ class OffenderV2ResourceTest {
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
+      events = listOf(anEvent),
     )
 
     val cancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2>()
@@ -526,6 +537,7 @@ class OffenderV2ResourceTest {
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
+      events = listOf(anEvent),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -556,6 +568,7 @@ class OffenderV2ResourceTest {
       offender.crn,
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
+      events = listOf(anEvent),
       contactSuspended = true,
     )
 

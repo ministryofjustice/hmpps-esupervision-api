@@ -88,7 +88,7 @@ class V2CheckinReminderJobTest {
     val ineligible = checkin("X000002")
     val missing = checkin("X000003")
     val eligibleCd = details("X000001", events = listOf(anEvent))
-    val ineligibleCd = details("X000002", suspended = true)
+    val ineligibleCd = details("X000002", events = listOf(anEvent), suspended = true)
     // X000003 deliberately absent from the NDelius response
     stub(listOf(eligible, ineligible, missing), listOf(eligibleCd, ineligibleCd))
 
