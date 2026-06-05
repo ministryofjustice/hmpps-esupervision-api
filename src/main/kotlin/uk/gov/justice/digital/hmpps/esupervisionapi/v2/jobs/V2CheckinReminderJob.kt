@@ -17,6 +17,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationV2Service
 import java.time.Clock
 import java.time.Duration
 
@@ -33,6 +35,7 @@ class V2CheckinReminderJob(
   private val checkinRepository: OffenderCheckinV2Repository,
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationService: NotificationV2Service,
+  private val offenderDeactivationV2Service: OffenderDeactivationV2Service,
   private val jobLogRepository: JobLogV2Repository,
   private val transactionTemplate: TransactionTemplate,
   private val eventAuditService: EventAuditV2Service,
@@ -66,6 +69,7 @@ class V2CheckinReminderJob(
       }!!
 
     var totalReminded = 0
+    var totalDeactivated = 0
 
     // Find checkins eligible for reminder (if they were already sent one today, don't send again)
     // the prod job should only run once a day but local/dev environments could be sending duplicate reminders if they're set more frequently
@@ -83,8 +87,6 @@ class V2CheckinReminderJob(
       LOGGER.info("Found {} checkins eligible for reminder", checkins.size)
 
       if (checkins.isNotEmpty()) {
-        totalReminded = checkins.size
-
         // Fetch contact details in batches - NO transaction
         val crns = checkins.map { it.offender.crn }.distinct()
         val contactDetailsMap = mutableMapOf<String, ContactDetails>()
@@ -106,11 +108,29 @@ class V2CheckinReminderJob(
         checkins.forEachIndexed { index, checkin ->
           try {
             val contactDetails = contactDetailsMap[checkin.offender.crn]
-            if (contactDetails != null) {
-              notificationService.sendCheckinReminderNotifications(checkin, contactDetails)
-              sentNotifications.add(Pair(checkin, contactDetails))
-            } else {
-              notSentNotifications.add(index)
+            val ineligibility = contactDetails?.let { checkinIneligibilityReason(checkin.offender, it) }
+            val outcome = when {
+              contactDetails == null -> {
+                notSentNotifications.add(index)
+                "not sent (missing details)"
+              }
+              ineligibility != null -> {
+                // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
+                // Deactivation cancels this check-in, so it is NOT recorded as a reminder (notSent) below.
+                offenderDeactivationV2Service.deactivateOffender(
+                  checkin.offender,
+                  ineligibility.auditNote,
+                  contactDetails,
+                  auditEventType = ineligibility.auditEventType,
+                )
+                totalDeactivated += 1
+                "not sent (deactivated: ${ineligibility.name})"
+              }
+              else -> {
+                notificationService.sendCheckinReminderNotifications(checkin, contactDetails)
+                sentNotifications.add(Pair(checkin, contactDetails))
+                "sent"
+              }
             }
 
             LOGGER.info(
@@ -118,13 +138,15 @@ class V2CheckinReminderJob(
               checkin.uuid,
               checkin.offender.crn,
               checkin.dueDate,
-              if (contactDetails == null) "not sent (missing details)" else "sent",
+              outcome,
             )
           } catch (e: Exception) {
             LOGGER.warn("Failed to send reminder notification for checkin {}", checkin.uuid, e)
             notSentNotifications.add(index)
           }
         }
+
+        totalReminded = sentNotifications.size
 
         eventAuditService.recordCheckinReminded(sentNotifications)
 
@@ -145,8 +167,9 @@ class V2CheckinReminderJob(
     }
 
     LOGGER.info(
-      "V2 Checkin Reminder Job completed: reminded={}, took={}",
+      "V2 Checkin Reminder Job completed: reminded={}, deactivated={}, took={}",
       totalReminded,
+      totalDeactivated,
       Duration.between(now, endTime),
     )
   }

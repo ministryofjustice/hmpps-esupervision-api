@@ -76,6 +76,16 @@ data class ContactDetails(
     required = false,
   )
   val events: List<Event>? = null,
+
+  /**
+   * Note: true when the person is "in reset" - their contact has been suspended in NDelius
+   * and we should stop sending them online check-ins.
+   */
+  @field:Schema(
+    description = "True when the person's contact has been suspended (in reset) in NDelius.",
+    required = false,
+  )
+  val contactSuspended: Boolean = false,
 )
 
 /** Person's name from Ndilius */

@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -184,6 +185,15 @@ class OffenderSetupV2Service(
         null
       }
 
+    // Don't onboard a POP who is no longer eligible for online check-ins (no active events, or in
+    // reset). We only block when NDelius details are available - a transient fetch failure must not
+    // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
+    if (contactDetails != null) {
+      checkinIneligibilityReason(offender, contactDetails)?.let { reason ->
+        throw BadArgumentException("Cannot complete setup for CRN ${offender.crn}: ${reason.description}")
+      }
+    }
+
     val now = clock.instant()
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = now
@@ -211,7 +221,11 @@ class OffenderSetupV2Service(
       uuid,
       checkin?.uuid ?: "not due",
     )
-    notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails, setup.setupId())
+    try {
+      notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails, setup.setupId())
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to send setup completed notifications for offender {}", savedOffender.uuid, e)
+    }
 
     checkin?.let {
       try {

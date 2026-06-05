@@ -21,9 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
@@ -34,7 +32,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupV2Service
 import java.net.URI
 import java.time.Clock
@@ -55,9 +52,8 @@ class OffenderV2ResourceTest {
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val notificationV2Service: NotificationV2Service = mock()
   private val checkinRepository: OffenderCheckinV2Repository = mock()
-  private val offenderSetupRepository: OffenderSetupV2Repository = mock()
   private val offenderSetupV2Service: OffenderSetupV2Service = mock()
-  private val questionService: QuestionService = mock()
+  private val offenderDeactivationV2Service: OffenderDeactivationV2Service = mock()
   private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderV2Resource
@@ -73,9 +69,8 @@ class OffenderV2ResourceTest {
       ndiliusApiClient,
       notificationV2Service,
       checkinRepository,
-      offenderSetupRepository,
       offenderSetupV2Service,
-      questionService,
+      offenderDeactivationV2Service,
       appConfig,
     )
   }
@@ -85,7 +80,7 @@ class OffenderV2ResourceTest {
   // ========================================
 
   @Test
-  fun `deactivateOffender - happy path - changes VERIFIED to INACTIVE`() {
+  fun `deactivateOffender - happy path - delegates to deactivation service and returns INACTIVE`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
     val request = DeactivateOffenderRequest(
@@ -98,16 +93,57 @@ class OffenderV2ResourceTest {
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.INACTIVE
+      o
+    }
+
     val result = resource.deactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
-    verify(questionService).deleteUpcomingAssignment(eq(offender.crn))
-    verify(offenderRepository).save(any())
-    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
+    verify(offenderDeactivationV2Service).deactivateOffender(
+      eq(offender),
+      eq("No longer on supervision"),
+      eq(contactDetails),
+      eq(false),
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
+    )
+  }
+
+  @Test
+  fun `deactivateOffender - passes sensitive flag through to deactivation service`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val request = DeactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Safety concerns disclosed",
+      sensitive = true,
+    )
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = offender.crn,
+      mobile = "07700900123",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
+      it.getArgument<OffenderV2>(0)
+    }
+
+    resource.deactivateOffender(uuid, request)
+
+    verify(offenderDeactivationV2Service).deactivateOffender(
+      eq(offender),
+      eq("Safety concerns disclosed"),
+      eq(contactDetails),
+      eq(true),
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
+    )
   }
 
   @Test
@@ -179,8 +215,12 @@ class OffenderV2ResourceTest {
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(offenderDeactivationV2Service.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
+      val o = it.getArgument<OffenderV2>(0)
+      o.status = OffenderStatus.INACTIVE
+      o
+    }
     // mock s3
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
 
@@ -190,108 +230,6 @@ class OffenderV2ResourceTest {
     assertEquals(OffenderStatus.INACTIVE, result.body?.status)
     assertEquals(uuid, result.body?.uuid)
     assertEquals("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true", result.body?.photoUrl)
-    verify(notificationV2Service).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
-  }
-
-  @Test
-  fun `deactivateOffender - happy path - changes any pending check ins to CANCELLED`() {
-    val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
-    val request = DeactivateOffenderRequest(
-      requestedBy = "PRACT001",
-      reason = "No longer on supervision",
-    )
-
-    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
-      crn = offender.crn,
-      mobile = "07700900123",
-      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
-    )
-
-    val pendingCheckin = OffenderCheckinV2(
-      uuid = UUID.randomUUID(),
-      offender = offender,
-      status = CheckinV2Status.CREATED,
-      dueDate = LocalDate.now(clock),
-      createdAt = clock.instant(),
-      createdBy = "PRACT001",
-    )
-
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(any<OffenderV2>())).thenAnswer { it.getArgument(0) }
-    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinV2Status.CREATED))
-      .thenReturn(listOf(pendingCheckin))
-
-    val result = resource.deactivateOffender(uuid, request)
-
-    assertEquals(HttpStatus.OK, result.statusCode)
-    assertEquals(OffenderStatus.INACTIVE, result.body?.status)
-    assertEquals(CheckinV2Status.CANCELLED, pendingCheckin.status)
-
-    verify(offenderRepository).save(offender)
-  }
-
-  @Test
-  fun `deactivateOffender - happy path - passes sensitive flag as TRUE to audit service`() {
-    val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
-    val request = DeactivateOffenderRequest(
-      requestedBy = "PRACT001",
-      reason = "Safety concerns disclosed",
-      sensitive = true,
-    )
-    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
-      crn = offender.crn,
-      mobile = "07700900123",
-      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
-    )
-
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-
-    val result = resource.deactivateOffender(uuid, request)
-
-    assertEquals(HttpStatus.OK, result.statusCode)
-
-    verify(eventAuditV2Service).recordOffenderEvent(
-      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
-      eq(offender),
-      eq(contactDetails),
-      eq("Safety concerns disclosed"),
-      eq(true),
-    )
-  }
-
-  @Test
-  fun `deactivateOffender - happy path - passes sensitive flag as FALSE to audit service`() {
-    val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
-    val request = DeactivateOffenderRequest(
-      requestedBy = "PRACT001",
-      reason = "Standard deactivation",
-      sensitive = false,
-    )
-    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
-      crn = offender.crn,
-      mobile = "07700900123",
-      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
-    )
-
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-
-    resource.deactivateOffender(uuid, request)
-
-    verify(eventAuditV2Service).recordOffenderEvent(
-      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
-      eq(offender),
-      eq(contactDetails),
-      eq("Standard deactivation"),
-      eq(false),
-    )
   }
 
   // ========================================
@@ -605,6 +543,57 @@ class OffenderV2ResourceTest {
 
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     verify(notificationV2Service).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails), isNull())
+  }
+
+  @Test
+  fun `reactivateOffender - blocked when contact suspended (in reset) in NDelius`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Reactivating")
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      mobile = "07700900123",
+      contactSuspended = true,
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.reactivateOffender(uuid, request)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderSetupV2Service, times(0)).activateOffenderAndIncrementSetupCounter(any())
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+  }
+
+  @Test
+  fun `reactivateOffender - blocked when there are no active events in NDelius`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Reactivating")
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      mobile = "07700900123",
+      events = emptyList(),
+    )
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.reactivateOffender(uuid, request)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderSetupV2Service, times(0)).activateOffenderAndIncrementSetupCounter(any())
   }
 
   // ========================================
