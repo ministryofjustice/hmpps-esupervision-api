@@ -18,9 +18,9 @@ class StubServicesConfiguration {
 
   @Bean
   @Profile("local & stubndilius")
-  fun ndiliusApiClient(): INdiliusApiClient {
-    LOG.info("Creating stubbed Ndilius API client")
-    return StubNdiliusApiClient()
+  fun ndiliusApiClient(latency: StubLatencyProperties): INdiliusApiClient {
+    LOG.info("Creating stubbed Ndilius API client (latency injection enabled={})", latency.enabled)
+    return StubNdiliusApiClient(latency = latency)
   }
 
   companion object {
@@ -37,6 +37,7 @@ class StubServicesConfiguration {
 class StubNdiliusApiClient(
   val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
   val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
+  private val latency: StubLatencyProperties = StubLatencyProperties(),
 ) : INdiliusApiClient,
   DisposableBean {
 
@@ -50,11 +51,13 @@ class StubNdiliusApiClient(
 
   override fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
     LOG.debug("Validating personal details: {}", personalDetails)
+    latency.sleep(latency.ndiliusValidate)
     return watcher.allowedCrns.contains(personalDetails.crn)
   }
 
   override fun getContactDetails(crn: String): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
+    latency.sleep(latency.ndiliusContact)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideCase(crn)
     }
@@ -64,6 +67,7 @@ class StubNdiliusApiClient(
 
   override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
     LOG.debug("Fetching contact details for {} CRNs, starting with {}", crns.size, crns.take(4))
+    latency.sleep(latency.ndiliusContact)
     val incomingCrns = HashSet<String>(crns)
     val allowedCrns = watcher.allowedCrns
     if (allowedCrns.containsAll(incomingCrns)) {

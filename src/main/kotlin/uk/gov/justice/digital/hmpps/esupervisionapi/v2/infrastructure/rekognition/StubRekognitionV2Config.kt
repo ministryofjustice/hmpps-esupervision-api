@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Profile
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.rekognition.model.AuditImage
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.StubLatencyProperties
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import java.util.concurrent.CompletableFuture
 
@@ -20,15 +21,15 @@ import java.util.concurrent.CompletableFuture
 class StubRekognitionV2Config {
 
   @Bean
-  fun offenderIdVerifierV2(): OffenderIdVerifier {
-    LOGGER.info("Creating V2 STUB OffenderIdVerifier (always returns MATCH)")
-    return StubOffenderIdVerifier()
+  fun offenderIdVerifierV2(latency: StubLatencyProperties): OffenderIdVerifier {
+    LOGGER.info("Creating V2 STUB OffenderIdVerifier (always returns MATCH, latency enabled={})", latency.enabled)
+    return StubOffenderIdVerifier(latency)
   }
 
   @Bean
-  fun livenessSessionServiceV2(): LivenessSessionService {
-    LOGGER.info("Creating V2 STUB LivenessSessionService")
-    return StubLivenessSessionService()
+  fun livenessSessionServiceV2(latency: StubLatencyProperties): LivenessSessionService {
+    LOGGER.info("Creating V2 STUB LivenessSessionService (latency enabled={})", latency.enabled)
+    return StubLivenessSessionService(latency)
   }
 
   @Bean
@@ -45,7 +46,9 @@ class StubRekognitionV2Config {
 /**
  * Stub implementation for testing - always returns MATCH.
  */
-class StubOffenderIdVerifier : OffenderIdVerifier {
+class StubOffenderIdVerifier(
+  private val latency: StubLatencyProperties = StubLatencyProperties(),
+) : OffenderIdVerifier {
   override fun verifyCheckinImages(
     snapshots: CheckinVerificationImages,
     requiredConfidence: Float,
@@ -55,8 +58,9 @@ class StubOffenderIdVerifier : OffenderIdVerifier {
       snapshots.reference.key,
       snapshots.snapshots.size,
     )
-    return CompletableFuture.completedFuture(
-      FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, topSimilarity = 99.5f),
+    return CompletableFuture.supplyAsync(
+      { FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, topSimilarity = 99.5f) },
+      latency.delayedExecutor(latency.rekogCompareFaces),
     )
   }
 
@@ -68,30 +72,39 @@ class StubOffenderIdVerifier : OffenderIdVerifier {
 /**
  * Stub liveness session service - returns a fake session ID and high confidence results.
  */
-class StubLivenessSessionService : LivenessSessionService {
+class StubLivenessSessionService(
+  private val latency: StubLatencyProperties = StubLatencyProperties(),
+) : LivenessSessionService {
   override fun createSession(): CompletableFuture<String> {
     LOGGER.info("STUB: Creating fake liveness session")
-    return CompletableFuture.completedFuture("stub-liveness-session-id")
+    return CompletableFuture.supplyAsync(
+      { "stub-liveness-session-id" },
+      latency.delayedExecutor(latency.rekogCreateSession),
+    )
   }
 
   override fun getSessionResults(sessionId: String): CompletableFuture<GetFaceLivenessSessionResultsResponse> {
     LOGGER.info("STUB: Returning fake liveness results for session {}", sessionId)
-    // 1x1 red pixel JPEG
-    val stubImageBytes = byteArrayOf(
-      0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(),
-      0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
-      0x00, 0x01, 0x00, 0x00, 0xFF.toByte(), 0xD9.toByte(),
+    return CompletableFuture.supplyAsync(
+      {
+        // 1x1 red pixel JPEG
+        val stubImageBytes = byteArrayOf(
+          0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(),
+          0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+          0x00, 0x01, 0x00, 0x00, 0xFF.toByte(), 0xD9.toByte(),
+        )
+        val referenceImage = AuditImage.builder()
+          .bytes(SdkBytes.fromByteArray(stubImageBytes))
+          .build()
+        GetFaceLivenessSessionResultsResponse.builder()
+          .sessionId(sessionId)
+          .confidence(99.5f)
+          .status("SUCCEEDED")
+          .referenceImage(referenceImage)
+          .build()
+      },
+      latency.delayedExecutor(latency.rekogSessionResults),
     )
-    val referenceImage = AuditImage.builder()
-      .bytes(SdkBytes.fromByteArray(stubImageBytes))
-      .build()
-    val response = GetFaceLivenessSessionResultsResponse.builder()
-      .sessionId(sessionId)
-      .confidence(99.5f)
-      .status("SUCCEEDED")
-      .referenceImage(referenceImage)
-      .build()
-    return CompletableFuture.completedFuture(response)
   }
 
   companion object {
