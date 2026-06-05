@@ -351,7 +351,7 @@ class MigrationEventReplayService(
         }
         try {
           val details = contactsByCrn[offender.crn]
-          if (details == null || details.events.isNullOrEmpty()) {
+          if (details == null || details.events.isEmpty()) {
             logger.info("Skipping V2_SETUP_COMPLETED for crn={}: no active Delius events", offender.crn)
             row.eventSent = true
             row.eventSentAt = clock.instant()

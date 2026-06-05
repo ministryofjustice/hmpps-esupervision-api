@@ -73,9 +73,9 @@ data class ContactDetails(
    */
   @field:Schema(
     description = "Collection of active events.",
-    required = false,
+    required = true,
   )
-  val events: List<Event>? = null,
+  val events: List<Event> = emptyList(),
 
   /**
    * Note: true when the person is "in reset" - their contact has been suspended in NDelius
