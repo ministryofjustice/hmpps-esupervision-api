@@ -41,7 +41,6 @@ import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
 
-
 class V2CheckinCreationJobTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-10T09:00:00Z"), ZoneId.of("UTC"))

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
@@ -75,7 +76,7 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
 
     offenderV2Repository.saveAll(listOf(offender1, offender2, offender3, offender4))
 
-    val result = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1)).toList()
+    val result = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1), PageRequest.of(0, 10))
 
     // we want only offender 1 and 2
     assertEquals(2, result.size) { "Should only find offenders 1 and 2, but found: ${result.map { it.crn }}" }
@@ -94,7 +95,7 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
     )
     checkinV2Repository.save(checkin)
 
-    val resultNoOffender1 = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1)).toList()
+    val resultNoOffender1 = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1), PageRequest.of(0, 10)).toList()
     assertEquals(1, resultNoOffender1.size)
     assertEquals("V200002", resultNoOffender1.first().crn)
   }
