@@ -282,7 +282,6 @@ class QuestionsIT(
     val upcomingList = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate, upcomingList.expectedCheckinDate)
 
-    ndiliusApiClient
     val checkin = offenderCheckinService.debugCreateCheckin(offender, clock)
     val upcomingListWithCheckin = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate, upcomingListWithCheckin.expectedCheckinDate)
