@@ -35,8 +35,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
@@ -70,6 +73,12 @@ class QuestionsIT(
   @Autowired lateinit var offenderV2Repository: OffenderV2Repository
 
   @Autowired lateinit var offenderCheckinV2Repository: OffenderCheckinV2Repository
+
+  @Autowired lateinit var offenderEventLogV2Repository: OffenderEventLogV2Repository
+
+  @Autowired lateinit var offenderSetupV2Repository: OffenderSetupV2Repository
+
+  @Autowired lateinit var outboxItemRepository: OutboxItemRepository
 
   @Autowired lateinit var genericNotificationV2Repository: GenericNotificationV2Repository
 
@@ -107,10 +116,13 @@ class QuestionsIT(
 
   @AfterEach
   fun tearDown() {
+    outboxItemRepository.deleteAll()
     genericNotificationV2Repository.deleteAll()
+    offenderEventLogV2Repository.deleteAll()
     questionListItemRepository.deleteAllNonSystem()
     questionListAssignmentRepository.deleteAll()
     questionListItemRepository.deleteCustomQuestions()
+    offenderSetupV2Repository.deleteAll()
     offenderCheckinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
   }
