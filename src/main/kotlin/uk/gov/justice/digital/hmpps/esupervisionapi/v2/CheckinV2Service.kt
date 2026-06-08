@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
@@ -910,7 +911,7 @@ class CheckinV2Service(
     if (offender.status != OffenderStatus.VERIFIED) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender not verified")
     }
-    if (dueDate.isBefore(LocalDate.now())) {
+    if (dueDate.isBefore(clock.today())) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Due date must be in the future")
     }
 
