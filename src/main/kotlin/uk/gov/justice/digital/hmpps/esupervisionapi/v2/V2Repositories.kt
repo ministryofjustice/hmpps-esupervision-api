@@ -40,7 +40,12 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
 
   @Query(
     value = """
-    SELECT o.id, o.crn, o.practitioner_id, o.contact_preference, o.current_event FROM offender_v2 o
+    SELECT
+        o.id as id, 
+        o.crn as crn, 
+        o.practitioner_id as practitionerId, 
+        o.contact_preference as contactPreference, 
+        o.current_event as currentEvent FROM offender_v2 o
     WHERE o.status = 'VERIFIED'
       AND o.first_checkin <= :lowerBoundInclusive
       AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
