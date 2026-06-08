@@ -22,6 +22,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -30,6 +31,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
@@ -68,18 +71,25 @@ class QuestionsIT(
 
   @Autowired lateinit var offenderCheckinV2Repository: OffenderCheckinV2Repository
 
+  @Autowired lateinit var genericNotificationV2Repository: GenericNotificationV2Repository
+
   @Autowired lateinit var offenderCheckinService: CheckinV2Service
 
   @Autowired lateinit var clock: Clock
 
   @MockitoBean lateinit var s3UploadService: S3UploadService
 
+  @MockitoBean lateinit var ndiliusApiClient: INdiliusApiClient
+
   @BeforeEach
   fun setUp() {
     (clock as MutableTestClock).advanceTo(Instant.now())
 
-    reset(s3UploadService)
+    reset(s3UploadService, ndiliusApiClient)
     whenever(s3UploadService.isCheckinVideoUploaded(any())).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(any())).thenAnswer { invocation ->
+      GeneratingStubDataProvider().provideCase(invocation.getArgument(0))
+    }
 
     questionDefinitionRepository.defineCustomQuestion(
       "BARRY.WHITE",
@@ -97,6 +107,7 @@ class QuestionsIT(
 
   @AfterEach
   fun tearDown() {
+    genericNotificationV2Repository.deleteAll()
     questionListItemRepository.deleteAllNonSystem()
     questionListAssignmentRepository.deleteAll()
     questionListItemRepository.deleteCustomQuestions()
@@ -259,6 +270,7 @@ class QuestionsIT(
     val upcomingList = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate, upcomingList.expectedCheckinDate)
 
+    ndiliusApiClient
     val checkin = offenderCheckinService.debugCreateCheckin(offender, clock)
     val upcomingListWithCheckin = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate, upcomingListWithCheckin.expectedCheckinDate)

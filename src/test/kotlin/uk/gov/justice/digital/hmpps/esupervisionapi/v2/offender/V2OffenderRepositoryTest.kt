@@ -79,7 +79,7 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
     val result = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1), PageRequest.of(0, 10))
 
     // we want only offender 1 and 2
-    assertEquals(2, result.size) { "Should only find offenders 1 and 2, but found: ${result.map { it.crn }}" }
+    assertEquals(2, result.content.size) { "Should only find offenders 1 and 2, but found: ${result.map { it.crn }}" }
     val crns = result.map { it.crn }.toSet()
     assert(crns.contains("V200001"))
     assert(crns.contains("V200002"))

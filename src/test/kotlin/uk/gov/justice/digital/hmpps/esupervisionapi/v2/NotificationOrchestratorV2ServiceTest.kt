@@ -240,7 +240,7 @@ class NotificationOrchestratorV2ServiceTest {
   @Test
   fun `sendSetupCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(events = emptyList())
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
@@ -280,7 +280,7 @@ class NotificationOrchestratorV2ServiceTest {
   @Test
   fun `sendReactivationCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(events = emptyList())
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
@@ -320,7 +320,7 @@ class NotificationOrchestratorV2ServiceTest {
   @Test
   fun `sendDeactivationCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(events = emptyList())
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
@@ -389,5 +389,6 @@ class NotificationOrchestratorV2ServiceTest {
       probationDeliveryUnit = OrganizationalUnit("PDU01", "Test PDU"),
       provider = OrganizationalUnit("PRV01", "Test Provider"),
     ),
+    events = listOf(Event(1, mainOffence = CodedDescription("OFF01", "Test Offence"), sentence = null)),
   )
 }
