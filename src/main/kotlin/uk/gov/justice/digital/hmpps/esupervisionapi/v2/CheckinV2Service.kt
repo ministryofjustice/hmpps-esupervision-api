@@ -957,7 +957,7 @@ class CheckinV2Service(
         practitionerId = checkin.createdBy,
         checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
         offenderContactPreference = checkin.offender.contactPreference,
-        checkin.offender.currentEvent,
+        currentEvent = currentEvent,
       )
       notificationService.sendCheckinCreatedNotifications(event)
     } else {
