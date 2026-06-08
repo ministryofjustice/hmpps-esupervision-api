@@ -760,20 +760,4 @@ interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
 
   @Query
   fun findByTypeAndEntityId(type: OutboxItemType, entityId: Long): Optional<OutboxItem>
-
-  @Query(
-    """
-    select item 
-    from OutboxItem item 
-    where item.type in :type and item.status in :status and cast(item.createdAt as date) >= :lowerBoundInclusive
-    order by item.createdAt desc
-    limit :limit
-  """,
-  )
-  fun findByTypeAndStatus(
-    type: Set<OutboxItemType>,
-    status: Set<OutboxItemStatus>,
-    lowerBoundInclusive: LocalDate,
-    limit: Int = 100,
-  ): List<OutboxItem>
 }
