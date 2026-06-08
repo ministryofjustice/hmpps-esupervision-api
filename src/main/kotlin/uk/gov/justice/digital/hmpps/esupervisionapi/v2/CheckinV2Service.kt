@@ -915,8 +915,8 @@ class CheckinV2Service(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Due date must be in the future")
     }
 
-    val personalDetails = ndiliusApiClient.getContactDetails(offender.crn) ?:
-      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
+    val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
+      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
     if (activeEventNumber(offender, personalDetails) == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
