@@ -224,7 +224,7 @@ class EventDetailV2ServiceTest {
     }
 
     @Test
-    fun `includes manual ID check for reviewed events`() {
+    fun `includes manual ID check MATCH for reviewed events`() {
       val uuid = UUID.randomUUID()
       val offender = createOffender(UUID.randomUUID())
       val checkin = createCheckin(
@@ -239,7 +239,45 @@ class EventDetailV2ServiceTest {
       val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
 
       assertThat(result).isNotNull
-      assertThat(result!!.notes).contains("Is the person in the video the correct person: Yes")
+      assertThat(result!!.notes).contains("Is the person in the video the correct person: Yes, and there’s nothing concerning")
+    }
+
+    @Test
+    fun `includes manual ID check MATCH_WITH_CONCERN for reviewed events`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+        manualIdCheck = ManualIdVerificationResult.MATCH_WITH_CONCERN,
+        status = CheckinV2Status.REVIEWED,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("Is the person in the video the correct person: Yes, and there’s visible concern")
+    }
+
+    @Test
+    fun `includes manual ID check NO_MATCH for reviewed events`() {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      val checkin = createCheckin(
+        uuid,
+        offender,
+        autoIdCheck = AutomatedIdVerificationResult.NO_MATCH,
+        manualIdCheck = ManualIdVerificationResult.NO_MATCH,
+        status = CheckinV2Status.REVIEWED,
+      )
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-reviewed/$uuid")
+
+      assertThat(result).isNotNull
+      assertThat(result!!.notes).contains("Is the person in the video the correct person: No, it is not the person")
     }
 
     @Test
