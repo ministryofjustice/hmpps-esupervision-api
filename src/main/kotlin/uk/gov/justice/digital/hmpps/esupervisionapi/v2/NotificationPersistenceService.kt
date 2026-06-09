@@ -83,6 +83,7 @@ class NotificationPersistenceService(
             ContactPreference.PHONE -> (pair.second as PhoneNumber).phoneNumber
             ContactPreference.EMAIL -> (pair.second as Email).email
           },
+          AssociatedOffenderInfo(crn),
         ),
       )
     }
@@ -123,7 +124,7 @@ class NotificationPersistenceService(
           sentAt = null,
           updatedAt = null,
         )
-        notifications.add(NotificationWithRecipient(notification, contactDetails.email))
+        notifications.add(NotificationWithRecipient(notification, contactDetails.email, AssociatedOffenderInfo.create(crn)))
       }
     }
 
@@ -161,9 +162,19 @@ class NotificationPersistenceService(
   }
 }
 
+data class AssociatedOffenderInfo(val crn: CRN) {
+  companion object {
+    fun create(crn: CRN?): AssociatedOffenderInfo? = crn?.let { AssociatedOffenderInfo(crn) }
+  }
+}
+
+
 data class NotificationWithRecipient(
   val notification: GenericNotificationV2,
+  /** Phone number or email address */
   val recipient: String,
+  /** Offender associated with the notification (which may be different than the recipient) */
+  val offender: AssociatedOffenderInfo?
 )
 
 data class SendResult(

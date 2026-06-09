@@ -320,10 +320,6 @@ open class GenericNotificationV2(
   @Column(name = "channel", nullable = false, length = 50)
   open var channel: String, // SMS or EMAIL
 
-  @ManyToOne(cascade = [CascadeType.DETACH])
-  @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true, insertable = false, updatable = false)
-  open var offender: OffenderV2? = null,
-
   @Column(name = "offender_id", nullable = true)
   open var offenderId: Long? = null,
 

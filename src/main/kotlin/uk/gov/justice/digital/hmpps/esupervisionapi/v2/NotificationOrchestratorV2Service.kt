@@ -444,17 +444,9 @@ class NotificationOrchestratorV2Service(
   ) {
     if (notificationsWithRecipients.isEmpty()) return
 
-    val savedNotifications =
-      notificationPersistence.saveNotifications(
-        notificationsWithRecipients.map { it.notification },
-      )
+    notificationPersistence.saveNotifications(notificationsWithRecipients.map { it.notification },)
 
-    val notificationsToSend =
-      savedNotifications.zip(notificationsWithRecipients).map { (saved, wrapper) ->
-        NotificationWithRecipient(saved, wrapper.recipient)
-      }
-
-    notificationsToSend.forEach { wrapper ->
+    notificationsWithRecipients.forEach { wrapper ->
       val notification = wrapper.notification
       val recipient = wrapper.recipient
 
@@ -472,7 +464,7 @@ class NotificationOrchestratorV2Service(
           "Sent {} notification to {} for offender {}, notificationId={}",
           notification.channel,
           notification.recipientType,
-          notification.offender?.crn ?: "unknown",
+          wrapper.offender?.crn ?: "unknown",
           notifyId,
         )
 
@@ -482,12 +474,7 @@ class NotificationOrchestratorV2Service(
           notifyId = notifyId,
         )
       } catch (e: Exception) {
-        val sanitized =
-          PiiSanitizer.sanitizeException(
-            e,
-            notification.offender?.crn,
-            notification.offender?.uuid,
-          )
+        val sanitized = PiiSanitizer.sanitizeException(e, wrapper.offender?.crn, null)
         LOGGER.warn(
           "Failed to send {} to {}: {}",
           notification.channel,
@@ -499,7 +486,7 @@ class NotificationOrchestratorV2Service(
           notification = notification,
           success = false,
           notifyId = UUID.randomUUID(),
-          error = PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null),
+          error = PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", wrapper.offender?.crn, null),
         )
       }
     }

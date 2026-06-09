@@ -144,7 +144,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendCheckinSubmittedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
-    verify(eventAuditService, never()).recordCheckinSubmitted(checkin, contactDetails)
+    verify(eventAuditService, never()).recordCheckinSubmitted(checkin, event)
   }
 
   @Test
@@ -187,7 +187,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendCheckinReviewedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
-    verify(eventAuditService, never()).recordCheckinReviewed(checkin, contactDetails)
+    verify(eventAuditService, never()).recordCheckinReviewed(checkin, event)
   }
 
   @Test
@@ -206,7 +206,7 @@ class NotificationOrchestratorV2ServiceTest {
     )
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
-      .thenReturn(notifications.map { NotificationWithRecipient(it, "07700900123") })
+      .thenReturn(notifications.map { NotificationWithRecipient(it, "07700900123", AssociatedOffenderInfo.create(offender.crn)) })
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(notifications)
     whenever(notifyGateway.send(any(), any(), any(), any(), any()))
       .thenThrow(RuntimeException("GOV.UK Notify error"))

@@ -29,15 +29,16 @@ class CheckinPersistenceService(
   @Transactional
   fun checkinCreation(checkin: OffenderCheckinV2, event: PartialCheckinCreatedEvent) {
     val savedCheckin = checkinRepository.saveAndFlush(checkin)
-    eventAuditService.recordCheckinCreated(savedCheckin, event.checkin.personalDetails)
+    val finalisedEvent = event.finalise(savedCheckin)
+    eventAuditService.recordCheckinCreated(savedCheckin, finalisedEvent)
 
-    appEventPublisher.publishEvent(event.finalise(savedCheckin))
+    appEventPublisher.publishEvent(finalisedEvent)
   }
 
   @Transactional
   fun checkinSubmission(checkin: OffenderCheckinV2, event: CheckinSubmittedEvent) {
     checkinRepository.save(checkin)
-    eventAuditService.recordCheckinSubmitted(checkin, event.checkin.personalDetails)
+    eventAuditService.recordCheckinSubmitted(checkin, event)
 
     appEventPublisher.publishEvent(event)
   }
@@ -46,7 +47,7 @@ class CheckinPersistenceService(
   fun checkinReview(checkin: OffenderCheckinV2, event: CheckinReviewedEvent, reviewInfo: CheckinReviewInfo) {
     require(event.checkin.reviewedBy != null)
     checkinRepository.save(checkin)
-    eventAuditService.recordCheckinReviewed(checkin, event.checkin.personalDetails)
+    eventAuditService.recordCheckinReviewed(checkin, event)
     offenderEventLogRepository.save(
       OffenderEventLogV2(
         comment = reviewInfo.comment,
