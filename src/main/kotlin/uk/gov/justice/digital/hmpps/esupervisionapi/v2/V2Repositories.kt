@@ -206,7 +206,7 @@ interface OffenderCheckinV2Repository : JpaRepository<OffenderCheckinV2, Long> {
       AND c.dueDate = :checkinStartDate
       AND NOT EXISTS (
           SELECT n FROM GenericNotificationV2 n
-          WHERE n.offender = o
+          WHERE n.offenderId = o.id
             AND n.eventType = :notificationType
             AND n.createdAt >= :checkinWindowStart
       )
@@ -315,7 +315,7 @@ interface GenericNotificationV2Repository : JpaRepository<GenericNotificationV2,
     """
       SELECT COUNT(n) > 0 
       FROM GenericNotificationV2 n 
-      WHERE n.offender = :offender 
+      WHERE n.offenderId = :#{#offender.id}
         AND n.eventType = :eventType 
         AND n.createdAt >= :cutoffTime
   """,
