@@ -444,7 +444,7 @@ class NotificationOrchestratorV2Service(
   ) {
     if (notificationsWithRecipients.isEmpty()) return
 
-    notificationPersistence.saveNotifications(notificationsWithRecipients.map { it.notification },)
+    notificationPersistence.saveNotifications(notificationsWithRecipients.map { it.notification })
 
     notificationsWithRecipients.forEach { wrapper ->
       val notification = wrapper.notification

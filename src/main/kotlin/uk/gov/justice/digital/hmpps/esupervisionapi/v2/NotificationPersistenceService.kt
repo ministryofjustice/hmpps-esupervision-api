@@ -168,13 +168,12 @@ data class AssociatedOffenderInfo(val crn: CRN) {
   }
 }
 
-
 data class NotificationWithRecipient(
   val notification: GenericNotificationV2,
   /** Phone number or email address */
   val recipient: String,
   /** Offender associated with the notification (which may be different than the recipient) */
-  val offender: AssociatedOffenderInfo?
+  val offender: AssociatedOffenderInfo?,
 )
 
 data class SendResult(

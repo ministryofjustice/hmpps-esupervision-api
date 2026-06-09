@@ -92,14 +92,13 @@ class V2CheckinCreationJob(
       val finalChunkSize = min(chunkSize, INdiliusApiClient.MAX_BATCH_SIZE)
 
       do {
-        val pageRequest = PageRequest.of(0, finalChunkSize)
+        val pageRequest = PageRequest.of(metrics.chunks, finalChunkSize)
         val chunk = offenderRepository.findEligibleForCheckinCreation(lowerBoundInclusive = today, upperBound, pageRequest)
         if (chunk.isEmpty) {
           break
         }
 
-        metrics.chunks += 1
-        LOGGER.info("Processing chunk {} with {} offenders", metrics.chunks, chunk.size)
+        LOGGER.info("Processing page {} with {} offenders", metrics.chunks, chunk.size)
 
         try {
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
@@ -121,11 +120,14 @@ class V2CheckinCreationJob(
           checkinCreationService.createCheckins(checkinsToCreate)
           logCreatedCheckins(checkinsToCreate, today, batchInsertStart)
           metrics.created += checkinsToCreate.size
+          metrics.chunks += 1
         } catch (e: NdiliusBatchFetchException) {
           metrics.errors += e.crns.size // already logged elsewhere
+          metrics.chunks += 1
         } catch (e: BatchCheckinCreationException) {
-          LOGGER.warn("Failed to create {} checkins for chunk {}", e.checkins.size, metrics.chunks, e)
+          LOGGER.warn("Failed to create {} checkins for page {}", e.checkins.size, metrics.chunks, e)
           metrics.errors += e.checkins.size
+          metrics.chunks += 1
         }
       } while (chunk.hasNext())
     } catch (e: Exception) {
@@ -218,18 +220,18 @@ class V2CheckinCreationJob(
 
   private fun getContactDetailsMap(
     crns: List<String>,
-    numChunks: Int,
+    page: Int,
   ): Map<String, ContactDetails> {
     val contactDetailsMap = try {
       ndiliusApiClient.getContactDetailsForMultiple(crns).associateBy { it.crn }
     } catch (e: NdiliusBatchFetchException) {
-      LOGGER.warn("Failed to fetch contact details for chunk {}", numChunks, e)
+      LOGGER.warn("Failed to fetch contact details for page {}", page, e)
       throw e
     }
 
     val missing = crns.toSet().minus(contactDetailsMap.keys)
     if (missing.isNotEmpty()) {
-      LOGGER.info("Contact details not found for {} CRNs in chunk {}. CRNS: {}", missing.size, numChunks, missing)
+      LOGGER.info("Contact details not found for {} CRNs in page {}. CRNS: {}", missing.size, page, missing)
     }
 
     return contactDetailsMap

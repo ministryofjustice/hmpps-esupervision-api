@@ -5,14 +5,12 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ICheckinEvent
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IEventBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
@@ -105,32 +103,27 @@ class EventAuditV2Service(
   /**
    * Record checkin created event
    */
-  fun recordCheckinCreated(checkin: OffenderCheckinV2, event: ICheckinEvent) =
-    recordCheckinEvent(CheckinAuditEventType.CHECKIN_CREATED, checkin, event)
+  fun recordCheckinCreated(checkin: OffenderCheckinV2, event: ICheckinEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_CREATED, checkin, event)
 
   /**
    * Record checkin submitted event
    */
-  fun recordCheckinSubmitted(checkin: OffenderCheckinV2, event: CheckinSubmittedEvent) =
-    recordCheckinEvent(CheckinAuditEventType.CHECKIN_SUBMITTED, checkin, event)
+  fun recordCheckinSubmitted(checkin: OffenderCheckinV2, event: CheckinSubmittedEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_SUBMITTED, checkin, event)
 
   /**
    * Record checkin reviewed event
    */
-  fun recordCheckinReviewed(checkin: OffenderCheckinV2, event: CheckinReviewedEvent) =
-    recordCheckinEvent(CheckinAuditEventType.CHECKIN_REVIEWED, checkin, event)
+  fun recordCheckinReviewed(checkin: OffenderCheckinV2, event: CheckinReviewedEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_REVIEWED, checkin, event)
 
   /**
    * Record checkin expired event
    */
-  fun recordCheckinExpired(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) =
-    recordCheckinEvents(CheckinAuditEventType.CHECKIN_EXPIRED, checkins)
+  fun recordCheckinExpired(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) = recordCheckinEvents(CheckinAuditEventType.CHECKIN_EXPIRED, checkins)
 
   /**
    * Record checkin reminder event
    */
-  fun recordCheckinReminded(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) =
-    recordCheckinEvents(CheckinAuditEventType.CHECKIN_REMINDER, checkins)
+  fun recordCheckinReminded(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) = recordCheckinEvents(CheckinAuditEventType.CHECKIN_REMINDER, checkins)
 
   fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderV2, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
     if (contactDetails == null) {
@@ -218,7 +211,7 @@ class EventAuditV2Service(
         practitionerId = this.practitionerId,
         contactDetails = checkinDto.personalDetails,
         checkin = checkin,
-        notes = "Created by scheduled job"
+        notes = "Created by scheduled job",
       )
 
       CheckinAuditEventType.CHECKIN_SUBMITTED -> buildAudit(
