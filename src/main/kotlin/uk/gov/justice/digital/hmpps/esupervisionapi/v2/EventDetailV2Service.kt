@@ -190,8 +190,9 @@ class EventDetailV2Service(
   }
 
   private fun formatManualIdCheckResult(result: String): String = when (result) {
-    "MATCH", "CONFIRMED" -> "Yes"
-    "NO_MATCH", "REJECTED" -> "No"
+    "MATCH", "CONFIRMED" -> "Yes, and there’s nothing concerning"
+    "MATCH_WITH_CONCERN" -> "Yes, and there’s visible concern"
+    "NO_MATCH", "REJECTED" -> "No, it is not the person"
     else -> result
   }
 
