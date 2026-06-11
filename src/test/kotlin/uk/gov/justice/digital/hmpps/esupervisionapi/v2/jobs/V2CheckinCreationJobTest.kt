@@ -11,7 +11,6 @@ import org.mockito.kotlin.same
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.springframework.data.domain.PageRequest
 import org.springframework.test.util.ReflectionTestUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -150,14 +149,8 @@ class V2CheckinCreationJobTest {
       override val contactPreference: ContactPreference,
       override val currentEvent: Long?,
     ) : OffenderV2Repository.IOffenderCheckinCreationInfo
-    whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any()))
-      .thenReturn(
-        org.springframework.data.domain.SliceImpl(
-          offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.currentEvent) },
-          PageRequest.of(0, 10),
-          false,
-        ),
-      )
+    whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), any()))
+      .thenReturn(offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.currentEvent) })
     whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<OffenderV2>())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
     whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenAnswer { arg ->

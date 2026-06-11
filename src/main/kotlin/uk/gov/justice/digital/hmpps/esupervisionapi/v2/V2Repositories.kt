@@ -3,7 +3,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
-import org.springframework.data.domain.Slice
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
@@ -56,14 +55,18 @@ interface OffenderV2Repository : JpaRepository<OffenderV2, Long> {
           AND c.due_date < :upperBoundExclusive
           AND c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
       )
+      AND o.id > coalesce(:lastOffenderId, 0)
+    ORDER BY o.id
+    FETCH FIRST :chunkSize ROWS ONLY
     """,
     nativeQuery = true,
   )
   fun findEligibleForCheckinCreation(
     lowerBoundInclusive: LocalDate,
     upperBoundExclusive: LocalDate,
-    pageable: Pageable,
-  ): Slice<IOffenderCheckinCreationInfo>
+    chunkSize: Int = 10,
+    lastOffenderId: Long? = null,
+  ): List<IOffenderCheckinCreationInfo>
 
   interface IOffenderCheckinCreationInfo : ActiveEvent {
     val id: Long

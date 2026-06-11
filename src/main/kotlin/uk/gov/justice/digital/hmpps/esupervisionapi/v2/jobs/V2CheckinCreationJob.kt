@@ -6,7 +6,6 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.domain.PageRequest
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHintV2
@@ -90,13 +89,14 @@ class V2CheckinCreationJob(
     try {
       val upperBound = today.plusDays(1)
       val finalChunkSize = min(chunkSize, INdiliusApiClient.MAX_BATCH_SIZE)
-
+      var lastOffenderId: Long? = null
+      metrics.chunks = 1
       do {
-        val pageRequest = PageRequest.of(metrics.chunks, finalChunkSize)
-        val chunk = offenderRepository.findEligibleForCheckinCreation(lowerBoundInclusive = today, upperBound, pageRequest)
-        if (chunk.isEmpty) {
+        val chunk = offenderRepository.findEligibleForCheckinCreation(lowerBoundInclusive = today, upperBound, finalChunkSize, lastOffenderId)
+        if (chunk.isEmpty()) {
           break
         }
+        lastOffenderId = chunk[chunk.size - 1].id
 
         LOGGER.info("Processing page {} with {} offenders", metrics.chunks, chunk.size)
 
@@ -129,7 +129,7 @@ class V2CheckinCreationJob(
           metrics.errors += e.checkins.size
           metrics.chunks += 1
         }
-      } while (chunk.hasNext())
+      } while (chunk.size == finalChunkSize)
     } catch (e: Exception) {
       LOGGER.warn("Checkin Creation Job(id={}) failed, metrics={}", logEntry.id, metrics, e)
     }

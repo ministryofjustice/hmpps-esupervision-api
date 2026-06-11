@@ -10,7 +10,9 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
@@ -39,7 +41,11 @@ import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+@TestPropertySource(properties = ["app.scheduling.v2-checkin-creation.chunk-size=1"])
 class V2CheckinCreationJobIT : IntegrationTestBase() {
+
+  @Value("\${app.scheduling.v2-checkin-creation.chunk-size}")
+  var chunkSize: Int = 0
 
   @Autowired lateinit var jdbcTemplate: JdbcTemplate
 
@@ -76,7 +82,8 @@ class V2CheckinCreationJobIT : IntegrationTestBase() {
 
     val practitionerDetails = PractitionerDetails(Name("John", "Smith"), "foo@example.com")
     whenever(ndeliusApiClient.getContactDetailsForMultiple(any()))
-      .thenReturn(
+      .thenAnswer { invocation ->
+        val crns = invocation.getArgument<List<String>>(0)
         listOf(
           ContactDetails(
             crn = "A000001",
@@ -100,8 +107,8 @@ class V2CheckinCreationJobIT : IntegrationTestBase() {
               Event(number = 1L, mainOffence = CodedDescription("OFF01", "Test"), sentence = null),
             ),
           ),
-        ),
-      )
+        ).filter { it.crn in crns }
+      }
 
     whenever(notifyGateway.send(any(), any(), any(), any(), any()))
       .thenAnswer { UUID.randomUUID() }
@@ -126,6 +133,8 @@ class V2CheckinCreationJobIT : IntegrationTestBase() {
       .pollInterval(100, TimeUnit.MILLISECONDS)
       .untilAsserted {
         val checkins = checkinRespository.findAll().associateBy { it.offender.crn }
+        assertEquals(2, checkins.size)
+
         outboxItemRepository
           .findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, checkins["A000001"]!!.id)
           .orElseThrow()
