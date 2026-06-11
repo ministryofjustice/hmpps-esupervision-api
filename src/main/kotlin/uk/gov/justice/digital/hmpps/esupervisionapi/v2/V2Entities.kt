@@ -40,6 +40,13 @@ interface CheckinSchedule {
 }
 
 /**
+ * Provides current event number for the offender.
+ */
+interface ActiveEvent {
+  val currentEvent: Long?
+}
+
+/**
  * V2 Offender Entity (no PII, only CRN)
  */
 @Entity
@@ -85,9 +92,10 @@ open class OffenderV2(
   open var contactPreference: ContactPreference,
 
   @Column(name = "current_event", nullable = true)
-  open var currentEvent: Long? = null,
+  open override var currentEvent: Long? = null,
 ) : V2BaseEntity(),
-  CheckinSchedule {
+  CheckinSchedule,
+  ActiveEvent {
   fun dto(personalDetails: ContactDetails? = null): OffenderV2Dto = OffenderV2Dto(
     uuid = uuid,
     crn = crn,
@@ -311,10 +319,6 @@ open class GenericNotificationV2(
 
   @Column(name = "channel", nullable = false, length = 50)
   open var channel: String, // SMS or EMAIL
-
-  @ManyToOne(cascade = [CascadeType.DETACH])
-  @JoinColumn(name = "offender_id", referencedColumnName = "id", nullable = true, insertable = false, updatable = false)
-  open var offender: OffenderV2? = null,
 
   @Column(name = "offender_id", nullable = true)
   open var offenderId: Long? = null,

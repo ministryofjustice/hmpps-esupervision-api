@@ -38,8 +38,8 @@ class NotificationV2Service(
   /**
    * Send notifications for checkin created event
    */
-  fun sendCheckinCreatedNotifications(checkin: OffenderCheckinV2, contactDetails: ContactDetails) {
-    orchestrator.sendCheckinCreatedNotifications(checkin, contactDetails)
+  fun sendCheckinCreatedNotifications(event: CheckinCreatedEvent) {
+    orchestrator.sendCheckinCreatedNotifications(event)
   }
 
   /**

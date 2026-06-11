@@ -4,11 +4,16 @@ import com.google.common.collect.Lists
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ICheckinEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.math.BigDecimal
 import java.time.Clock
@@ -55,22 +60,23 @@ class EventAuditV2Service(
    */
   fun recordSetupCompleted(offender: OffenderV2, contactDetails: ContactDetails?) = recordOffenderEvent(OffenderAuditEventType.SETUP_COMPLETED, offender, contactDetails, null, sensitive = false)
 
-  fun recordCheckinEvent(event: CheckinAuditEventType, checkin: OffenderCheckinV2, contactDetails: ContactDetails?) {
-    if (contactDetails?.practitioner == null) {
-      LOGGER.warn("Cannot record audit event {} for checkin {}: practitioner details not found", event.name, checkin.uuid)
+  fun recordCheckinEvent(eventType: CheckinAuditEventType, checkin: OffenderCheckinV2, event: ICheckinEvent) {
+    if (event.checkin.personalDetails?.practitioner == null) {
+      LOGGER.warn("Cannot record audit event {} for checkin {}: practitioner details not found", eventType.name, checkin.uuid)
       return
     }
 
     try {
-      val payload = checkin.toAudit(event, contactDetails)
+      val payload = event.toAudit(eventType, checkin)
       transactionTemplate.execute { auditRepository.save(payload) }
-      LOGGER.info("Recorded {} audit event for checkin {}", event.name, checkin.uuid)
+      LOGGER.info("Recorded {} audit event for checkin {}", eventType.name, checkin.uuid)
     } catch (e: Exception) {
-      LOGGER.error("Failed to record {} audit event: {}", event.name, PiiSanitizer.sanitizeException(e, checkin.offender.crn, checkin.uuid))
+      LOGGER.error("Failed to record {} audit event: {}", eventType.name, PiiSanitizer.sanitizeException(e, event.checkin.crn, checkin.uuid))
     }
   }
 
   fun recordCheckinEvents(eventType: CheckinAuditEventType, checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) {
+    assert(eventType == CheckinAuditEventType.CHECKIN_EXPIRED || eventType == CheckinAuditEventType.CHECKIN_REMINDER) // those events are not using the event pattern yet
     val skipped = mutableListOf<UUID>()
     val audits = Lists.newArrayListWithCapacity<EventAuditV2>(checkins.count())
     for ((checkin, contactDetails) in checkins) {
@@ -97,17 +103,17 @@ class EventAuditV2Service(
   /**
    * Record checkin created event
    */
-  fun recordCheckinCreated(checkin: OffenderCheckinV2, contactDetails: ContactDetails?) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_CREATED, checkin, contactDetails)
+  fun recordCheckinCreated(checkin: OffenderCheckinV2, event: ICheckinEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_CREATED, checkin, event)
 
   /**
    * Record checkin submitted event
    */
-  fun recordCheckinSubmitted(checkin: OffenderCheckinV2, contactDetails: ContactDetails?) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_SUBMITTED, checkin, contactDetails)
+  fun recordCheckinSubmitted(checkin: OffenderCheckinV2, event: CheckinSubmittedEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_SUBMITTED, checkin, event)
 
   /**
    * Record checkin reviewed event
    */
-  fun recordCheckinReviewed(checkin: OffenderCheckinV2, contactDetails: ContactDetails?) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_REVIEWED, checkin, contactDetails)
+  fun recordCheckinReviewed(checkin: OffenderCheckinV2, event: CheckinReviewedEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_REVIEWED, checkin, event)
 
   /**
    * Record checkin expired event
@@ -140,7 +146,8 @@ class EventAuditV2Service(
 
   private fun buildAudit(
     eventType: String,
-    offender: OffenderV2,
+    crn: CRN,
+    practitionerId: ExternalUserId,
     contactDetails: ContactDetails,
     checkin: OffenderCheckinV2? = null,
     timeToSubmitHours: BigDecimal? = null,
@@ -154,8 +161,8 @@ class EventAuditV2Service(
   ): EventAuditV2 = EventAuditV2(
     eventType = eventType,
     occurredAt = clock.instant(),
-    crn = offender.crn,
-    practitionerId = offender.practitionerId,
+    crn = crn,
+    practitionerId = practitionerId,
     localAdminUnitCode = contactDetails.practitioner?.localAdminUnit?.code,
     localAdminUnitDescription = contactDetails.practitioner?.localAdminUnit?.description,
     pduCode = contactDetails.practitioner?.probationDeliveryUnit?.code,
@@ -185,7 +192,8 @@ class EventAuditV2Service(
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       -> buildAudit(
         eventType.name,
-        offender,
+        offender.crn,
+        offender.practitionerId,
         contactDetails,
         notes = notes,
         sensitive = sensitive,
@@ -193,32 +201,42 @@ class EventAuditV2Service(
     }
   }
 
-  private fun OffenderCheckinV2.toAudit(event: CheckinAuditEventType, contactDetails: ContactDetails): EventAuditV2 {
-    val checkin = this
-    return when (event) {
-      CheckinAuditEventType.CHECKIN_CREATED -> buildAudit(event.name, checkin.offender, contactDetails, checkin, notes = "Created by scheduled job")
+  private fun ICheckinEvent.toAudit(eventType: CheckinAuditEventType, checkin: OffenderCheckinV2): EventAuditV2 {
+    val checkinDto = this.checkin
+    require(checkinDto.personalDetails != null)
+    return when (eventType) {
+      CheckinAuditEventType.CHECKIN_CREATED -> buildAudit(
+        eventType = eventType.name,
+        crn = checkinDto.crn,
+        practitionerId = this.practitionerId,
+        contactDetails = checkinDto.personalDetails,
+        checkin = checkin,
+        notes = "Created by scheduled job",
+      )
 
       CheckinAuditEventType.CHECKIN_SUBMITTED -> buildAudit(
-        event.name,
-        checkin.offender,
-        contactDetails,
-        checkin,
+        eventType = eventType.name,
+        crn = checkinDto.crn,
+        practitionerId = this.practitionerId,
+        contactDetails = checkinDto.personalDetails,
+        checkin = checkin,
         timeToSubmitHours = checkin.hoursToSubmit(),
         autoIdCheckResult = checkin.autoIdCheck?.name,
         livenessResult = checkin.livenessResult?.name,
       )
 
       CheckinAuditEventType.CHECKIN_REVIEWED -> {
-        val notes = if (checkin.reviewedBy != null && checkin.reviewedBy != checkin.offender.practitionerId) {
-          "Reviewed by ${checkin.reviewedBy} (possibly covering for ${checkin.offender.practitionerId})"
+        val notes = if (checkin.reviewedBy != null && checkin.reviewedBy != this.practitionerId) {
+          "Reviewed by ${checkin.reviewedBy} (possibly covering for ${this.practitionerId})"
         } else {
           null
         }
         buildAudit(
-          event.name,
-          checkin.offender,
-          contactDetails,
-          checkin,
+          eventType = eventType.name,
+          crn = checkinDto.crn,
+          practitionerId = this.practitionerId,
+          contactDetails = checkinDto.personalDetails,
+          checkin = checkin,
           timeToReviewHours = checkin.hoursToReview(),
           reviewDurationHours = checkin.reviewDurationHours(),
           manualIdCheckResult = checkin.manualIdCheck?.name,
@@ -228,8 +246,32 @@ class EventAuditV2Service(
       }
 
       CheckinAuditEventType.CHECKIN_EXPIRED -> buildAudit(
+        eventType = eventType.name,
+        crn = checkinDto.crn,
+        practitionerId = this.practitionerId,
+        contactDetails = checkinDto.personalDetails,
+        checkin = checkin,
+        notes = "Expired by scheduled job",
+      )
+
+      CheckinAuditEventType.CHECKIN_REMINDER -> buildAudit(
+        eventType = eventType.name,
+        crn = checkinDto.crn,
+        practitionerId = this.practitionerId,
+        contactDetails = checkinDto.personalDetails,
+        checkin = checkin,
+        notes = "Reminder sent by scheduled job",
+      )
+    }
+  }
+
+  private fun OffenderCheckinV2.toAudit(event: CheckinAuditEventType, contactDetails: ContactDetails): EventAuditV2 {
+    val checkin = this
+    return when (event) {
+      CheckinAuditEventType.CHECKIN_EXPIRED -> buildAudit(
         event.name,
-        checkin.offender,
+        checkin.offender.crn,
+        checkin.offender.practitionerId,
         contactDetails,
         checkin,
         notes = "Expired by scheduled job",
@@ -237,11 +279,13 @@ class EventAuditV2Service(
 
       CheckinAuditEventType.CHECKIN_REMINDER -> buildAudit(
         event.name,
-        checkin.offender,
+        checkin.offender.crn,
+        checkin.offender.practitionerId,
         contactDetails,
         checkin,
         notes = "Reminder sent by scheduled job",
       )
+      else -> throw IllegalArgumentException("Unexpected event type: $event")
     }
   }
 

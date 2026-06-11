@@ -96,9 +96,17 @@ class NotificationOrchestratorV2ServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendCheckinCreatedNotifications(checkin, contactDetails)
+    val event = CheckinCreatedEvent(
+      checkin = checkin.dto(contactDetails, clock = clock),
+      offenderId = offender.id,
+      checkinId = checkin.id,
+      practitionerId = offender.practitionerId,
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = null,
+    )
+    service.sendCheckinCreatedNotifications(event)
 
-    // V1 only notifies offender for checkin invite (no practitioner template)
+    // we only notify the offender about the checkin invite (no practitioner template)
     verify(notificationPersistence).buildOffenderNotifications(any(), any(), any(), any(), eq(NotificationType.OffenderCheckinInvite))
     verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
@@ -136,7 +144,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendCheckinSubmittedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
-    verify(eventAuditService, never()).recordCheckinSubmitted(checkin, contactDetails)
+    verify(eventAuditService, never()).recordCheckinSubmitted(checkin, event)
   }
 
   @Test
@@ -179,7 +187,7 @@ class NotificationOrchestratorV2ServiceTest {
     service.sendCheckinReviewedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(any(), eq(checkin.uuid), eq(checkin.offender.crn), any(), eq(null), eq(null))
-    verify(eventAuditService, never()).recordCheckinReviewed(checkin, contactDetails)
+    verify(eventAuditService, never()).recordCheckinReviewed(checkin, event)
   }
 
   @Test
@@ -198,7 +206,7 @@ class NotificationOrchestratorV2ServiceTest {
     )
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
-      .thenReturn(notifications.map { NotificationWithRecipient(it, "07700900123") })
+      .thenReturn(notifications.map { NotificationWithRecipient(it, "07700900123", AssociatedOffenderInfo.create(offender.crn)) })
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(notifications)
     whenever(notifyGateway.send(any(), any(), any(), any(), any()))
       .thenThrow(RuntimeException("GOV.UK Notify error"))
@@ -232,7 +240,7 @@ class NotificationOrchestratorV2ServiceTest {
   @Test
   fun `sendSetupCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(events = emptyList())
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
@@ -272,7 +280,7 @@ class NotificationOrchestratorV2ServiceTest {
   @Test
   fun `sendReactivationCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(events = emptyList())
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
@@ -312,7 +320,7 @@ class NotificationOrchestratorV2ServiceTest {
   @Test
   fun `sendDeactivationCompletedNotifications - publishes event without eventNumber when no events`() {
     val offender = createOffender()
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(events = emptyList())
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
@@ -381,5 +389,6 @@ class NotificationOrchestratorV2ServiceTest {
       probationDeliveryUnit = OrganizationalUnit("PDU01", "Test PDU"),
       provider = OrganizationalUnit("PRV01", "Test Provider"),
     ),
+    events = listOf(Event(1, mainOffence = CodedDescription("OFF01", "Test Offence"), sentence = null)),
   )
 }

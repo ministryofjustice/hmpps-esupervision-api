@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Primary
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
@@ -52,6 +53,27 @@ class CheckinEventsListenerIT : IntegrationTestBase() {
     outboxItemRepository.deleteAll()
     checkinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
+  }
+
+  @Test
+  fun `processEvent - checkin creation - mark outbox item as sent - success`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now()).toEntity()
+    offenderV2Repository.save(offender)
+
+    val checkin = checkinV2Repository.save(createCheckin(offender))
+
+    val event = CheckinCreatedEvent(
+      checkinId = checkin.id,
+      offenderId = offender.id,
+      practitionerId = offender.practitionerId,
+      checkin = checkin.dto(null, clock = clock),
+      offenderContactPreference = ContactPreference.PHONE,
+      currentEvent = 1,
+    )
+
+    checkinEventsListener.processEvent(event).get(2, TimeUnit.SECONDS)
+    val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, checkin.id).orElseThrow()
+    assertEquals(OutboxItemStatus.SENT, outboxItem.status)
   }
 
   @Test

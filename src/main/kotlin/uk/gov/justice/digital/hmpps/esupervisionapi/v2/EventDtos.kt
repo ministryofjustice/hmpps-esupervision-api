@@ -24,6 +24,18 @@ sealed interface ICheckinEvent : IEventBase {
   val outboxItemCoords: Pair<OutboxItemType, Long>? get() = null
 }
 
+data class CheckinCreatedEvent(
+  override val checkinId: Long,
+  override val offenderId: Long,
+  override val practitionerId: ExternalUserId,
+  override val checkin: CheckinV2Dto,
+  override val offenderContactPreference: ContactPreference,
+  override val currentEvent: Long?,
+) : ICheckinEvent,
+  ActiveEvent {
+  override val outboxItemCoords = OutboxItemType.CHECKIN_CREATED to checkinId
+}
+
 data class CheckinSubmittedEvent(
   override val checkinId: Long,
   override val offenderId: Long,
@@ -53,6 +65,32 @@ data class CheckinAnnotatedEvent(
   val annotation: Pair<Long, UUID>,
 ) : ICheckinEvent {
   override val outboxItemCoords = OutboxItemType.CHECKIN_ANNOTATED to annotation.first
+}
+
+/**
+ * Finalised event requires the checkin ID to be set, which we only get after DB insert is done.
+ */
+data class PartialCheckinCreatedEvent(
+  override val checkinId: Long = -1,
+  override val offenderId: Long,
+  override val practitionerId: ExternalUserId,
+  override val checkin: CheckinV2Dto,
+  override val offenderContactPreference: ContactPreference,
+  override val currentEvent: Long?,
+) : IEventBase,
+  IPartialEvent,
+  ActiveEvent {
+  fun finalise(checkin: OffenderCheckinV2): CheckinCreatedEvent {
+    require(checkin.id != 0L) { "Checkin ID must be set after DB insert" }
+    return CheckinCreatedEvent(
+      checkinId = checkin.id,
+      offenderId = offenderId,
+      practitionerId = practitionerId,
+      checkin = this.checkin,
+      offenderContactPreference = offenderContactPreference,
+      currentEvent = currentEvent,
+    )
+  }
 }
 
 /**
