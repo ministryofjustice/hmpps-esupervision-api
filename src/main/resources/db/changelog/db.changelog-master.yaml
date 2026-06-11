@@ -131,3 +131,5 @@ databaseChangeLog:
       file: db/changelog/changesets/65_add_checkin_event_enum_value.sql
   - include:
       file: db/changelog/changesets/66_sum_per_period_stats_over_range.sql
+  - include:
+      file: db/changelog/changesets/67_update_welsh_default_questions.sql
