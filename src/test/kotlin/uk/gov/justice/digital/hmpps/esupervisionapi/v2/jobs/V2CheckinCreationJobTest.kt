@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import jakarta.persistence.EntityManager
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -149,7 +150,7 @@ class V2CheckinCreationJobTest {
       override val contactPreference: ContactPreference,
       override val currentEvent: Long?,
     ) : OffenderV2Repository.IOffenderCheckinCreationInfo
-    whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), any()))
+    whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), anyOrNull()))
       .thenReturn(offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.currentEvent) })
     whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<OffenderV2>())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
