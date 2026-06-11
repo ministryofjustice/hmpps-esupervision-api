@@ -120,6 +120,7 @@ class V2CheckinCreationJobIT : IntegrationTestBase() {
     jdbcTemplate.update("TRUNCATE TABLE offender_checkin_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE outbox_items RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE offender_v2 RESTART IDENTITY CASCADE")
 
     reset(ndeliusApiClient, domainEventPublisher, notifyGateway)
   }
