@@ -33,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -69,6 +70,7 @@ class OffenderSetupV2ServiceTest {
       eventAuditService,
       ndiliusApiClient,
       transactionTemplate,
+      Duration.ofDays(3),
     )
   }
 

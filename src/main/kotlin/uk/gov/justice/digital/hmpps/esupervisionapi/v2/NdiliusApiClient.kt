@@ -15,6 +15,10 @@ class NdiliusBatchFetchException(val crns: List<CRN>, message: String, cause: Ex
 
 interface INdiliusApiClient {
   fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
+
+  /**
+   * Get contact details by CRN. Returns null if not found.
+   */
   fun getContactDetails(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
 

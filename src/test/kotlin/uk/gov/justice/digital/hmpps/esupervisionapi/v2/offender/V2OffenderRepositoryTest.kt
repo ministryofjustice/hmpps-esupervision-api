@@ -75,7 +75,7 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
 
     offenderV2Repository.saveAll(listOf(offender1, offender2, offender3, offender4))
 
-    val result = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1)).toList()
+    val result = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1))
 
     // we want only offender 1 and 2
     assertEquals(2, result.size) { "Should only find offenders 1 and 2, but found: ${result.map { it.crn }}" }
@@ -94,7 +94,7 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
     )
     checkinV2Repository.save(checkin)
 
-    val resultNoOffender1 = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1)).toList()
+    val resultNoOffender1 = offenderV2Repository.findEligibleForCheckinCreation(today, today.plusDays(1))
     assertEquals(1, resultNoOffender1.size)
     assertEquals("V200002", resultNoOffender1.first().crn)
   }

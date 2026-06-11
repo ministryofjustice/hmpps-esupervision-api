@@ -395,9 +395,9 @@ class OffenderV2Resource(
     if (request.checkinSchedule != null || request.contactPreference != null) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
-      if (newFirstCheckinDateIsToday(offenderBefore, offenderAfter, LocalDate.now(clock))) {
+      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, LocalDate.now(clock))) {
         LOGGER.debug("Creating check-in for offender {} as first check-in date is today", offenderAfter.uuid)
-        checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, "")
+        checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
       }
       return ResponseEntity.ok(offenderAfter)
     } else {

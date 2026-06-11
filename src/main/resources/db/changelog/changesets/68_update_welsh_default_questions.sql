@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset Maddie-Williams:67_update_welsh_default_questions splitStatements:false
+--changeset Maddie-Williams:68_update_welsh_default_questions splitStatements:false
 
 update question_info qi
 set question_template = 'Oes angen cymorth arnoch chi neu ydych chi eisiau rhoi gwybod i ni am unrhyw beth?'

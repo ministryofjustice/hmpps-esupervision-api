@@ -132,4 +132,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/66_sum_per_period_stats_over_range.sql
   - include:
-      file: db/changelog/changesets/67_update_welsh_default_questions.sql
+      file: db/changelog/changesets/67_checkin_creation_outbox.sql
+  - include:
+      file: db/changelog/changesets/68_update_welsh_default_questions.sql

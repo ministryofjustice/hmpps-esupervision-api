@@ -1,10 +1,13 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
@@ -12,13 +15,16 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
 
-class BatchCheckinCreationException(val checkins: List<OffenderCheckinV2>, cause: Exception) : RuntimeException("Failed to batch create checkins", cause)
+class BatchCheckinCreationException(val checkins: List<Pair<OffenderCheckinV2, PartialCheckinCreatedEvent>>, cause: Exception) : RuntimeException("Failed to batch create checkins", cause)
 
 /**
  * Checkin Creation Service
@@ -33,7 +39,12 @@ class CheckinCreationService(
   private val ndiliusApiClient: INdiliusApiClient,
   private val notificationService: NotificationV2Service,
   private val eventAuditService: EventAuditV2Service,
+  @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  private val transactionTemplate: TransactionTemplate,
+  private val checkinPersistenceService: CheckinPersistenceService,
 ) {
+
+  val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
 
   /**
    * Create a checkin for an offender
@@ -42,7 +53,6 @@ class CheckinCreationService(
    * @param createdBy Who created the checkin (e.g., "SYSTEM", practitioner ID)
    * @return Created checkin
    */
-  @Transactional
   fun createCheckin(
     offenderUuid: UUID,
     dueDate: LocalDate,
@@ -63,12 +73,14 @@ class CheckinCreationService(
    * @param createdBy Who created the checkin
    * @return Created checkin
    */
-  @Transactional
   fun createCheckinForOffender(
     offender: OffenderV2,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
   ): OffenderCheckinV2 {
+    val contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
+      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
+
     val checkin =
       OffenderCheckinV2(
         uuid = UUID.randomUUID(),
@@ -79,64 +91,39 @@ class CheckinCreationService(
         createdBy = createdBy,
       )
 
-    val saved = checkinRepository.save(checkin)
+    val event = PartialCheckinCreatedEvent(
+      offenderId = checkin.offender.id,
+      practitionerId = checkin.createdBy,
+      checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
+      offenderContactPreference = checkin.offender.contactPreference,
+      currentEvent = checkin.offender.currentEvent,
+    )
+
+    checkinPersistenceService.checkinCreation(checkin, event)
 
     LOGGER.info(
-      "Created checkin {} for offender {} (CRN={}) with due date {} by {}",
-      saved.uuid,
-      offender.uuid,
+      "Created checkin {} for offender CRN={} with due date {} by {}",
+      checkin.uuid,
       offender.crn,
       dueDate,
       createdBy,
     )
 
-    // Fetch contact details and send notifications
-    val contactDetails =
-      try {
-        ndiliusApiClient.getContactDetails(offender.crn)
-      } catch (e: Exception) {
-        LOGGER.warn("Failed to fetch contact details for CRN={}", offender.crn, e)
-        null
-      }
-
-    if (contactDetails != null) {
-      try {
-        notificationService.sendCheckinCreatedNotifications(saved, contactDetails)
-      } catch (e: Exception) {
-        LOGGER.info("Failed to send checkin created notifications for checkin {}", saved.uuid, e)
-      }
-    } else {
-      LOGGER.warn("Skipping notifications for checkin {}: contact details not found", saved.uuid)
-    }
-    eventAuditService.recordCheckinCreated(checkin, contactDetails)
-
-    return saved
+    return checkin
   }
 
   /**
-   * Batch create checkins (used by job for efficiency)
    * @param checkins List of checkins to create
    * @return List of saved checkins
    * @throws BatchCheckinCreationException
    */
   @Transactional
-  fun batchCreateCheckins(checkins: List<OffenderCheckinV2>): List<OffenderCheckinV2> {
-    if (checkins.isEmpty()) return emptyList()
-
-    return try {
-      val savedCheckins = checkinRepository.saveAll(checkins).toList()
-
-      LOGGER.info("Batch created {} checkins", savedCheckins.size)
-      savedCheckins.forEach { checkin ->
-        LOGGER.debug(
-          "Created checkin {} for offender {} with due date {}",
-          checkin.uuid,
-          checkin.offender.crn,
-          checkin.dueDate,
-        )
+  fun createCheckins(checkins: List<Pair<OffenderCheckinV2, PartialCheckinCreatedEvent>>) {
+    if (checkins.isEmpty()) return
+    try {
+      for ((checkin, event) in checkins) {
+        checkinPersistenceService.checkinCreation(checkin, event)
       }
-
-      savedCheckins
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)
     }

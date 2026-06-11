@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ActiveEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
@@ -17,12 +18,12 @@ import java.time.temporal.ChronoUnit
  *
  * @see uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
  */
-fun activeEventNumber(offender: OffenderV2, details: ContactDetails): Long? {
+fun activeEventNumber(offender: ActiveEvent, details: ContactDetails): Long? {
   if (offender.currentEvent != null) {
     return offender.currentEvent
   }
 
-  return details.events.firstOrNull()?.number
+  return details.events?.firstOrNull()?.number
 }
 
 /**
@@ -52,18 +53,16 @@ enum class CheckinIneligibilityReason(
  * Determines whether an offender should be stopped from receiving online check-ins, based on the
  * latest Delius contact details. Returns the reason, or null if the offender is still eligible.
  *
- * Stops check-ins when the person has no active probation events or is in reset (contact suspended).
+ * Stops check-ins when the person is in reset (contact suspended) or has no active probation events.
  *
- * Note on ordering: no-active-events takes priority over contact-suspended, because an active event
- * is a prerequisite for check-ins at all. So when a person is both in reset and has no events, we
- * report NO_ACTIVE_EVENTS as the reason.
- *
- * Note on no-active-events: an empty events list means NDelius reports no active probation events.
- * A cached [OffenderV2.currentEvent] always counts as an active event.
+ * Note on no-active-events: we only treat this as grounds for stopping when NDelius returns an
+ * explicitly empty events list. An absent/null events list is treated as indeterminate (e.g. a
+ * partial or degraded response) and does NOT stop check-ins, so a transient data gap can't wrongly
+ * off-board an active person. A cached [OffenderV2.currentEvent] always counts as an active event.
  *
  * @see activeEventNumber
  */
-fun checkinIneligibilityReason(offender: OffenderV2, details: ContactDetails): CheckinIneligibilityReason? = when {
+fun checkinIneligibilityReason(offender: ActiveEvent, details: ContactDetails): CheckinIneligibilityReason? = when {
   offender.currentEvent == null && details.events.isEmpty() -> CheckinIneligibilityReason.NO_ACTIVE_EVENTS
   details.contactSuspended -> CheckinIneligibilityReason.CONTACT_SUSPENDED
   else -> null
