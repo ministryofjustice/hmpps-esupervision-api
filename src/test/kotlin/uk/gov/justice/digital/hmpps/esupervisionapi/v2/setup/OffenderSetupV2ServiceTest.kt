@@ -114,6 +114,7 @@ class OffenderSetupV2ServiceTest {
       createdAt = clock.instant(),
       startedAt = offenderInfo.startedAt,
       eligibilityChoice = offenderInfo.eligibilityChoice,
+      rationale = offenderInfo.rationale,
     )
 
     whenever(offenderRepository.save(any())).thenReturn(savedOffender)
@@ -128,8 +129,8 @@ class OffenderSetupV2ServiceTest {
     assertEquals(practitionerId, result.practitionerId)
     assertEquals(savedOffender.uuid, result.offenderUuid)
 
-    verify(offenderRepository).save(any())
-    verify(offenderSetupRepository).save(any())
+    verify(offenderRepository).save(argThat { this.status != OffenderStatus.VERIFIED })
+    verify(offenderSetupRepository).save(argThat { this == expectedSetup })
   }
 
   @Test
