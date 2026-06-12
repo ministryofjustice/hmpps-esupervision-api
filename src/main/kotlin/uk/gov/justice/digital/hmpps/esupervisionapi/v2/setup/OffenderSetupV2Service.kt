@@ -14,7 +14,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationFailureExcept
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoInitial
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfoV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
@@ -105,6 +104,7 @@ class OffenderSetupV2Service(
       practitionerId = offenderInfo.practitionerId,
       createdAt = now,
       startedAt = offenderInfo.startedAt,
+      eligibilityChoice = offenderInfo.eligibilityChoice,
     )
 
     val saved =
@@ -119,53 +119,7 @@ class OffenderSetupV2Service(
       saved.uuid,
     )
 
-    return OffenderSetupV2Dto(
-      uuid = saved.uuid,
-      practitionerId = saved.practitionerId,
-      offenderUuid = saved.offender.uuid,
-      createdAt = saved.createdAt,
-      startedAt = saved.startedAt,
-    )
-  }
-
-  /**
-   * Initiates or re-starts the setup process for an offender based on the provided offender information.
-   * Checks if an offender setup already exists for the given CRN. If no setup exists, a new setup is initiated.
-   * If a setup exists but the offender's status is not "INITIAL", an exception is thrown.
-   * Otherwise, the existing offender information is updated with the provided details.
-   *
-   * @param offenderInfo the initial information about the offender
-   * @return the updated offender setup
-   * @throws BadArgumentException if the offender exists but has a status other than "INITIAL"
-   */
-  @Transactional
-  fun startOffenderSetup(offenderInfo: OffenderInfoInitial): OffenderSetupV2Dto {
-    LOGGER.info("Initiating offender setup for CRN={}", offenderInfo.crn)
-    val setup = offenderSetupRepository.findByCrn(offenderInfo.crn).orElse(null)
-    if (setup == null) {
-      return startOffenderSetup(offenderInfo.toOffenderInfoV2())
-    } else if (setup.offender.status != OffenderStatus.INITIAL) {
-      throw BadArgumentException("Offender already exists.")
-    }
-
-    val now = clock.instant()
-    val offender = setup.offender
-    offender.practitionerId = offenderInfo.practitionerId
-    offender.firstCheckin = offenderInfo.firstCheckin
-    offender.checkinInterval = offenderInfo.checkinInterval.duration
-    offender.contactPreference = offenderInfo.contactPreference
-    offender.updatedAt = now
-
-    offenderRepository.save(offender)
-
-    LOGGER.info(
-      "Re-started V2 offender setup: offender={}, crn={}, setup={}",
-      offender.uuid,
-      offender.crn,
-      setup.uuid,
-    )
-
-    return setup.dto()
+    return saved.dto()
   }
 
   /**
@@ -347,13 +301,3 @@ fun <T> raiseOnConstraintViolation(
     throw e
   }
 }
-
-private fun OffenderInfoInitial.toOffenderInfoV2(): OffenderInfoV2 = OffenderInfoV2(
-  setupUuid = UUID.randomUUID(),
-  practitionerId = practitionerId,
-  crn = crn,
-  firstCheckin = firstCheckin,
-  checkinInterval = checkinInterval,
-  contactPreference = contactPreference,
-  startedAt = startedAt,
-)
