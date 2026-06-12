@@ -349,7 +349,7 @@ data class CheckinV2Dto(
   @field:Schema(description = "Presigned S3 URL for reference photo", required = false)
   val photoUrl: URL? = null,
 ) {
-  @field:JsonProperty("flaggedResponses")
+  @get:JsonProperty("flaggedResponses")
   val flaggedResponses: List<String>
     @Schema(description = "Flagged keys of the survey")
     get() {
