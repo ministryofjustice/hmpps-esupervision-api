@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
@@ -46,10 +47,14 @@ class CheckinEventsListenerIT : IntegrationTestBase() {
   private lateinit var outboxItemRepository: OutboxItemRepository
 
   @Autowired
+  private lateinit var genericNotificationV2Repository: GenericNotificationV2Repository
+
+  @Autowired
   private lateinit var clock: Clock
 
   @AfterEach
   fun cleanUp() {
+    genericNotificationV2Repository.deleteAll()
     outboxItemRepository.deleteAll()
     checkinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()

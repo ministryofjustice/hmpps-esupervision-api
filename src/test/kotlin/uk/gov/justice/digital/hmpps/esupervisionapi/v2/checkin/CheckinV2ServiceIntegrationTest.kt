@@ -19,6 +19,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinV2Request
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
@@ -57,6 +58,9 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
   @Autowired
   private lateinit var outboxItemRepository: OutboxItemRepository
 
+  @Autowired
+  private lateinit var genericNotificationV2Repository: GenericNotificationV2Repository
+
   @MockitoBean
   private lateinit var ndiliusApiClient: INdiliusApiClient
 
@@ -74,6 +78,7 @@ class CheckinV2ServiceIntegrationTest : IntegrationTestBase() {
 
   @AfterEach
   fun tearDown() {
+    genericNotificationV2Repository.deleteAll()
     offenderEventLogV2Repository.deleteAll()
     checkinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
