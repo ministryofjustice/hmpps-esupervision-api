@@ -22,10 +22,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProv
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CustomQuestionsReminderJob
 import java.time.Clock
@@ -66,6 +69,12 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
   @Autowired lateinit var offenderCheckinV2Repository: OffenderCheckinV2Repository
 
+  @Autowired lateinit var offenderEventLogV2Repository: OffenderEventLogV2Repository
+
+  @Autowired lateinit var genericNotificationV2Repository: GenericNotificationV2Repository
+
+  @Autowired lateinit var outboxItemRepository: OutboxItemRepository
+
   @Autowired lateinit var questionListItemRepository: DebugQuestionsRepository
 
   @Autowired lateinit var questionListAssignmentRepository: QuestionListAssignmentRepository
@@ -88,6 +97,9 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
   fun tearDown() {
     reset(notificationService)
 
+    genericNotificationV2Repository.deleteAll()
+    outboxItemRepository.deleteAll()
+    offenderEventLogV2Repository.deleteAll()
     questionListItemRepository.deleteAllNonSystem()
     questionListAssignmentRepository.deleteAll()
     questionListItemRepository.deleteCustomQuestions()
