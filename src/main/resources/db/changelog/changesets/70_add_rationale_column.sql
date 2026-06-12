@@ -2,6 +2,6 @@
 
 --changeset roland.sadowski:70_add_rationale_column.sql splitStatements:false
 
-alter table offender add rationale text;
+alter table offender_setup_v2 add rationale text;
 
---rollback alter table offender drop column rationale;
+--rollback alter table offender_setup_v2 drop column rationale;
