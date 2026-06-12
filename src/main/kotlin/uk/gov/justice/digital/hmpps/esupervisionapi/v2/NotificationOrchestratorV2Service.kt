@@ -50,7 +50,7 @@ class NotificationOrchestratorV2Service(
   fun sendSetupCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
-    setup: OffenderSetupV2Dto
+    setup: OffenderSetupV2Dto,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 

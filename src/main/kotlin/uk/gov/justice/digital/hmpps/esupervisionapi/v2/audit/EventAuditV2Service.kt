@@ -59,12 +59,13 @@ class EventAuditV2Service(
   /**
    * Record setup completed event
    */
-  fun recordSetupCompleted(offender: OffenderV2, contactDetails: ContactDetails?, setup: OffenderSetupV2Dto) =
-    recordOffenderEvent(OffenderAuditEventType.SETUP_COMPLETED,
-      offender = offender,
-      contactDetails = contactDetails,
-      notes = "Rationale for sign up: ${setup.rationale ?: "not provided"}\nEligibility: ${setup.eligibilityChoice?.name ?: "not provided"}\n",
-      sensitive = false)
+  fun recordSetupCompleted(offender: OffenderV2, contactDetails: ContactDetails?, setup: OffenderSetupV2Dto) = recordOffenderEvent(
+    OffenderAuditEventType.SETUP_COMPLETED,
+    offender = offender,
+    contactDetails = contactDetails,
+    notes = "Rationale for sign up: ${setup.rationale ?: "not provided"}\nEligibility: ${setup.eligibilityChoice?.name ?: "not provided"}\n",
+    sensitive = false,
+  )
 
   fun recordCheckinEvent(eventType: CheckinAuditEventType, checkin: OffenderCheckinV2, event: ICheckinEvent) {
     if (event.checkin.personalDetails?.practitioner == null) {

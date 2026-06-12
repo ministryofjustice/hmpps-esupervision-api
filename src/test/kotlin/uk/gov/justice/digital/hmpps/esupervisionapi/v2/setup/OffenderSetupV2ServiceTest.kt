@@ -9,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -92,7 +91,7 @@ class OffenderSetupV2ServiceTest {
       checkinInterval = CheckinInterval.WEEKLY,
       contactPreference = ContactPreference.EMAIL,
       eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
-      rationale = "it's fine"
+      rationale = "it's fine",
     )
 
     val savedOffender = OffenderV2(
@@ -399,7 +398,7 @@ class OffenderSetupV2ServiceTest {
         checkinInterval = CheckinInterval.WEEKLY,
         contactPreference = offender.contactPreference,
         eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
-        rationale = "it's fine"
+        rationale = "it's fine",
       ),
     )
 
@@ -412,7 +411,7 @@ class OffenderSetupV2ServiceTest {
         checkinInterval = CheckinInterval.WEEKLY,
         contactPreference = offender.contactPreference,
         eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
-        rationale = "it's fine"
+        rationale = "it's fine",
       ),
     )
 

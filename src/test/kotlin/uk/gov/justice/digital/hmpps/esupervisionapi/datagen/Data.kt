@@ -49,5 +49,5 @@ fun OffenderV2.asSetupDto(clock: Clock) = OffenderSetupV2Dto(
   null,
   EligibilityChoice.SUPPLEMENT_F2F,
   "It's fine",
-  UUID.randomUUID()
+  UUID.randomUUID(),
 )
