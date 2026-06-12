@@ -209,24 +209,24 @@ data class OffenderV2Dto(
 
 /** V2 Offender information for starting setup V2 does not store PII - only CRN */
 data class OffenderInfoV2(
-  @get:Schema(description = "Setup UUID", required = true) val setupUuid: UUID,
-  @get:Schema(description = "Practitioner ID", required = true)
+  @field:Schema(description = "Setup UUID", required = true) val setupUuid: UUID,
+  @field:Schema(description = "Practitioner ID", required = true)
   @field:NotBlank
   val practitionerId: ExternalUserId,
-  @get:Schema(description = "Case Reference Number", required = true, example = "X123456")
-  @get:NotBlank
-  @get:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
+  @field:NotBlank
+  @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
   val crn: String,
-  @get:Schema(description = "Date of first checkin", required = true)
-  @get:JsonDeserialize(using = LocalDateDeserializer::class)
+  @field:Schema(description = "Date of first checkin", required = true)
+  @field:JsonDeserialize(using = LocalDateDeserializer::class)
   val firstCheckin: LocalDate,
-  @get:Schema(description = "Interval between checkins", required = true)
+  @field:Schema(description = "Interval between checkins", required = true)
   val checkinInterval: CheckinInterval,
-  @get:Schema(description = "POP contact preference", required = true)
+  @field:Schema(description = "POP contact preference", required = true)
   val contactPreference: ContactPreference,
-  @get:Schema(description = "Setup start timestamp (optional)", required = false)
+  @field:Schema(description = "Setup start timestamp (optional)", required = false)
   val startedAt: Instant? = null,
-  @get:Schema(description = "Eligibility choice", required = false)
+  @field:Schema(description = "Eligibility choice", required = false)
   val eligibilityChoice: EligibilityChoice? = null,
 )
 
@@ -254,14 +254,14 @@ data class OffenderInfoInitial(
 
 /** V2 Offender setup DTO (response) */
 data class OffenderSetupV2Dto(
-  @get:Schema(description = "Setup unique identifier", required = true) val uuid: UUID,
-  @get:Schema(description = "Practitioner's unique ID", required = true)
+  @field:Schema(description = "Setup unique identifier", required = true) val uuid: UUID,
+  @field:Schema(description = "Practitioner's unique ID", required = true)
   val practitionerId: ExternalUserId,
-  @get:Schema(description = "Offender's unique ID", required = true) val offenderUuid: UUID,
-  @get:Schema(description = "Created timestamp", required = true) val createdAt: Instant,
-  @get:Schema(description = "Setup started timestamp (optional)", required = false)
+  @field:Schema(description = "Offender's unique ID", required = true) val offenderUuid: UUID,
+  @field:Schema(description = "Created timestamp", required = true) val createdAt: Instant,
+  @field:Schema(description = "Setup started timestamp (optional)", required = false)
   val startedAt: Instant? = null,
-  @get:Schema(description = "Eligibility choice", required = false)
+  @field:Schema(description = "Eligibility choice", required = false)
   val eligibilityChoice: EligibilityChoice? = null,
 )
 
@@ -349,7 +349,7 @@ data class CheckinV2Dto(
   @field:Schema(description = "Presigned S3 URL for reference photo", required = false)
   val photoUrl: URL? = null,
 ) {
-  @get:JsonProperty("flaggedResponses")
+  @field:JsonProperty("flaggedResponses")
   val flaggedResponses: List<String>
     @Schema(description = "Flagged keys of the survey")
     get() {
