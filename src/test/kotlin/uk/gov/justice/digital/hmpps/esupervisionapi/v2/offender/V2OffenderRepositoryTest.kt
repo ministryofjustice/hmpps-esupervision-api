@@ -36,6 +36,8 @@ class V2OffenderRepositoryTest : IntegrationTestBase() {
 
   @AfterEach
   fun cleanUp() {
+    genericNotificationV2Repository.deleteAll()
+    checkinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
   }
 
