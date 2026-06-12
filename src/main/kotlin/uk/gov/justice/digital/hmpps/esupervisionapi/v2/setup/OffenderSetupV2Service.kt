@@ -105,6 +105,7 @@ class OffenderSetupV2Service(
       createdAt = now,
       startedAt = offenderInfo.startedAt,
       eligibilityChoice = offenderInfo.eligibilityChoice,
+      rationale = offenderInfo.rationale,
     )
 
     val saved =
