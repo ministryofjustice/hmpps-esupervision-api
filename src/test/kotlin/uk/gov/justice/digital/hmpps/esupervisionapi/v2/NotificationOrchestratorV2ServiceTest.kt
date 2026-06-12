@@ -78,12 +78,13 @@ class NotificationOrchestratorV2ServiceTest {
 
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
 
-    service.sendSetupCompletedNotifications(offender, null, offender.asSetupDto(clock))
+    val setupDto = offender.asSetupDto(clock)
+    service.sendSetupCompletedNotifications(offender, null, setupDto)
 
     // Domain event ALWAYS published (even without contact details)
     verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
     // Audit event ALWAYS recorded (even with null contact details)
-    verify(eventAuditService).recordSetupCompleted(offender, null, offender.asSetupDto(clock))
+    verify(eventAuditService).recordSetupCompleted(offender, null, setupDto)
     // Notifications NOT sent (because contact details missing)
     verify(notificationPersistence, never()).saveNotifications(any())
   }
@@ -226,7 +227,8 @@ class NotificationOrchestratorV2ServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
+    val setupDto = offender.asSetupDto(clock)
+    service.sendSetupCompletedNotifications(offender, contactDetails, setupDto)
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_COMPLETED),
@@ -234,7 +236,7 @@ class NotificationOrchestratorV2ServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = null)),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = setupDto.setupId)),
     )
   }
 
@@ -246,7 +248,8 @@ class NotificationOrchestratorV2ServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
+    val setupDto = offender.asSetupDto(clock)
+    service.sendSetupCompletedNotifications(offender, contactDetails, setupDto)
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_COMPLETED),
@@ -254,7 +257,7 @@ class NotificationOrchestratorV2ServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = null, setupId = null)),
+      eq(AdditionalInformation(eventNumber = null, setupId = setupDto.setupId)),
     )
   }
 
