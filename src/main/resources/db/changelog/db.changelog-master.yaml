@@ -134,4 +134,7 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/67_checkin_creation_outbox.sql
   - include:
-      file: db/changelog/changesets/68_add_eligibility_column.sql
+      file: db/changelog/changesets/68_update_welsh_default_questions.sql
+  - include:
+      file: db/changelog/changesets/69_add_eligibility_column.sql
+
