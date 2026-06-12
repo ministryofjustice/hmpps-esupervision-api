@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset roland.sadowski:68_add_eligibility_column.sql splitStatements:false
+--changeset roland.sadowski:69_add_eligibility_column.sql splitStatements:false
 
 create type eligibility_choice as enum ('REPLACE_F2F', 'SUPPLEMENT_F2F');
 
