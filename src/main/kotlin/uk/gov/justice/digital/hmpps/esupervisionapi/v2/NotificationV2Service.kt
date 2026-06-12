@@ -17,8 +17,8 @@ class NotificationV2Service(
   /**
    * Send notifications for setup completed event
    */
-  fun sendSetupCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
-    orchestrator.sendSetupCompletedNotifications(offender, contactDetails, setupId)
+  fun sendSetupCompletedNotifications(offender: OffenderV2, contactDetails: ContactDetails? = null, setup: OffenderSetupV2Dto) {
+    orchestrator.sendSetupCompletedNotifications(offender, contactDetails, setup)
   }
 
   /**

@@ -10,6 +10,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.asSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -66,7 +67,7 @@ class NotificationOrchestratorV2ServiceTest {
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
-    service.sendSetupCompletedNotifications(offender, contactDetails)
+    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
 
     verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
   }
@@ -77,12 +78,12 @@ class NotificationOrchestratorV2ServiceTest {
 
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
 
-    service.sendSetupCompletedNotifications(offender, null)
+    service.sendSetupCompletedNotifications(offender, null, offender.asSetupDto(clock))
 
     // Domain event ALWAYS published (even without contact details)
     verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
     // Audit event ALWAYS recorded (even with null contact details)
-    verify(eventAuditService).recordSetupCompleted(offender, null)
+    verify(eventAuditService).recordSetupCompleted(offender, null, offender.asSetupDto(clock))
     // Notifications NOT sent (because contact details missing)
     verify(notificationPersistence, never()).saveNotifications(any())
   }
@@ -212,7 +213,7 @@ class NotificationOrchestratorV2ServiceTest {
       .thenThrow(RuntimeException("GOV.UK Notify error"))
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(contactDetails)
 
-    service.sendSetupCompletedNotifications(offender, contactDetails)
+    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
 
     verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
   }
@@ -225,7 +226,7 @@ class NotificationOrchestratorV2ServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendSetupCompletedNotifications(offender, contactDetails)
+    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_COMPLETED),
@@ -245,7 +246,7 @@ class NotificationOrchestratorV2ServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendSetupCompletedNotifications(offender, contactDetails)
+    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_COMPLETED),

@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ICheckinEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
@@ -58,7 +59,12 @@ class EventAuditV2Service(
   /**
    * Record setup completed event
    */
-  fun recordSetupCompleted(offender: OffenderV2, contactDetails: ContactDetails?) = recordOffenderEvent(OffenderAuditEventType.SETUP_COMPLETED, offender, contactDetails, null, sensitive = false)
+  fun recordSetupCompleted(offender: OffenderV2, contactDetails: ContactDetails?, setup: OffenderSetupV2Dto) =
+    recordOffenderEvent(OffenderAuditEventType.SETUP_COMPLETED,
+      offender = offender,
+      contactDetails = contactDetails,
+      notes = "Rationale for sign up: ${setup.rationale ?: "not provided"}\nEligibility: ${setup.eligibilityChoice?.name ?: "not provided"}\n",
+      sensitive = false)
 
   fun recordCheckinEvent(eventType: CheckinAuditEventType, checkin: OffenderCheckinV2, event: ICheckinEvent) {
     if (event.checkin.personalDetails?.practitioner == null) {

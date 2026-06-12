@@ -183,7 +183,7 @@ class OffenderSetupV2Service(
       checkin?.uuid ?: "not due",
     )
     try {
-      notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails, setup.setupId())
+      notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails, setup.dto())
     } catch (e: Exception) {
       LOGGER.warn("Failed to send setup completed notifications for offender {}", savedOffender.uuid, e)
     }

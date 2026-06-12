@@ -50,7 +50,7 @@ class NotificationOrchestratorV2Service(
   fun sendSetupCompletedNotifications(
     offender: OffenderV2,
     contactDetails: ContactDetails? = null,
-    setupId: UUID? = null,
+    setup: OffenderSetupV2Dto
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
@@ -61,11 +61,11 @@ class NotificationOrchestratorV2Service(
       description = "Practitioner completed setup for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
         eventNumber = details?.let { activeEventNumber(offender, it) },
-        setupId = setupId,
+        setupId = setup.setupId,
       ),
     )
 
-    eventAuditService.recordSetupCompleted(offender, details)
+    eventAuditService.recordSetupCompleted(offender, details, setup)
 
     if (details != null) {
       try {

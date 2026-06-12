@@ -137,4 +137,5 @@ databaseChangeLog:
       file: db/changelog/changesets/68_update_welsh_default_questions.sql
   - include:
       file: db/changelog/changesets/69_add_eligibility_column.sql
-
+  - include:
+      file: db/changelog/changesets/70_add_rationale_column.sql
