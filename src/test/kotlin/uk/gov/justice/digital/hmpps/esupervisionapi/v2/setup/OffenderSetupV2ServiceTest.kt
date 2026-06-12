@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -383,8 +384,9 @@ class OffenderSetupV2ServiceTest {
       startedAt = null,
     )
 
-    whenever(offenderSetupRepository.findByCrn(offender.crn)).thenReturn(Optional.of(setup))
-    whenever(offenderSetupRepository.save(any())).thenReturn(setup)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetupV2>())).thenAnswer { it.getArgument(0) }
 
     val first = service.startOffenderSetup(
       OffenderInfoV2(
@@ -410,7 +412,7 @@ class OffenderSetupV2ServiceTest {
       ),
     )
 
-    assertEquals(first.uuid, second.uuid)
+    assertTrue(first.uuid != second.uuid)
   }
 
   @Test
