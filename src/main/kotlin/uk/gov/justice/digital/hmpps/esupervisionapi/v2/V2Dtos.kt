@@ -227,8 +227,7 @@ data class OffenderInfoV2(
   @get:Schema(description = "Setup start timestamp (optional)", required = false)
   val startedAt: Instant? = null,
   @get:Schema(description = "Eligibility choice", required = false)
-  val eligibilityChoice: EligibilityChoice?,
-)
+  val eligibilityChoice: EligibilityChoice? = null,
 
 /**
  * Offender information required to start/resume the offender setup process.
