@@ -228,6 +228,8 @@ data class OffenderInfoV2(
   val startedAt: Instant? = null,
   @field:Schema(description = "Eligibility choice", required = false)
   val eligibilityChoice: EligibilityChoice? = null,
+  @field:Schema(description = "Rationale for decision to sign up a POP for checkins", required = false)
+  val rationale: String? = null,
 )
 
 /** V2 Offender setup DTO (response) */
@@ -241,6 +243,10 @@ data class OffenderSetupV2Dto(
   val startedAt: Instant? = null,
   @field:Schema(description = "Eligibility choice", required = false)
   val eligibilityChoice: EligibilityChoice? = null,
+  @field:Schema(description = "Rationale for decision to sign up a POP for checkins", required = false)
+  val rationale: String? = null,
+  @field:Schema(description = "Setup ID", required = true)
+  val setupId: UUID,
 )
 
 // ========================================

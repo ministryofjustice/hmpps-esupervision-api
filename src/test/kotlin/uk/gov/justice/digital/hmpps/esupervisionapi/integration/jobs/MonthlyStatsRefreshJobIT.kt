@@ -1,7 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.jobs
 
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
@@ -23,7 +23,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
   private val fixedClock: Clock =
     Clock.fixed(Instant.parse("2026-02-22T12:00:00Z"), ZoneOffset.UTC)
 
-  @BeforeEach
+  @AfterEach
   fun cleanDb() {
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE monthly_stats RESTART IDENTITY CASCADE")

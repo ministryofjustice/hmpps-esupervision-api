@@ -4,11 +4,14 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.datagen
  * Put "template" DTOs here for use in tests
  */
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityChoice
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Dto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
@@ -36,4 +39,15 @@ fun OffenderV2Dto.toEntity() = OffenderV2(
   createdBy = createdBy,
   updatedAt = updatedAt,
   contactPreference = contactPreference,
+)
+
+fun OffenderV2.asSetupDto(clock: Clock) = OffenderSetupV2Dto(
+  uuid = UUID.randomUUID(),
+  practitionerId = this.practitionerId,
+  offenderUuid = this.uuid,
+  createdAt = clock.instant(),
+  startedAt = null,
+  eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
+  rationale = "It's fine",
+  setupId = UUID.randomUUID(),
 )

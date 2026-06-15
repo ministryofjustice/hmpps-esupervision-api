@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.eq
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -91,6 +91,7 @@ class OffenderSetupV2ServiceTest {
       checkinInterval = CheckinInterval.WEEKLY,
       contactPreference = ContactPreference.EMAIL,
       eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
+      rationale = "it's fine",
     )
 
     val savedOffender = OffenderV2(
@@ -113,6 +114,7 @@ class OffenderSetupV2ServiceTest {
       createdAt = clock.instant(),
       startedAt = offenderInfo.startedAt,
       eligibilityChoice = offenderInfo.eligibilityChoice,
+      rationale = offenderInfo.rationale,
     )
 
     whenever(offenderRepository.save(any())).thenReturn(savedOffender)
@@ -127,8 +129,12 @@ class OffenderSetupV2ServiceTest {
     assertEquals(practitionerId, result.practitionerId)
     assertEquals(savedOffender.uuid, result.offenderUuid)
 
-    verify(offenderRepository).save(any())
-    verify(offenderSetupRepository).save(any())
+    verify(offenderRepository).save(argThat { this.status != OffenderStatus.VERIFIED })
+    verify(offenderSetupRepository).save(
+      argThat {
+        this.uuid == expectedSetup.uuid && rationale == expectedSetup.rationale && eligibilityChoice == expectedSetup.eligibilityChoice
+      },
+    )
   }
 
   @Test
@@ -173,7 +179,7 @@ class OffenderSetupV2ServiceTest {
     assertEquals(1, setup.setupCounter)
     verify(s3UploadService).isSetupPhotoUploaded(setup)
     verify(offenderRepository).save(any())
-    verify(notificationService).sendSetupCompletedNotifications(any(), isNull(), eq(setup.setupId()))
+    verify(notificationService).sendSetupCompletedNotifications(any(), isNull(), argThat { setupId == setup.setupId() })
   }
 
   @Test
@@ -397,6 +403,7 @@ class OffenderSetupV2ServiceTest {
         checkinInterval = CheckinInterval.WEEKLY,
         contactPreference = offender.contactPreference,
         eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
+        rationale = "it's fine",
       ),
     )
 
@@ -409,6 +416,7 @@ class OffenderSetupV2ServiceTest {
         checkinInterval = CheckinInterval.WEEKLY,
         contactPreference = offender.contactPreference,
         eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
+        rationale = "it's fine",
       ),
     )
 

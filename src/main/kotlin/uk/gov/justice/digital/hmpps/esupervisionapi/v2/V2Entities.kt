@@ -150,6 +150,9 @@ open class OffenderSetupV2(
   @Column(name = "eligibility_choice", nullable = true)
   @Enumerated(EnumType.STRING)
   open var eligibilityChoice: EligibilityChoice? = null,
+
+  @Column(name = "rationale", nullable = true)
+  open var rationale: String? = null,
 ) : V2BaseEntity() {
   fun setupId(): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
 
@@ -164,6 +167,8 @@ open class OffenderSetupV2(
     createdAt = createdAt,
     startedAt = startedAt,
     eligibilityChoice = eligibilityChoice,
+    rationale = rationale,
+    setupId = setupId(),
   )
 }
 
