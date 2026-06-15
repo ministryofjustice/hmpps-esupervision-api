@@ -63,7 +63,7 @@ class EventAuditV2Service(
     OffenderAuditEventType.SETUP_COMPLETED,
     offender = offender,
     contactDetails = contactDetails,
-    notes = "Rationale for sign up: ${setup.rationale ?: "not provided"}\nEligibility: ${setup.eligibilityChoice?.name ?: "not provided"}\n",
+    notes = "Eligibility: ${setup.eligibilityChoice?.name ?: "not provided"}\nRationale provided: ${!setup.rationale.isNullOrBlank()}",
     sensitive = false,
   )
 
