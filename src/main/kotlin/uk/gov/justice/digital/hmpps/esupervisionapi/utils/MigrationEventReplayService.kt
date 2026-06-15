@@ -210,7 +210,7 @@ class MigrationEventReplayService(
       CheckinStatus.SUBMITTED -> control.checkinSubmitted = value
       CheckinStatus.REVIEWED -> control.checkinReviewed = value
       CheckinStatus.EXPIRED -> control.checkinExpired = value
-      else -> logger.warn("setColum: Unhandled checkin status {} for CRN {}", this, control.crn)
+      else -> logger.warn("setColumn: Unhandled checkin status {} for CRN {}", this, control.crn)
     }
   }
   fun CheckinStatus.value(control: MigrationControl): Boolean = when (this) {

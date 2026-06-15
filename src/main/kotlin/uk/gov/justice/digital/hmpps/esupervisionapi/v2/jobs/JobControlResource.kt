@@ -20,14 +20,14 @@ class JobControlResource(
 
   @PostMapping("/checkin-creation")
   @PreAuthorize("permitAll()")
-  @Operation(summary = "Trigger V2 Checkin Creation Job")
+  @Operation(summary = "Trigger Checkin Creation Job")
   fun triggerCheckinCreation() {
     checkinCreationJob.process()
   }
 
   @PostMapping("/checkin-expiry")
   @PreAuthorize("permitAll()")
-  @Operation(summary = "Trigger V2 Checkin Expiry Job")
+  @Operation(summary = "Trigger Checkin Expiry Job")
   fun triggerCheckinExpiry() {
     checkinExpiryJob.process()
   }
