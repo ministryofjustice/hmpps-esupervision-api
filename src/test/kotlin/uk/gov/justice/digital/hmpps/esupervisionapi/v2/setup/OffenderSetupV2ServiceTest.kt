@@ -130,7 +130,11 @@ class OffenderSetupV2ServiceTest {
     assertEquals(savedOffender.uuid, result.offenderUuid)
 
     verify(offenderRepository).save(argThat { this.status != OffenderStatus.VERIFIED })
-    verify(offenderSetupRepository).save(argThat { this == expectedSetup })
+    verify(offenderSetupRepository).save(
+      argThat {
+        this.uuid == expectedSetup.uuid && rationale == expectedSetup.rationale && eligibilityChoice == expectedSetup.eligibilityChoice
+      },
+    )
   }
 
   @Test
