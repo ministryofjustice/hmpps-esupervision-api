@@ -7,26 +7,26 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MigrationEventReplayService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationCheckinsUuidsRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControl
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControlRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationEventsToSend
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditV2Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import java.time.Clock
 
 @Component
 class MigrationEventReplayJob(
   private val clock: Clock,
   private val migrationEventReplayService: MigrationEventReplayService,
-  private val jobLogRepository: JobLogV2Repository,
+  private val jobLogRepository: JobLogRepository,
   private val migrationControlRepository: MigrationControlRepository,
   private val migrationCheckinsUuidsRepository: MigrationCheckinsUuidsRepository,
-  private val eventAuditService: EventAuditV2Service,
-  private val eventAuditRepository: EventAuditV2Repository,
+  private val eventAuditService: EventAuditService,
+  private val eventAuditRepository: EventAuditRepository,
   private val ndiliusApiClient: INdiliusApiClient,
   @Value("\${app.scheduling.migration-event-replay.batch-size}") private val batchSize: Int,
 ) {
@@ -39,7 +39,7 @@ class MigrationEventReplayJob(
   @Transactional
   fun process() {
     val now = clock.instant()
-    val logEntry = jobLogRepository.saveAndFlush(JobLogV2(jobType = "MIGRATION_EVENT_REPLAY", createdAt = now))
+    val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = "MIGRATION_EVENT_REPLAY", createdAt = now))
     LOGGER.info("Migration Event Replay Job(id={}) started", logEntry.id)
 
     var crns: List<MigrationControl> = emptyList()

@@ -3,7 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ActiveEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -58,7 +58,7 @@ enum class CheckinIneligibilityReason(
  * Note on no-active-events: we only treat this as grounds for stopping when NDelius returns an
  * explicitly empty events list. An absent/null events list is treated as indeterminate (e.g. a
  * partial or degraded response) and does NOT stop check-ins, so a transient data gap can't wrongly
- * off-board an active person. A cached [OffenderV2.currentEvent] always counts as an active event.
+ * off-board an active person. A cached [Offender.currentEvent] always counts as an active event.
  *
  * @see activeEventNumber
  */

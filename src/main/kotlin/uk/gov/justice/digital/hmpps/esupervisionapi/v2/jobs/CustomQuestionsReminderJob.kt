@@ -13,10 +13,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.time.Clock
@@ -53,10 +53,10 @@ private data class OffenderInfo(
 )
 class CustomQuestionsReminderJob(
   private val clock: Clock,
-  private val offenderRepository: OffenderV2Repository,
+  private val offenderRepository: OffenderRepository,
   private val ndiliusApiClient: INdiliusApiClient,
-  private val notificationService: NotificationV2Service,
-  private val jobLogRepository: JobLogV2Repository,
+  private val notificationService: NotificationService,
+  private val jobLogRepository: JobLogRepository,
   private val transactionTemplate: TransactionTemplate,
   private val entityManager: EntityManager,
 ) {
@@ -75,7 +75,7 @@ class CustomQuestionsReminderJob(
     LOGGER.info("Practitioner Custom Questions Reminder Job started for {}", today)
 
     val logEntry = transactionTemplate.execute {
-      val entry = JobLogV2(jobType = "V2_PRACTITIONER_CUSTOM_QUESTIONS_REMINDER", createdAt = now)
+      val entry = JobLog(jobType = "V2_PRACTITIONER_CUSTOM_QUESTIONS_REMINDER", createdAt = now)
       jobLogRepository.saveAndFlush(entry)
       entry
     }!!

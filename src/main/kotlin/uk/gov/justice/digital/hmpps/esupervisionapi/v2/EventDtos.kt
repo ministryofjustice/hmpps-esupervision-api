@@ -13,7 +13,7 @@ interface IEventBase {
   val checkinId: Long
   val offenderId: Long
   val practitionerId: ExternalUserId
-  val checkin: CheckinV2Dto
+  val checkin: CheckinDto
   val offenderContactPreference: ContactPreference
 }
 
@@ -28,7 +28,7 @@ data class CheckinCreatedEvent(
   override val checkinId: Long,
   override val offenderId: Long,
   override val practitionerId: ExternalUserId,
-  override val checkin: CheckinV2Dto,
+  override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
   override val currentEvent: Long?,
 ) : ICheckinEvent,
@@ -40,7 +40,7 @@ data class CheckinSubmittedEvent(
   override val checkinId: Long,
   override val offenderId: Long,
   override val practitionerId: ExternalUserId,
-  override val checkin: CheckinV2Dto,
+  override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
 ) : ICheckinEvent {
   override val outboxItemCoords = OutboxItemType.CHECKIN_SUBMITTED to checkinId
@@ -50,7 +50,7 @@ data class CheckinReviewedEvent(
   override val checkinId: Long,
   override val offenderId: Long,
   override val practitionerId: ExternalUserId,
-  override val checkin: CheckinV2Dto,
+  override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
 ) : ICheckinEvent {
   override val outboxItemCoords = OutboxItemType.CHECKIN_REVIEWED to checkinId
@@ -60,7 +60,7 @@ data class CheckinAnnotatedEvent(
   override val checkinId: Long,
   override val offenderId: Long,
   override val practitionerId: ExternalUserId,
-  override val checkin: CheckinV2Dto,
+  override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
   val annotation: Pair<Long, UUID>,
 ) : ICheckinEvent {
@@ -74,13 +74,13 @@ data class PartialCheckinCreatedEvent(
   override val checkinId: Long = -1,
   override val offenderId: Long,
   override val practitionerId: ExternalUserId,
-  override val checkin: CheckinV2Dto,
+  override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
   override val currentEvent: Long?,
 ) : IEventBase,
   IPartialEvent,
   ActiveEvent {
-  fun finalise(checkin: OffenderCheckinV2): CheckinCreatedEvent {
+  fun finalise(checkin: OffenderCheckin): CheckinCreatedEvent {
     require(checkin.id != 0L) { "Checkin ID must be set after DB insert" }
     return CheckinCreatedEvent(
       checkinId = checkin.id,
@@ -100,11 +100,11 @@ data class PartialCheckinAnnotatedEvent(
   override val checkinId: Long,
   override val offenderId: Long,
   override val practitionerId: ExternalUserId,
-  override val checkin: CheckinV2Dto,
+  override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
 ) : IEventBase,
   IPartialEvent {
-  fun finalise(logEntry: OffenderEventLogV2): CheckinAnnotatedEvent = CheckinAnnotatedEvent(
+  fun finalise(logEntry: OffenderEventLog): CheckinAnnotatedEvent = CheckinAnnotatedEvent(
     checkinId = checkinId,
     offenderId = offenderId,
     checkin = checkin,
