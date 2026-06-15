@@ -133,11 +133,7 @@ class EventAuditV2Service(
   fun recordCheckinReminded(checkins: Iterable<Pair<OffenderCheckinV2, ContactDetails?>>) = recordCheckinEvents(CheckinAuditEventType.CHECKIN_REMINDER, checkins)
 
   fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderV2, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
-    if (contactDetails == null) {
-      LOGGER.warn("Cannot record audit event {} for CRN {}: contact details not found", eventType.name, offender.crn)
-      return
-    }
-    if (contactDetails.practitioner == null) {
+    if (contactDetails?.practitioner == null) {
       // Still record the event (e.g. an automated deactivation of a POP in reset) - the practitioner
       // org-unit columns are nullable, so we keep the audit trail rather than dropping it entirely.
       LOGGER.warn("Recording audit event {} for CRN {} without practitioner organisation details", eventType.name, offender.crn)
@@ -155,7 +151,7 @@ class EventAuditV2Service(
     eventType: String,
     crn: CRN,
     practitionerId: ExternalUserId,
-    contactDetails: ContactDetails,
+    contactDetails: ContactDetails?,
     checkin: OffenderCheckinV2? = null,
     timeToSubmitHours: BigDecimal? = null,
     timeToReviewHours: BigDecimal? = null,
@@ -170,12 +166,12 @@ class EventAuditV2Service(
     occurredAt = clock.instant(),
     crn = crn,
     practitionerId = practitionerId,
-    localAdminUnitCode = contactDetails.practitioner?.localAdminUnit?.code,
-    localAdminUnitDescription = contactDetails.practitioner?.localAdminUnit?.description,
-    pduCode = contactDetails.practitioner?.probationDeliveryUnit?.code,
-    pduDescription = contactDetails.practitioner?.probationDeliveryUnit?.description,
-    providerCode = contactDetails.practitioner?.provider?.code,
-    providerDescription = contactDetails.practitioner?.provider?.description,
+    localAdminUnitCode = contactDetails?.practitioner?.localAdminUnit?.code,
+    localAdminUnitDescription = contactDetails?.practitioner?.localAdminUnit?.description,
+    pduCode = contactDetails?.practitioner?.probationDeliveryUnit?.code,
+    pduDescription = contactDetails?.practitioner?.probationDeliveryUnit?.description,
+    providerCode = contactDetails?.practitioner?.provider?.code,
+    providerDescription = contactDetails?.practitioner?.provider?.description,
     checkinUuid = checkin?.uuid,
     checkinStatus = checkin?.status?.name,
     checkinDueDate = checkin?.dueDate,
@@ -189,7 +185,7 @@ class EventAuditV2Service(
     sensitive = sensitive,
   )
 
-  private fun OffenderV2.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails, notes: String?, sensitive: Boolean = false): EventAuditV2 {
+  private fun OffenderV2.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false): EventAuditV2 {
     val offender = this
     return when (eventType) {
       OffenderAuditEventType.SETUP_COMPLETED,
