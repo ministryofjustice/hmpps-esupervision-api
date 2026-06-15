@@ -229,7 +229,7 @@ data class OffenderInfoV2(
   @field:Schema(description = "Eligibility choice", required = false)
   val eligibilityChoice: EligibilityChoice? = null,
   @field:Schema(description = "Rationale for decision to sign up a POP for checkins", required = false)
-  val rationale: String?,
+  val rationale: String? = null,
 )
 
 /** V2 Offender setup DTO (response) */
