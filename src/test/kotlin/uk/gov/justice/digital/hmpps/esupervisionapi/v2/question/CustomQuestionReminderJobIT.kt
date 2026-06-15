@@ -98,6 +98,7 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
     reset(notificationService)
 
     genericNotificationV2Repository.deleteAll()
+    genericNotificationV2Repository.flush()
     outboxItemRepository.deleteAll()
     offenderEventLogV2Repository.deleteAll()
     questionListItemRepository.deleteAllNonSystem()
@@ -105,6 +106,7 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
     questionListItemRepository.deleteCustomQuestions()
     offenderCheckinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
+    offenderV2Repository.flush()
   }
 
   @Test

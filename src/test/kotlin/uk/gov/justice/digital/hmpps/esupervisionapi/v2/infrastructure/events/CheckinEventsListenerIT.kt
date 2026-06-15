@@ -55,9 +55,11 @@ class CheckinEventsListenerIT : IntegrationTestBase() {
   @AfterEach
   fun cleanUp() {
     genericNotificationV2Repository.deleteAll()
+    genericNotificationV2Repository.flush()
     outboxItemRepository.deleteAll()
     checkinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
+    offenderV2Repository.flush()
   }
 
   @Test

@@ -118,6 +118,7 @@ class QuestionsIT(
   fun tearDown() {
     outboxItemRepository.deleteAll()
     genericNotificationV2Repository.deleteAll()
+    genericNotificationV2Repository.flush()
     offenderEventLogV2Repository.deleteAll()
     questionListItemRepository.deleteAllNonSystem()
     questionListAssignmentRepository.deleteAll()
@@ -125,6 +126,7 @@ class QuestionsIT(
     offenderSetupV2Repository.deleteAll()
     offenderCheckinV2Repository.deleteAll()
     offenderV2Repository.deleteAll()
+    offenderV2Repository.flush()
   }
 
   @Test
