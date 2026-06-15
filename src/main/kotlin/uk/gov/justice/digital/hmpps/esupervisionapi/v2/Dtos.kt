@@ -447,7 +447,7 @@ data class CreateCheckinRequest(
 )
 
 /** Create checkin by crn request (DEBUG ONLY) */
-data class CreateCheckinByCrnV2Request(
+data class CreateCheckinByCrnRequest(
   @Schema(description = "Practitioner ID", required = true)
   @field:NotBlank
   val practitioner: ExternalUserId,

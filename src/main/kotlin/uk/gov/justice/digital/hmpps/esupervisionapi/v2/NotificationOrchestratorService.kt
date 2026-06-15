@@ -30,7 +30,7 @@ class NotificationFailureException(message: String) : RuntimeException(message)
  * - NotificationPersistenceService for building and persisting notifications
  * - NotifyGatewayService for GOV.UK Notify API calls
  * - DomainEventService for publishing domain events
- * - EventAuditV2Service for audit logging
+ * - EventAuditService for audit logging
  */
 @Service
 class NotificationOrchestratorService(

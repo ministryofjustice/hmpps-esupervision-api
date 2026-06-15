@@ -29,7 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -191,7 +191,7 @@ class QuestionsIT(
     val qlitems = questionListItemRepository.findAllItems()
     assertTrue(qlitems.size > 1)
 
-    val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnV2Request("BARRY.WHITE", offender.crn, clock.today()))
+    val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnRequest("BARRY.WHITE", offender.crn, clock.today()))
     val assignment = questionService.upcomingAssignment(offender)
     assertNotEquals(defaultListId, assignment.questionList, "Upcoming assignment should not flip to default list immediately after a checkin is created")
 
@@ -422,7 +422,7 @@ private fun makeAssignCustomQuestionsRequest(
 )
 
 private fun CheckinService.debugCreateCheckin(offender: Offender, clock: Clock): CheckinDto = this.createCheckinByCrn(
-  CreateCheckinByCrnV2Request(
+  CreateCheckinByCrnRequest(
     "BARRY.WHITE",
     offender.crn,
     clock.today(),
