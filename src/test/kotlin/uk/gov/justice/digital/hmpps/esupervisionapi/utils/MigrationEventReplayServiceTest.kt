@@ -16,17 +16,17 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusBatchFetchException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupEventBackfillV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupEventBackfillV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupEventBackfill
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupEventBackfillRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -43,13 +43,13 @@ import java.util.UUID
 class MigrationEventReplayServiceTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-03T10:00:00Z"), ZoneId.of("UTC"))
-  private val checkinRepository: OffenderCheckinV2Repository = mock()
-  private val offenderRepository: OffenderV2Repository = mock()
-  private val offenderSetupRepository: OffenderSetupV2Repository = mock()
-  private val backfillRepository: SetupEventBackfillV2Repository = mock()
+  private val checkinRepository: OffenderCheckinRepository = mock()
+  private val offenderRepository: OffenderRepository = mock()
+  private val offenderSetupRepository: OffenderSetupRepository = mock()
+  private val backfillRepository: SetupEventBackfillRepository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val domainEventService: DomainEventService = mock()
-  private val eventAuditLogRepository: EventAuditV2Repository = mock()
+  private val eventAuditLogRepository: EventAuditRepository = mock()
 
   private lateinit var service: MigrationEventReplayService
 
@@ -72,7 +72,7 @@ class MigrationEventReplayServiceTest {
   @Test
   fun `createMissingSetupV2Rows creates setup and marks flag when no setup exists`() {
     val offender = newOffender(id = 100L)
-    val row = SetupEventBackfillV2(offenderId = 100L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
 
     whenever(backfillRepository.findPendingSetupRowCreation(PageRequest.of(0, 50)))
       .thenReturn(listOf(row))
@@ -85,7 +85,7 @@ class MigrationEventReplayServiceTest {
     assertThat(created).isEqualTo(1)
     assertThat(row.setupRowCreated).isTrue()
 
-    val captor = argumentCaptor<OffenderSetupV2>()
+    val captor = argumentCaptor<OffenderSetup>()
     verify(offenderSetupRepository).save(captor.capture())
     val saved = captor.firstValue
     assertThat(saved.offender).isEqualTo(offender)
@@ -98,14 +98,14 @@ class MigrationEventReplayServiceTest {
   @Test
   fun `createMissingSetupV2Rows is idempotent when setup already exists`() {
     val offender = newOffender(id = 100L)
-    val existingSetup = OffenderSetupV2(
+    val existingSetup = OffenderSetup(
       uuid = UUID.randomUUID(),
       offender = offender,
       practitionerId = offender.practitionerId,
       createdAt = offender.createdAt,
       startedAt = null,
     )
-    val row = SetupEventBackfillV2(offenderId = 100L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
 
     whenever(backfillRepository.findPendingSetupRowCreation(any()))
       .thenReturn(listOf(row))
@@ -122,7 +122,7 @@ class MigrationEventReplayServiceTest {
 
   @Test
   fun `createMissingSetupV2Rows flags row when offender is missing`() {
-    val row = SetupEventBackfillV2(offenderId = 999L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 999L, createdAt = clock.instant())
 
     whenever(backfillRepository.findPendingSetupRowCreation(any()))
       .thenReturn(listOf(row))
@@ -141,14 +141,14 @@ class MigrationEventReplayServiceTest {
   @Test
   fun `replayActiveOffenderSetupEvents publishes V2_SETUP_COMPLETED with correct payload`() {
     val offender = newOffender(id = 100L)
-    val setup = OffenderSetupV2(
+    val setup = OffenderSetup(
       uuid = UUID.randomUUID(),
       offender = offender,
       practitionerId = offender.practitionerId,
       createdAt = offender.createdAt,
       startedAt = offender.createdAt,
     )
-    val row = SetupEventBackfillV2(offenderId = 100L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
     val contactDetails = ContactDetails(
       crn = offender.crn,
       name = Name("John", "Smith"),
@@ -181,7 +181,7 @@ class MigrationEventReplayServiceTest {
   @Test
   fun `replayActiveOffenderSetupEvents skips publish when Delius has no active events`() {
     val offender = newOffender(id = 100L)
-    val row = SetupEventBackfillV2(offenderId = 100L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
     val contactDetails = ContactDetails(crn = offender.crn, name = Name("John", "Smith"), events = emptyList())
 
     whenever(backfillRepository.findPendingEventSend(any()))
@@ -201,7 +201,7 @@ class MigrationEventReplayServiceTest {
   @Test
   fun `replayActiveOffenderSetupEvents skips publish when Delius returns no contact details`() {
     val offender = newOffender(id = 100L)
-    val row = SetupEventBackfillV2(offenderId = 100L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
 
     whenever(backfillRepository.findPendingEventSend(any()))
       .thenReturn(listOf(row))
@@ -219,7 +219,7 @@ class MigrationEventReplayServiceTest {
   @Test
   fun `replayActiveOffenderSetupEvents does not flag rows when Delius batch call fails`() {
     val offender = newOffender(id = 100L)
-    val row = SetupEventBackfillV2(offenderId = 100L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
 
     whenever(backfillRepository.findPendingEventSend(any()))
       .thenReturn(listOf(row))
@@ -238,7 +238,7 @@ class MigrationEventReplayServiceTest {
   @Test
   fun `replayActiveOffenderSetupEvents leaves row pending when setup row is missing`() {
     val offender = newOffender(id = 100L)
-    val row = SetupEventBackfillV2(offenderId = 100L, createdAt = clock.instant())
+    val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
     val contactDetails = ContactDetails(
       crn = offender.crn,
       name = Name("John", "Smith"),
@@ -261,8 +261,8 @@ class MigrationEventReplayServiceTest {
 
   // ---------- helpers ----------
 
-  private fun newOffender(id: Long, crn: String = "X123456"): OffenderV2 {
-    val offender = OffenderV2(
+  private fun newOffender(id: Long, crn: String = "X123456"): Offender {
+    val offender = Offender(
       uuid = UUID.randomUUID(),
       crn = crn,
       practitionerId = "PRACT001",

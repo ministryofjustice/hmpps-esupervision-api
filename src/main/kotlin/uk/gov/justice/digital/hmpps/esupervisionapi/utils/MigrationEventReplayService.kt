@@ -4,18 +4,18 @@ import com.google.common.util.concurrent.RateLimiter
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationControl
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.MigrationEventsToSend
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupEventBackfillV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupEventBackfillRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -24,13 +24,13 @@ import java.util.UUID
 
 @Service
 class MigrationEventReplayService(
-  private val checkinRepository: OffenderCheckinV2Repository,
-  private val offenderRepository: OffenderV2Repository,
-  private val offenderSetupRepository: OffenderSetupV2Repository,
-  private val backfillRepository: SetupEventBackfillV2Repository,
+  private val checkinRepository: OffenderCheckinRepository,
+  private val offenderRepository: OffenderRepository,
+  private val offenderSetupRepository: OffenderSetupRepository,
+  private val backfillRepository: SetupEventBackfillRepository,
   private val ndiliusApiClient: INdiliusApiClient,
   private val domainEventService: DomainEventService,
-  private val eventAuditLogRepository: EventAuditV2Repository,
+  private val eventAuditLogRepository: EventAuditRepository,
   private val clock: Clock,
 ) {
   private val logger = LoggerFactory.getLogger(javaClass)
@@ -90,19 +90,19 @@ class MigrationEventReplayService(
     val uuids = checkins.associateBy { it.checkin }
 
     val checkinsSubmitted = checkinRepository
-      .findMigratedByStatus(CheckinV2Status.SUBMITTED, PageRequest.of(0, 1000))
+      .findMigratedByStatus(CheckinStatus.SUBMITTED, PageRequest.of(0, 1000))
       .filter { uuids.contains(it.uuid) }
     val checkinsReviewed = checkinRepository
-      .findMigratedByStatus(CheckinV2Status.REVIEWED, PageRequest.of(0, 1000))
+      .findMigratedByStatus(CheckinStatus.REVIEWED, PageRequest.of(0, 1000))
       .filter { uuids.contains(it.uuid) }
     val checkinsExpired = checkinRepository
-      .findMigratedByStatus(CheckinV2Status.EXPIRED, PageRequest.of(0, 1000))
+      .findMigratedByStatus(CheckinStatus.EXPIRED, PageRequest.of(0, 1000))
       .filter { uuids.contains(it.uuid) }
 
     // turns out ndelius doesn't listen to "checkin-created' events, so we can skip those
     for (checkin in checkinsSubmitted + checkinsReviewed) {
       rateLimiter.acquire()
-      CheckinV2Status.SUBMITTED.publishEvent(checkin)
+      CheckinStatus.SUBMITTED.publishEvent(checkin)
       uuids[checkin.uuid]?.let {
         it.sentAt = clock.instant()
         it.notes = "SUBMITTED"
@@ -110,7 +110,7 @@ class MigrationEventReplayService(
     }
     for (checkin in checkinsReviewed) {
       rateLimiter.acquire()
-      CheckinV2Status.REVIEWED.publishEvent(checkin)
+      CheckinStatus.REVIEWED.publishEvent(checkin)
       uuids[checkin.uuid]?.let {
         it.sentAt = clock.instant()
         it.notes += "REVIEWED "
@@ -118,7 +118,7 @@ class MigrationEventReplayService(
     }
     for (checkin in checkinsExpired) {
       rateLimiter.acquire()
-      CheckinV2Status.EXPIRED.publishEvent(checkin)
+      CheckinStatus.EXPIRED.publishEvent(checkin)
       uuids[checkin.uuid]?.let {
         it.sentAt = clock.instant()
         it.notes = "EXPIRED"
@@ -135,7 +135,7 @@ class MigrationEventReplayService(
 
     var totalProcessed = 0
 
-    fun sendAndMark(control: MigrationControl, status: CheckinV2Status, checkin: OffenderCheckinV2) {
+    fun sendAndMark(control: MigrationControl, status: CheckinStatus, checkin: OffenderCheckin) {
       if (!status.value(control)) {
         rateLimiter.acquire()
         status.publishEvent(checkin)
@@ -143,32 +143,32 @@ class MigrationEventReplayService(
       }
     }
 
-    val submitted = processCheckinBatch(CheckinV2Status.SUBMITTED, batchSize) { checkin ->
+    val submitted = processCheckinBatch(CheckinStatus.SUBMITTED, batchSize) { checkin ->
       val control = crns[checkin.offender.crn]
       if (control == null || control.checkinSubmitted) return@processCheckinBatch
-      sendAndMark(control, CheckinV2Status.CREATED, checkin)
-      sendAndMark(control, CheckinV2Status.SUBMITTED, checkin)
+      sendAndMark(control, CheckinStatus.CREATED, checkin)
+      sendAndMark(control, CheckinStatus.SUBMITTED, checkin)
     }
     totalProcessed += submitted.size
     logger.info("Processed SUBMITTED events for CRNS: {}", submitted)
 
-    val reviewed = processCheckinBatch(CheckinV2Status.REVIEWED, batchSize) { checkin ->
+    val reviewed = processCheckinBatch(CheckinStatus.REVIEWED, batchSize) { checkin ->
       val control = crns[checkin.offender.crn]
       if (control == null || control.checkinReviewed) return@processCheckinBatch
-      sendAndMark(control, CheckinV2Status.CREATED, checkin)
-      sendAndMark(control, CheckinV2Status.SUBMITTED, checkin)
-      sendAndMark(control, CheckinV2Status.REVIEWED, checkin)
+      sendAndMark(control, CheckinStatus.CREATED, checkin)
+      sendAndMark(control, CheckinStatus.SUBMITTED, checkin)
+      sendAndMark(control, CheckinStatus.REVIEWED, checkin)
     }
     totalProcessed += reviewed.size
     logger.info("Processed REVIEWED events for CRNS: {}", reviewed)
 
-    val expired = processCheckinBatch(CheckinV2Status.EXPIRED, batchSize) { checkin ->
+    val expired = processCheckinBatch(CheckinStatus.EXPIRED, batchSize) { checkin ->
       val control = crns[checkin.offender.crn]
       if (control == null || control.checkinExpired) return@processCheckinBatch
-      sendAndMark(control, CheckinV2Status.CREATED, checkin)
-      sendAndMark(control, CheckinV2Status.EXPIRED, checkin)
+      sendAndMark(control, CheckinStatus.CREATED, checkin)
+      sendAndMark(control, CheckinStatus.EXPIRED, checkin)
       if (checkin.reviewedAt != null) {
-        sendAndMark(control, CheckinV2Status.REVIEWED, checkin)
+        sendAndMark(control, CheckinStatus.REVIEWED, checkin)
       }
     }
     totalProcessed += expired.size
@@ -178,9 +178,9 @@ class MigrationEventReplayService(
   }
 
   private fun processCheckinBatch(
-    status: CheckinV2Status,
+    status: CheckinStatus,
     batchSize: Int,
-    processor: (OffenderCheckinV2) -> Unit,
+    processor: (OffenderCheckin) -> Unit,
   ): Set<String> {
     var page = 0
     var processedInStatus = 0
@@ -202,35 +202,35 @@ class MigrationEventReplayService(
     return processedCrns
   }
 
-  fun additionalInformation(checkin: OffenderCheckinV2) = if (checkin.offender.currentEvent == null) null else AdditionalInformation(checkin.offender.currentEvent)
+  fun additionalInformation(checkin: OffenderCheckin) = if (checkin.offender.currentEvent == null) null else AdditionalInformation(checkin.offender.currentEvent)
 
-  fun CheckinV2Status.setColumn(control: MigrationControl, value: Boolean) {
+  fun CheckinStatus.setColumn(control: MigrationControl, value: Boolean) {
     when (this) {
-      CheckinV2Status.CREATED -> control.checkinCreated = value
-      CheckinV2Status.SUBMITTED -> control.checkinSubmitted = value
-      CheckinV2Status.REVIEWED -> control.checkinReviewed = value
-      CheckinV2Status.EXPIRED -> control.checkinExpired = value
+      CheckinStatus.CREATED -> control.checkinCreated = value
+      CheckinStatus.SUBMITTED -> control.checkinSubmitted = value
+      CheckinStatus.REVIEWED -> control.checkinReviewed = value
+      CheckinStatus.EXPIRED -> control.checkinExpired = value
       else -> logger.warn("setColum: Unhandled checkin status {} for CRN {}", this, control.crn)
     }
   }
-  fun CheckinV2Status.value(control: MigrationControl): Boolean = when (this) {
-    CheckinV2Status.CREATED -> control.checkinCreated
-    CheckinV2Status.SUBMITTED -> control.checkinSubmitted
-    CheckinV2Status.REVIEWED -> control.checkinReviewed
-    CheckinV2Status.EXPIRED -> control.checkinExpired
+  fun CheckinStatus.value(control: MigrationControl): Boolean = when (this) {
+    CheckinStatus.CREATED -> control.checkinCreated
+    CheckinStatus.SUBMITTED -> control.checkinSubmitted
+    CheckinStatus.REVIEWED -> control.checkinReviewed
+    CheckinStatus.EXPIRED -> control.checkinExpired
     else -> false
   }
-  fun CheckinV2Status.publishEvent(checkin: OffenderCheckinV2) {
+  fun CheckinStatus.publishEvent(checkin: OffenderCheckin) {
     when (this) {
-      CheckinV2Status.CREATED -> publishCheckinCreatedEvent(checkin)
-      CheckinV2Status.SUBMITTED -> publishCheckinSubmittedEvent(checkin)
-      CheckinV2Status.REVIEWED -> publishCheckinReviewedEvent(checkin)
-      CheckinV2Status.EXPIRED -> publishCheckinExpiredEvent(checkin)
+      CheckinStatus.CREATED -> publishCheckinCreatedEvent(checkin)
+      CheckinStatus.SUBMITTED -> publishCheckinSubmittedEvent(checkin)
+      CheckinStatus.REVIEWED -> publishCheckinReviewedEvent(checkin)
+      CheckinStatus.EXPIRED -> publishCheckinExpiredEvent(checkin)
       else -> logger.warn("publishEvent: Unhandled checkin status {} for CRN {}", this, checkin.offender.crn)
     }
   }
 
-  private fun publishCheckinCreatedEvent(checkin: OffenderCheckinV2) {
+  private fun publishCheckinCreatedEvent(checkin: OffenderCheckin) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_CREATED,
       uuid = checkin.uuid,
@@ -241,7 +241,7 @@ class MigrationEventReplayService(
     )
   }
 
-  private fun publishCheckinSubmittedEvent(checkin: OffenderCheckinV2) {
+  private fun publishCheckinSubmittedEvent(checkin: OffenderCheckin) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_SUBMITTED,
       uuid = checkin.uuid,
@@ -252,7 +252,7 @@ class MigrationEventReplayService(
     )
   }
 
-  private fun publishCheckinReviewedEvent(checkin: OffenderCheckinV2) {
+  private fun publishCheckinReviewedEvent(checkin: OffenderCheckin) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_REVIEWED,
       uuid = checkin.uuid,
@@ -263,7 +263,7 @@ class MigrationEventReplayService(
     )
   }
 
-  private fun publishCheckinExpiredEvent(checkin: OffenderCheckinV2) {
+  private fun publishCheckinExpiredEvent(checkin: OffenderCheckin) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_EXPIRED,
       uuid = checkin.uuid,
@@ -294,7 +294,7 @@ class MigrationEventReplayService(
           }
           if (offenderSetupRepository.findByOffender(offender).isEmpty) {
             offenderSetupRepository.save(
-              OffenderSetupV2(
+              OffenderSetup(
                 uuid = UUID.randomUUID(),
                 offender = offender,
                 practitionerId = offender.practitionerId,

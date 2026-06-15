@@ -12,8 +12,8 @@ import software.amazon.awssdk.services.s3.model.Delete
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest
 import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import java.time.Clock
 import java.time.Duration
 
@@ -35,7 +35,7 @@ import java.time.Duration
 class CheckinLegacyAssetCleanupJob(
   private val clock: Clock,
   @Qualifier("MOJ") private val s3Client: S3Client,
-  private val jobLogRepository: JobLogV2Repository,
+  private val jobLogRepository: JobLogRepository,
   @Value("\${aws.s3.video-uploads}") private val bucket: String,
   @Value("\${app.scheduling.checkin-legacy-cleanup.dry-run:true}") private val dryRun: Boolean,
 ) {
@@ -57,7 +57,7 @@ class CheckinLegacyAssetCleanupJob(
   )
   fun process() {
     val started = clock.instant()
-    val logEntry = jobLogRepository.saveAndFlush(JobLogV2(jobType = "V2_CHECKIN_LEGACY_CLEANUP", createdAt = started))
+    val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = "V2_CHECKIN_LEGACY_CLEANUP", createdAt = started))
     LOGGER.info(
       "Checkin Legacy Asset Cleanup Job(id={}) started: bucket={}, dryRun={}",
       logEntry.id,

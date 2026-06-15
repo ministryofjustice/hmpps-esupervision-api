@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RestController
 @Profile("local")
 @Tag(name = "Job Control", description = "Endpoints to manually trigger jobs (Local only)")
 class JobControlResource(
-  private val v2CheckinCreationJob: V2CheckinCreationJob,
-  private val v2CheckinExpiryJob: V2CheckinExpiryJob,
+  private val checkinCreationJob: CheckinCreationJob,
+  private val checkinExpiryJob: CheckinExpiryJob,
   private val customQuestionsReminderJob: CustomQuestionsReminderJob,
 ) {
 
@@ -22,14 +22,14 @@ class JobControlResource(
   @PreAuthorize("permitAll()")
   @Operation(summary = "Trigger V2 Checkin Creation Job")
   fun triggerCheckinCreation() {
-    v2CheckinCreationJob.process()
+    checkinCreationJob.process()
   }
 
   @PostMapping("/checkin-expiry")
   @PreAuthorize("permitAll()")
   @Operation(summary = "Trigger V2 Checkin Expiry Job")
   fun triggerCheckinExpiry() {
-    v2CheckinExpiryJob.process()
+    checkinExpiryJob.process()
   }
 
   @PostMapping("/question-reminders")
