@@ -244,7 +244,7 @@ data class OffenderSetupV2Dto(
   @field:Schema(description = "Eligibility choice", required = false)
   val eligibilityChoice: EligibilityChoice? = null,
   @field:Schema(description = "Rationale for decision to sign up a POP for checkins", required = false)
-  val rationale: String?,
+  val rationale: String? = null,
   @field:Schema(description = "Setup ID", required = true)
   val setupId: UUID,
 )

@@ -42,12 +42,12 @@ fun OffenderV2Dto.toEntity() = OffenderV2(
 )
 
 fun OffenderV2.asSetupDto(clock: Clock) = OffenderSetupV2Dto(
-  UUID.randomUUID(),
-  this.practitionerId,
-  this.uuid,
-  clock.instant(),
-  null,
-  EligibilityChoice.SUPPLEMENT_F2F,
-  "It's fine",
-  UUID.randomUUID(),
+  uuid = UUID.randomUUID(),
+  practitionerId = this.practitionerId,
+  offenderUuid = this.uuid,
+  createdAt = clock.instant(),
+  startedAt = null,
+  eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
+  rationale = "It's fine",
+  setupId = UUID.randomUUID(),
 )
