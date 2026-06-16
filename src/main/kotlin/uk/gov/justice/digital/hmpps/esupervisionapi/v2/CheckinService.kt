@@ -893,7 +893,7 @@ class CheckinService(
     return createCheckin(offender, request.dueDate, request.practitioner)
   }
 
-  fun createCheckinByCrn(request: CreateCheckinByCrnV2Request): CheckinDto {
+  fun createCheckinByCrn(request: CreateCheckinByCrnRequest): CheckinDto {
     LOGGER.info(
       "DEBUG: Manually creating checkin by crn for offender {} with due date {}",
       request.offender,

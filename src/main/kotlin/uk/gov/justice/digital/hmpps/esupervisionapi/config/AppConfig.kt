@@ -11,7 +11,6 @@ class AppConfig(
   @Value("\${app.checkinUrl}") private val checkinUrl: String,
   @Value("\${app.mpopUrl}") private val mpopUrl: String,
   @Value("\${app.hostedAt}") private val hostedAt: String,
-  @Value("\${app.scheduling.checkin-notification.cron}") val checkinNotificationCron: String,
   @Value("\${app.features.esup-1239}") val esup1239ProxyLinks: Boolean,
   @Value("\${app.features.esup-1763}") val esup1763RemoveSnapshots: Boolean,
   @Value("\${app.features.upload-content-hash.require:false}") val uploadContentHashRequire: Boolean,

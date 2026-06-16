@@ -24,7 +24,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNotificationRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnV2Request
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.FacialRecognitionResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
@@ -364,7 +364,7 @@ class CheckinResource(
   @ApiResponse(responseCode = "200", description = "Checkin created")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   fun createCheckinByCrn(
-    @RequestBody @Valid request: CreateCheckinByCrnV2Request,
+    @RequestBody @Valid request: CreateCheckinByCrnRequest,
   ): ResponseEntity<CheckinDto> {
     val checkin = checkinService.createCheckinByCrn(request)
     return ResponseEntity.ok(checkin)
