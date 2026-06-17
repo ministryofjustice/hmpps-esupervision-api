@@ -7,21 +7,17 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationFailureException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
@@ -33,6 +29,32 @@ import java.time.Period
 import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrElse
+
+@Service
+class OffenderSetupPersistenceService(
+  private val offenderRepository: OffenderRepository,
+  private val checkinCreationService: CheckinCreationService,
+  private val clock: Clock,
+) {
+  data class Result(val checkin: UUID?)
+
+  /**
+   * Saves the updated offender record and optionally creates a checkin.
+   */
+  @Transactional
+  fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): Result {
+    require(offender.status == OffenderStatus.VERIFIED) { "Offender must be in VERIFIED status" }
+    require(!createCheckin || offender.firstCheckin == LocalDate.now(clock)) { "createCheckin=true requires offender.firstCheckin to be today" }
+
+    offenderRepository.save(offender)
+    val checkin = if (createCheckin && contactDetails != null) {
+      checkinCreationService.createCheckinForOffender(offender, offender.firstCheckin, offender.createdBy, contactDetails)
+    } else {
+      null
+    }
+    return Result(checkin = checkin?.uuid)
+  }
+}
 
 /**
  * V2 Offender Setup Service Handles registration/setup workflow for V2 offenders
@@ -47,13 +69,12 @@ class OffenderSetupService(
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
-  private val checkinRepository: OffenderCheckinRepository,
   private val s3UploadService: S3UploadService,
   private val notificationService: NotificationService,
-  private val eventAuditService: EventAuditService,
   private val ndiliusApiClient: INdiliusApiClient,
   private val transactionTemplate: TransactionTemplate,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  private val offenderSetupPersistenceService: OffenderSetupPersistenceService,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -127,12 +148,10 @@ class OffenderSetupService(
    * Complete offender setup Verifies photo, changes status to VERIFIED, sends notifications, and
    * creates first checkin if due
    */
-  @Transactional
   fun completeOffenderSetup(uuid: UUID): OffenderDto {
-    val setup =
-      offenderSetupRepository.findByUuid(uuid).getOrElse {
-        throw BadArgumentException("No setup for given uuid=$uuid")
-      }
+    val setup = offenderSetupRepository.findByUuid(uuid).getOrElse {
+      throw BadArgumentException("No setup for given uuid=$uuid")
+    }
     val photoUploaded = s3UploadService.isSetupPhotoUploaded(setup)
     if (!photoUploaded) {
       throw InvalidOffenderSetupState("No uploaded photo for setup uuid=$uuid", setup)
@@ -159,55 +178,23 @@ class OffenderSetupService(
     val now = clock.instant()
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = now
-    val savedOffender = offenderRepository.save(offender)
-
-    var checkin: OffenderCheckin? = null
-    val checkinDueToday = savedOffender.firstCheckin == LocalDate.now(clock)
-    if (checkinDueToday) {
-      checkin = checkinRepository.save(
-        OffenderCheckin(
-          uuid = UUID.randomUUID(),
-          offender = savedOffender,
-          status = CheckinStatus.CREATED,
-          dueDate = savedOffender.firstCheckin,
-          createdAt = now,
-          createdBy = "SYSTEM",
-        ),
-      )
-    }
+    val createCheckin = offender.firstCheckin == LocalDate.now(clock) && contactDetails != null
+    val result = offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, createCheckin)
 
     LOGGER.info(
       "Completed V2 offender setup: offender={}, crn={}, setup={}, checkin={}",
-      savedOffender.uuid,
-      savedOffender.crn,
+      offender.uuid,
+      offender.crn,
       uuid,
-      checkin?.uuid ?: "not due",
+      result.checkin ?: if (offender.firstCheckin == LocalDate.now(clock)) "skipped (no contact details)" else "not due",
     )
     try {
-      notificationService.sendSetupCompletedNotifications(savedOffender, contactDetails, setup.dto())
+      notificationService.sendSetupCompletedNotifications(offender, contactDetails, setup.dto())
     } catch (e: Exception) {
-      LOGGER.warn("Failed to send setup completed notifications for offender {}", savedOffender.uuid, e)
+      LOGGER.warn("Failed to send setup completed notifications for offender {}", offender.crn, e)
     }
 
-    checkin?.let {
-      try {
-        val event = CheckinCreatedEvent(
-          checkinId = it.id,
-          offenderId = offender.id,
-          practitionerId = it.createdBy,
-          checkin = it.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
-          offenderContactPreference = it.offender.contactPreference,
-          currentEvent = it.offender.currentEvent,
-        )
-        contactDetails?.let { notificationService.sendCheckinCreatedNotifications(event) }
-      } catch (e: NotificationFailureException) {
-        LOGGER.info("Notification failure {}", e.message, e)
-      } catch (e: Exception) {
-        LOGGER.warn("Unknown notification failure {}", checkin.uuid, e)
-      }
-    }
-
-    return savedOffender.dto(contactDetails)
+    return offender.dto(contactDetails)
   }
 
   /**

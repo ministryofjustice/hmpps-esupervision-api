@@ -1,20 +1,26 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.reset
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityChoice
@@ -23,12 +29,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -51,12 +56,11 @@ class OffenderSetupServiceTest {
   private val clock = Clock.fixed(Instant.parse("2025-12-03T10:00:00Z"), ZoneId.of("UTC"))
   private val offenderRepository: OffenderRepository = mock()
   private val offenderSetupRepository: OffenderSetupRepository = mock()
-  private val checkinRepository: OffenderCheckinRepository = mock()
   private val s3UploadService: S3UploadService = mock()
   private val notificationService: NotificationService = mock()
-  private val eventAuditService: EventAuditService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
+  private val offenderSetupPersistenceService: OffenderSetupPersistenceService = mock()
 
   private lateinit var service: OffenderSetupService
 
@@ -66,14 +70,18 @@ class OffenderSetupServiceTest {
       clock,
       offenderRepository,
       offenderSetupRepository,
-      checkinRepository,
       s3UploadService,
       notificationService,
-      eventAuditService,
       ndiliusApiClient,
       transactionTemplate,
       Duration.ofDays(3),
+      offenderSetupPersistenceService,
     )
+  }
+
+  @AfterEach
+  fun tearDown() {
+    reset(offenderRepository, offenderSetupRepository, s3UploadService, notificationService, ndiliusApiClient, transactionTemplate, offenderSetupPersistenceService)
   }
 
   @Test
@@ -117,7 +125,6 @@ class OffenderSetupServiceTest {
       rationale = offenderInfo.rationale,
     )
 
-    whenever(offenderRepository.save(any())).thenReturn(savedOffender)
     whenever(offenderSetupRepository.save(any())).thenReturn(expectedSetup)
 
     // When
@@ -168,7 +175,8 @@ class OffenderSetupServiceTest {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Pair<Offender, Any?>>>(0)
       callback.doInTransaction(null)
     }
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
+      .thenReturn(OffenderSetupPersistenceService.Result(checkin = null)) // because no contact info
 
     // When
     val result = service.completeOffenderSetup(setup.uuid)
@@ -178,7 +186,7 @@ class OffenderSetupServiceTest {
     assertEquals(offender.uuid, result.uuid)
     assertEquals(1, setup.setupCounter)
     verify(s3UploadService).isSetupPhotoUploaded(setup)
-    verify(offenderRepository).save(any())
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(argThat { status == OffenderStatus.VERIFIED }, anyOrNull(), any())
     verify(notificationService).sendSetupCompletedNotifications(any(), isNull(), argThat { setupId == setup.setupId() })
   }
 
@@ -294,12 +302,13 @@ class OffenderSetupServiceTest {
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
+      .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))
 
     val result = service.completeOffenderSetup(setup.uuid)
 
     assertEquals(OffenderStatus.VERIFIED, result.status)
-    verify(offenderRepository).save(any())
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(argThat { status == OffenderStatus.VERIFIED }, anyOrNull(), any())
   }
 
   @Test
@@ -318,12 +327,13 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent)),
     )
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any()))
+      .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))
 
     val result = service.completeOffenderSetup(setup.uuid)
 
     assertEquals(OffenderStatus.VERIFIED, result.status)
-    verify(offenderRepository).save(any())
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(argThat { status == OffenderStatus.VERIFIED }, any(), any())
   }
 
   @Test
@@ -512,6 +522,52 @@ class OffenderSetupServiceTest {
     val (_, secondSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
     assertEquals(2, setup.setupCounter)
     assertEquals(firstSetupId, secondSetupId)
+  }
+
+  @Nested
+  inner class OffenderSetupPersistenceServiceTest {
+
+    fun makeData(): Pair<Offender, ContactDetails> {
+      val offender = makeOffender(clock, LocalDate.now(clock))
+      offender.status = OffenderStatus.VERIFIED
+      return Pair(offender, GeneratingStubDataProvider().provideCase(offender.crn))
+    }
+
+    @Test
+    fun `do not create checkin when contact info is missing`() {
+      val (offender, _) = makeData()
+
+      val checkinCreationService = mock<CheckinCreationService>()
+      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+
+      service.completeOffenderSetupAndMaybeCreateCheckin(offender, null, true)
+
+      verify(offenderRepository).save(offender)
+      verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `create checkin when contact info is passed in`() {
+      val (offender, contactDetails) = makeData()
+      val checkinCreationService = mock<CheckinCreationService>()
+      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+
+      service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, true)
+
+      verify(offenderRepository).save(offender)
+      verify(checkinCreationService, times(1)).createCheckinForOffender(any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `do not create checkin when contact info passed, but flag is false`() {
+      val (offender, contactDetails) = makeData()
+      val checkinCreationService = mock<CheckinCreationService>()
+      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+
+      service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, false)
+      verify(offenderRepository, times(1)).save(offender)
+      verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
+    }
   }
 }
 
