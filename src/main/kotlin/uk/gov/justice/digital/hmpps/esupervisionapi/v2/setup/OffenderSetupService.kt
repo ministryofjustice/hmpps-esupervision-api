@@ -39,11 +39,13 @@ class OffenderSetupPersistenceService(
   data class Result(val checkin: UUID?)
 
   /**
-   *
+   * Saves the updated offender record and optionally creates a checkin.
    */
   @Transactional
   fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): Result {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender must be in VERIFIED status" }
+    require(!createCheckin || offender.firstCheckin == LocalDate.now(clock))
+
     offenderRepository.save(offender)
     val checkin = if (createCheckin && contactDetails != null) {
       checkinCreationService.createCheckinForOffender(offender, offender.firstCheckin, offender.createdBy, contactDetails)
