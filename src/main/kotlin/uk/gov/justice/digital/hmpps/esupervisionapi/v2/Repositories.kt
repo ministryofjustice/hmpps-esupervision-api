@@ -132,6 +132,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
  */
 @Repository
 interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
+  @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderSetup>
 
   @Query(

@@ -9,6 +9,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
@@ -67,7 +68,8 @@ class CheckinCreationService(
   }
 
   /**
-   * Create a checkin for an offender
+   * Create a checkin for an offender. Attempts to fetch contact details from NDelius.
+   *
    * @param offender Offender entity
    * @param dueDate Due date for checkin
    * @param createdBy Who created the checkin
@@ -80,7 +82,23 @@ class CheckinCreationService(
   ): OffenderCheckin {
     val contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
+    return createCheckinForOffender(offender, dueDate, createdBy, contactDetails)
+  }
 
+  /**
+   * Create a checkin for an offender
+   * @param offender Offender entity
+   * @param dueDate Due date for checkin
+   * @param createdBy Who created the checkin
+   * @param contactDetails Contact details for offender
+   * @return Created checkin
+   */
+  fun createCheckinForOffender(
+    offender: Offender,
+    dueDate: LocalDate,
+    createdBy: ExternalUserId,
+    contactDetails: ContactDetails,
+  ): OffenderCheckin {
     val checkin =
       OffenderCheckin(
         uuid = UUID.randomUUID(),

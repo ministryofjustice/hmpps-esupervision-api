@@ -42,7 +42,7 @@ class NotificationOrchestratorService(
   private val ndiliusApiClient: INdiliusApiClient,
   private val appConfig: AppConfig,
   private val clock: Clock,
-  @Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) {
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
 
@@ -52,26 +52,24 @@ class NotificationOrchestratorService(
     contactDetails: ContactDetails? = null,
     setup: OffenderSetupDto,
   ) {
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
-
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = details?.let { activeEventNumber(offender, it) },
+        eventNumber = contactDetails?.let { activeEventNumber(offender, it) },
         setupId = setup.setupId,
       ),
     )
 
-    eventAuditService.recordSetupCompleted(offender, details, setup)
+    eventAuditService.recordSetupCompleted(offender, contactDetails, setup)
 
-    if (details != null) {
+    if (contactDetails != null) {
       try {
         val personalisation =
           mapOf(
-            "name" to "${details.name.forename} ${details.name.surname}",
+            "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
             "date" to offender.firstCheckin.format(DATE_FORMATTER),
             "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
           )
@@ -81,7 +79,7 @@ class NotificationOrchestratorService(
             offenderId = offender.id,
             crn = offender.crn,
             contactPreference = offender.contactPreference,
-            contactDetails = details,
+            contactDetails = contactDetails,
             notificationType = NotificationType.RegistrationConfirmation,
           )
 
