@@ -186,7 +186,7 @@ class OffenderSetupService(
       offender.uuid,
       offender.crn,
       uuid,
-      result.checkin ?: "not due",
+      result.checkin ?: if (offender.firstCheckin == LocalDate.now(clock)) "skipped (no contact details)" else "not due",
     )
     try {
       notificationService.sendSetupCompletedNotifications(offender, contactDetails, setup.dto())
