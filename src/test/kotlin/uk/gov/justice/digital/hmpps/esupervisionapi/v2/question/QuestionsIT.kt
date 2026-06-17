@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
@@ -59,6 +60,8 @@ import java.util.UUID
 class QuestionsIT(
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) : IntegrationTestBase() {
+
+  @Autowired lateinit var jdbcTemplate: JdbcTemplate
 
   @Autowired lateinit var questionRepository: QuestionRepository
 
@@ -116,17 +119,15 @@ class QuestionsIT(
 
   @AfterEach
   fun tearDown() {
-    outboxItemRepository.deleteAll()
-    genericNotificationRepository.deleteAll()
-    genericNotificationRepository.flush()
-    offenderEventLogRepository.deleteAll()
     questionListItemRepository.deleteAllNonSystem()
     questionListAssignmentRepository.deleteAll()
     questionListItemRepository.deleteCustomQuestions()
-    offenderSetupRepository.deleteAll()
-    offenderCheckinRepository.deleteAll()
-    offenderRepository.deleteAll()
-    offenderRepository.flush()
+
+    jdbcTemplate.update("TRUNCATE TABLE generic_notification_v2 RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE offender_checkin_v2 RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE outbox_items RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE offender_v2 RESTART IDENTITY CASCADE")
   }
 
   @Test
