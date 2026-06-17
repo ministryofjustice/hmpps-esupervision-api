@@ -53,7 +53,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
 
   @Autowired lateinit var offenderRepository: OffenderRepository
 
-  @Autowired lateinit var checkinRespository: OffenderCheckinRepository
+  @Autowired lateinit var checkinRepository: OffenderCheckinRepository
 
   @Autowired lateinit var outboxItemRepository: OutboxItemRepository
 
@@ -133,7 +133,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
       .atMost(Duration.ofSeconds(10000))
       .pollInterval(100, TimeUnit.MILLISECONDS)
       .untilAsserted {
-        val checkins = checkinRespository.findAll().associateBy { it.offender.crn }
+        val checkins = checkinRepository.findAll().associateBy { it.offender.crn }
         assertEquals(2, checkins.size)
 
         outboxItemRepository
