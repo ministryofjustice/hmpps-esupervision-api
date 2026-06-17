@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -15,9 +16,11 @@ import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityChoice
@@ -30,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -518,6 +522,52 @@ class OffenderSetupServiceTest {
     val (_, secondSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
     assertEquals(2, setup.setupCounter)
     assertEquals(firstSetupId, secondSetupId)
+  }
+
+  @Nested
+  inner class OffenderSetupPersistenceServiceTest {
+
+    fun makeData(): Pair<Offender, ContactDetails> {
+      val offender = makeOffender(clock, LocalDate.now(clock))
+      offender.status = OffenderStatus.VERIFIED
+      return Pair(offender, GeneratingStubDataProvider().provideCase(offender.crn))
+    }
+
+    @Test
+    fun `do not create checkin when contact info is missing`() {
+      val (offender, _) = makeData()
+
+      val checkinCreationService = mock<CheckinCreationService>()
+      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+
+      service.completeOffenderSetupAndMaybeCreateCheckin(offender, null, true)
+
+      verify(offenderRepository).save(offender)
+      verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `create checkin when contact info is passed in`() {
+      val (offender, contactDetails) = makeData()
+      val checkinCreationService = mock<CheckinCreationService>()
+      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+
+      service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, true)
+
+      verify(offenderRepository).save(offender)
+      verify(checkinCreationService, times(1)).createCheckinForOffender(any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `do not create checkin when contact info passed, but flag is false`() {
+      val (offender, contactDetails) = makeData()
+      val checkinCreationService = mock<CheckinCreationService>()
+      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+
+      service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, false)
+      verify(offenderRepository, times(1)).save(offender)
+      verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
+    }
   }
 }
 
