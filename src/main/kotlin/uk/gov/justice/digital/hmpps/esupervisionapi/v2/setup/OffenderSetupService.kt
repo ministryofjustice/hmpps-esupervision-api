@@ -44,7 +44,7 @@ class OffenderSetupPersistenceService(
   @Transactional
   fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): Result {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender must be in VERIFIED status" }
-    require(!createCheckin || offender.firstCheckin == LocalDate.now(clock))
+    require(!createCheckin || offender.firstCheckin == LocalDate.now(clock)) { "createCheckin=true requires offender.firstCheckin to be today" }
 
     offenderRepository.save(offender)
     val checkin = if (createCheckin && contactDetails != null) {
