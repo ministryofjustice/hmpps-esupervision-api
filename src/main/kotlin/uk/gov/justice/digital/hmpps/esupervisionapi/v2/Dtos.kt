@@ -398,20 +398,28 @@ data class SubmitCheckinRequest(
 
 /** Review checkin request */
 data class ReviewCheckinRequest(
-  @Schema(description = "Reviewed by practitioner ID", required = true)
+  @field:Schema(description = "Reviewed by practitioner ID", required = true)
   @field:NotBlank
   val reviewedBy: ExternalUserId,
-  @Schema(description = "Manual ID check result", required = false)
+
+  @field:Schema(description = "Manual ID check result", required = false)
   val manualIdCheck: ManualIdVerificationResult? = null,
-  @Schema(description = "Review notes", required = false)
+
+  @field:Schema(description = "Review notes", required = false)
   val notes: String? = null,
-  @Schema(description = "Missed checkin comments", required = false)
+
+  @field:Schema(description = "Missed checkin comments", required = false)
   val missedCheckinComment: String? = null,
-  @Schema(description = "Risk management feedback", required = false)
+
+  @field:Schema(description = "Risk management feedback", required = false)
   val riskManagementFeedback: Boolean? = null,
-  @Schema(description = "Whether the review contains sensitive information", required = false)
-  @JsonDeserialize(using = StrictBooleanDeserializer::class)
+
+  @field:Schema(description = "Whether the review contains sensitive information", required = false)
+  @field:JsonDeserialize(using = StrictBooleanDeserializer::class)
   val sensitive: Boolean = false,
+
+  @field:Schema(description = "", required = false)
+  val reviewStartedAt: Instant? = null,
 )
 
 /** Review started request */

@@ -324,6 +324,7 @@ class CheckinService(
 
   /** Mark checkin review as started */
   fun startReview(uuid: UUID, practitionerId: ExternalUserId): CheckinDto {
+    // This function should be removed once we ensure MPOP stopped using it,
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
@@ -338,9 +339,6 @@ class CheckinService(
 
     checkin.reviewStartedAt = clock.instant()
     checkin.reviewStartedBy = practitionerId
-    transactionTemplate.execute { checkinRepository.save(checkin) }
-
-    LOGGER.info("Review started for checkin {} by {}", uuid, practitionerId)
 
     val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
@@ -1130,12 +1128,20 @@ object CheckinRequestApplicator {
   fun OffenderCheckin.applyRequest(request: ReviewCheckinRequest, reviewInfo: CheckinReviewInfo, clock: Clock) {
     assert(this.status == CheckinStatus.SUBMITTED || this.status == CheckinStatus.EXPIRED)
     this.status = reviewInfo.newStatus
-    this.reviewedAt = clock.instant()
+    this.reviewStartedBy = request.reviewedBy
     this.reviewedBy = request.reviewedBy
     this.manualIdCheck = request.manualIdCheck
     this.riskFeedback = request.riskManagementFeedback
     this.sensitive = this.sensitive || request.sensitive
+    this.reviewedAt = clock.instant()
+    if (request.reviewStartedAt != null && request.reviewStartedAt < this.reviewedAt) {
+      this.reviewStartedAt = request.reviewStartedAt
+    } else {
+      LOGGER.debug("Invalid review timings for checkin={}, reviewStartedAt={}, reviewedAt={}", this.uuid, request.reviewStartedAt, this.reviewedAt)
+    }
   }
+
+  val LOGGER = logger<CheckinRequestApplicator>()
 }
 
 private fun OffenderCheckin.toCheckinSubmittedEvent(
