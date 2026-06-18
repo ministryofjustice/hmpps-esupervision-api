@@ -1134,10 +1134,12 @@ object CheckinRequestApplicator {
     this.riskFeedback = request.riskManagementFeedback
     this.sensitive = this.sensitive || request.sensitive
     this.reviewedAt = clock.instant()
-    if (request.reviewStartedAt != null && request.reviewStartedAt < this.reviewedAt) {
-      this.reviewStartedAt = request.reviewStartedAt
-    } else {
-      LOGGER.debug("Invalid review timings for checkin={}, reviewStartedAt={}, reviewedAt={}", this.uuid, request.reviewStartedAt, this.reviewedAt)
+    if (request.reviewStartedAt != null) {
+      if (request.reviewStartedAt < this.reviewedAt) {
+        this.reviewStartedAt = request.reviewStartedAt
+      } else {
+        LOGGER.debug("Invalid review timings for checkin={}, reviewStartedAt={}, reviewedAt={}", this.uuid, request.reviewStartedAt, this.reviewedAt)
+      }
     }
   }
 
