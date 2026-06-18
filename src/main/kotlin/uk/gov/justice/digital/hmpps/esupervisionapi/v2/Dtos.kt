@@ -418,7 +418,7 @@ data class ReviewCheckinRequest(
   @field:JsonDeserialize(using = StrictBooleanDeserializer::class)
   val sensitive: Boolean = false,
 
-  @field:Schema(description = "", required = false)
+  @field:Schema(description = "When the practitioner started reviewing this check-in (UTC Instant).", required = false)
   val reviewStartedAt: Instant? = null,
 )
 
