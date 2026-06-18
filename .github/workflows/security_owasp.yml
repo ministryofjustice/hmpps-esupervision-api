@@ -14,4 +14,8 @@ jobs:
     uses: ministryofjustice/hmpps-github-actions/.github/workflows/security_owasp.yml@v2 # WORKFLOW_VERSION
     with:
       channel_id: ${{ vars.SECURITY_ALERTS_SLACK_CHANNEL_ID || 'NO_SLACK' }}
+      # Use NVD API v2 (self-hosted runner + cached feed). The default ('1') pulls the
+      # legacy NVD JSON 1.1 feeds, which NIST decommissioned — they now return HTTP 403,
+      # so dependencyCheckAnalyze fails before writing the SARIF report.
+      nvd_feed_version: '2'
     secrets: inherit
