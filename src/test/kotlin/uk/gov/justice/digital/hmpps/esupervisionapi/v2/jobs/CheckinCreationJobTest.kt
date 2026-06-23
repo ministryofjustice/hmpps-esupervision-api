@@ -26,6 +26,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -165,7 +166,7 @@ class CheckinCreationJobTest {
         createdBy = "SYSTEM",
       )
     }
-    whenever(checkinCreationService.createCheckins(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinCreationService.createCheckins(any())).thenAnswer { it.getArgument<List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>>(0) }
     whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<Offender>(0) }
   }
 
