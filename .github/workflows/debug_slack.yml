@@ -17,11 +17,13 @@ jobs:
     steps:
       - name: Post test message and show Slack response
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          # The reusable security_owasp.yml feeds the Slack action's SLACK_BOT_TOKEN
+          # env from secrets.HMPPS_SRE_SLACK_BOT_TOKEN — so that's the real secret name.
+          SLACK_BOT_TOKEN: ${{ secrets.HMPPS_SRE_SLACK_BOT_TOKEN }}
           CHANNEL_ID: ${{ vars.SECURITY_ALERTS_SLACK_CHANNEL_ID }}
         run: |
           if [ -z "${SLACK_BOT_TOKEN}" ]; then
-            echo "::error::SLACK_BOT_TOKEN is empty — the org secret is not available to this repo."
+            echo "::error::HMPPS_SRE_SLACK_BOT_TOKEN is empty — the secret is not available to this repo."
           fi
           echo "Target channel id (from repo variable): '${CHANNEL_ID}'"
           echo "--- Slack chat.postMessage response ---"
