@@ -3,6 +3,12 @@ name: DEBUG slack delivery
 # Posts a test message to the security alerts channel and prints Slack's raw
 # API response, so we can see the real error (the security scans hide it via errors:false).
 on:
+  # push trigger so it runs on the feature branch without needing to be on main
+  push:
+    branches:
+      - ESUP-1978/fix-owasp-scan-failure
+    paths:
+      - .github/workflows/debug_slack.yml
   workflow_dispatch:
 
 jobs:
