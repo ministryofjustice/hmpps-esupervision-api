@@ -19,7 +19,6 @@ import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
-import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import software.amazon.awssdk.core.SdkBytes
@@ -291,34 +290,6 @@ class CheckinServiceTest {
   }
 
   @Test
-  fun `startReview - happy path - marks review as started`() {
-    val uuid = UUID.randomUUID()
-    val offender = createOffender()
-    val checkin = OffenderCheckin(
-      uuid = uuid,
-      offender = offender,
-      status = CheckinStatus.SUBMITTED,
-      dueDate = LocalDate.now(clock),
-      createdAt = clock.instant(),
-      createdBy = "SYSTEM",
-      submittedAt = clock.instant(),
-    )
-
-    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
-    whenever(transactionTemplate.execute(any<TransactionCallback<Any>>())).thenAnswer { invocation ->
-      val callback = invocation.arguments[0] as TransactionCallback<*>
-      callback.doInTransaction(mock())
-    }
-
-    val result = service.startReview(uuid, "PRACT001")
-
-    assertNotNull(result.snapshotUrl)
-    verify(checkinRepository).save(any())
-  }
-
-  @Test
   fun `reviewCheckin - happy path & Feature ESUP_1763 TRUE - completes review and updates status`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender()
@@ -330,7 +301,6 @@ class CheckinServiceTest {
       createdAt = clock.instant(),
       createdBy = "SYSTEM",
       submittedAt = clock.instant(),
-      reviewStartedAt = clock.instant(),
       reviewStartedBy = "PRACT001",
     )
 
@@ -338,6 +308,7 @@ class CheckinServiceTest {
       reviewedBy = "PRACT001",
       manualIdCheck = ManualIdVerificationResult.MATCH,
       notes = "Approved",
+      reviewStartedAt = clock.instant().minusSeconds(20),
     )
 
     whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
@@ -352,7 +323,7 @@ class CheckinServiceTest {
     assertNull(result.snapshotUrl)
     assertEquals("PRACT001", result.reviewedBy)
     assertEquals(ManualIdVerificationResult.MATCH, result.manualIdCheck)
-    verify(checkinPersistenceService).checkinReview(any(), any(), any())
+    verify(checkinPersistenceService).checkinReview(argThat { reviewStartedAt != null }, any(), any())
     verify(s3UploadService).deleteCheckinSnapshot(uuid, 0)
     verify(s3UploadService).deleteCheckinVideo(uuid)
   }
