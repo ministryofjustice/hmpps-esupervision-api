@@ -125,7 +125,7 @@ class OffenderSetupServiceTest {
       rationale = offenderInfo.rationale,
     )
 
-    whenever(offenderSetupRepository.save(any())).thenReturn(expectedSetup)
+    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenReturn(expectedSetup)
 
     // When
     val result = service.startOffenderSetup(offenderInfo)
@@ -367,7 +367,7 @@ class OffenderSetupServiceTest {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Offender>>(0)
       callback.doInTransaction(null)
     }
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
 
     // When
     val result = service.terminateOffenderSetup(setupUuid)
@@ -401,8 +401,8 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument<OffenderSetup>(0) }
 
     val first = service.startOffenderSetup(
       OffenderInfo(
@@ -446,8 +446,8 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument<OffenderSetup>(0) }
 
     val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
 
@@ -488,7 +488,7 @@ class OffenderSetupServiceTest {
     }
 
     whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.empty())
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
 
     val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
 
@@ -511,8 +511,8 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument<OffenderSetup>(0) }
 
     // First call: INACTIVE -> VERIFIED, counter 1 -> 2
     val (_, firstSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
