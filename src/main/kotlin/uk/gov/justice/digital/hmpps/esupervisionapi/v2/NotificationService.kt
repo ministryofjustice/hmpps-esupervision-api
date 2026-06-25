@@ -24,8 +24,8 @@ class NotificationService(
   /**
    * Send notifications for deactivation completed event
    */
-  fun sendDeactivationCompletedNotifications(offender: Offender, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
-    orchestrator.sendDeactivationCompletedNotifications(offender, contactDetails, setupId)
+  fun sendDeactivationCompletedNotifications(offender: Offender, contactDetails: ContactDetails? = null, setupId: UUID? = null, reason: String? = null) {
+    orchestrator.sendDeactivationCompletedNotifications(offender, contactDetails, setupId, reason)
   }
 
   /**

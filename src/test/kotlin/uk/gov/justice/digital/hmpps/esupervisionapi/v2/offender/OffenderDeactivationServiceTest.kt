@@ -70,7 +70,7 @@ class OffenderDeactivationServiceTest {
       eq("no active events"),
       eq(true),
     )
-    verify(notificationService).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
+    verify(notificationService).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull(), eq("ESPMP"))
   }
 
   @Test
@@ -93,6 +93,7 @@ class OffenderDeactivationServiceTest {
       eq("no active events"),
       eq(false),
     )
+    verify(notificationService).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull(), eq("ESPNA"))
   }
 
   @Test
@@ -115,7 +116,7 @@ class OffenderDeactivationServiceTest {
     assertEquals(OffenderStatus.INACTIVE, result.status)
     verify(offenderRepository, never()).save(any())
     verify(questionService, never()).deleteUpcomingAssignment(any())
-    verify(notificationService, never()).sendDeactivationCompletedNotifications(any(), any(), any())
+    verify(notificationService, never()).sendDeactivationCompletedNotifications(any(), any(), any(), any())
   }
 
   @Test
@@ -126,7 +127,7 @@ class OffenderDeactivationServiceTest {
 
     service.deactivateOffender(offender, "no active events")
 
-    verify(notificationService).sendDeactivationCompletedNotifications(eq(offender), isNull(), isNull())
+    verify(notificationService).sendDeactivationCompletedNotifications(eq(offender), isNull(), isNull(), eq("ESPMP"))
   }
 
   private fun offender(status: OffenderStatus) = Offender(
