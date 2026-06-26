@@ -322,14 +322,14 @@ class NotificationOrchestratorServiceTest {
   }
 
   @Test
-  fun `sendDeactivationCompletedNotifications - includes reason code in domain event`() {
+  fun `sendDeactivationCompletedNotifications - includes outcome code in domain event`() {
     val offender = createOffender()
     val contactDetails = createContactDetailsWithEvents()
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendDeactivationCompletedNotifications(offender, contactDetails, reason = "ESPRS")
+    service.sendDeactivationCompletedNotifications(offender, contactDetails, outcomeCode = "ESPRS")
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_REMOVED),
@@ -337,7 +337,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = null, reason = "ESPRS")),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = null, outcomeCode = "ESPRS")),
     )
   }
 
