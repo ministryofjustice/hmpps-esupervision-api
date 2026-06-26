@@ -95,6 +95,9 @@ data class StatsBlock(
   val improvementsPct: Map<String, BigDecimal>,
   val pctSignedUpOfTotal: Double,
   val updatedAt: String,
+  val medianHoursToComplete: Double,
+  val p90HoursToComplete: Double,
+  val delayedSubmissions: Long,
 )
 
 data class ProviderStatsBlock(
@@ -118,6 +121,9 @@ data class ProviderStatsBlock(
   val pctExpiredCheckins: Double,
   val pctSignedUpOfTotal: Double,
   val updatedAt: String,
+  val medianHoursToComplete: Double,
+  val p90HoursToComplete: Double,
+  val delayedSubmissions: Long,
 )
 
 private fun StatsTotalsDto.toStatsBlock() = StatsBlock(
@@ -146,6 +152,9 @@ private fun StatsTotalsDto.toStatsBlock() = StatsBlock(
   improvementsPct = improvementsPct,
   pctSignedUpOfTotal = pctSignedUpOfTotal,
   updatedAt = updatedAt.toString(),
+  medianHoursToComplete = medianHoursToComplete,
+  p90HoursToComplete = p90HoursToComplete,
+  delayedSubmissions = delayedSubmissions,
 )
 
 private fun StatsProviderDto.toProviderBlock() = ProviderStatsBlock(
@@ -169,4 +178,7 @@ private fun StatsProviderDto.toProviderBlock() = ProviderStatsBlock(
   pctExpiredCheckins = pctExpiredCheckins,
   pctSignedUpOfTotal = pctSignedUpOfTotal,
   updatedAt = updatedAt.toString(),
+  medianHoursToComplete = medianHoursToComplete,
+  p90HoursToComplete = p90HoursToComplete,
+  delayedSubmissions = delayedSubmissions,
 )
