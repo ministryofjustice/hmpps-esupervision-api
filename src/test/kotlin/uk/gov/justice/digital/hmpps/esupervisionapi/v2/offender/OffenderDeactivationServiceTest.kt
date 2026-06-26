@@ -55,7 +55,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `deactivates a VERIFIED offender - status, audit and notification`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
     val result = service.deactivateOffender(offender, "no active events", contactDetails, sensitive = true)
@@ -76,7 +76,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `records the supplied audit event type (automated deactivation)`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
     service.deactivateOffender(
@@ -98,7 +98,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `cancels pending CREATED check-ins on deactivation`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
     service.deactivateOffender(offender, "in reset", contactDetails)
@@ -121,7 +121,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `passes null contact details through when not supplied by caller`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
     service.deactivateOffender(offender, "no active events")

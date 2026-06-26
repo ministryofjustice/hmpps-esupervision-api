@@ -312,7 +312,7 @@ class CheckinServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_1763))
 
     val result = service.reviewCheckin(uuid, request)
@@ -351,7 +351,7 @@ class CheckinServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(any())).thenReturn(checkin)
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
 
     val result = service.reviewCheckin(uuid, request)
 
@@ -453,7 +453,7 @@ class CheckinServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
 
     val result = service.reviewCheckin(uuid, request)
 
@@ -489,7 +489,7 @@ class CheckinServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
-    // whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    // whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument(0) }
 
     val result = service.reviewCheckin(uuid, request)
 
@@ -525,8 +525,8 @@ class CheckinServiceTest {
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
+    whenever(offenderEventLogRepository.save(any<OffenderEventLog>())).thenAnswer { it.getArgument<OffenderEventLog>(0) }
 
     val result = service.annotateCheckin(uuid, request)
 
@@ -555,8 +555,8 @@ class CheckinServiceTest {
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
+    whenever(offenderEventLogRepository.save(any<OffenderEventLog>())).thenAnswer { it.getArgument<OffenderEventLog>(0) }
 
     val result = service.annotateCheckin(uuid, request)
 
@@ -588,8 +588,8 @@ class CheckinServiceTest {
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
+    whenever(offenderEventLogRepository.save(any<OffenderEventLog>())).thenAnswer { it.getArgument<OffenderEventLog>(0) }
     service.annotateCheckin(uuid, AnnotateCheckinRequest("P1", "Note", sensitive = false))
     assertEquals(false, checkin.sensitive)
   }
@@ -609,8 +609,8 @@ class CheckinServiceTest {
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
+    whenever(offenderEventLogRepository.save(any<OffenderEventLog>())).thenAnswer { it.getArgument<OffenderEventLog>(0) }
 
     service.annotateCheckin(uuid, AnnotateCheckinRequest("P1", "Note", sensitive = true))
 
@@ -632,8 +632,8 @@ class CheckinServiceTest {
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
+    whenever(offenderEventLogRepository.save(any<OffenderEventLog>())).thenAnswer { it.getArgument<OffenderEventLog>(0) }
     service.annotateCheckin(uuid, AnnotateCheckinRequest("P1", "Note", sensitive = false))
 
     assertEquals(true, checkin.sensitive)
@@ -656,8 +656,8 @@ class CheckinServiceTest {
     )
 
     whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
-    whenever(offenderEventLogRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
+    whenever(offenderEventLogRepository.save(any<OffenderEventLog>())).thenAnswer { it.getArgument<OffenderEventLog>(0) }
 
     val result = service.reviewCheckin(
       uuid,
@@ -690,7 +690,7 @@ class CheckinServiceTest {
     assertFalse(checkin.livenessEnabled)
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(livenessSessionService.createSession()).thenReturn(CompletableFuture.completedFuture("session-123"))
 
     val result = service.createLivenessSession(uuid)
@@ -756,7 +756,7 @@ class CheckinServiceTest {
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(livenessSessionService.createSession()).thenReturn(CompletableFuture.completedFuture("session-456"))
 
     service.createLivenessSession(uuid)
@@ -787,7 +787,7 @@ class CheckinServiceTest {
     )
 
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(livenessSessionService.createSession()).thenReturn(CompletableFuture.completedFuture("session-789"))
 
     service.createLivenessSession(uuid)
@@ -961,7 +961,7 @@ class CheckinServiceTest {
     val sessionId = "session-abc"
     val checkin = createCreatedCheckin(uuid, livenessEnabled = true)
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(livenessSessionService.getSessionResults(sessionId))
       .thenReturn(CompletableFuture.completedFuture(buildLivenessResponse(sessionId, confidence = 42.5f, withReferenceImage = true)))
     stubFaceMatchPrereqs(checkin)
@@ -987,7 +987,7 @@ class CheckinServiceTest {
     val sessionId = "session-xyz"
     val checkin = createCreatedCheckin(uuid, livenessEnabled = true)
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(livenessSessionService.getSessionResults(sessionId))
       .thenReturn(CompletableFuture.completedFuture(buildLivenessResponse(sessionId, confidence = 99.0f, withReferenceImage = true)))
     stubFaceMatchPrereqs(checkin)
@@ -1018,7 +1018,7 @@ class CheckinServiceTest {
     val sessionId = "session-no-img"
     val checkin = createCreatedCheckin(uuid, livenessEnabled = true)
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(livenessSessionService.getSessionResults(sessionId))
       .thenReturn(CompletableFuture.completedFuture(buildLivenessResponse(sessionId, confidence = 99.0f, withReferenceImage = false)))
 
@@ -1068,7 +1068,7 @@ class CheckinServiceTest {
     val uuid = UUID.randomUUID()
     val checkin = createCreatedCheckin(uuid)
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     val rekogError = RekognitionException.builder().message("Throttled").build()
     whenever(livenessSessionService.createSession())
       .thenReturn(CompletableFuture.failedFuture(rekogError))
@@ -1102,7 +1102,7 @@ class CheckinServiceTest {
   /** Mock just enough of `findByUuid` and S3 prereqs to let `performFacialRecognition` reach the verifier. */
   private fun stubFaceMatchPrereqs(checkin: OffenderCheckin) {
     whenever(checkinRepository.findByUuid(checkin.uuid)).thenReturn(Optional.of(checkin))
-    whenever(checkinRepository.save(any())).thenAnswer { it.getArgument(0) }
+    whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(s3UploadService.isCheckinSnapshotUploaded(eq(checkin), any())).thenReturn(true)
     whenever(s3UploadService.isSetupPhotoUploaded(eq(checkin.offender))).thenReturn(true)
     whenever(s3UploadService.setupPhotoObjectCoordinate(eq(checkin.offender)))

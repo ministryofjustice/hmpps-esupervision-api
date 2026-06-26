@@ -100,7 +100,7 @@ class QuestionsIT(
     reset(s3UploadService, ndiliusApiClient)
     whenever(s3UploadService.isCheckinVideoUploaded(any())).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(any())).thenAnswer { invocation ->
-      GeneratingStubDataProvider().provideCase(invocation.getArgument(0))
+      GeneratingStubDataProvider().provideCase(invocation.getArgument<String>(0))
     }
 
     questionDefinitionRepository.defineCustomQuestion(
