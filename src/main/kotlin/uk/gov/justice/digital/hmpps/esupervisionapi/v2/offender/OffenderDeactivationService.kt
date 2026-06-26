@@ -88,7 +88,7 @@ class OffenderDeactivationService(
 
     val setup = offenderSetupRepository.findByOffender(saved).orElse(null)
     try {
-      notificationService.sendDeactivationCompletedNotifications(saved, contactDetails, setup?.setupId())
+      notificationService.sendDeactivationCompletedNotifications(saved, contactDetails, setup?.setupId(), auditEventType.deliusOutcomeCode)
     } catch (e: Exception) {
       LOGGER.warn("Failed to send deactivation completed notifications for offender {}", saved.uuid, e)
     }
