@@ -97,6 +97,29 @@ class OffenderDeactivationServiceTest {
   }
 
   @Test
+  fun `propagates the contact-suspended outcome code (automated deactivation)`() {
+    val offender = offender(OffenderStatus.VERIFIED)
+    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+
+    service.deactivateOffender(
+      offender,
+      "contact suspended",
+      contactDetails,
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+    )
+
+    verify(eventAuditService).recordOffenderEvent(
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      eq(offender),
+      eq(contactDetails),
+      eq("contact suspended"),
+      eq(false),
+    )
+    verify(notificationService).sendDeactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull(), eq("ESPRS"))
+  }
+
+  @Test
   fun `cancels pending CREATED check-ins on deactivation`() {
     val offender = offender(OffenderStatus.VERIFIED)
     whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
