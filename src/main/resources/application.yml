@@ -224,7 +224,7 @@ rekognition:
     threshold: 90.0
   liveness:
     # minimum confidence score for liveness detection to pass
-    confidence-threshold: 90.0
+    confidence-threshold: ${REKOG_LIVENESS_CONFIDENCE_THRESHOLD:70.0}
     # Face Liveness is not available in eu-west-2, so we use eu-west-1
     region: ${REKOG_LIVENESS_REGION:eu-west-1}
   region: ${REKOG_AWS_REGION}
