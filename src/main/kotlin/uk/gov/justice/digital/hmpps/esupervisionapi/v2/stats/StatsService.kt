@@ -90,6 +90,15 @@ class StatsService(
    * Calculates stats for given month range [fromMonth, toMonth) using the following tables:
    * - stats_summary_provider_month (stats)
    * - total_feedback_monthly (feedback)
+   * - event_audit_log_v2 (submit-time distribution: median/p90/delayed submissions)
+   *
+   * Most figures come from the summary/feedback views, which are updated periodically. The submit-time distribution
+   * figures are read live from the raw `event_audit_log_v2` because percentiles are non-additive and cannot be
+   * reconstructed from the per-month sums those views store.
+   * Two things to note:
+   * - the three fields reflect live data and so may differ slightly from the refresh-based `avgHoursToComplete`,
+   *   especially for the current (incomplete) month;
+   * - they add a query over `event_audit_log_v2` per call, scoped to CHECKIN_SUBMITTED events in the range.
    *
    *   @param fromMonth inclusive
    *   @param toMonth exclusive

@@ -506,8 +506,8 @@ class StatsSummaryRepository(
     val sql = """
       SELECT
         COALESCE(provider_code, 'ALL') AS provider_code,
-        COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_submit_hours), 0) AS median_hours,
-        COALESCE(percentile_cont(0.9) WITHIN GROUP (ORDER BY time_to_submit_hours), 0) AS p90_hours,
+        COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_submit_hours) FILTER (WHERE time_to_submit_hours <= ${'$'}DELAYED_SUBMISSION_THRESHOLD_HOURS), 0) AS median_hours,
+        COALESCE(percentile_cont(0.9) WITHIN GROUP (ORDER BY time_to_submit_hours) FILTER (WHERE time_to_submit_hours <= ${'$'}DELAYED_SUBMISSION_THRESHOLD_HOURS), 0) AS p90_hours,
         COUNT(*) FILTER (WHERE time_to_submit_hours > ?) AS delayed_submissions
       FROM event_audit_log_v2
       WHERE event_type = 'CHECKIN_SUBMITTED'
