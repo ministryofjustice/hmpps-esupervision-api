@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import com.fasterxml.jackson.core.type.TypeReference
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.EntityGraph
@@ -497,7 +498,10 @@ class StatsSummaryRepository(
   /**
    * Median and 90th percentile of time-to-submit, plus the count of "delayed" submissions (start->submit gap
    * exceeding [DELAYED_SUBMISSION_THRESHOLD_HOURS]). Returns one row per provider plus an all row.
+   *
+   * Cached (on fromMonth/toMonth) to avoid a full event_audit_log_v2 scan on every request - TTL 6h
    */
+  @Cacheable("stats.submit-time-distribution")
   fun getSubmitTimeDistribution(
     fromMonth: LocalDate,
     toMonth: LocalDate,
