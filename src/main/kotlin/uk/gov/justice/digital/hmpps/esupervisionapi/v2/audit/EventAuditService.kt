@@ -21,18 +21,22 @@ import java.time.Clock
 import java.time.Duration
 import java.util.UUID
 
-enum class OffenderAuditEventType {
+/**
+ * @param deliusOutcomeCode the code sent to NDelius on the V2_SETUP_REMOVED domain event to convey
+ *   why online check-ins were stopped. Null for event types that do not stop check-ins.
+ */
+enum class OffenderAuditEventType(val deliusOutcomeCode: String? = null) {
   SETUP_COMPLETED,
 
   /** Practitioner-initiated deactivation via the deactivate endpoint. */
-  OFFENDER_DEACTIVATED,
+  OFFENDER_DEACTIVATED("ESPMP"),
   OFFENDER_REACTIVATED,
 
   /** Automated deactivation by a scheduled job because the POP's NDelius contact is suspended (in reset). */
-  OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+  OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED("ESPRS"),
 
   /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
-  OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+  OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA"),
 }
 
 enum class CheckinAuditEventType {
