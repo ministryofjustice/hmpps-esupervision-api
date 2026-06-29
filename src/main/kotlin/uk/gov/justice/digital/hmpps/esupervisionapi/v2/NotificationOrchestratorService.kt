@@ -159,6 +159,7 @@ class NotificationOrchestratorService(
     offender: Offender,
     contactDetails: ContactDetails? = null,
     setupId: UUID? = null,
+    outcomeCode: String? = null,
   ) {
     val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
 
@@ -170,6 +171,7 @@ class NotificationOrchestratorService(
       additionalInformation = AdditionalInformation(
         eventNumber = details?.let { activeEventNumber(offender, it) },
         setupId = setupId,
+        outcomeCode = outcomeCode,
       ),
     )
 
