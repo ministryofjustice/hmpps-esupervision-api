@@ -88,6 +88,9 @@ class StatsResourceTest {
         improvementsPct = improvementsPct,
         pctSignedUpOfTotal = 1.0,
         updatedAt = totalsUpdatedAt,
+        medianHoursToComplete = 0.02,
+        p90HoursToComplete = 0.15,
+        delayedSubmissions = 3,
       )
 
     val provider1 =
@@ -112,6 +115,9 @@ class StatsResourceTest {
         pctExpiredCheckins = 0.1111,
         pctSignedUpOfTotal = 0.4,
         updatedAt = providerUpdatedAt,
+        medianHoursToComplete = 0.03,
+        p90HoursToComplete = 0.20,
+        delayedSubmissions = 1,
       )
 
     val provider2 =
@@ -136,6 +142,9 @@ class StatsResourceTest {
         pctExpiredCheckins = 0.0769,
         pctSignedUpOfTotal = 0.6,
         updatedAt = providerUpdatedAt,
+        medianHoursToComplete = 0.04,
+        p90HoursToComplete = 0.25,
+        delayedSubmissions = 2,
       )
 
     whenever(service.getStatsForMonths(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-02-01")))
@@ -171,6 +180,9 @@ class StatsResourceTest {
     assertEquals(0.1, total.pctExpiredCheckins)
     assertEquals(1.0, total.pctSignedUpOfTotal)
     assertEquals(totalsUpdatedAt.toString(), total.updatedAt)
+    assertEquals(0.02, total.medianHoursToComplete)
+    assertEquals(0.15, total.p90HoursToComplete)
+    assertEquals(3L, total.delayedSubmissions)
 
     assertEquals(10L, total.feedbackTotal)
     assertEquals(howEasyCounts, total.howEasyCounts)
@@ -204,6 +216,9 @@ class StatsResourceTest {
     assertEquals(0.1111, first.pctExpiredCheckins)
     assertEquals(0.4, first.pctSignedUpOfTotal)
     assertEquals(providerUpdatedAt.toString(), first.updatedAt)
+    assertEquals(0.03, first.medianHoursToComplete)
+    assertEquals(0.20, first.p90HoursToComplete)
+    assertEquals(1L, first.delayedSubmissions)
 
     val second = body.providers[1]
     assertEquals("N07ALL", second.providerCode)
@@ -226,6 +241,9 @@ class StatsResourceTest {
     assertEquals(0.0769, second.pctExpiredCheckins)
     assertEquals(0.6, second.pctSignedUpOfTotal)
     assertEquals(providerUpdatedAt.toString(), second.updatedAt)
+    assertEquals(0.04, second.medianHoursToComplete)
+    assertEquals(0.25, second.p90HoursToComplete)
+    assertEquals(2L, second.delayedSubmissions)
   }
 
   @Test

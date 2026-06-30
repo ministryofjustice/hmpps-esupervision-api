@@ -35,6 +35,9 @@ data class StatsTotalsDto(
   val improvementsPct: Map<String, BigDecimal>,
   val pctSignedUpOfTotal: Double,
   val updatedAt: Instant,
+  val medianHoursToComplete: Double = 0.0,
+  val p90HoursToComplete: Double = 0.0,
+  val delayedSubmissions: Long = 0,
 )
 
 data class StatsProviderDto(
@@ -58,6 +61,19 @@ data class StatsProviderDto(
   val pctExpiredCheckins: Double,
   val pctSignedUpOfTotal: Double,
   val updatedAt: Instant,
+  val medianHoursToComplete: Double = 0.0,
+  val p90HoursToComplete: Double = 0.0,
+  val delayedSubmissions: Long = 0,
+)
+
+/**
+ * Median / P90 of time-to-complete-check-in and the count of delayed submissions, for one provider (or 'ALL')
+ */
+data class SubmitTimeDistributionDto(
+  val providerCode: String,
+  val medianHoursToComplete: Double,
+  val p90HoursToComplete: Double,
+  val delayedSubmissions: Long,
 )
 
 data class StatsDashboardDto(
@@ -74,6 +90,15 @@ class StatsService(
    * Calculates stats for given month range [fromMonth, toMonth) using the following tables:
    * - stats_summary_provider_month (stats)
    * - total_feedback_monthly (feedback)
+   * - event_audit_log_v2 (submit-time distribution: median/p90/delayed submissions)
+   *
+   * Most figures come from the summary/feedback views, which are updated periodically. The submit-time distribution
+   * figures are read live from the raw `event_audit_log_v2` because percentiles are non-additive and cannot be
+   * reconstructed from the per-month sums those views store.
+   * Two things to note:
+   * - the three fields reflect live data and so may differ slightly from the refresh-based `avgHoursToComplete`,
+   *   especially for the current (incomplete) month;
+   * - they add a query over `event_audit_log_v2` per call, scoped to CHECKIN_SUBMITTED events in the range.
    *
    *   @param fromMonth inclusive
    *   @param toMonth exclusive
@@ -85,6 +110,11 @@ class StatsService(
     val allRows = statsSummaryRepository.getSummary(fromMonth, toMonth, "ALL")
     val providerRows = statsSummaryRepository.getSummary(fromMonth, toMonth, "PROVIDER")
     val feedback = statsSummaryRepository.getFeedbackSummary(fromMonth, toMonth)
+
+    val distributionByProvider = statsSummaryRepository
+      .getSubmitTimeDistribution(fromMonth, toMonth)
+      .associateBy { it.providerCode }
+    val allDistribution = distributionByProvider["ALL"]
 
     val baseTotal = allRows.first().let {
       StatsTotalsDto(
@@ -113,9 +143,21 @@ class StatsService(
         improvementsPct = feedback.improvementsPct,
         updatedAt = it.updatedAt,
         pctSignedUpOfTotal = it.pctSignedUpOfTotal,
+        medianHoursToComplete = allDistribution?.medianHoursToComplete ?: 0.0,
+        p90HoursToComplete = allDistribution?.p90HoursToComplete ?: 0.0,
+        delayedSubmissions = allDistribution?.delayedSubmissions ?: 0,
       )
     }
 
-    return StatsDashboardDto(total = baseTotal, providers = providerRows)
+    val providersWithDistribution = providerRows.map { row ->
+      val distribution = distributionByProvider[row.providerCode]
+      row.copy(
+        medianHoursToComplete = distribution?.medianHoursToComplete ?: 0.0,
+        p90HoursToComplete = distribution?.p90HoursToComplete ?: 0.0,
+        delayedSubmissions = distribution?.delayedSubmissions ?: 0,
+      )
+    }
+
+    return StatsDashboardDto(total = baseTotal, providers = providersWithDistribution)
   }
 }

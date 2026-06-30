@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import com.fasterxml.jackson.core.type.TypeReference
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.EntityGraph
@@ -18,6 +19,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.SubmitTimeDistributionDto
 import java.lang.reflect.ParameterizedType
 import java.math.BigDecimal
 import java.sql.ResultSet
@@ -491,6 +493,57 @@ class StatsSummaryRepository(
       toMonth,
       rowType,
     )
+  }
+
+  /**
+   * Median and 90th percentile of time-to-submit, plus the count of "delayed" submissions (start->submit gap
+   * exceeding [DELAYED_SUBMISSION_THRESHOLD_HOURS]). Returns one row per provider plus an all row.
+   *
+   * Cached (on fromMonth/toMonth) to avoid a full event_audit_log_v2 scan on every request - TTL 6h
+   */
+  @Cacheable("stats.submit-time-distribution")
+  fun getSubmitTimeDistribution(
+    fromMonth: LocalDate,
+    toMonth: LocalDate,
+  ): List<SubmitTimeDistributionDto> {
+    require(fromMonth.isBefore(toMonth))
+    val sql = """
+      SELECT
+        COALESCE(provider_code, 'ALL') AS provider_code,
+        COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_submit_hours) FILTER (WHERE time_to_submit_hours <= ${DELAYED_SUBMISSION_THRESHOLD_HOURS}), 0) AS median_hours,
+        COALESCE(percentile_cont(0.9) WITHIN GROUP (ORDER BY time_to_submit_hours) FILTER (WHERE time_to_submit_hours <= ${DELAYED_SUBMISSION_THRESHOLD_HOURS}), 0) AS p90_hours,
+        COUNT(*) FILTER (WHERE time_to_submit_hours > ?) AS delayed_submissions
+      FROM event_audit_log_v2
+      WHERE event_type = 'CHECKIN_SUBMITTED'
+        AND occurred_at >= ?
+        AND occurred_at < ?
+        AND provider_code <> 'XXX'
+        AND provider_code IS NOT NULL
+        AND time_to_submit_hours IS NOT NULL
+      GROUP BY GROUPING SETS ((), (provider_code))
+    """.trimIndent()
+    return jdbcTemplate.query(
+      sql,
+      { rs, _ ->
+        SubmitTimeDistributionDto(
+          providerCode = rs.getString("provider_code"),
+          medianHoursToComplete = rs.getBigDecimal("median_hours").toDouble(),
+          p90HoursToComplete = rs.getBigDecimal("p90_hours").toDouble(),
+          delayedSubmissions = rs.getLong("delayed_submissions"),
+        )
+      },
+      DELAYED_SUBMISSION_THRESHOLD_HOURS,
+      fromMonth,
+      toMonth,
+    )
+  }
+
+  private companion object {
+    /**
+     * Submissions whose start->submit gap exceeds this many hours are counted as delayed (the offender starting check-in,
+     * validated their identity then submitted much later), and should not contribute to the average time to complete a check-in.
+     */
+    const val DELAYED_SUBMISSION_THRESHOLD_HOURS = 12
   }
 
   private fun <T> parseJson(json: String?, typeReference: TypeReference<T>): T {
