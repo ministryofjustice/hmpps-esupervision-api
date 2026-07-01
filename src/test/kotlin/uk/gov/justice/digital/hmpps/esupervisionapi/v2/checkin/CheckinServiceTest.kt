@@ -13,6 +13,7 @@ import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
@@ -33,6 +34,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
@@ -51,14 +53,17 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.FacialRecognitionOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.S3ObjectCoordinate
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.net.URI
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -1085,6 +1090,90 @@ class CheckinServiceTest {
           notes["action"] == "create liveness session"
       },
     )
+  }
+
+  // ----- getUploadLocations: content-hash enforcement -----
+
+  @Test
+  fun `getUploadLocations - happy path - binds each snapshot to its hash and leaves video unbound`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val videoUrl = URI.create("https://upload/video").toURL()
+    val snapshotUrl = URI.create("https://upload/snapshot/0").toURL()
+    whenever(s3UploadService.generatePresignedUpload(eq(checkin), eq("video/webm"), any<Duration>(), isNull()))
+      .thenReturn(PresignedUpload(videoUrl, emptyMap()))
+    whenever(s3UploadService.generatePresignedUpload(eq(checkin), eq("image/jpeg"), eq(0), any<Duration>(), eq("hash0")))
+      .thenReturn(PresignedUpload(snapshotUrl, mapOf("x-amz-checksum-sha256" to "hash0")))
+
+    val result = service.getUploadLocations(
+      uuid,
+      "video/webm",
+      listOf("image/jpeg"),
+      CheckinUploadHashesRequest(snapshots = listOf(UploadHashRequest(sha256 = "hash0"))),
+    )
+
+    assertEquals(videoUrl, result.video.url)
+    assertNull(result.video.requiredHeaders, "Video URL is deliberately left unbound to a content hash")
+    assertEquals(1, result.snapshots.size)
+    assertEquals(snapshotUrl, result.snapshots[0].url)
+    assertEquals(mapOf("x-amz-checksum-sha256" to "hash0"), result.snapshots[0].requiredHeaders)
+  }
+
+  @Test
+  fun `getUploadLocations - missing request body - returns 400`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.getUploadLocations(uuid, "video/webm", listOf("image/jpeg"), null)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(s3UploadService, never()).generatePresignedUpload(any(), any<String>(), any<Int>(), any<Duration>(), any())
+  }
+
+  @Test
+  fun `getUploadLocations - blank snapshot hash - returns 400`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.getUploadLocations(
+        uuid,
+        "video/webm",
+        listOf("image/jpeg"),
+        CheckinUploadHashesRequest(snapshots = listOf(UploadHashRequest(sha256 = "   "))),
+      )
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(s3UploadService, never()).generatePresignedUpload(any(), any<String>(), any<Int>(), any<Duration>(), any())
+  }
+
+  @Test
+  fun `getUploadLocations - fewer hashes than snapshots - returns 400`() {
+    val uuid = UUID.randomUUID()
+    val checkin = createCreatedCheckin(uuid)
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+    // The first snapshot resolves fine; the second has no hash and must trigger the 400.
+    whenever(s3UploadService.generatePresignedUpload(eq(checkin), eq("image/jpeg"), eq(0), any<Duration>(), eq("hash0")))
+      .thenReturn(PresignedUpload(URI.create("https://upload/snapshot/0").toURL(), emptyMap()))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.getUploadLocations(
+        uuid,
+        "video/webm",
+        listOf("image/jpeg", "image/jpeg"),
+        CheckinUploadHashesRequest(snapshots = listOf(UploadHashRequest(sha256 = "hash0"))),
+      )
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(s3UploadService, never()).generatePresignedUpload(eq(checkin), eq("image/jpeg"), eq(1), any<Duration>(), any())
   }
 
   // ----- Failure-logging test helpers -----
