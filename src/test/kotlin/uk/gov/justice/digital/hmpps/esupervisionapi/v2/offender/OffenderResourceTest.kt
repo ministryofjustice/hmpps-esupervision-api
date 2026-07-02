@@ -16,7 +16,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
@@ -32,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
@@ -56,7 +56,6 @@ class OffenderResourceTest {
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val offenderSetupService: OffenderSetupService = mock()
   private val offenderDeactivationService: OffenderDeactivationService = mock()
-  private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -75,7 +74,6 @@ class OffenderResourceTest {
       checkinRepository,
       offenderSetupService,
       offenderDeactivationService,
-      appConfig,
     )
   }
 
@@ -620,15 +618,29 @@ class OffenderResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/jpeg"), any<Duration>(), isNull()))
-      .thenReturn(PresignedUpload(presignedUrl, emptyMap()))
+    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/jpeg"), any<Duration>(), eq("hash123")))
+      .thenReturn(PresignedUpload(presignedUrl, mapOf("x-amz-checksum-sha256" to "hash123")))
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", null)
+    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", UploadHashRequest(sha256 = "hash123"))
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertNotNull(result.body?.locationInfo)
     assertEquals(presignedUrl.toString(), result.body?.locationInfo?.url.toString())
     assertEquals("image/jpeg", result.body?.locationInfo?.contentType)
+  }
+
+  @Test
+  fun `getPhotoUploadLocation - missing content hash - returns 400`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.getPhotoUploadLocation(uuid, "image/jpeg", null)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
   }
 
   @Test
@@ -688,10 +700,10 @@ class OffenderResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.png?presigned=true").toURL()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/png"), any<Duration>(), isNull()))
-      .thenReturn(PresignedUpload(presignedUrl, emptyMap()))
+    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/png"), any<Duration>(), eq("hash123")))
+      .thenReturn(PresignedUpload(presignedUrl, mapOf("x-amz-checksum-sha256" to "hash123")))
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/png", null)
+    val result = resource.getPhotoUploadLocation(uuid, "image/png", UploadHashRequest(sha256 = "hash123"))
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertNotNull(result.body?.locationInfo)

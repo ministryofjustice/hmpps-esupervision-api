@@ -15,8 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
@@ -37,7 +35,6 @@ import java.util.UUID
 class OffenderSetupResource(
   private val offenderSetupService: OffenderSetupService,
   private val s3UploadService: S3UploadService,
-  private val appConfig: AppConfig,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -103,10 +100,8 @@ class OffenderSetupResource(
 
     val hash = resolveUploadHash(
       sha256Base64 = hashRequest?.sha256,
-      require = appConfig.enabledFeatures.contains(Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH),
       slot = "setup-photo",
     )
-    LOGGER.info("upload_hash.received endpoint=/v2/offender_setup/upload_location received={}", hash != null)
 
     val duration = Duration.ofMinutes(5)
     val presigned = s3UploadService.generatePresignedUpload(setup.get(), contentType, duration, hash)

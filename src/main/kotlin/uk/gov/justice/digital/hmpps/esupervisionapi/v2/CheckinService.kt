@@ -178,8 +178,6 @@ class CheckinService(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin is past submission date")
     }
 
-    val requireHash = appConfig.enabledFeatures.contains(Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH)
-
     val ttl = Duration.ofMinutes(uploadTtlMinutes)
     val ttlString = "PT${uploadTtlMinutes}M"
     // Video URL is left unbound to a content hash — no client uploads videos via this endpoint.
@@ -188,13 +186,7 @@ class CheckinService(
       snapshotContentTypes.mapIndexed { index, contentType ->
         val snapHash = resolveUploadHash(
           hashes?.snapshots?.getOrNull(index)?.sha256,
-          requireHash,
           "snapshot[$index]",
-        )
-        LOGGER.info(
-          "upload_hash.received endpoint=/v2/offender_checkins/upload_location slot=snapshot[{}] received={}",
-          index,
-          snapHash != null,
         )
         val presigned = s3UploadService.generatePresignedUpload(checkin, contentType, index, ttl, snapHash)
         UploadLocation(
