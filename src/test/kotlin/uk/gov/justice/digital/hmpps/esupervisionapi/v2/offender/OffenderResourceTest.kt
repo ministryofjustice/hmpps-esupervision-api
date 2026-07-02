@@ -752,6 +752,17 @@ class OffenderResourceTest {
     assertEquals(ContactPreference.EMAIL, offender.contactPreference)
   }
 
+  @Test
+  fun `getOffenderByCrn - success`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+
+    val resultWithoutDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = false)
+    assertNull(resultWithoutDetails.body?.details)
+
+    val resultWithDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = true)
+    assertNotNull(resultWithDetails.body?.details)
+  }
+
   // ========================================
   // Helper Methods
   // ========================================
