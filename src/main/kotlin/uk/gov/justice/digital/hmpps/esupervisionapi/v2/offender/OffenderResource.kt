@@ -71,13 +71,14 @@ class OffenderResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Get offender by CRN",
-    description = "Returns offender registration details.",
+    description = "Returns offender registration details. Does not include PII by default.",
   )
   @ApiResponse(responseCode = "200", description = "Offender found")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   @GetMapping("/crn/{crn}")
   fun getOffenderByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+    @Parameter(description = "Include PII from NDdelius", required = false)
     @RequestParam(name = "include-personal-details", required = false, defaultValue = "false") includePersonalDetails: Boolean,
   ): ResponseEntity<OffenderSummaryDto> {
     val normalisedCrn = crn.trim().uppercase()
