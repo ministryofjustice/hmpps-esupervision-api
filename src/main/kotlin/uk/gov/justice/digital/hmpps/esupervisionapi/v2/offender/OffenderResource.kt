@@ -25,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INamedPerson
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
@@ -70,22 +71,24 @@ class OffenderResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Get offender by CRN",
-    description = "Returns offender registration details (no PII). Returns 404 if not found.",
+    description = "Returns offender registration details.",
   )
   @ApiResponse(responseCode = "200", description = "Offender found")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   @GetMapping("/crn/{crn}")
   fun getOffenderByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+    @RequestParam(name = "include-personal-details", required = false, defaultValue = "false") includePersonalDetails: Boolean,
   ): ResponseEntity<OffenderSummaryDto> {
     val offender = offenderRepository.findByCrn(crn.trim().uppercase()).orElse(null)
     if (offender == null) {
       LOGGER.info("Offender not found for crn={}", crn)
       return ResponseEntity.notFound().build()
     }
+    val contactDetails = if (includePersonalDetails) ndiliusApiClient.getContactDetails(crn) else null
 
-    LOGGER.info("Found offender by CRN: crn={}, status={}", offender.crn, offender.status)
-    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender)))
+    LOGGER.info("Found offender by CRN: crn={}, status={}, contactDetails={}", offender.crn, offender.status, if (!includePersonalDetails) "skipped" else contactDetails != null)
+    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -439,7 +442,14 @@ class OffenderResource(
   }
 }
 
-/** Simple DTO for offender lookup - no PII */
+/**
+ * Subset of [ContactDetails] that is returned in the summary DTO.
+ */
+data class OffenderSummaryDetails(
+  override val name: Name,
+) : INamedPerson
+
+/** Simple DTO for offender lookup - no PII by default */
 data class OffenderSummaryDto(
   val uuid: UUID,
   val crn: String,
@@ -448,9 +458,10 @@ data class OffenderSummaryDto(
   val checkinInterval: CheckinInterval,
   val contactPreference: ContactPreference,
   val photoUrl: String? = null,
+  val details: INamedPerson? = null,
 )
 
-private fun Offender.toSummaryDto(photoUrl: String? = null) = OffenderSummaryDto(
+private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: ContactDetails? = null) = OffenderSummaryDto(
   uuid = uuid,
   crn = crn,
   status = status,
@@ -458,6 +469,7 @@ private fun Offender.toSummaryDto(photoUrl: String? = null) = OffenderSummaryDto
   checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   contactPreference = contactPreference,
   photoUrl = photoUrl,
+  details = contactDetails?.let { OffenderSummaryDetails(it.name) },
 )
 
 /** Request to deactivate an offender */
