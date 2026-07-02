@@ -460,7 +460,7 @@ data class OffenderSummaryDto(
   val checkinInterval: CheckinInterval,
   val contactPreference: ContactPreference,
   val photoUrl: String? = null,
-  val details: INamedPerson? = null,
+  val details: OffenderSummaryDetails? = null,
 )
 
 private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: ContactDetails? = null) = OffenderSummaryDto(
