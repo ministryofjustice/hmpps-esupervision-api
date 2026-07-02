@@ -80,12 +80,13 @@ class OffenderResource(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
     @RequestParam(name = "include-personal-details", required = false, defaultValue = "false") includePersonalDetails: Boolean,
   ): ResponseEntity<OffenderSummaryDto> {
-    val offender = offenderRepository.findByCrn(crn.trim().uppercase()).orElse(null)
+    val normalisedCrn = crn.trim().uppercase()
+    val offender = offenderRepository.findByCrn(normalisedCrn).orElse(null)
     if (offender == null) {
       LOGGER.info("Offender not found for crn={}", crn)
       return ResponseEntity.notFound().build()
     }
-    val contactDetails = if (includePersonalDetails) ndiliusApiClient.getContactDetails(crn) else null
+    val contactDetails = if (includePersonalDetails) ndiliusApiClient.getContactDetails(normalisedCrn) else null
 
     LOGGER.info("Found offender by CRN: crn={}, status={}, contactDetails={}", offender.crn, offender.status, if (!includePersonalDetails) "skipped" else contactDetails != null)
     return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
