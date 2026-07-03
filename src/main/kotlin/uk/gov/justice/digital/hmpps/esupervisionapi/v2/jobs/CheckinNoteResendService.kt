@@ -82,6 +82,11 @@ class CheckinNoteResendService(
     val logEntry = row.annotationUuid?.let { uuid ->
       eventLogRepository.findByUuid(uuid)
         .orElseThrow { IllegalStateException("annotation $uuid recorded for checkin ${row.checkin} but log entry not found") }
+        .also {
+          require(it.checkin == checkin.id && it.logEntryType == LogEntryType.OFFENDER_CHECKIN_ANNOTATED) {
+            "annotation $uuid recorded for checkin ${row.checkin} does not match expected checkin/logEntryType"
+          }
+        }
     } ?: transactionTemplate.execute {
       val saved = eventLogRepository.saveAndFlush(
         OffenderEventLog(
