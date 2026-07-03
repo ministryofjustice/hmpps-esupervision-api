@@ -94,12 +94,6 @@ The flow hits nDelius synchronously, in the request path, twice: `identity-verif
 - **Tier 2 must run against Delius _dev_, not preprod.** Preprod Delius holds real CRNs
   that cannot be generated; Delius dev allows generated test CRNs. This is the reason the
   real-integration tier is pinned to dev.
-- **Confirmed Hikari risk — `identity-verify`:** `CheckinV2Service.validateIdentity` is
-  `@Transactional` (line 120) and calls `ndiliusApiClient.validatePersonalDetails` **inside
-  the transaction** (line 142). A slow Delius call (up to the 5s time-limiter) therefore
-  holds one of only **10 Hikari connections per pod** for its whole duration. **10
-  concurrent slow `identity-verify` calls exhaust a pod's pool** and queue everything else.
-  This is the most likely failure mode in Tier 2 and the thing to watch first.
 - **`submitCheckin` is lower risk:** it is *not* `@Transactional` at the method level
   (line 224); its `getContactDetails` call (line 229) runs *before* the short persistence
   transaction in `checkinPersistenceService.checkinSubmission`, so the Delius call does not
