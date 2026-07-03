@@ -11,7 +11,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -65,10 +64,6 @@ class OffenderResourceTest {
 
   @BeforeEach
   fun setUp() {
-    reset(
-      offenderRepository, s3UploadService, checkinCreationService, eventAuditService, ndiliusApiClient,
-      notificationService, checkinRepository, offenderSetupService, offenderDeactivationService,
-    )
     resource = OffenderResource(
       offenderRepository,
       s3UploadService,
