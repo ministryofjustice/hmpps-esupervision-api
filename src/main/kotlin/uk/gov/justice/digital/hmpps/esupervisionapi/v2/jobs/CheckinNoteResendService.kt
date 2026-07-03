@@ -117,7 +117,10 @@ class CheckinNoteResendService(
     }
 
     // clear the outbox row created by the offender_event_log_v2 insert trigger
-    outboxItemRepository.markAsSent(OutboxItemType.CHECKIN_ANNOTATED.name, logEntry.id)
+    val updated = outboxItemRepository.markAsSent(OutboxItemType.CHECKIN_ANNOTATED.name, logEntry.id)
+    if (updated != 1) {
+      logger.warn("Checkin note resend: expected to mark 1 outbox item as sent for annotation={}, updated={}", logEntry.uuid, updated)
+    }
     markRow(row, "SENT")
   }
 
