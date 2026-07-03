@@ -67,7 +67,9 @@ class CheckinNoteResendJobIT : IntegrationTestBase() {
     eventLogRepository.deleteAll()
     checkinRepository.deleteAll()
     offenderRepository.deleteAll()
+    jobLogRepository.deleteAll()
     offenderRepository.flush()
+    org.mockito.kotlin.reset(ndeliusApiClient, domainEventPublisher)
   }
 
   @Test
