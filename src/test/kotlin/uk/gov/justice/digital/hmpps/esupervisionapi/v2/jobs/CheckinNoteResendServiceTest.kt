@@ -6,6 +6,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
@@ -50,7 +51,9 @@ class CheckinNoteResendServiceTest {
     on { saveAndFlush(any<OffenderEventLog>()) } doAnswer { it.arguments[0] as OffenderEventLog }
   }
   private val outboxItemRepository: OutboxItemRepository = mock()
-  private val domainEventService: DomainEventService = mock()
+  private val domainEventService: DomainEventService = mock {
+    on { publishDomainEvent(any(), any(), any(), any(), anyOrNull(), anyOrNull()) } doReturn true
+  }
   private val transactionTemplate: TransactionTemplate = mock {
     on { execute(any<TransactionCallback<OffenderEventLog>>()) } doAnswer {
       @Suppress("UNCHECKED_CAST")
@@ -190,6 +193,23 @@ class CheckinNoteResendServiceTest {
     )
     assertThat(row.sentAt).isEqualTo(clock.instant())
     assertThat(row.notes).isEqualTo("SENT")
+  }
+
+  @Test
+  fun `publish failure leaves the row pending so the next run retries`() {
+    val checkin = createCheckin(surveyResponse = mapOf("mentalHealth" to "FEELING_GREAT"))
+    val row = CheckinNoteResend(checkin = checkin.uuid)
+    pending(row)
+    whenever(checkinRepository.findByUuid(checkin.uuid)).thenReturn(Optional.of(checkin))
+    whenever(domainEventService.publishDomainEvent(any(), any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(false)
+
+    service.processPending(batchSize = 10, eventsPerSecond = 100.0)
+
+    // annotation is kept for the retry, but nothing is marked sent
+    assertThat(row.annotationUuid).isNotNull()
+    assertThat(row.sentAt).isNull()
+    assertThat(row.notes).isEqualTo("PUBLISH FAILED: will retry")
+    verify(outboxItemRepository, never()).markAsSent(any(), any())
   }
 
   @Test

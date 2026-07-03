@@ -24,7 +24,10 @@ class DomainEventService(
   @Value("\${app.apiBaseUrl}") private val apiBaseUrl: String,
 ) {
   /**
-   * Publish a domain event
+   * Publish a domain event.
+   *
+   * Publish failures are logged, not thrown; the return value tells callers whether
+   * the event was actually published so they can retry or record the failure.
    */
   fun publishDomainEvent(
     eventType: DomainEventType,
@@ -33,7 +36,7 @@ class DomainEventService(
     description: String,
     occurredAt: ZonedDateTime? = null,
     additionalInformation: AdditionalInformation? = null,
-  ) {
+  ): Boolean {
     LOGGER.debug(">>> Initiating {} event for uuid={}, crn={}", eventType.eventTypeName, uuid, crn)
     val detailUrl = eventType.pathSegment?.let { "$apiBaseUrl/v2/events/$it/$uuid" }
 
@@ -49,11 +52,13 @@ class DomainEventService(
 
       eventPublisher.publish(event)
       LOGGER.info("Published domain event: eventType={}, crn={}, detailUrl={}, eventNumber={}, setupId={}, outcomeCode={}", eventType.type, crn, detailUrl, additionalInformation?.eventNumber, additionalInformation?.setupId, additionalInformation?.outcomeCode)
+      return true
     } catch (e: Exception) {
       LOGGER.error(
         "Failed to publish domain event: {}",
         PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", crn, null) + " [eventType=${eventType.type}]",
       )
+      return false
     }
   }
 

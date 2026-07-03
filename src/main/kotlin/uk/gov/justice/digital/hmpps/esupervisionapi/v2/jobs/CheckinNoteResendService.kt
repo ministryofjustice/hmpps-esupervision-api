@@ -101,12 +101,20 @@ class CheckinNoteResendService(
     }!!
 
     rateLimiter.acquire()
-    domainEventService.publishDomainEvent(
+    val published = domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_ANNOTATED,
       uuid = logEntry.uuid,
       crn = checkin.offender.crn,
       description = "Check-in note resend for ${checkin.offender.crn} (ESUP-1956)",
     )
+    if (!published) {
+      // leave sentAt null so the next run retries; annotationUuid is already persisted,
+      // so the retry republishes the same annotation instead of creating a duplicate
+      logger.warn("Checkin note resend: publish failed for checkin={}, leaving row pending", row.checkin)
+      row.notes = "PUBLISH FAILED: will retry"
+      resendRepository.saveAndFlush(row)
+      return
+    }
 
     // clear the outbox row created by the offender_event_log_v2 insert trigger
     outboxItemRepository.markAsSent(OutboxItemType.CHECKIN_ANNOTATED.name, logEntry.id)
