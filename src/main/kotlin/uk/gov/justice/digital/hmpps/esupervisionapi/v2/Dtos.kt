@@ -40,6 +40,10 @@ data class Event(
   )
 }
 
+interface INamedPerson {
+  val name: Name
+}
+
 /** Contact details from Delius API
  *
  * See https://github.com/ministryofjustice/hmpps-probation-integration-services/blob/main/projects/esupervision-and-delius/src/main/kotlin/uk/gov/justice/digital/hmpps/model/ContactDetails.kt
@@ -49,7 +53,7 @@ data class ContactDetails(
   val crn: String,
 
   @field:Schema(description = "Person's name", required = true)
-  val name: Name,
+  override val name: Name,
 
   @field:Schema(
     description = "Mobile phone number (optional)",
@@ -86,35 +90,40 @@ data class ContactDetails(
     required = false,
   )
   val contactSuspended: Boolean = false,
-)
+) : INamedPerson
 
 /** Person's name from Ndilius */
 data class Name(
-  @Schema(description = "Forename", required = true, example = "John") val forename: String,
-  @Schema(description = "Surname", required = true, example = "Smith") val surname: String,
+  @field:Schema(description = "Forename", required = true, example = "John") val forename: String,
+  @field:Schema(description = "Surname", required = true, example = "Smith") val surname: String,
 )
 
 /** Practitioner details from Ndilius API */
 data class PractitionerDetails(
-  @Schema(description = "Practitioner's name", required = true) val name: Name,
-  @Schema(
+  @field:Schema(description = "Practitioner's name", required = true)
+  override val name: Name,
+
+  @field:Schema(
     description = "Practitioner's email address (optional - may not be available)",
     required = false,
     example = "practitioner@example.com",
   )
   val email: String? = null,
-  @Schema(description = "Local Admin Unit", required = false)
+
+  @field:Schema(description = "Local Admin Unit", required = false)
   val localAdminUnit: OrganizationalUnit? = null,
-  @Schema(description = "Probation Delivery Unit", required = false)
+
+  @field:Schema(description = "Probation Delivery Unit", required = false)
   val probationDeliveryUnit: OrganizationalUnit? = null,
-  @Schema(description = "Provider", required = false)
+
+  @field:Schema(description = "Provider", required = false)
   val provider: OrganizationalUnit? = null,
-)
+) : INamedPerson
 
 /** Organizational unit (LAU, PDU, Provider) */
 data class OrganizationalUnit(
-  @Schema(description = "Unit code", required = true, example = "N01ABC") val code: String,
-  @Schema(description = "Unit description", required = false, example = "London North LAU")
+  @field:Schema(description = "Unit code", required = true, example = "N01ABC") val code: String,
+  @field:Schema(description = "Unit description", required = false, example = "London North LAU")
   val description: String? = null,
 )
 

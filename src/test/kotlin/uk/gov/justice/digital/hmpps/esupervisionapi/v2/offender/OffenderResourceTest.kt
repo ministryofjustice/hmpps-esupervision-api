@@ -16,6 +16,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
@@ -762,6 +763,22 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(ContactPreference.EMAIL, result.body?.contactPreference)
     assertEquals(ContactPreference.EMAIL, offender.contactPreference)
+  }
+
+  @Test
+  fun `getOffenderByCrn - success`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenAnswer { GeneratingStubDataProvider().provideCase(crn = offender.crn) }
+
+    val resultWithoutDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = false)
+    assertNotNull(resultWithoutDetails.body)
+    assertNull(resultWithoutDetails.body?.details)
+    verify(ndiliusApiClient, times(0)).getContactDetails(offender.crn)
+
+    val resultWithDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = true)
+    assertNotNull(resultWithDetails.body?.details)
+    verify(ndiliusApiClient, times(1)).getContactDetails(offender.crn)
   }
 
   // ========================================
