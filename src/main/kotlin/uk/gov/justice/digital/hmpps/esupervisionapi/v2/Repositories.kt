@@ -408,6 +408,8 @@ interface OffenderEventLogRepository : JpaRepository<OffenderEventLog, Long> {
     """,
   )
   fun findCheckinLogByUuid(uuid: UUID): Optional<IOffenderCheckinLogEntryDto>
+
+  fun findByUuid(uuid: UUID): Optional<OffenderEventLog>
 }
 
 /**
@@ -597,6 +599,11 @@ interface MigrationControlRepository : JpaRepository<MigrationControl, Long>
 
 @Repository
 interface MigrationCheckinsUuidsRepository : JpaRepository<MigrationEventsToSend, Long>
+
+@Repository
+interface CheckinNoteResendRepository : JpaRepository<CheckinNoteResend, Long> {
+  fun findBySentAtIsNull(pageable: Pageable): List<CheckinNoteResend>
+}
 
 @Repository
 class QuestionRepository(

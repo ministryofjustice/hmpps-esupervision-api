@@ -39,6 +39,14 @@ app:
     migration-event-replay:
       cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
       batch-size: 50
+    # Resend check-in answers to NDelius for check-ins whose contact note was created
+    # without them (ESUP-1956, pre-commit event publish bug). The work list is seeded
+    # manually into the checkin_note_resend table. Disabled by default; enable per env
+    # via APP_SCHEDULING_CHECKIN_NOTE_RESEND_CRON.
+    checkin-note-resend:
+      cron: "-"
+      batch-size: 50
+      events-per-second: 2.0
     # One-off cleanup of legacy checkin S3 assets (ESUP-1770 + pre-liveness videos).
     # Disabled by default. Enable per env, observe with dry-run=true, flip dry-run off,
     # then disable again.

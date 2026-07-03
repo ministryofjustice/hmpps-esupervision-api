@@ -139,3 +139,5 @@ databaseChangeLog:
       file: db/changelog/changesets/69_add_eligibility_column.sql
   - include:
       file: db/changelog/changesets/70_add_rationale_column.sql
+  - include:
+      file: db/changelog/changesets/71_checkin_note_resend.sql
