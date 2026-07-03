@@ -44,7 +44,7 @@ class CheckinNoteResendService(
 ) {
 
   fun processPending(batchSize: Int, eventsPerSecond: Double = 2.0): Int {
-    val rows = resendRepository.findBySentAtIsNull(PageRequest.of(0, batchSize))
+    val rows = resendRepository.findBySentAtIsNull(PageRequest.of(0, batchSize, org.springframework.data.domain.Sort.by("id")))
     if (rows.isEmpty()) {
       return 0
     }
