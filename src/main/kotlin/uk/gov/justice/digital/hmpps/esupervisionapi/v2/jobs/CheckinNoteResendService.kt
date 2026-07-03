@@ -60,7 +60,7 @@ class CheckinNoteResendService(
         logger.error("Checkin note resend failed for checkin={}, will retry next run", row.checkin, e)
       }
     }
-    logger.info("Checkin note resend: processed {}/{} rows", processed, rows.size)
+    logger.info("Checkin note resend: handled {}/{} rows", processed, rows.size)
     return processed
   }
 
