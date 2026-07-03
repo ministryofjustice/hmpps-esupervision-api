@@ -16,7 +16,6 @@ class JobControlResource(
   private val checkinCreationJob: CheckinCreationJob,
   private val checkinExpiryJob: CheckinExpiryJob,
   private val customQuestionsReminderJob: CustomQuestionsReminderJob,
-  private val checkinNoteResendJob: CheckinNoteResendJob,
 ) {
 
   @PostMapping("/checkin-creation")
@@ -38,12 +37,5 @@ class JobControlResource(
   @Operation(summary = "Trigger Custom Question Reminders Job")
   fun triggerQuestionReminders() {
     customQuestionsReminderJob.process()
-  }
-
-  @PostMapping("/checkin-note-resend")
-  @PreAuthorize("permitAll()")
-  @Operation(summary = "Trigger Checkin Note Resend Job")
-  fun triggerCheckinNoteResend() {
-    checkinNoteResendJob.process()
   }
 }
