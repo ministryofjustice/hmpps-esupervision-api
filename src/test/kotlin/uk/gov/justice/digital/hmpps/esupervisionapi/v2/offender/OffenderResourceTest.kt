@@ -779,9 +779,11 @@ class OffenderResourceTest {
     val resultWithoutDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = false)
     assertNotNull(resultWithoutDetails.body)
     assertNull(resultWithoutDetails.body?.details)
+    verify(ndiliusApiClient, times(0)).getContactDetails(offender.crn)
 
     val resultWithDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = true)
     assertNotNull(resultWithDetails.body?.details)
+    verify(ndiliusApiClient, times(1)).getContactDetails(offender.crn)
   }
 
   // ========================================
