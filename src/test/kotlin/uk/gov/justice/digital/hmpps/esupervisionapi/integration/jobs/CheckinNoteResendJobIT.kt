@@ -96,7 +96,7 @@ class CheckinNoteResendJobIT : IntegrationTestBase() {
 
     // the NDelius callback for that detail URL must return the answers
     val detail = eventDetailService.getEventDetail("/v2/events/checkin-annotated/${row.annotationUuid}")
-    assertThat(detail).isNotNull
+    assertThat(detail).isNotNull()
     assertThat(detail!!.notes).contains("This note was resent due to a system issue.")
     assertThat(detail.notes).contains("Check in answers:")
     assertThat(detail.notes).contains("How they have been feeling: Feeling Great")
