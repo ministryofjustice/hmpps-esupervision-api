@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS "checkin_note_resend" (
 
 CREATE INDEX "idx_checkin_note_resend_pending" ON "checkin_note_resend" ("sent_at") WHERE sent_at IS NULL;
 
--- rollback DROP TABLE "checkin_note_resend";
+-- rollback DROP TABLE IF EXISTS "checkin_note_resend";
 
 -- changeset richard-birch:71_checkin_note_resend-2 runInTransaction:false
 ALTER TYPE job_type_v2 ADD VALUE 'CHECKIN_NOTE_RESEND';
