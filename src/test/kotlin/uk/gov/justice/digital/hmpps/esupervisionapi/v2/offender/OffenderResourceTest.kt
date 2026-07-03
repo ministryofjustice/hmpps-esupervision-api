@@ -761,10 +761,11 @@ class OffenderResourceTest {
   @Test
   fun `getOffenderByCrn - success`() {
     val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
-    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenAnswer { GeneratingStubDataProvider().provideCase(crn = offender.crn) }
 
     val resultWithoutDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = false)
+    assertNotNull(resultWithoutDetails.body)
     assertNull(resultWithoutDetails.body?.details)
 
     val resultWithDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = true)
