@@ -102,7 +102,8 @@ class CheckinNoteResendJobIT : IntegrationTestBase() {
     assertThat(detail.notes).contains("How they have been feeling: Feeling Great")
     assertThat(detail.crn).isEqualTo(checkin.offender.crn)
 
-    val jobLog = jobLogRepository.findAll().single { it.jobType == "CHECKIN_NOTE_RESEND" }
+    // other tests in this class also write CHECKIN_NOTE_RESEND job logs, so assert on the latest
+    val jobLog = jobLogRepository.findAll().filter { it.jobType == "CHECKIN_NOTE_RESEND" }.maxBy { it.id }
     assertThat(jobLog.endedAt).isNotNull()
   }
 
