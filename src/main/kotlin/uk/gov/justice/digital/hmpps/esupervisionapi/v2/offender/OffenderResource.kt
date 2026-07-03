@@ -86,7 +86,14 @@ class OffenderResource(
     }
     val contactDetails = if (includePersonalDetails) ndiliusApiClient.getContactDetails(normalisedCrn) else null
 
-    LOGGER.info("Found offender by CRN: crn={}, status={}, contactDetails={}", normalisedCrn, offender.status, if (!includePersonalDetails) "skipped" else contactDetails != null)
+    val detailsMesage = if (!includePersonalDetails) {
+      "skipped"
+    } else if (contactDetails != null) {
+      "fetched"
+    } else {
+      "not found"
+    }
+    LOGGER.info("Found offender by CRN: crn={}, status={}, contactDetails={}", normalisedCrn, offender.status, detailsMesage)
     return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
   }
 
