@@ -37,8 +37,7 @@ data class PresignedUpload(
 /**
  * Resolve a client-supplied base64 SHA-256 to forward to S3.
  *
- * - `require=true` rejects with HTTP 400 when the hash is missing (post-rollout state).
- * - Otherwise: returns the trimmed value if present, null if absent (dual-mode rollout).
+ * Rejects with HTTP 400 when the hash is missing — a content hash is mandatory for all uploads.
  *
  * The value is passed verbatim to the AWS SDK's `.checksumSHA256(...)`. The SDK / S3 will
  * reject malformed values at PUT time, so we don't validate format here beyond non-empty.
@@ -46,18 +45,14 @@ data class PresignedUpload(
  */
 fun resolveUploadHash(
   sha256Base64: String?,
-  require: Boolean,
   slot: String = "file",
-): String? {
+): String {
   val trimmed = sha256Base64?.trim()
   if (trimmed.isNullOrEmpty()) {
-    if (require) {
-      throw org.springframework.web.server.ResponseStatusException(
-        org.springframework.http.HttpStatus.BAD_REQUEST,
-        "Missing content hash for $slot",
-      )
-    }
-    return null
+    throw org.springframework.web.server.ResponseStatusException(
+      org.springframework.http.HttpStatus.BAD_REQUEST,
+      "Missing content hash for $slot",
+    )
   }
   return trimmed
 }
