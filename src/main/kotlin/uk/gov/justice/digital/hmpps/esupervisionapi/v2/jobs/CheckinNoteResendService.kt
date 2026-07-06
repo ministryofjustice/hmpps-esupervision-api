@@ -55,7 +55,7 @@ class CheckinNoteResendService(
     for (row in rows) {
       try {
         processRow(row, rateLimiter)
-        processed++
+        if (row.sentAt != null) processed++
       } catch (e: Exception) {
         logger.error("Checkin note resend failed for checkin={}, will retry next run", row.checkin, e)
       }
