@@ -602,6 +602,13 @@ interface MigrationCheckinsUuidsRepository : JpaRepository<MigrationEventsToSend
 
 @Repository
 interface CheckinNoteResendRepository : JpaRepository<CheckinNoteResend, Long> {
+  @Query(
+    """
+    SELECT r FROM CheckinNoteResend r
+    WHERE r.sentAt IS NULL
+    ORDER BY r.id
+    """,
+  )
   fun findBySentAtIsNull(pageable: Pageable): List<CheckinNoteResend>
 }
 
