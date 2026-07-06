@@ -55,9 +55,9 @@ class DomainEventService(
       return true
     } catch (e: Exception) {
       LOGGER.error(
-        "Failed to publish domain event: {}",
+        "Failed to publish domain event: errorType={}, message={} ",
+        e::class.simpleName,
         PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", crn, null) + " [eventType=${eventType.type}]",
-        e,
       )
       return false
     }
