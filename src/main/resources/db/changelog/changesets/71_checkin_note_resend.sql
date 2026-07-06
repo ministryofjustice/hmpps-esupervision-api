@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS "checkin_note_resend" (
     CONSTRAINT "checkin_note_resend_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "idx_checkin_note_resend_pending" ON "checkin_note_resend" ("sent_at") WHERE sent_at IS NULL;
+CREATE INDEX "idx_checkin_note_resend_pending" ON "checkin_note_resend" ("id") WHERE sent_at IS NULL;
 
 -- rollback DROP TABLE IF EXISTS "checkin_note_resend";
 
