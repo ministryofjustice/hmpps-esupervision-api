@@ -57,6 +57,7 @@ class DomainEventService(
       LOGGER.error(
         "Failed to publish domain event: {}",
         PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", crn, null) + " [eventType=${eventType.type}]",
+        e,
       )
       return false
     }
