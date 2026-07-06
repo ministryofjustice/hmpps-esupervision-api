@@ -7,7 +7,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.times
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
@@ -27,25 +27,36 @@ class CheckinNoteResendJobTest {
   private val job = CheckinNoteResendJob(clock, service, jobLogRepository, batchSize = 50, eventsPerSecond = 2.0)
 
   @Test
-  fun `process delegates to the service and records a job log`() {
+  fun `process delegates to the service and records a job log when rows were processed`() {
+    whenever(service.processPending(any(), any())).thenReturn(3)
+
     job.process()
 
     verify(service).processPending(eq(50), eq(2.0))
     val captor = argumentCaptor<JobLog>()
-    verify(jobLogRepository, times(2)).saveAndFlush(captor.capture())
-    val logEntry = captor.lastValue
+    verify(jobLogRepository).saveAndFlush(captor.capture())
+    val logEntry = captor.firstValue
     assertThat(logEntry.jobType).isEqualTo("CHECKIN_NOTE_RESEND")
     assertThat(logEntry.endedAt).isEqualTo(clock.instant())
   }
 
   @Test
-  fun `job log is closed even when the service throws`() {
+  fun `no job log is written when the work list is empty`() {
+    whenever(service.processPending(any(), any())).thenReturn(0)
+
+    job.process()
+
+    verify(jobLogRepository, never()).saveAndFlush(any<JobLog>())
+  }
+
+  @Test
+  fun `a job log is written when the service throws`() {
     whenever(service.processPending(any(), any())).thenThrow(RuntimeException("boom"))
 
     job.process()
 
     val captor = argumentCaptor<JobLog>()
-    verify(jobLogRepository, times(2)).saveAndFlush(captor.capture())
-    assertThat(captor.lastValue.endedAt).isEqualTo(clock.instant())
+    verify(jobLogRepository).saveAndFlush(captor.capture())
+    assertThat(captor.firstValue.endedAt).isEqualTo(clock.instant())
   }
 }

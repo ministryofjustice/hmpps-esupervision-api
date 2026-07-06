@@ -30,18 +30,22 @@ class CheckinNoteResendJob(
     lockAtMostFor = "PT30M",
   )
   fun process() {
-    val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = "CHECKIN_NOTE_RESEND", createdAt = clock.instant()))
-    LOGGER.info("Checkin Note Resend Job(id={}) started", logEntry.id)
+    val startedAt = clock.instant()
 
+    var processed = 0
+    var failed = false
     try {
-      checkinNoteResendService.processPending(batchSize, eventsPerSecond)
+      processed = checkinNoteResendService.processPending(batchSize, eventsPerSecond)
     } catch (e: Exception) {
-      LOGGER.error("Checkin Note Resend Job(id={}) failed", logEntry.id, e)
+      failed = true
+      LOGGER.error("Checkin Note Resend Job failed", e)
     }
 
-    logEntry.endedAt = clock.instant()
-    jobLogRepository.saveAndFlush(logEntry)
-    LOGGER.info("Checkin Note Resend Job(id={}) completed", logEntry.id)
+    // the work list is usually empty; don't log a job run for every no-op tick
+    if (processed > 0 || failed) {
+      jobLogRepository.saveAndFlush(JobLog(jobType = "CHECKIN_NOTE_RESEND", createdAt = startedAt, endedAt = clock.instant()))
+      LOGGER.info("Checkin Note Resend Job completed, processed {} rows", processed)
+    }
   }
 
   companion object {
