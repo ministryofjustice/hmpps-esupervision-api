@@ -698,6 +698,23 @@ open class MigrationEventsToSend(
   open var notes: String? = null,
 ) : V2BaseEntity()
 
+/**
+ * Work list for resending check-in answers to NDelius as corrective notes (ESUP-1956).
+ * Rows are seeded manually; the resend job drains rows where sent_at is null.
+ */
+@Entity
+@Table(name = "checkin_note_resend")
+open class CheckinNoteResend(
+  @Column(nullable = false, unique = true)
+  open var checkin: UUID,
+  @Column(name = "annotation_uuid")
+  open var annotationUuid: UUID? = null,
+  @Column(name = "sent_at")
+  open var sentAt: Instant? = null,
+  @Column
+  open var notes: String? = null,
+) : V2BaseEntity()
+
 enum class Language(@get:JsonValue val dbString: String) {
   ENGLISH("en-GB"),
   WELSH("cy-GB"),

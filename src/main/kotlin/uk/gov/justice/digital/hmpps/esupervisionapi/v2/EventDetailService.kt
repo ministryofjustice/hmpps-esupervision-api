@@ -5,15 +5,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.SurveyValueExpansionsConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.formatHumanReadableDateTime
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.appendQuestionsAndAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
@@ -178,15 +175,6 @@ class EventDetailService(
     }
 
     return sb.toString().trimEnd('\n')
-  }
-
-  private fun formatHumanReadableDateTime(instant: Instant): String {
-    val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy 'at' h:mma", Locale.UK)
-    return instant
-      .atZone(ZoneId.of("Europe/London"))
-      .format(formatter)
-      .replace("AM", "am")
-      .replace("PM", "pm")
   }
 
   private fun formatManualIdCheckResult(result: String): String = when (result) {
