@@ -1,5 +1,7 @@
 # NOTE: update the PUT to S3 with the path to your file: e.g. /Users/YOUR.NAME/Desktop/correct.png
-# Params: 'crn'
+# Params:
+# - 'crn'
+# - 'photo_hash'
 
 ### Start offender setup
 < {%
@@ -33,6 +35,10 @@ POST {{HOST}}/v2/offender_setup/{{setup_uuid}}/upload_location?content-type=imag
 Content-Type: application/json
 Authorization: Bearer {{hmpps_auth.token}}
 
+{
+  "sha256": "{{photo_hash}}"
+}
+
 > {%
     if (response.status === 200) {
         const uploadLocation = response.body["locationInfo"]
@@ -49,3 +55,9 @@ Content-Type: image/png
 ### Complete offender setup
 POST {{HOST}}/v2/offender_setup/{{setup_uuid}}/complete
 Authorization: Bearer {{hmpps_auth.token}}
+
+> {%
+    client.test("Response OK", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
