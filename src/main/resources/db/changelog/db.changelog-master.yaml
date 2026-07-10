@@ -127,3 +127,17 @@ databaseChangeLog:
       file: db/changelog/changesets/63_update_provider_month_mv.sql
   - include:
       file: db/changelog/changesets/64_update_monthly_feedback_mv.sql
+  - include:
+      file: db/changelog/changesets/65_add_checkin_event_enum_value.sql
+  - include:
+      file: db/changelog/changesets/66_sum_per_period_stats_over_range.sql
+  - include:
+      file: db/changelog/changesets/67_checkin_creation_outbox.sql
+  - include:
+      file: db/changelog/changesets/68_update_welsh_default_questions.sql
+  - include:
+      file: db/changelog/changesets/69_add_eligibility_column.sql
+  - include:
+      file: db/changelog/changesets/70_add_rationale_column.sql
+  - include:
+      file: db/changelog/changesets/71_checkin_note_resend.sql

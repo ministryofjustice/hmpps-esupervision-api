@@ -22,7 +22,7 @@ generic-service:
     APP_ENV: "TEST"
     APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
     APP_FEATURES_ESUP_1239: "true"
-    APP_FEATURES_ESUP_1183: "true"
+    APP_FEATURES_ESUP_1763: "true"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts

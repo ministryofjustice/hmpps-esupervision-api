@@ -22,10 +22,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProv
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationV2Service
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CustomQuestionsReminderJob
 import java.time.Clock
@@ -37,7 +40,7 @@ import java.util.UUID
 class MockNotificationServiceConfiguration {
   @Bean
   @Primary
-  fun notificationService(): NotificationV2Service = mock()
+  fun notificationService(): NotificationService = mock()
 }
 
 @TestConfiguration
@@ -60,11 +63,17 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
   @Autowired lateinit var ndiliusApiClient: INdiliusApiClient
 
-  @Autowired lateinit var notificationService: NotificationV2Service
+  @Autowired lateinit var notificationService: NotificationService
 
-  @Autowired lateinit var offenderV2Repository: OffenderV2Repository
+  @Autowired lateinit var offenderRepository: OffenderRepository
 
-  @Autowired lateinit var offenderCheckinV2Repository: OffenderCheckinV2Repository
+  @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
+
+  @Autowired lateinit var offenderEventLogRepository: OffenderEventLogRepository
+
+  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+
+  @Autowired lateinit var outboxItemRepository: OutboxItemRepository
 
   @Autowired lateinit var questionListItemRepository: DebugQuestionsRepository
 
@@ -81,18 +90,23 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
     val offender1 = offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
     val offender2 = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID()).toEntity()
     val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
-    offenderV2Repository.saveAll(listOf(offender1, offender2, offender3))
+    offenderRepository.saveAll(listOf(offender1, offender2, offender3))
   }
 
   @AfterEach
   fun tearDown() {
     reset(notificationService)
 
+    genericNotificationRepository.deleteAll()
+    genericNotificationRepository.flush()
+    outboxItemRepository.deleteAll()
+    offenderEventLogRepository.deleteAll()
     questionListItemRepository.deleteAllNonSystem()
     questionListAssignmentRepository.deleteAll()
     questionListItemRepository.deleteCustomQuestions()
-    offenderCheckinV2Repository.deleteAll()
-    offenderV2Repository.deleteAll()
+    offenderCheckinRepository.deleteAll()
+    offenderRepository.deleteAll()
+    offenderRepository.flush()
   }
 
   @Test

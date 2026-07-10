@@ -1,0 +1,422 @@
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
+
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
+import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCollectionResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCase
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNotificationRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.FacialRecognitionResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessClientFailureRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessSessionResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerificationResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LivenessVerifyRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogCheckinEventRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewStartedRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UploadLocationsResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
+import java.util.UUID
+
+/** V2 Checkin REST Controller */
+@RestController
+@RequestMapping("/v2/offender_checkins")
+@Tag(name = "V2 Checkins", description = "V2 Checkin endpoints for offenders and practitioners")
+class CheckinResource(
+  private val checkinService: CheckinService,
+) {
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping
+  @Operation(
+    summary = "List checkins",
+    description =
+    "Retrieve paginated list of checkins for a practitioner with optional filtering",
+  )
+  @ApiResponse(responseCode = "200", description = "Checkins retrieved successfully")
+  fun listCheckins(
+    @Parameter(description = "Practitioner ID", required = true)
+    @RequestParam("practitioner")
+    practitionerId: ExternalUserId,
+    @Parameter(description = "Filter by offender UUID", required = false)
+    @RequestParam(name = "offenderId", required = false)
+    offenderId: UUID?,
+    @Parameter(
+      description = "Filter by use case: NEEDS_ATTENTION, REVIEWED, AWAITING_CHECKIN",
+      required = false,
+    )
+    @RequestParam(name = "useCase", required = false)
+    useCase: CheckinListUseCase?,
+    @Parameter(description = "Page number (zero-indexed)", required = false)
+    @RequestParam(defaultValue = "0")
+    page: Int,
+    @Parameter(description = "Page size", required = false)
+    @RequestParam(defaultValue = "20")
+    @Max(100)
+    size: Int,
+    @Parameter(description = "Sort direction (ASC or DESC)", required = false)
+    @RequestParam(defaultValue = "DESC")
+    direction: String,
+  ): ResponseEntity<CheckinCollectionResponse> {
+    val sortDirection = Sort.Direction.fromString(direction)
+    val pageRequest = PageRequest.of(page, size, Sort.by(sortDirection, "dueDate"))
+    val result = checkinService.listCheckins(practitionerId, offenderId, useCase, pageRequest)
+    return ResponseEntity.ok(result)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/{uuid}")
+  @Operation(
+    summary = "Get checkin by UUID",
+    description = "Retrieve checkin details. Used by both offenders and practitioners.",
+  )
+  @ApiResponse(responseCode = "200", description = "Checkin found")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun getCheckin(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @Parameter(description = "Include personal details from Ndilius", required = false)
+    @RequestParam(name = "include-personal-details", defaultValue = "false")
+    includePersonalDetails: Boolean,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.getCheckin(uuid, includePersonalDetails)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/identity-verify")
+  @Operation(
+    summary = "Verify offender identity against Ndilius",
+    description =
+    "Validate personal details (name, DOB, CRN) against Ndilius before allowing checkin submission",
+  )
+  @ApiResponse(responseCode = "200", description = "Identity validation result")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun identityVerify(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid personalDetails: PersonalDetails,
+  ): ResponseEntity<IdentityValidationResponse> {
+    val result = checkinService.validateIdentity(uuid, personalDetails)
+    return ResponseEntity.ok(result)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/upload_location")
+  @Operation(
+    summary = "Get upload locations for video and snapshots",
+    description = "Returns presigned S3 URLs for uploading checkin media",
+  )
+  @ApiResponse(responseCode = "200", description = "Upload locations generated")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid checkin state")
+  fun getUploadLocations(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @Parameter(description = "Video content type", required = false)
+    @RequestParam(name = "video", defaultValue = "video/mp4")
+    videoContentType: String,
+    @Parameter(description = "Snapshot content types", required = false)
+    @RequestParam(name = "snapshots", required = false)
+    snapshotContentTypes: List<String> = listOf("image/jpeg"),
+    @RequestBody(required = false) hashes: CheckinUploadHashesRequest?,
+  ): ResponseEntity<UploadLocationsResponse> {
+    val locations = checkinService.getUploadLocations(uuid, videoContentType, snapshotContentTypes, hashes)
+    return ResponseEntity.ok(locations)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/video-verify")
+  @Operation(
+    summary = "Verify face against setup photo",
+    description =
+    "Performs facial recognition using uploaded snapshot(s) against offender's setup photo. " +
+      "Call this after uploading video/snapshot but before submission to show user the result. " +
+      "User can re-record if NO_MATCH or proceed anyway.",
+  )
+  @ApiResponse(responseCode = "200", description = "Facial recognition result")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state or missing data")
+  fun videoVerify(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @Parameter(description = "Number of snapshots to compare", required = false)
+    @RequestParam(name = "numSnapshots", defaultValue = "1")
+    numSnapshots: Int,
+  ): ResponseEntity<FacialRecognitionResult> {
+    val result = checkinService.verifyFace(uuid, numSnapshots)
+    return ResponseEntity.ok(result)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/liveness/session")
+  @Operation(
+    summary = "Create liveness session",
+    description = "Creates an AWS Rekognition Face Liveness session for browser-based liveness detection",
+  )
+  @ApiResponse(responseCode = "200", description = "Liveness session created")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid checkin state")
+  fun createLivenessSession(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<LivenessSessionResponse> {
+    val session = checkinService.createLivenessSession(uuid)
+    return ResponseEntity.ok(session)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/{uuid}/liveness/credentials")
+  @Operation(
+    summary = "Get liveness credentials",
+    description = "Returns scoped temporary AWS credentials for the browser FaceLivenessDetector component",
+  )
+  @ApiResponse(responseCode = "200", description = "Credentials returned")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun getLivenessCredentials(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<LivenessCredentialsResponse> {
+    val credentials = checkinService.getLivenessCredentials(uuid)
+    return ResponseEntity.ok(credentials)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/liveness/verify")
+  @Operation(
+    summary = "Verify liveness result",
+    description =
+    "Gets liveness session results from Rekognition, checks confidence, " +
+      "and compares the liveness reference image against the offender's setup photo.",
+  )
+  @ApiResponse(responseCode = "200", description = "Verification result")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state or missing data")
+  fun verifyLiveness(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: LivenessVerifyRequest,
+  ): ResponseEntity<LivenessVerificationResponse> {
+    val result = checkinService.verifyLiveness(uuid, request.sessionId)
+    return ResponseEntity.ok(result)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/liveness/client-failure")
+  @Operation(
+    summary = "Record a client-side liveness failure",
+    description =
+    "Called by the browser when the AWS Amplify FaceLivenessDetector fails before " +
+      "the session reaches Rekognition (e.g. camera error, multiple faces, timeout). " +
+      "Records an OFFENDER_CHECKIN_LIVENESS_FAILED event so client-side failures are " +
+      "captured alongside server-side ones.",
+  )
+  @ApiResponse(responseCode = "204", description = "Failure recorded")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun recordLivenessClientFailure(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: LivenessClientFailureRequest,
+  ): ResponseEntity<Void> {
+    checkinService.recordLivenessClientFailure(uuid, request.state)
+    return ResponseEntity.noContent().build()
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/submit")
+  @Operation(
+    summary = "Submit checkin",
+    description = "Submit checkin with survey responses after uploading media",
+  )
+  @ApiResponse(responseCode = "200", description = "Checkin submitted successfully")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state or missing data")
+  fun submitCheckin(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: SubmitCheckinRequest,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.submitCheckin(uuid, request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/review-started")
+  @Operation(
+    summary = "Mark review as started",
+    description = "Called when practitioner opens checkin in MPOP to start review",
+  )
+  @ApiResponse(responseCode = "200", description = "Review started")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state")
+  fun startReview(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: ReviewStartedRequest,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.startReview(uuid, request.practitionerId)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/review")
+  @Operation(
+    summary = "Complete checkin review",
+    description = "Practitioner completes review and marks checkin as REVIEWED",
+  )
+  @ApiResponse(responseCode = "200", description = "Review completed")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state")
+  fun reviewCheckin(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: ReviewCheckinRequest,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.reviewCheckin(uuid, request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/annotate")
+  @Operation(
+    summary = "Annotate a checkin",
+    description = "Practitioner annotates a checkin after it has been reviewed",
+  )
+  @ApiResponse(responseCode = "200", description = "Update completed")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "400", description = "Invalid state")
+  fun annotateCheckin(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: AnnotateCheckinRequest,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.annotateCheckin(uuid, request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/{uuid}/proxy/video")
+  @Operation(
+    summary = "Get video proxy URL",
+    description = "Returns presigned S3 URL for viewing checkin video (for MPOP)",
+  )
+  @ApiResponse(responseCode = "200", description = "Video URL")
+  @ApiResponse(responseCode = "404", description = "Video not found")
+  fun getVideoProxyUrl(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<Map<String, String>> {
+    val url = checkinService.getVideoProxyUrl(uuid)
+    return ResponseEntity.ok(mapOf("url" to url.toString()))
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/{uuid}/proxy/snapshot")
+  @Operation(
+    summary = "Get snapshot proxy URL",
+    description = "Returns presigned S3 URL for viewing checkin snapshot (for MPOP)",
+  )
+  @ApiResponse(responseCode = "200", description = "Snapshot URL")
+  @ApiResponse(responseCode = "404", description = "Snapshot not found")
+  fun getSnapshotProxyUrl(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @Parameter(description = "Snapshot index", required = false)
+    @RequestParam(name = "index", defaultValue = "0")
+    index: Int,
+  ): ResponseEntity<Map<String, String>> {
+    val url = checkinService.getSnapshotProxyUrl(uuid, index)
+    return ResponseEntity.ok(mapOf("url" to url.toString()))
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping
+  @Operation(
+    summary = "DEBUG: Manual checkin creation",
+    description =
+    "DEBUG ONLY - Manually create a checkin outside the automated job schedule. Use for testing purposes.",
+  )
+  @ApiResponse(responseCode = "200", description = "Checkin created")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  fun createCheckin(
+    @RequestBody @Valid request: CreateCheckinRequest,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.createCheckin(request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/crn")
+  @Operation(
+    summary = "DEBUG: Manual checkin creation by crn",
+    description =
+    "DEBUG ONLY - Manually create a checkin outside the automated job schedule. Use for testing purposes.",
+  )
+  @ApiResponse(responseCode = "200", description = "Checkin created")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  fun createCheckinByCrn(
+    @RequestBody @Valid request: CreateCheckinByCrnRequest,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.createCheckinByCrn(request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/invite")
+  @Operation(
+    summary = "DEBUG: Manual notification trigger",
+    description =
+    "DEBUG ONLY - Manually trigger notifications for a checkin outside the automated event flow. Use for testing purposes.",
+  )
+  @ApiResponse(responseCode = "200", description = "Notification sent")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun sendInvite(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: CheckinNotificationRequest,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.sendInvite(uuid, request)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/reminder")
+  @Operation(
+    summary = "DEBUG: Manual reminder trigger",
+    description =
+    "DEBUG ONLY - Manually trigger a reminder notification for a checkin. Use for testing purposes.",
+  )
+  @ApiResponse(responseCode = "200", description = "Reminder sent")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun sendReminder(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<CheckinDto> {
+    val checkin = checkinService.sendReminder(uuid)
+    return ResponseEntity.ok(checkin)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/log-event")
+  @Operation(
+    summary = "Log checkin audit event",
+    description =
+    "Record security or audit events (e.g., outside access attempts, geolocation issues)",
+  )
+  @ApiResponse(responseCode = "200", description = "Event logged successfully")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  fun logEvent(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: LogCheckinEventRequest,
+  ): ResponseEntity<Map<String, String>> {
+    val eventUuid = checkinService.logCheckinEvent(uuid, request)
+    return ResponseEntity.ok(mapOf("eventUuid" to eventUuid.toString()))
+  }
+}

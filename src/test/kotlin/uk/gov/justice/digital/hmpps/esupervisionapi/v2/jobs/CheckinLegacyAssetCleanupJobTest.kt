@@ -18,8 +18,8 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse
 import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest
 import software.amazon.awssdk.services.s3.model.ListObjectVersionsResponse
 import software.amazon.awssdk.services.s3.model.ObjectVersion
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -29,8 +29,8 @@ class CheckinLegacyAssetCleanupJobTest {
 
   private val bucket = "checkins-bucket"
   private val clock = Clock.fixed(Instant.parse("2026-05-13T12:00:00Z"), ZoneId.of("UTC"))
-  private val jobLogRepository: JobLogV2Repository = mock {
-    on { saveAndFlush(any<JobLogV2>()) } doAnswer { it.arguments[0] as JobLogV2 }
+  private val jobLogRepository: JobLogRepository = mock {
+    on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
   }
 
   private fun job(s3: S3Client, dryRun: Boolean = false) = CheckinLegacyAssetCleanupJob(clock, s3, jobLogRepository, bucket, dryRun)
@@ -228,8 +228,8 @@ class CheckinLegacyAssetCleanupJobTest {
     val s3: S3Client = mock {
       on { listObjectVersions(any<ListObjectVersionsRequest>()) } doReturn listPage()
     }
-    val captor = argumentCaptor<JobLogV2>()
-    whenever(jobLogRepository.saveAndFlush(captor.capture())) doAnswer { it.arguments[0] as JobLogV2 }
+    val captor = argumentCaptor<JobLog>()
+    whenever(jobLogRepository.saveAndFlush(captor.capture())) doAnswer { it.arguments[0] as JobLog }
 
     job(s3).process()
 

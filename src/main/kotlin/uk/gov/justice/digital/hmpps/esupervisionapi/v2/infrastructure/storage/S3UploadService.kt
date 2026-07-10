@@ -16,9 +16,9 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.S3ObjectCoordinate
 import java.net.URL
@@ -37,8 +37,7 @@ data class PresignedUpload(
 /**
  * Resolve a client-supplied base64 SHA-256 to forward to S3.
  *
- * - `require=true` rejects with HTTP 400 when the hash is missing (post-rollout state).
- * - Otherwise: returns the trimmed value if present, null if absent (dual-mode rollout).
+ * Rejects with HTTP 400 when the hash is missing — a content hash is mandatory for all uploads.
  *
  * The value is passed verbatim to the AWS SDK's `.checksumSHA256(...)`. The SDK / S3 will
  * reject malformed values at PUT time, so we don't validate format here beyond non-empty.
@@ -46,18 +45,14 @@ data class PresignedUpload(
  */
 fun resolveUploadHash(
   sha256Base64: String?,
-  require: Boolean,
   slot: String = "file",
-): String? {
+): String {
   val trimmed = sha256Base64?.trim()
   if (trimmed.isNullOrEmpty()) {
-    if (require) {
-      throw org.springframework.web.server.ResponseStatusException(
-        org.springframework.http.HttpStatus.BAD_REQUEST,
-        "Missing content hash for $slot",
-      )
-    }
-    return null
+    throw org.springframework.web.server.ResponseStatusException(
+      org.springframework.http.HttpStatus.BAD_REQUEST,
+      "Missing content hash for $slot",
+    )
   }
   return trimmed
 }
@@ -254,7 +249,7 @@ class S3UploadService(
    * V2 Setup - generates presigned upload URL for setup photo
    */
   fun generatePresignedUploadUrl(
-    setup: OffenderSetupV2,
+    setup: OffenderSetup,
     contentType: String = "application/octet-stream",
     duration: Duration,
   ): URL = generatePresignedUploadUrl(SetupPhotoKey(setup.offender.uuid), contentType, duration)
@@ -263,7 +258,7 @@ class S3UploadService(
    * V2 Setup - generates presigned upload, optionally signed with a content hash.
    */
   fun generatePresignedUpload(
-    setup: OffenderSetupV2,
+    setup: OffenderSetup,
     contentType: String = "application/octet-stream",
     duration: Duration,
     checksumSha256Base64: String? = null,
@@ -273,7 +268,7 @@ class S3UploadService(
    * V2 Offender - generates presigned upload URL for updating offender photo
    */
   fun generatePresignedUploadUrl(
-    offender: OffenderV2,
+    offender: Offender,
     contentType: String = "application/octet-stream",
     duration: Duration,
   ): URL = generatePresignedUploadUrl(SetupPhotoKey(offender.uuid), contentType, duration)
@@ -282,7 +277,7 @@ class S3UploadService(
    * V2 Offender - generates presigned upload, optionally signed with a content hash.
    */
   fun generatePresignedUpload(
-    offender: OffenderV2,
+    offender: Offender,
     contentType: String = "application/octet-stream",
     duration: Duration,
     checksumSha256Base64: String? = null,
@@ -291,7 +286,7 @@ class S3UploadService(
   /**
    * V2 Setup - checks if setup photo is uploaded
    */
-  fun isSetupPhotoUploaded(setup: OffenderSetupV2): Boolean {
+  fun isSetupPhotoUploaded(setup: OffenderSetup): Boolean {
     val photoKey = SetupPhotoKey(setup.offender.uuid)
     return keyExists(photoKey)
   }
@@ -299,7 +294,7 @@ class S3UploadService(
   /**
    * V2 Offender - checks if setup photo is uploaded (overload for direct offender check)
    */
-  fun isSetupPhotoUploaded(offender: OffenderV2): Boolean {
+  fun isSetupPhotoUploaded(offender: Offender): Boolean {
     val photoKey = SetupPhotoKey(offender.uuid)
     return keyExists(photoKey)
   }
@@ -307,7 +302,7 @@ class S3UploadService(
   /**
    * V2 Offender - gets presigned download URL for offender photo
    */
-  fun getOffenderPhoto(offender: OffenderV2): URL? {
+  fun getOffenderPhoto(offender: Offender): URL? {
     if (offender.status != OffenderStatus.INITIAL) {
       val photoKey = SetupPhotoKey(offender.uuid)
       return presignedGetUrlFor(photoKey)
@@ -319,7 +314,7 @@ class S3UploadService(
   /**
    * V2 Offender - gets S3 object coordinate for setup photo (used by Rekognition)
    */
-  fun setupPhotoObjectCoordinate(offender: OffenderV2): S3ObjectCoordinate {
+  fun setupPhotoObjectCoordinate(offender: Offender): S3ObjectCoordinate {
     val key = SetupPhotoKey(offender.uuid)
     return S3ObjectCoordinate(
       bucket = imageUploadBucket,
@@ -335,7 +330,7 @@ class S3UploadService(
    * V2 Checkin - generates presigned upload URL for video
    */
   fun generatePresignedUploadUrl(
-    checkin: OffenderCheckinV2,
+    checkin: OffenderCheckin,
     contentType: String = "application/octet-stream",
     duration: Duration,
   ): URL = generatePresignedUploadUrl(CheckinVideoKey(checkin.uuid), contentType, duration)
@@ -344,7 +339,7 @@ class S3UploadService(
    * V2 Checkin - generates presigned video upload, optionally signed with a content hash.
    */
   fun generatePresignedUpload(
-    checkin: OffenderCheckinV2,
+    checkin: OffenderCheckin,
     contentType: String = "application/octet-stream",
     duration: Duration,
     checksumSha256Base64: String? = null,
@@ -354,7 +349,7 @@ class S3UploadService(
    * V2 Checkin - generates presigned upload URL for snapshot at index
    */
   fun generatePresignedUploadUrl(
-    checkin: OffenderCheckinV2,
+    checkin: OffenderCheckin,
     contentType: String = "application/octet-stream",
     index: Int,
     duration: Duration,
@@ -364,7 +359,7 @@ class S3UploadService(
    * V2 Checkin - generates presigned snapshot upload, optionally signed with a content hash.
    */
   fun generatePresignedUpload(
-    checkin: OffenderCheckinV2,
+    checkin: OffenderCheckin,
     contentType: String = "application/octet-stream",
     index: Int,
     duration: Duration,
@@ -374,7 +369,7 @@ class S3UploadService(
   /**
    * V2 Checkin - checks if video is uploaded
    */
-  fun isCheckinVideoUploaded(checkin: OffenderCheckinV2): Boolean {
+  fun isCheckinVideoUploaded(checkin: OffenderCheckin): Boolean {
     val videoKey = CheckinVideoKey(checkin.uuid)
     return keyExists(videoKey)
   }
@@ -382,7 +377,7 @@ class S3UploadService(
   /**
    * V2 Checkin - checks if snapshot at index exists
    */
-  fun isCheckinSnapshotUploaded(checkin: OffenderCheckinV2, index: Int): Boolean {
+  fun isCheckinSnapshotUploaded(checkin: OffenderCheckin, index: Int): Boolean {
     val snapshotKey = CheckinPhotoKey(checkin.uuid, index)
     return keyExists(snapshotKey)
   }
@@ -391,7 +386,7 @@ class S3UploadService(
    * V2 Checkin - gets presigned download URL for video if it exists in S3
    * Returns null if video hasn't been uploaded yet
    */
-  fun getCheckinVideo(checkin: OffenderCheckinV2): URL? {
+  fun getCheckinVideo(checkin: OffenderCheckin): URL? {
     val videoKey = CheckinVideoKey(checkin.uuid)
     return if (keyExists(videoKey)) {
       presignedGetUrlFor(videoKey)
@@ -404,7 +399,7 @@ class S3UploadService(
    * V2 Checkin - gets presigned download URL for snapshot at index if it exists
    * Returns null if snapshot hasn't been uploaded yet
    */
-  fun getCheckinSnapshot(checkin: OffenderCheckinV2, index: Int): URL? {
+  fun getCheckinSnapshot(checkin: OffenderCheckin, index: Int): URL? {
     val photoKey = CheckinPhotoKey(checkin.uuid, index)
     return if (keyExists(photoKey)) {
       presignedGetUrlFor(photoKey)
@@ -418,7 +413,7 @@ class S3UploadService(
    */
   @CircuitBreaker(name = "awsS3")
   @Retry(name = "awsS3")
-  fun uploadCheckinSnapshot(checkin: OffenderCheckinV2, index: Int, bytes: ByteArray, contentType: String): S3ObjectCoordinate {
+  fun uploadCheckinSnapshot(checkin: OffenderCheckin, index: Int, bytes: ByteArray, contentType: String): S3ObjectCoordinate {
     val key = CheckinPhotoKey(checkin.uuid, index)
     val putReq = putObjectRequest(bucketFor(key), key.toKey(), contentType)
     s3uploadClient.putObject(putReq, RequestBody.fromBytes(bytes))
@@ -428,7 +423,7 @@ class S3UploadService(
   /**
    * V2 Checkin - gets S3 object coordinate for snapshot (used by Rekognition)
    */
-  fun checkinObjectCoordinate(checkin: OffenderCheckinV2, index: Int): S3ObjectCoordinate {
+  fun checkinObjectCoordinate(checkin: OffenderCheckin, index: Int): S3ObjectCoordinate {
     val key = CheckinPhotoKey(checkin.uuid, index)
     return S3ObjectCoordinate(
       bucket = videoUploadBucket,

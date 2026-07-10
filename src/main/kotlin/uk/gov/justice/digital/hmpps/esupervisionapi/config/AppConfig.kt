@@ -11,14 +11,11 @@ class AppConfig(
   @Value("\${app.checkinUrl}") private val checkinUrl: String,
   @Value("\${app.mpopUrl}") private val mpopUrl: String,
   @Value("\${app.hostedAt}") private val hostedAt: String,
-  @Value("\${app.scheduling.checkin-notification.cron}") val checkinNotificationCron: String,
   @Value("\${app.features.esup-1239}") val esup1239ProxyLinks: Boolean,
-  @Value("\${app.features.esup-1183}") val esup1183SendInviteOnlyWhenActiveEvent: Boolean,
-  @Value("\${app.features.upload-content-hash.require:false}") val uploadContentHashRequire: Boolean,
+  @Value("\${app.features.esup-1763}") val esup1763RemoveSnapshots: Boolean,
   val enabledFeatures: Set<Feature> = listOfNotNull(
     if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
-    if (esup1183SendInviteOnlyWhenActiveEvent) Feature.ESUP_1183 else null,
-    if (uploadContentHashRequire) Feature.ESUP_1672_REQUIRE_UPLOAD_CONTENT_HASH else null,
+    if (esup1763RemoveSnapshots) Feature.ESUP_1763 else null,
   ).toSet(),
 ) {
 

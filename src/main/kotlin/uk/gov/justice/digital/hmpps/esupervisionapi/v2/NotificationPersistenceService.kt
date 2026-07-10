@@ -14,7 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContextV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContext
 import java.time.Clock
 import java.util.UUID
 
@@ -25,7 +25,7 @@ import java.util.UUID
 @Service
 class NotificationPersistenceService(
   private val templateConfig: MessageTemplateConfig,
-  private val genericNotificationV2Repository: GenericNotificationV2Repository,
+  private val genericNotificationRepository: GenericNotificationRepository,
   private val transactionTemplate: TransactionTemplate,
   private val clock: Clock,
   @param:Value("\${app.env}") private val env: String,
@@ -45,10 +45,10 @@ class NotificationPersistenceService(
       return notifications
     }
 
-    fun createNotificationRecord(details: ContactDetails): Pair<GenericNotificationV2, NotificationMethod>? {
+    fun createNotificationRecord(details: ContactDetails): Pair<GenericNotification, NotificationMethod>? {
       val templates = templateConfig.templatesFor(contactPreference, details)
       val notification = if (templates != null) {
-        GenericNotificationV2(
+        GenericNotification(
           notificationId = UUID.randomUUID(),
           eventType = notificationType.name,
           recipientType = "OFFENDER",
@@ -59,7 +59,7 @@ class NotificationPersistenceService(
           offenderId = offenderId,
           practitionerId = null,
           status = "created",
-          reference = NotificationContextV2.generateReference(notificationType, clock, env),
+          reference = NotificationContext.generateReference(notificationType, clock, env),
           createdAt = clock.instant(),
           errorMessage = null,
           templateId = templates.first.getTemplate(notificationType),
@@ -83,6 +83,7 @@ class NotificationPersistenceService(
             ContactPreference.PHONE -> (pair.second as PhoneNumber).phoneNumber
             ContactPreference.EMAIL -> (pair.second as Email).email
           },
+          AssociatedOffenderInfo(crn),
         ),
       )
     }
@@ -95,7 +96,7 @@ class NotificationPersistenceService(
     offenderId: Long?,
     crn: CRN?,
     contactDetails: PractitionerDetails?,
-    checkin: CheckinV2Dto?,
+    checkin: CheckinDto?,
     notificationType: NotificationType,
     practitionerId: ExternalUserId,
   ): List<NotificationWithRecipient> {
@@ -107,8 +108,8 @@ class NotificationPersistenceService(
         LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}]", reason, notificationType, crn)
       } else {
         val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
-        val reference = NotificationContextV2.generateReference(notificationType, clock, env)
-        val notification = GenericNotificationV2(
+        val reference = NotificationContext.generateReference(notificationType, clock, env)
+        val notification = GenericNotification(
           notificationId = UUID.randomUUID(),
           eventType = notificationType.name,
           recipientType = "PRACTITIONER",
@@ -123,7 +124,7 @@ class NotificationPersistenceService(
           sentAt = null,
           updatedAt = null,
         )
-        notifications.add(NotificationWithRecipient(notification, contactDetails.email))
+        notifications.add(NotificationWithRecipient(notification, contactDetails.email, AssociatedOffenderInfo.create(crn)))
       }
     }
 
@@ -131,17 +132,17 @@ class NotificationPersistenceService(
   }
 
   /** Save notification records in a transaction */
-  fun saveNotifications(notifications: List<GenericNotificationV2>): List<GenericNotificationV2> {
+  fun saveNotifications(notifications: List<GenericNotification>): List<GenericNotification> {
     if (notifications.isEmpty()) return emptyList()
 
     return transactionTemplate.execute {
-      genericNotificationV2Repository.saveAll(notifications).toList()
+      genericNotificationRepository.saveAll(notifications).toList()
     } ?: emptyList()
   }
 
   /** Update single notification status immediately after sending (in own transaction) */
   fun updateSingleNotificationStatus(
-    notification: GenericNotificationV2,
+    notification: GenericNotification,
     success: Boolean,
     notifyId: UUID,
     error: String? = null,
@@ -152,7 +153,7 @@ class NotificationPersistenceService(
       notification.sentAt = if (success) clock.instant() else null
       notification.errorMessage = error
       notification.updatedAt = clock.instant()
-      genericNotificationV2Repository.save(notification)
+      genericNotificationRepository.save(notification)
     }
   }
 
@@ -161,13 +162,22 @@ class NotificationPersistenceService(
   }
 }
 
+data class AssociatedOffenderInfo(val crn: CRN) {
+  companion object {
+    fun create(crn: CRN?): AssociatedOffenderInfo? = crn?.let { AssociatedOffenderInfo(crn) }
+  }
+}
+
 data class NotificationWithRecipient(
-  val notification: GenericNotificationV2,
+  val notification: GenericNotification,
+  /** Phone number or email address */
   val recipient: String,
+  /** Offender associated with the notification (which may be different than the recipient) */
+  val offender: AssociatedOffenderInfo?,
 )
 
 data class SendResult(
-  val notification: GenericNotificationV2,
+  val notification: GenericNotification,
   val notificationId: UUID,
   val success: Boolean,
   val error: String? = null,

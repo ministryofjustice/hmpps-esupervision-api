@@ -4,15 +4,18 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.datagen
  * Put "template" DTOs here for use in tests
  */
 
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Dto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityChoice
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
-val offenderTemplate = OffenderV2Dto(
+val offenderTemplate = OffenderDto(
   uuid = UUID.randomUUID(),
   crn = "X000000",
   practitionerId = "BARRY.WHITE",
@@ -25,7 +28,7 @@ val offenderTemplate = OffenderV2Dto(
   contactPreference = ContactPreference.EMAIL,
 )
 
-fun OffenderV2Dto.toEntity() = OffenderV2(
+fun OffenderDto.toEntity() = Offender(
   uuid = uuid,
   crn = crn,
   practitionerId = practitionerId,
@@ -36,4 +39,15 @@ fun OffenderV2Dto.toEntity() = OffenderV2(
   createdBy = createdBy,
   updatedAt = updatedAt,
   contactPreference = contactPreference,
+)
+
+fun Offender.asSetupDto(clock: Clock) = OffenderSetupDto(
+  uuid = UUID.randomUUID(),
+  practitionerId = this.practitionerId,
+  offenderUuid = this.uuid,
+  createdAt = clock.instant(),
+  startedAt = null,
+  eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
+  rationale = "It's fine",
+  setupId = UUID.randomUUID(),
 )

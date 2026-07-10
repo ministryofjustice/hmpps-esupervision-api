@@ -1,8 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ActiveEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -16,12 +18,54 @@ import java.time.temporal.ChronoUnit
  *
  * @see uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
  */
-fun activeEventNumber(offender: OffenderV2, details: ContactDetails): Long? {
+fun activeEventNumber(offender: ActiveEvent, details: ContactDetails): Long? {
   if (offender.currentEvent != null) {
     return offender.currentEvent
   }
 
   return details.events?.firstOrNull()?.number
+}
+
+/**
+ * Reasons a verified offender should no longer receive online check-ins.
+ * The [auditNote] is recorded against the automated deactivation audit event.
+ */
+enum class CheckinIneligibilityReason(
+  val description: String,
+  /** The audit event type recorded when a scheduled job stops check-ins for this reason. */
+  val auditEventType: OffenderAuditEventType,
+) {
+  CONTACT_SUSPENDED(
+    "contact is suspended (in reset) in NDelius",
+    OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+  ),
+  NO_ACTIVE_EVENTS(
+    "there are no active probation events in NDelius",
+    OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+  ),
+  ;
+
+  /** Human-readable reason text recorded in the audit event's notes. */
+  val auditNote: String get() = "Automatically deactivated: $description"
+}
+
+/**
+ * Determines whether an offender should be stopped from receiving online check-ins, based on the
+ * latest Delius contact details. Returns the reason, or null if the offender is still eligible.
+ *
+ * Stops check-ins when the person is in reset (contact suspended) or has no active probation events.
+ *
+ * Note on no-active-events: we only treat this as grounds for stopping when NDelius returns an
+ * explicitly empty events list. An absent/null events list is treated as indeterminate (e.g. a
+ * partial or degraded response) and does NOT stop check-ins, so a transient data gap can't wrongly
+ * off-board an active person. A cached [Offender.currentEvent] always counts as an active event.
+ *
+ * @see activeEventNumber
+ */
+fun checkinIneligibilityReason(offender: ActiveEvent, details: ContactDetails): CheckinIneligibilityReason? = when {
+  offender.currentEvent == null && details.events.isEmpty() -> CheckinIneligibilityReason.NO_ACTIVE_EVENTS
+  details.contactSuspended -> CheckinIneligibilityReason.CONTACT_SUSPENDED
+  else -> null
 }
 
 /**

@@ -9,14 +9,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Service
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinV2Status
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderQuestionList
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderV2Repository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListItemDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionPolicy
@@ -42,9 +42,9 @@ import kotlin.jvm.optionals.getOrNull
 class QuestionService(
   private val questionsRepository: QuestionRepository,
   private val questionListAssignmentRepository: QuestionListAssignmentRepository,
-  private val offenderRepository: OffenderV2Repository,
-  private val checkinService: CheckinV2Service,
-  private val checkinRepository: OffenderCheckinV2Repository,
+  private val offenderRepository: OffenderRepository,
+  private val checkinService: CheckinService,
+  private val checkinRepository: OffenderCheckinRepository,
   private val clock: Clock,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) {
@@ -82,7 +82,7 @@ class QuestionService(
    * Returns a minimal set of information about the upcoming question list assignment.
    */
   @Transactional(readOnly = true)
-  fun upcomingAssignment(offender: OffenderV2): UpcomingQuestionAssignmentInfo {
+  fun upcomingAssignment(offender: Offender): UpcomingQuestionAssignmentInfo {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender status is ${offender.status}" }
     val today = clock.today()
     val next = nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY)
@@ -113,7 +113,7 @@ class QuestionService(
     }
     val today = clock.today()
     val checkin = checkinRepository.findByOffenderAndDueDate(offender, today).getOrNull()
-    if ((checkin == null && isCheckinDay(offender, today)) || (checkin != null && checkin.status == CheckinV2Status.CREATED)) {
+    if ((checkin == null && isCheckinDay(offender, today)) || (checkin != null && checkin.status == CheckinStatus.CREATED)) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
@@ -152,7 +152,7 @@ class QuestionService(
   @Transactional(readOnly = true)
   fun checkinQuestions(checkinUuid: UUID, language: Language): List<QuestionListItemDto> {
     val checkin = checkinRepository.findByUuid(checkinUuid).orElseThrow { BadArgumentException("Checkin not found for UUID=$checkinUuid") }
-    if (checkin.status != CheckinV2Status.CREATED) {
+    if (checkin.status != CheckinStatus.CREATED) {
       throw BadArgumentException("Can't checkin questions for checkin with status ${checkin.status}")
     }
     val listId = questionListAssignmentRepository.checkinAssignment(checkin.id)

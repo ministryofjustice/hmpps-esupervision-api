@@ -119,7 +119,7 @@ class HmppsESupervisionExceptionHandler {
     ).also { log.info("V2 Bad argument exception: {}", e.message) }
 
   @ExceptionHandler(V2ResourceNotFoundException::class)
-  fun handleV2ResourceNotFoundException(e: V2ResourceNotFoundException): ResponseEntity<ErrorResponse> = ResponseEntity
+  fun handleResourceNotFoundException(e: V2ResourceNotFoundException): ResponseEntity<ErrorResponse> = ResponseEntity
     .status(NOT_FOUND)
     .body(
       ErrorResponse(

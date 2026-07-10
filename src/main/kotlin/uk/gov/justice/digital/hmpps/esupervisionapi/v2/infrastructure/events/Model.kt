@@ -3,7 +3,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events
 import java.time.ZonedDateTime
 import java.util.UUID
 
-data class AdditionalInformation(val eventNumber: Long? = null, val setupId: UUID? = null)
+data class AdditionalInformation(
+  val eventNumber: Long? = null,
+  val setupId: UUID? = null,
+  /** Delius outcome code explaining why online check-ins were stopped (V2_SETUP_REMOVED only). */
+  val outcomeCode: String? = null,
+)
 
 data class DomainEvent(
   val eventType: String,
