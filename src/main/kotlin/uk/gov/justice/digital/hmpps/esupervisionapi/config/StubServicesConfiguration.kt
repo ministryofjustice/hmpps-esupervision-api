@@ -17,7 +17,7 @@ import java.nio.file.Path
 class StubServicesConfiguration {
 
   @Bean
-  @Profile("local & stubndilius")
+  @Profile("stubndilius")
   fun ndiliusApiClient(latency: StubLatencyProperties): INdiliusApiClient {
     LOG.info("Creating stubbed Ndilius API client (latency injection enabled={})", latency.enabled)
     return StubNdiliusApiClient(latency = latency)
