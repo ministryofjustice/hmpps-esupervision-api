@@ -21,7 +21,7 @@ generic-service:
     POP_UI_URL: "https://probation-check-in-test.hmpps.service.justice.gov.uk"
     APP_ENV: "TEST"
     APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
-    APP_SCHEDULING_V2_CHECKIN_CREATION_CRON: "0 5 9,11,12,1 3,14,15 * * *"
+    APP_SCHEDULING_V2_CHECKIN_CREATION_CRON: "0 5 9,11,12,13,14,15,16,17,18 * * *"
     APP_FEATURES_ESUP_1239: "true"
     APP_FEATURES_ESUP_1763: "true"
     SPRING_PROFILES_ACTIVE: "stubrekog,stubndilius"
