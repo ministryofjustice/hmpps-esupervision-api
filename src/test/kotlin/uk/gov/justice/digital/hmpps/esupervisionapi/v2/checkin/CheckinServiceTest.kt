@@ -1,7 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -26,6 +24,8 @@ import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.rekognition.model.AuditImage
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse
 import software.amazon.awssdk.services.rekognition.model.RekognitionException
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import tools.jackson.module.kotlin.readValue
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType

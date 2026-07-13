@@ -1,8 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.events
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.Logger
 import org.springframework.stereotype.Service
+import tools.jackson.databind.ObjectMapper
 import uk.gov.justice.hmpps.sqs.HmppsQueueService
 import uk.gov.justice.hmpps.sqs.publish
 

@@ -1,12 +1,12 @@
-import com.fasterxml.jackson.core.JsonParser
-import com.fasterxml.jackson.core.JsonToken
-import com.fasterxml.jackson.databind.DeserializationContext
-import com.fasterxml.jackson.databind.JsonDeserializer
+import tools.jackson.core.JsonParser
+import tools.jackson.core.JsonToken
+import tools.jackson.databind.DeserializationContext
+import tools.jackson.databind.ValueDeserializer
 
-class StrictBooleanDeserializer : JsonDeserializer<Boolean>() {
+class StrictBooleanDeserializer : ValueDeserializer<Boolean>() {
 
   override fun deserialize(p: JsonParser, ctxt: DeserializationContext): Boolean {
-    val token = p.currentToken
+    val token = p.currentToken()
 
     if (token == JsonToken.VALUE_TRUE) return true
     if (token == JsonToken.VALUE_FALSE) return false

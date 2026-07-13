@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
-import com.fasterxml.jackson.core.type.TypeReference
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -13,6 +12,7 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.core.type.TypeReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -427,7 +427,7 @@ interface TotalFeedbackMonthlyRepository : JpaRepository<TotalFeedbackMonthly, L
 @Component
 class StatsSummaryRepository(
   private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
-  private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
+  private val objectMapper: tools.jackson.databind.ObjectMapper,
 ) {
   /**
    * @param fromMonth inclusive
@@ -615,7 +615,7 @@ interface CheckinNoteResendRepository : JpaRepository<CheckinNoteResend, Long> {
 @Repository
 class QuestionRepository(
   private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
-  private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
+  private val objectMapper: tools.jackson.databind.ObjectMapper,
 ) {
   /**
    * Get questions for a specific list.
