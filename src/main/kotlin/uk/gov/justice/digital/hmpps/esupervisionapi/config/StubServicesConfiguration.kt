@@ -83,11 +83,11 @@ class StubNdiliusApiClient(
     latency.sleep(latency.ndiliusContact)
     val incomingCrns = HashSet<String>(crns)
     val allowedCrns = watcher.allowedCrns
-    if (allowedCrns.containsAll(incomingCrns)) {
-      return crns.map { dataProvider.provideCase(it) }
+    val notAllowed = incomingCrns.subtract(allowedCrns)
+    if (notAllowed.isNotEmpty()) {
+      LOG.debug("Following CRNs not found in allowed list: {}", notAllowed)
     }
-    LOG.debug("Not all CRNs found in allowed list: {}", incomingCrns.subtract(allowedCrns))
-    return emptyList()
+    return crns.map { dataProvider.provideCase(it) }
   }
 
   companion object {
