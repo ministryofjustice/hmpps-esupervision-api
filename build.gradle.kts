@@ -14,7 +14,9 @@ configurations {
 dependencies {
   implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-starter:2.5.0")
   implementation("org.springframework.boot:spring-boot-starter-webflux")
-  implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
+  // Keep in lockstep with springdoc-openapi-starter-common pulled by hmpps-kotlin-spring-boot-autoconfigure
+  // (a lower webmvc-ui against a higher common causes an AbstractRequestService constructor mismatch at context load)
+  implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.14")
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
   implementation("net.javacrumbs.shedlock:shedlock-spring:7.7.0")
   implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.7.0")
