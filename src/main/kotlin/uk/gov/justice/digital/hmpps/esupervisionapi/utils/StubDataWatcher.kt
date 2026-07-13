@@ -8,6 +8,7 @@ import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.slf4j.LoggerFactory
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher.Companion.LOG
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher.DataConfig
+import java.io.InputStream
 import java.nio.file.ClosedWatchServiceException
 import java.nio.file.FileSystems
 import java.nio.file.Path
@@ -153,9 +154,9 @@ class StubDataWatcher(val path: Path) :
 
 private fun extractData(objectMapper: ObjectMapper, path: Path): Set<CRN> {
   try {
-    val wrapper = objectMapper.readValue<DataConfig>(path.toFile())
-    // convert path to resource
-    val res = Paths.get("")
+    val resourceStream: InputStream? = Thread.currentThread().contextClassLoader.getResourceAsStream(path.toString())
+    val stream = resourceStream ?: path.toFile().inputStream()
+    val wrapper = stream.use { objectMapper.readValue<DataConfig>(it) }
     LOG.info("Loaded {} CRNs from {}", wrapper.crns.size, path)
     return wrapper.crns
   } catch (ex: Exception) {
