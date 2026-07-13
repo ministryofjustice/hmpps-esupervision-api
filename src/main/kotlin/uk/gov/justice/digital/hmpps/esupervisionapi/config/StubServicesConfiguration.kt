@@ -5,7 +5,10 @@ import org.springframework.beans.factory.DisposableBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ConstantCrnSet
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ICrnSet
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.IWatcher
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -19,8 +22,14 @@ class StubServicesConfiguration {
   @Bean
   @Profile("stubndilius")
   fun ndiliusApiClient(latency: StubLatencyProperties): INdiliusApiClient {
-    LOG.info("Creating stubbed Ndilius API client (latency injection enabled={})", latency.enabled)
-    return StubNdiliusApiClient(latency = latency)
+    LOG.info("Creating stubbed NDelius API client (latency injection enabled={})", latency.enabled)
+    val appEnv = System.getenv("APP_ENV")?.trim()
+    val crns: ICrnSet = if (appEnv.isNullOrEmpty()) {
+      StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json"))
+    } else {
+      ConstantCrnSet.fromResource("ndelius-responses/${appEnv.lowercase()}.json")
+    }
+    return StubNdiliusApiClient(latency = latency, watcher = crns)
   }
 
   companion object {
@@ -35,18 +44,22 @@ class StubServicesConfiguration {
  * The file can be edited at runtime and will be automatically reloaded.
  */
 class StubNdiliusApiClient(
-  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
+  val watcher: ICrnSet = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
   val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
   private val latency: StubLatencyProperties = StubLatencyProperties(),
 ) : INdiliusApiClient,
   DisposableBean {
 
   init {
-    watcher.startWatchingChanges()
+    if (watcher is IWatcher) {
+      watcher.startWatchingChanges()
+    }
   }
 
   override fun destroy() {
-    watcher.stopWatchingChanges()
+    if (watcher is IWatcher) {
+      watcher.stopWatchingChanges()
+    }
   }
 
   override fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
