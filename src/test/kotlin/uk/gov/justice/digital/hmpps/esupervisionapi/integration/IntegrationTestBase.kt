@@ -4,6 +4,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT
+import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.context.annotation.Import
 import org.springframework.http.HttpHeaders
 import org.springframework.test.context.ActiveProfiles
@@ -20,8 +21,14 @@ import uk.gov.justice.hmpps.test.kotlin.auth.JwtAuthorisationHelper
 @ActiveProfiles("test")
 abstract class IntegrationTestBase {
 
-  @Autowired
-  protected lateinit var webTestClient: WebTestClient
+  // Boot 4 removed the auto-registered WebTestClient bean for @SpringBootTest(RANDOM_PORT);
+  // build one bound to the live server port instead.
+  @LocalServerPort
+  private var port: Int = 0
+
+  protected val webTestClient: WebTestClient by lazy {
+    WebTestClient.bindToServer().baseUrl("http://localhost:$port").build()
+  }
 
   @Autowired
   protected lateinit var jwtAuthHelper: JwtAuthorisationHelper
