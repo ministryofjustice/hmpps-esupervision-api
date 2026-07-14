@@ -72,13 +72,17 @@ kotlin {
   jvmToolchain(21)
 }
 
+// Project-specific OWASP suppressions, applied alongside the plugin-generated
+// dps-gradle-spring-boot-suppressions.xml (which is regenerated on every build).
+dependencyCheck {
+  suppressionFiles.add("$projectDir/owasp-suppressions.xml")
+}
+
 tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
   }
   withType<Test> {
-    environment("DOCKER_API_VERSION", "1.44")
-    systemProperty("com.github.dockerjava.api.version", "1.44")
     useJUnitPlatform()
   }
 }
