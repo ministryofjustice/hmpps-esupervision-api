@@ -183,7 +183,8 @@ class CheckinService(
     val videoPresigned = s3UploadService.generatePresignedUpload(checkin, videoContentType, ttl, null)
     val snapshotUploads =
       snapshotContentTypes.mapIndexed { index, contentType ->
-//        val snapHash = resolveUploadHash(
+        val snapHash = null
+        //        resolveUploadHash(
 //          hashes?.snapshots?.getOrNull(index)?.sha256,
 //          "snapshot[$index]",
 //        )
