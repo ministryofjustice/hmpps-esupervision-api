@@ -135,6 +135,7 @@ spring:
       idle-timeout: 60000
       connection-timeout: 30000
       pool-name: HikariPool-esupervision
+      leak-detection-threshold: 15000
 
   liquibase:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
@@ -171,7 +172,7 @@ management:
     web:
       base-path: /
       exposure:
-        include: 'info, health'
+        include: 'info, health, metrics'
   endpoint:
     health:
       cache:
@@ -183,6 +184,9 @@ management:
     info:
       cache:
         time-to-live: 2000ms
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 aws:
   region-name: eu-west-2
