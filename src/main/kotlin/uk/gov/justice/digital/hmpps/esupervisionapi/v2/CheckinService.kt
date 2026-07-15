@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -183,11 +184,10 @@ class CheckinService(
     val videoPresigned = s3UploadService.generatePresignedUpload(checkin, videoContentType, ttl, null)
     val snapshotUploads =
       snapshotContentTypes.mapIndexed { index, contentType ->
-        val snapHash = null
-        //        resolveUploadHash(
-//          hashes?.snapshots?.getOrNull(index)?.sha256,
-//          "snapshot[$index]",
-//        )
+        val snapHash = resolveUploadHash(
+          hashes?.snapshots?.getOrNull(index)?.sha256,
+          "snapshot[$index]",
+        )
         val presigned = s3UploadService.generatePresignedUpload(checkin, contentType, index, ttl, snapHash)
         UploadLocation(
           url = presigned.url,
