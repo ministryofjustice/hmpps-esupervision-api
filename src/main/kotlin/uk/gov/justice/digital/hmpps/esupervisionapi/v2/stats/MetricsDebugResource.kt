@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats
 
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 
@@ -17,6 +18,7 @@ class MetricsDebugResource(private val meterRegistry: MeterRegistry) {
     REKOG_COMPARE_FACES_VERIFY_CHECKIN_IMAGES("rekog.compare-faces.verify-chckin-images"),
   }
 
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/metrics")
   fun getMetrics(request: HttpServletRequest): Map<String, Any> = mapOf(
     "host" to request.serverName,
