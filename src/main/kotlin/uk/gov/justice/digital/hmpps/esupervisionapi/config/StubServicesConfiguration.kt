@@ -54,7 +54,7 @@ open class StubNdiliusApiClient(
     return watcher.allowedCrns.contains(personalDetails.crn)
   }
 
-  @Timed("ndelius.get-contact-details", extraTags = ["method=GET", "endpoint=/case/{crn}"], description = "Time taken to get contact details (STUB)")
+  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details (STUB)")
   override fun getContactDetails(crn: String): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {

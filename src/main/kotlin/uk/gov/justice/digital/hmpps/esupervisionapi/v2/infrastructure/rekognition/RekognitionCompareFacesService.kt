@@ -47,7 +47,7 @@ open class RekognitionCompareFacesService(
 
   @CircuitBreaker(name = "awsRekognition")
   @Retry(name = "awsRekognition")
-  @Timed("rekog.compare-faces.verify-chckin-images", extraTags = [], description = "Time taken to compare checkin images")
+  @Timed("rekog.compare-faces.verify-checkin-images", extraTags = [], description = "Time taken to compare checkin images")
   override fun verifyCheckinImages(
     snapshots: CheckinVerificationImages,
     requiredConfidence: Float,

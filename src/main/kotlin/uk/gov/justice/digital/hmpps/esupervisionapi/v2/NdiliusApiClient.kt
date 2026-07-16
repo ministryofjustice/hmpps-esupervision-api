@@ -43,7 +43,7 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.get-contact-details", extraTags = ["method=GET", "endpoint=/case/{crn}"], description = "Time taken to get contact details")
+  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
   override fun getContactDetails(crn: String): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
 
@@ -74,7 +74,7 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.get-contact-details-for-multiple", extraTags = ["method=POST", "endpoint=/cases"], description = "Time taken to get contact details")
+  @Timed("ndelius.get-contact-details-for-multiple", extraTags = ["method", "POST", "endpoint", "/cases"], description = "Time taken to get contact details")
   override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
     if (crns.isEmpty()) {
       return emptyList()
@@ -113,7 +113,7 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "validatePersonalDetailsFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.validate-details", extraTags = ["method=POST", "endpoint=/case/{crn}/validate-details"], description = "Time taken to validate personal details")
+  @Timed("ndelius.validate-details", extraTags = ["method", "POST", "endpoint", "/case/{crn}/validate-details"], description = "Time taken to validate personal details")
   override fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
     LOGGER.info("Validating personal details for CRN: {}", personalDetails.crn)
 

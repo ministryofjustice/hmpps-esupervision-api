@@ -15,7 +15,7 @@ class MetricsDebugResource(private val meterRegistry: MeterRegistry) {
     NDELIUS_VALIDATE_DETAILS("ndelius.validate-details"),
     REKOG_LIVENESS_CREATE_SESSION("rekog.liveness.create-session"),
     REKOG_LIVENESS_RESULTS("rekog.liveness.results"),
-    REKOG_COMPARE_FACES_VERIFY_CHECKIN_IMAGES("rekog.compare-faces.verify-chckin-images"),
+    REKOG_COMPARE_FACES_VERIFY_CHECKIN_IMAGES("rekog.compare-faces.verify-checkin-images"),
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
