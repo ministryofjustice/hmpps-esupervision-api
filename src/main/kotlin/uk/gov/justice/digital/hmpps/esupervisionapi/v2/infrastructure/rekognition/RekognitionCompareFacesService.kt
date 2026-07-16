@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekogniti
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
+import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.services.rekognition.RekognitionAsyncClient
 import software.amazon.awssdk.services.rekognition.model.CompareFacesResponse
@@ -46,6 +47,7 @@ open class RekognitionCompareFacesService(
 
   @CircuitBreaker(name = "awsRekognition")
   @Retry(name = "awsRekognition")
+  @Timed("rekog.compare-faces.verify-chckin-images", extraTags = [], description = "Time taken to compare checkin images")
   override fun verifyCheckinImages(
     snapshots: CheckinVerificationImages,
     requiredConfidence: Float,

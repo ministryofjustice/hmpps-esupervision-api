@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
+import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
@@ -42,6 +43,7 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsFallback")
   @Retry(name = "ndiliusApi")
+  @Timed("ndelius.get-contact-details", extraTags = ["method=GET", "endpoint=/case/{crn}"], description = "Time taken to get contact details")
   override fun getContactDetails(crn: String): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
 
@@ -72,6 +74,7 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
   @Retry(name = "ndiliusApi")
+  @Timed("ndelius.get-contact-details-for-multiple", extraTags = ["method=POST", "endpoint=/cases"], description = "Time taken to get contact details")
   override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
     if (crns.isEmpty()) {
       return emptyList()
@@ -104,27 +107,13 @@ class NdiliusApiClient(
   }
 
   /**
-   * Get contact details in batches (handles automatic chunking)
-   */
-  fun getContactDetailsInBatches(crns: List<String>): List<ContactDetails> {
-    if (crns.isEmpty()) {
-      return emptyList()
-    }
-
-    LOGGER.info("Fetching contact details for {} CRNs in batches of {}", crns.size, INdiliusApiClient.MAX_BATCH_SIZE)
-
-    return crns.chunked(INdiliusApiClient.MAX_BATCH_SIZE).flatMap { batch ->
-      getContactDetailsForMultiple(batch)
-    }
-  }
-
-  /**
    * Validate personal details for a person on probation
    * POST /case/{crn}/validate-details
    * Returns true if valid (200 OK), false if invalid (400 Bad Request)
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "validatePersonalDetailsFallback")
   @Retry(name = "ndiliusApi")
+  @Timed("ndelius.validate-details", extraTags = ["method=POST", "endpoint=/case/{crn}/validate-details"], description = "Time taken to validate personal details")
   override fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
     LOGGER.info("Validating personal details for CRN: {}", personalDetails.crn)
 
