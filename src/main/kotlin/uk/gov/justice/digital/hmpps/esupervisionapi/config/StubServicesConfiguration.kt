@@ -44,7 +44,7 @@ class StubServicesConfiguration {
  *
  * The file can be edited at runtime and will be automatically reloaded.
  */
-class StubNdiliusApiClient(
+open class StubNdiliusApiClient(
   val watcher: ICrnSet = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
   val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
   private val latency: StubLatencyProperties = StubLatencyProperties(),
