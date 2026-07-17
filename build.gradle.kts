@@ -12,14 +12,16 @@ configurations {
 }
 
 dependencies {
-  implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-starter:1.4.5")
+  implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-starter:1.8.2")
   implementation("org.springframework.boot:spring-boot-starter-webflux")
-  implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8")
+  // Keep in lockstep with springdoc-openapi-starter-common pulled by hmpps-kotlin-spring-boot-autoconfigure
+  // (a lower webmvc-ui against a higher common causes an AbstractRequestService constructor mismatch at context load)
+  implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.14")
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
   implementation("net.javacrumbs.shedlock:shedlock-spring:6.9.2")
   implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.9.2")
-  implementation("uk.gov.justice.service.hmpps:hmpps-sqs-spring-boot-starter:5.4.9")
-  implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-autoconfigure:1.4.10")
+  implementation("uk.gov.justice.service.hmpps:hmpps-sqs-spring-boot-starter:5.6.3")
+  implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-autoconfigure:1.8.2")
   implementation("com.github.ben-manes.caffeine:caffeine")
   implementation("org.springframework.boot:spring-boot-starter-cache")
   implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -29,10 +31,10 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-aop")
 
   api("software.amazon.awssdk:s3")
-  implementation("software.amazon.awssdk:s3:2.31.63")
-  implementation("software.amazon.awssdk:sts:2.31.63")
-  implementation("software.amazon.awssdk:rekognition:2.31.63")
-  implementation("software.amazon.awssdk:netty-nio-client:2.31.63")
+  implementation("software.amazon.awssdk:s3:2.47.5")
+  implementation("software.amazon.awssdk:sts:2.47.5")
+  implementation("software.amazon.awssdk:rekognition:2.47.5")
+  implementation("software.amazon.awssdk:netty-nio-client:2.47.5")
 
   implementation("org.jetbrains.kotlin:kotlin-reflect")
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -44,7 +46,7 @@ dependencies {
 
   developmentOnly("org.springframework.boot:spring-boot-devtools")
 
-  testImplementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-starter-test:1.4.5")
+  testImplementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-starter-test:1.8.2")
   testImplementation("org.wiremock:wiremock-standalone:3.13.0")
   testImplementation("io.swagger.parser.v3:swagger-parser:2.1.29") {
     exclude(group = "io.swagger.core.v3")
