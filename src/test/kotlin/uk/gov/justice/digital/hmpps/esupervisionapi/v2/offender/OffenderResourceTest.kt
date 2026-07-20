@@ -34,6 +34,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import java.net.URI
 import java.time.Clock
@@ -56,6 +57,7 @@ class OffenderResourceTest {
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val offenderSetupService: OffenderSetupService = mock()
   private val offenderDeactivationService: OffenderDeactivationService = mock()
+  private val offenderService: OffenderService = mock()
   private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderResource
@@ -75,6 +77,7 @@ class OffenderResourceTest {
       checkinRepository,
       offenderSetupService,
       offenderDeactivationService,
+      offenderService,
       appConfig,
     )
   }
@@ -95,6 +98,7 @@ class OffenderResourceTest {
       crn = offender.crn,
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
@@ -131,6 +135,7 @@ class OffenderResourceTest {
       crn = offender.crn,
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -215,6 +220,7 @@ class OffenderResourceTest {
       crn = offender.crn,
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
@@ -259,6 +265,7 @@ class OffenderResourceTest {
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -301,6 +308,7 @@ class OffenderResourceTest {
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -384,6 +392,7 @@ class OffenderResourceTest {
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
@@ -414,6 +423,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = null,
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -443,6 +453,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       email = "",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -471,6 +482,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val completedCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
@@ -504,6 +516,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val cancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
@@ -538,6 +551,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -570,6 +584,7 @@ class OffenderResourceTest {
       mobile = "07700900123",
       events = listOf(anEvent),
       contactSuspended = true,
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -596,6 +611,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
       events = emptyList(),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))

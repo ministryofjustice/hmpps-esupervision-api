@@ -399,6 +399,7 @@ class NotificationOrchestratorServiceTest {
       provider = OrganizationalUnit("PRV01", "Test Provider"),
     ),
     events = listOf(Event(number = 12345L, mainOffence = CodedDescription("OFF01", "Test Offence"), sentence = null)),
+    dateOfBirth = LocalDate.of(1980, 1, 1),
   )
 
   private fun createContactDetails() = ContactDetails(
@@ -414,5 +415,6 @@ class NotificationOrchestratorServiceTest {
       provider = OrganizationalUnit("PRV01", "Test Provider"),
     ),
     events = listOf(Event(1, mainOffence = CodedDescription("OFF01", "Test Offence"), sentence = null)),
+    dateOfBirth = LocalDate.of(1980, 1, 1),
   )
 }

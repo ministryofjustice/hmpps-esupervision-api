@@ -124,6 +124,7 @@ spring:
             authorization-grant-type: client_credentials
             scope: read
 
+          tier-api:
             provider: hmpps-auth
             client-id: ${API_CLIENT_ID}
             client-secret: ${API_CLIENT_SECRET}

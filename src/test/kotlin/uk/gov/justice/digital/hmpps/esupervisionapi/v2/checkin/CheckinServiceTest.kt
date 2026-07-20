@@ -157,6 +157,7 @@ class CheckinServiceTest {
       crn = offender.crn,
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       email = "john@example.com",
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     service.sendReminder(uuid)
