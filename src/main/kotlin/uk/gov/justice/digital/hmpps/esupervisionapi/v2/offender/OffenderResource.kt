@@ -122,6 +122,29 @@ class OffenderResource(
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Get offender header by CRN",
+    description = "Returns offender header details. Returns 404 if not found.",
+  )
+  @ApiResponse(responseCode = "200", description = "Offender found")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @GetMapping("/header/{crn}")
+  fun getOffenderHeaderByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): ResponseEntity<OffenderHeaderDetails> {
+    val offender = offenderRepository.findByCrn(crn.trim().uppercase()).orElse(null)
+    if (offender == null) {
+      LOGGER.info("Offender not found for crn={}", crn)
+      return ResponseEntity.notFound().build()
+    }
+
+    val headerDetails = offenderService.getHeaderDetails(crn.trim().uppercase())
+
+    LOGGER.info("Retrieved header details for offender by CRN: crn={}, status={}", offender.crn, offender.status)
+    return ResponseEntity.ok(headerDetails)
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/{uuid}/proxy/photo")
   @Operation(
     summary = "Get photo proxy URL",
@@ -498,6 +521,14 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   contactPreference = contactPreference,
   photoUrl = photoUrl,
   details = contactDetails?.let { OffenderSummaryDetails(it.name) },
+)
+
+data class OffenderHeaderDetails(
+  val crn: String,
+  val dateOfBirth: LocalDate,
+  val tierScore: String,
+  val tierDetailsLink: String,
+  val overallRisk: String,
 )
 
 data class OffenderHeaderDetails(
