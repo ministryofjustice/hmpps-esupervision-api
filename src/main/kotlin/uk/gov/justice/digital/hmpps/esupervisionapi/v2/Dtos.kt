@@ -58,9 +58,6 @@ data class ContactDetails(
   @field:Schema(description = "Person's date of birth")
   val dateOfBirth: LocalDate,
 
-  @field:Schema(description = "Person's date of birth")
-  val dateOfBirth: LocalDate,
-
   @field:Schema(
     description = "Mobile phone number (optional)",
     required = false,

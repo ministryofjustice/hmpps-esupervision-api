@@ -36,7 +36,7 @@ class OffenderServiceTest {
     tierScore = "D2",
     calculationId = UUID.randomUUID(),
     calculationDate = LocalDate.of(2026, 1, 1),
-    changeReason = "A registration was added"
+    changeReason = "A registration was added",
   )
   private val riskWidget = ArnsWidget(
     overallRisk = "VERY_HIGH",
@@ -46,14 +46,14 @@ class OffenderServiceTest {
       children = "LOW",
       knownAdult = "MEDIUM",
       staff = "VERY_HIGH",
-      prisoners = null
+      prisoners = null,
     ),
     riskInCustody = RiskInSituation(
       public = "HIGH",
       children = "LOW",
       knownAdult = "MEDIUM",
       staff = "VERY_HIGH",
-      prisoners = "VERY_HIGH"
+      prisoners = "VERY_HIGH",
     ),
   )
 
@@ -101,7 +101,7 @@ class OffenderServiceTest {
   }
 
   @Test
-  fun `getHeaderDetails - contact details missing`(){
+  fun `getHeaderDetails - contact details missing`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(null)
 
     val exception = assertThrows(ResponseStatusException::class.java) {
@@ -113,7 +113,7 @@ class OffenderServiceTest {
   }
 
   @Test
-  fun `getHeaderDetails - tier details missing`(){
+  fun `getHeaderDetails - tier details missing`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
     whenever(tierApiClient.getTierDetails(crn)).thenReturn(null)
 
@@ -126,7 +126,7 @@ class OffenderServiceTest {
   }
 
   @Test
-  fun `getHeaderDetails - risk details missing`(){
+  fun `getHeaderDetails - risk details missing`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
     whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
     whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(null)
@@ -137,6 +137,5 @@ class OffenderServiceTest {
 
     assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
     assertEquals("Could not verify risk widget in ARNS API for $crn.", exception.reason)
-
   }
 }
