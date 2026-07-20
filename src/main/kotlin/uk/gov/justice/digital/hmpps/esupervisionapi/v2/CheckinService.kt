@@ -253,7 +253,7 @@ class CheckinService(
    *
    * @param numSnapshots Number of snapshots to compare against setup photo (default 1)
    */
-  fun verifyFace(uuid: UUID, numSnapshots: Int = 1): FacialRecognitionResult {
+  fun verifyFace(uuid: UUID, numSnapshots: Int = 1): CompletableFuture<FacialRecognitionResult> {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
@@ -292,26 +292,26 @@ class CheckinService(
     }
 
     // Perform facial recognition (slow I/O, no DB transaction held)
-    val outcome = performFacialRecognition(checkin, numSnapshots)
+    return performFacialRecognition(checkin, numSnapshots).thenApplyAsync { outcome ->
+      // Record every non-MATCH outcome so retries leave an audit trail.
+      if (outcome.result != AutomatedIdVerificationResult.MATCH) {
+        recordRekognitionFailure(
+          checkin,
+          LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
+          attemptNotes(
+            "result" to outcome.result.name,
+            "similarity" to outcome.topSimilarity,
+            "errorCode" to outcome.errorCode,
+          ),
+        )
+      }
 
-    // Record every non-MATCH outcome so retries leave an audit trail.
-    if (outcome.result != AutomatedIdVerificationResult.MATCH) {
-      recordRekognitionFailure(
-        checkin,
-        LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
-        attemptNotes(
-          "result" to outcome.result.name,
-          "similarity" to outcome.topSimilarity,
-          "errorCode" to outcome.errorCode,
-        ),
-      )
+      checkin.autoIdCheck = outcome.result
+      checkin.autoIdCheckScore = outcome.topSimilarity
+      checkinRepository.save(checkin)
+
+      FacialRecognitionResult(outcome.result)
     }
-
-    checkin.autoIdCheck = outcome.result
-    checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
-
-    return FacialRecognitionResult(outcome.result)
   }
 
   /** Mark checkin review as started */
@@ -420,7 +420,7 @@ class CheckinService(
   // ========================================
 
   /** Create a Rekognition Face Liveness session for the given checkin */
-  fun createLivenessSession(uuid: UUID): LivenessSessionResponse {
+  fun createLivenessSession(uuid: UUID): CompletableFuture<LivenessSessionResponse> {
     val checkin =
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
@@ -446,7 +446,7 @@ class CheckinService(
     checkin.autoIdCheckScore = null
     checkinRepository.save(checkin)
 
-    val sessionId = awaitRekognition(
+    return awaitRekognition(
       future = livenessSessionService.createSession(),
       action = "create liveness session",
       checkinUuid = uuid,
@@ -462,10 +462,10 @@ class CheckinService(
           ),
         )
       },
-    )
-    LOGGER.info("Liveness session created for checkin {}: {}", uuid, sessionId)
-
-    return LivenessSessionResponse(sessionId = sessionId)
+    ).thenApplyAsync { sessionId ->
+      LOGGER.info("Liveness session created for checkin {}: {}", uuid, sessionId)
+      LivenessSessionResponse(sessionId = sessionId)
+    }
   }
 
   /**
@@ -480,72 +480,75 @@ class CheckinService(
     action: String,
     checkinUuid: UUID,
     onFailure: ((kind: RekognitionFailureKind, errorCode: String?, elapsedMs: Long) -> Unit)? = null,
-  ): T {
+  ): CompletableFuture<T> {
     val startNanos = System.nanoTime()
-    try {
-      val result = future.orTimeout(rekognitionCallTimeoutSeconds, TimeUnit.SECONDS).join()
-      LOGGER.info(
-        "Rekognition ({}) for checkin {} completed in {}ms",
-        action,
-        checkinUuid,
-        elapsedMs(startNanos),
-      )
-      return result
-    } catch (e: CompletionException) {
-      val elapsedMs = elapsedMs(startNanos)
-      when (val cause = e.cause) {
-        is TimeoutException -> {
-          onFailure?.invoke(RekognitionFailureKind.TIMEOUT, null, elapsedMs)
-          LOGGER.error(
-            "Timeout waiting for Rekognition ({}) for checkin {} after {}ms (limit {}s)",
-            action,
-            checkinUuid,
-            elapsedMs,
-            rekognitionCallTimeoutSeconds,
-            cause,
-          )
-          throw ResponseStatusException(
-            HttpStatus.GATEWAY_TIMEOUT,
-            "Rekognition call timed out: $action",
-            cause,
-          )
+    return future.orTimeout(rekognitionCallTimeoutSeconds, TimeUnit.SECONDS)
+      .handle { result, error ->
+        if (error != null) {
+          val elapsedMs = elapsedMs(startNanos)
+          val cause = if (error is CompletionException) error.cause else error
+          when (cause) {
+            is TimeoutException -> {
+              onFailure?.invoke(RekognitionFailureKind.TIMEOUT, null, elapsedMs)
+              LOGGER.error(
+                "Timeout waiting for Rekognition ({}) for checkin {} after {}ms (limit {}s)",
+                action,
+                checkinUuid,
+                elapsedMs,
+                rekognitionCallTimeoutSeconds,
+                cause,
+              )
+              throw ResponseStatusException(
+                HttpStatus.GATEWAY_TIMEOUT,
+                "Rekognition call timed out: $action",
+                cause,
+              )
+            }
+            is RekognitionException -> {
+              val errorCode = cause.awsErrorDetails()?.errorCode()
+              onFailure?.invoke(RekognitionFailureKind.REKOG_ERROR, errorCode, elapsedMs)
+              LOGGER.error(
+                "Rekognition error ({}) for checkin {} after {}ms: awsErrorCode={}, statusCode={}, message={}",
+                action,
+                checkinUuid,
+                elapsedMs,
+                errorCode,
+                cause.statusCode(),
+                cause.message,
+                cause,
+              )
+              throw ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "Rekognition call failed ($action): ${cause.awsErrorDetails()?.errorMessage() ?: cause.message}",
+                cause,
+              )
+            }
+            else -> {
+              onFailure?.invoke(RekognitionFailureKind.OTHER, null, elapsedMs)
+              LOGGER.error(
+                "Unexpected async error ({}) for checkin {} after {}ms",
+                action,
+                checkinUuid,
+                elapsedMs,
+                cause ?: error,
+              )
+              throw ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Rekognition call failed ($action)",
+                cause ?: error,
+              )
+            }
+          }
         }
-        is RekognitionException -> {
-          val errorCode = cause.awsErrorDetails()?.errorCode()
-          onFailure?.invoke(RekognitionFailureKind.REKOG_ERROR, errorCode, elapsedMs)
-          LOGGER.error(
-            "Rekognition error ({}) for checkin {} after {}ms: awsErrorCode={}, statusCode={}, message={}",
-            action,
-            checkinUuid,
-            elapsedMs,
-            errorCode,
-            cause.statusCode(),
-            cause.message,
-            cause,
-          )
-          throw ResponseStatusException(
-            HttpStatus.BAD_GATEWAY,
-            "Rekognition call failed ($action): ${cause.awsErrorDetails()?.errorMessage() ?: cause.message}",
-            cause,
-          )
-        }
-        else -> {
-          onFailure?.invoke(RekognitionFailureKind.OTHER, null, elapsedMs)
-          LOGGER.error(
-            "Unexpected async error ({}) for checkin {} after {}ms",
-            action,
-            checkinUuid,
-            elapsedMs,
-            cause ?: e,
-          )
-          throw ResponseStatusException(
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            "Rekognition call failed ($action)",
-            cause ?: e,
-          )
-        }
+
+        LOGGER.info(
+          "Rekognition ({}) for checkin {} completed in {}ms",
+          action,
+          checkinUuid,
+          elapsedMs(startNanos),
+        )
+        result
       }
-    }
   }
 
   private fun elapsedMs(startNanos: Long): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos)
@@ -638,71 +641,72 @@ class CheckinService(
    * Reads and writes each happen in their own short, auto-managed transactions via the
    * repository. The outer flow is: load → validate → Rekognition → S3 → face compare → persist.
    */
-  fun verifyLiveness(uuid: UUID, sessionId: String): LivenessVerificationResponse {
+  fun verifyLiveness(uuid: UUID, sessionId: String): CompletableFuture<LivenessVerificationResponse> {
     val checkin = loadCheckinForLivenessVerify(uuid)
 
-    val livenessResult = fetchLivenessSessionResults(checkin, sessionId)
-    val confidence = livenessResult.confidence()
-    val isLive = confidence >= livenessConfidenceThreshold
-    val livenessStatus = if (isLive) LivenessResult.LIVE else LivenessResult.NOT_LIVE
+    return fetchLivenessSessionResults(checkin, sessionId).thenComposeAsync { livenessResult ->
+      val confidence = livenessResult.confidence()
+      val isLive = confidence >= livenessConfidenceThreshold
+      val livenessStatus = if (isLive) LivenessResult.LIVE else LivenessResult.NOT_LIVE
 
-    LOGGER.info(
-      "Liveness result for checkin {}: confidence={}, threshold={}, isLive={}",
-      uuid,
-      confidence,
-      livenessConfidenceThreshold,
-      isLive,
-    )
-
-    if (!isLive) {
-      recordRekognitionFailure(
-        checkin,
-        LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
-        attemptNotes(
-          "result" to LivenessResult.NOT_LIVE.name,
-          "confidence" to confidence,
-          "sessionId" to sessionId,
-        ),
+      LOGGER.info(
+        "Liveness result for checkin {}: confidence={}, threshold={}, isLive={}",
+        uuid,
+        confidence,
+        livenessConfidenceThreshold,
+        isLive,
       )
+
+      if (!isLive) {
+        recordRekognitionFailure(
+          checkin,
+          LogEntryType.OFFENDER_CHECKIN_LIVENESS_FAILED,
+          attemptNotes(
+            "result" to LivenessResult.NOT_LIVE.name,
+            "confidence" to confidence,
+            "sessionId" to sessionId,
+          ),
+        )
+      }
+
+      val referenceImage = livenessResult.referenceImage()
+      val imageBytes = referenceImage?.bytes()?.asByteArray()
+      if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {
+        CompletableFuture.completedFuture(handleMissingReferenceImage(checkin, sessionId, livenessStatus, confidence, isLive))
+      } else {
+        uploadLivenessImagesToS3(checkin, imageBytes)
+
+        // Perform face comparison (slow I/O, no DB transaction held)
+        performFacialRecognition(checkin, numSnapshots = 1).thenApplyAsync { outcome ->
+          // Record every non-MATCH outcome so retries leave an audit trail.
+          if (outcome.result != AutomatedIdVerificationResult.MATCH) {
+            recordRekognitionFailure(
+              checkin,
+              LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
+              attemptNotes(
+                "result" to outcome.result.name,
+                "similarity" to outcome.topSimilarity,
+                "errorCode" to outcome.errorCode,
+                "sessionId" to sessionId,
+              ),
+            )
+          }
+
+          // Persist both results in a single short write transaction
+          checkin.livenessResult = livenessStatus
+          checkin.livenessConfidence = confidence
+          checkin.autoIdCheck = outcome.result
+          checkin.autoIdCheckScore = outcome.topSimilarity
+          checkinRepository.save(checkin)
+
+          LivenessVerificationResponse(
+            isLive = isLive,
+            livenessConfidence = confidence,
+            result = outcome.result,
+          )
+        }
+      }
     }
-
-    val referenceImage = livenessResult.referenceImage()
-    val imageBytes = referenceImage?.bytes()?.asByteArray()
-    if (referenceImage == null || imageBytes == null || imageBytes.isEmpty()) {
-      return handleMissingReferenceImage(checkin, sessionId, livenessStatus, confidence, isLive)
-    }
-
-    uploadLivenessImagesToS3(checkin, imageBytes)
-
-    // Perform face comparison (slow I/O, no DB transaction held)
-    val outcome = performFacialRecognition(checkin, numSnapshots = 1)
-
-    // Record every non-MATCH outcome so retries leave an audit trail.
-    if (outcome.result != AutomatedIdVerificationResult.MATCH) {
-      recordRekognitionFailure(
-        checkin,
-        LogEntryType.OFFENDER_CHECKIN_FACE_MATCH_FAILED,
-        attemptNotes(
-          "result" to outcome.result.name,
-          "similarity" to outcome.topSimilarity,
-          "errorCode" to outcome.errorCode,
-          "sessionId" to sessionId,
-        ),
-      )
-    }
-
-    // Persist both results in a single short write transaction
-    checkin.livenessResult = livenessStatus
-    checkin.livenessConfidence = confidence
-    checkin.autoIdCheck = outcome.result
-    checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
-
-    return LivenessVerificationResponse(
-      isLive = isLive,
-      livenessConfidence = confidence,
-      result = outcome.result,
-    )
   }
 
   /**
@@ -732,7 +736,7 @@ class CheckinService(
   private fun fetchLivenessSessionResults(
     checkin: OffenderCheckin,
     sessionId: String,
-  ): GetFaceLivenessSessionResultsResponse = awaitRekognition(
+  ): CompletableFuture<GetFaceLivenessSessionResultsResponse> = awaitRekognition(
     future = livenessSessionService.getSessionResults(sessionId),
     action = "get liveness session results",
     checkinUuid = checkin.uuid,
@@ -810,7 +814,7 @@ class CheckinService(
   private fun performFacialRecognition(
     checkin: OffenderCheckin,
     numSnapshots: Int,
-  ): FacialRecognitionOutcome {
+  ): CompletableFuture<FacialRecognitionOutcome> {
     val offender = checkin.offender
 
     // Check setup photo exists
@@ -834,7 +838,7 @@ class CheckinService(
         snapshots = snapshotCoordinates,
       )
 
-    val outcome = awaitRekognition(
+    return awaitRekognition(
       future = compareFacesService.verifyCheckinImages(images, faceSimilarityThreshold),
       action = "compare faces",
       checkinUuid = checkin.uuid,
@@ -850,24 +854,24 @@ class CheckinService(
           ),
         )
       },
-    )
+    ).thenApplyAsync { outcome ->
+      when (outcome.result) {
+        AutomatedIdVerificationResult.MATCH -> {
+          LOGGER.info("Facial recognition MATCH for checkin {} (similarity={})", checkin.uuid, outcome.topSimilarity)
+        }
+        AutomatedIdVerificationResult.NO_MATCH -> {
+          LOGGER.info("Facial recognition NO_MATCH for checkin {} (topSimilarity={})", checkin.uuid, outcome.topSimilarity)
+        }
+        AutomatedIdVerificationResult.NO_FACE_DETECTED -> {
+          LOGGER.warn("Facial recognition NO_FACE_DETECTED for checkin {}", checkin.uuid)
+        }
+        AutomatedIdVerificationResult.ERROR -> {
+          LOGGER.error("Facial recognition ERROR for checkin {}", checkin.uuid)
+        }
+      }
 
-    when (outcome.result) {
-      AutomatedIdVerificationResult.MATCH -> {
-        LOGGER.info("Facial recognition MATCH for checkin {} (similarity={})", checkin.uuid, outcome.topSimilarity)
-      }
-      AutomatedIdVerificationResult.NO_MATCH -> {
-        LOGGER.info("Facial recognition NO_MATCH for checkin {} (topSimilarity={})", checkin.uuid, outcome.topSimilarity)
-      }
-      AutomatedIdVerificationResult.NO_FACE_DETECTED -> {
-        LOGGER.warn("Facial recognition NO_FACE_DETECTED for checkin {}", checkin.uuid)
-      }
-      AutomatedIdVerificationResult.ERROR -> {
-        LOGGER.error("Facial recognition ERROR for checkin {}", checkin.uuid)
-      }
+      outcome
     }
-
-    return outcome
   }
 
   fun createCheckin(request: CreateCheckinRequest): CheckinDto {

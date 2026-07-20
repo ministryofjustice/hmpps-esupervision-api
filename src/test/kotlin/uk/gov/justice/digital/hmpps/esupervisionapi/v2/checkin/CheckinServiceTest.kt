@@ -698,7 +698,7 @@ class CheckinServiceTest {
     whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(livenessSessionService.createSession()).thenReturn(CompletableFuture.completedFuture("session-123"))
 
-    val result = service.createLivenessSession(uuid)
+    val result = service.createLivenessSession(uuid).join()
 
     assertEquals("session-123", result.sessionId)
     assertTrue(checkin.livenessEnabled)
@@ -875,7 +875,7 @@ class CheckinServiceTest {
     whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
       .thenReturn(CompletableFuture.completedFuture(FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, topSimilarity = 95.5f)))
 
-    service.verifyFace(uuid, numSnapshots = 1)
+    service.verifyFace(uuid, numSnapshots = 1).join()
 
     assertEquals(AutomatedIdVerificationResult.MATCH, checkin.autoIdCheck)
     assertEquals(95.5f, checkin.autoIdCheckScore)
@@ -890,7 +890,7 @@ class CheckinServiceTest {
     whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
       .thenReturn(CompletableFuture.completedFuture(FacialRecognitionOutcome(AutomatedIdVerificationResult.NO_MATCH, topSimilarity = 67.3f)))
 
-    service.verifyFace(uuid, numSnapshots = 1)
+    service.verifyFace(uuid, numSnapshots = 1).join()
 
     assertEquals(AutomatedIdVerificationResult.NO_MATCH, checkin.autoIdCheck)
     assertEquals(67.3f, checkin.autoIdCheckScore)
@@ -920,7 +920,7 @@ class CheckinServiceTest {
         ),
       )
 
-    service.verifyFace(uuid, numSnapshots = 1)
+    service.verifyFace(uuid, numSnapshots = 1).join()
 
     assertEquals(AutomatedIdVerificationResult.NO_FACE_DETECTED, checkin.autoIdCheck)
     assertNull(checkin.autoIdCheckScore)
@@ -946,7 +946,7 @@ class CheckinServiceTest {
         ),
       )
 
-    service.verifyFace(uuid, numSnapshots = 1)
+    service.verifyFace(uuid, numSnapshots = 1).join()
 
     assertEquals(AutomatedIdVerificationResult.ERROR, checkin.autoIdCheck)
     assertNull(checkin.autoIdCheckScore)
@@ -973,7 +973,7 @@ class CheckinServiceTest {
     whenever(compareFacesService.verifyCheckinImages(any(), eq(faceSimilarityThreshold)))
       .thenReturn(CompletableFuture.completedFuture(FacialRecognitionOutcome(AutomatedIdVerificationResult.MATCH, topSimilarity = 95.0f)))
 
-    service.verifyLiveness(uuid, sessionId)
+    service.verifyLiveness(uuid, sessionId).join()
 
     verify(offenderEventLogRepository).save(
       argThat<OffenderEventLog> {
@@ -1003,7 +1003,7 @@ class CheckinServiceTest {
         ),
       )
 
-    service.verifyLiveness(uuid, sessionId)
+    service.verifyLiveness(uuid, sessionId).join()
 
     verify(offenderEventLogRepository).save(
       argThat<OffenderEventLog> {
@@ -1027,7 +1027,7 @@ class CheckinServiceTest {
     whenever(livenessSessionService.getSessionResults(sessionId))
       .thenReturn(CompletableFuture.completedFuture(buildLivenessResponse(sessionId, confidence = 99.0f, withReferenceImage = false)))
 
-    val response = service.verifyLiveness(uuid, sessionId)
+    val response = service.verifyLiveness(uuid, sessionId).join()
 
     assertEquals(AutomatedIdVerificationResult.ERROR, response.result)
     assertEquals(AutomatedIdVerificationResult.ERROR, checkin.autoIdCheck)
@@ -1053,8 +1053,8 @@ class CheckinServiceTest {
     whenever(livenessSessionService.getSessionResults(sessionId))
       .thenReturn(CompletableFuture.failedFuture(rekogError))
 
-    assertThrows(ResponseStatusException::class.java) {
-      service.verifyLiveness(uuid, sessionId)
+    assertThrows(java.util.concurrent.CompletionException::class.java) {
+      service.verifyLiveness(uuid, sessionId).join()
     }
 
     verify(offenderEventLogRepository).save(
@@ -1078,8 +1078,8 @@ class CheckinServiceTest {
     whenever(livenessSessionService.createSession())
       .thenReturn(CompletableFuture.failedFuture(rekogError))
 
-    assertThrows(ResponseStatusException::class.java) {
-      service.createLivenessSession(uuid)
+    assertThrows(java.util.concurrent.CompletionException::class.java) {
+      service.createLivenessSession(uuid).join()
     }
 
     verify(offenderEventLogRepository).save(
