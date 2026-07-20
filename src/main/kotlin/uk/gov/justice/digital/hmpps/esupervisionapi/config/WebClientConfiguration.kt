@@ -17,6 +17,8 @@ import java.time.Duration
 class WebClientConfiguration(
   @Value("\${api.base.url.manage-users-api}") val manageUsersApiBaseUri: String,
   @Value("\${api.base.url.ndilius-api}") val ndiliusApiBaseUri: String,
+  @Value("\${api.base.url.tier-api}") val tierApiBaseUri: String,
+  @Value("\${api.base.url.arns-api}") val arnsApiBaseUri: String,
   @Value("\${hmpps-auth.url}") val hmppsAuthBaseUri: String,
   @Value("\${api.health-timeout:2s}") val healthTimeout: Duration,
   @Value("\${api.timeout:20s}") val timeout: Duration,
@@ -45,6 +47,30 @@ class WebClientConfiguration(
       )
     }
     .authorisedWebClient(authorizedClientManager, registrationId = "ndilius-api", url = ndiliusApiBaseUri, timeout = timeout)
+
+  @Bean
+  fun tierApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
+    .filters {
+      it.add(
+        ExchangeFilterFunction.ofRequestProcessor { req ->
+          log.info("Requesting Tier API URL: {}", req.url())
+          Mono.just(req)
+        },
+      )
+    }
+    .authorisedWebClient(authorizedClientManager, registrationId = "ndilius-api", url = tierApiBaseUri, timeout = timeout)
+
+  @Bean
+  fun arnsApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
+    .filters {
+      it.add(
+        ExchangeFilterFunction.ofRequestProcessor { req ->
+          log.info("Requesting Arns API URL: {}", req.url())
+          Mono.just(req)
+        },
+      )
+    }
+    .authorisedWebClient(authorizedClientManager, registrationId = "arns-api", url = arnsApiBaseUri, timeout = timeout)
 
   // HMPPS Auth health ping is required if your service calls HMPPS Auth to get a token to call other services
   @Bean
