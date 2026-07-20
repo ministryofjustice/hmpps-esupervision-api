@@ -22,6 +22,7 @@ class DefaultStubDataProvider : StubDataProvider {
       forename = "John",
       surname = "Smith",
     ),
+    dateOfBirth = LocalDate.of(1980, 1, 1),
     mobile = "07700900123",
     email = "john.smith@example.com",
     practitioner = PractitionerDetails(
@@ -61,6 +62,7 @@ class GeneratingStubDataProvider : StubDataProvider {
         forename = "Person",
         surname = "Number${parsed.person}",
       ),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
       mobile = "0770${parsed.person.padStart(4, '0')}",
       email = "person.number${parsed.person}@example.com",
       practitioner = PractitionerDetails(

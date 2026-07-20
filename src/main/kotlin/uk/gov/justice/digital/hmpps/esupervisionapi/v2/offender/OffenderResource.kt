@@ -26,7 +26,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
@@ -64,6 +63,7 @@ class OffenderResource(
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderSetupService: OffenderSetupService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val offenderService: OffenderService,
   private val appConfig: AppConfig,
 ) {
 
@@ -86,6 +86,29 @@ class OffenderResource(
 
     LOGGER.info("Found offender by CRN: crn={}, status={}", offender.crn, offender.status)
     return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender)))
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Get offender header by CRN",
+    description = "Returns offender header details. Returns 404 if not found.",
+  )
+  @ApiResponse(responseCode = "200", description = "Offender found")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @GetMapping("/header/{crn}")
+  fun getOffenderHeaderByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): ResponseEntity<OffenderHeaderDetails> {
+    val offender = offenderRepository.findByCrn(crn.trim().uppercase()).orElse(null)
+    if (offender == null) {
+      LOGGER.info("Offender not found for crn={}", crn)
+      return ResponseEntity.notFound().build()
+    }
+
+    val headerDetails = offenderService.getHeaderDetails(crn.trim().uppercase())
+
+    LOGGER.info("Retrieved header details for offender by CRN: crn={}, status={}", offender.crn, offender.status)
+    return ResponseEntity.ok(headerDetails)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -414,7 +437,7 @@ class OffenderResource(
       // exception already logged and sanitised elswhere
       LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
     }
-    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
+    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails, reason, sensitive)
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {
@@ -458,6 +481,14 @@ private fun Offender.toSummaryDto(photoUrl: String? = null) = OffenderSummaryDto
   checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   contactPreference = contactPreference,
   photoUrl = photoUrl,
+)
+
+data class OffenderHeaderDetails(
+  val crn: String,
+  val dateOfBirth: LocalDate,
+  val tierScore: String,
+  val tierDetailsLink: String,
+  val overallRisk: String,
 )
 
 /** Request to deactivate an offender */
@@ -526,4 +557,4 @@ private fun newFirstCheckinDateIsToday(
  * Used only for audit events. We should log audit events if we have the CRN, but were unable
  * to get the full details from Ndelius for some reason
  */
-private fun missingDetails(crn: String) = ContactDetails(crn, Name(forename = "missing", surname = "missing"))
+// private fun missingDetails(crn: String) = ContactDetails(crn, Name(forename = "missing", surname = "missing"))
