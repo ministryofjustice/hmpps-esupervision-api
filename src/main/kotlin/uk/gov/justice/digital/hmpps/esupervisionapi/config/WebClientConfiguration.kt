@@ -58,7 +58,7 @@ class WebClientConfiguration(
         },
       )
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = "ndilius-api", url = tierApiBaseUri, timeout = timeout)
+    .authorisedWebClient(authorizedClientManager, registrationId = "tier-api", url = tierApiBaseUri, timeout = timeout)
 
   @Bean
   fun arnsApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
