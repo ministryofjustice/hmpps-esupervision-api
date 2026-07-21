@@ -6,7 +6,10 @@ import org.springframework.beans.factory.DisposableBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ConstantCrnSet
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ICrnSet
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.IWatcher
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -18,10 +21,16 @@ import java.nio.file.Path
 class StubServicesConfiguration {
 
   @Bean
-  @Profile("local & stubndilius")
-  fun ndiliusApiClient(): INdiliusApiClient {
-    LOG.info("Creating stubbed Ndilius API client")
-    return StubNdiliusApiClient()
+  @Profile("stubndilius")
+  fun ndiliusApiClient(latency: StubLatencyProperties): INdiliusApiClient {
+    LOG.info("Creating stubbed NDelius API client (latency injection enabled={})", latency.enabled)
+    val appEnv = System.getenv("APP_ENV")?.trim()
+    val crns: ICrnSet = if (appEnv.isNullOrEmpty()) {
+      StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json"))
+    } else {
+      ConstantCrnSet.fromResource("ndelius-responses/${appEnv.lowercase()}.json")
+    }
+    return StubNdiliusApiClient(latency = latency, watcher = crns)
   }
 
   companion object {
@@ -36,27 +45,34 @@ class StubServicesConfiguration {
  * The file can be edited at runtime and will be automatically reloaded.
  */
 open class StubNdiliusApiClient(
-  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
+  val watcher: ICrnSet = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
   val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
+  private val latency: StubLatencyProperties = StubLatencyProperties(),
 ) : INdiliusApiClient,
   DisposableBean {
 
   init {
-    watcher.startWatchingChanges()
+    if (watcher is IWatcher) {
+      watcher.startWatchingChanges()
+    }
   }
 
   override fun destroy() {
-    watcher.stopWatchingChanges()
+    if (watcher is IWatcher) {
+      watcher.stopWatchingChanges()
+    }
   }
 
   override fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
     LOG.debug("Validating personal details: {}", personalDetails)
+    latency.sleep(latency.ndiliusValidate)
     return watcher.allowedCrns.contains(personalDetails.crn)
   }
 
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details (STUB)")
   override fun getContactDetails(crn: String): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
+    latency.sleep(latency.ndiliusContact)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideCase(crn)
     }
@@ -66,13 +82,14 @@ open class StubNdiliusApiClient(
 
   override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
     LOG.debug("Fetching contact details for {} CRNs, starting with {}", crns.size, crns.take(4))
+    latency.sleep(latency.ndiliusContact)
     val incomingCrns = HashSet<String>(crns)
     val allowedCrns = watcher.allowedCrns
-    if (allowedCrns.containsAll(incomingCrns)) {
-      return crns.map { dataProvider.provideCase(it) }
+    val notAllowed = incomingCrns.subtract(allowedCrns)
+    if (notAllowed.isNotEmpty()) {
+      LOG.debug("Following CRNs not found in allowed list: {}", notAllowed)
     }
-    LOG.debug("Not all CRNs found in allowed list: {}", incomingCrns.subtract(allowedCrns))
-    return emptyList()
+    return crns.map { dataProvider.provideCase(it) }
   }
 
   companion object {

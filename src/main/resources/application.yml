@@ -135,6 +135,7 @@ spring:
       idle-timeout: 60000
       connection-timeout: 30000
       pool-name: HikariPool-esupervision
+      leak-detection-threshold: 15000
 
   liquibase:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
@@ -171,7 +172,7 @@ management:
     web:
       base-path: /
       exposure:
-        include: 'info, health'
+        include: 'info, health, metrics'
   endpoint:
     health:
       cache:
@@ -183,6 +184,9 @@ management:
     info:
       cache:
         time-to-live: 2000ms
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 aws:
   region-name: eu-west-2
@@ -373,3 +377,22 @@ resilience4j:
       awsRekognition:
         timeout-duration: 30s
         cancel-running-future: true
+
+loadtest:
+  stub-latency:
+    enabled: ${LOADTEST_STUB_LATENCY_ENABLED:false}
+    ndilius-validate:
+      mean-ms: ${LOADTEST_STUB_LATENCY_NDILIUS_VALIDATE_MEAN_MS:250}
+      jitter-ms: ${LOADTEST_STUB_LATENCY_NDILIUS_VALIDATE_JITTER_MS:120}
+    ndilius-contact:
+      mean-ms: ${LOADTEST_STUB_LATENCY_NDILIUS_CONTACT_MEAN_MS:250}
+      jitter-ms: ${LOADTEST_STUB_LATENCY_NDILIUS_CONTACT_JITTER_MS:120}
+    rekog-create-session:
+      mean-ms: ${LOADTEST_STUB_LATENCY_REKOG_CREATE_SESSION_MEAN_MS:200}
+      jitter-ms: ${LOADTEST_STUB_LATENCY_REKOG_CREATE_SESSION_JITTER_MS:80}
+    rekog-session-results:
+      mean-ms: ${LOADTEST_STUB_LATENCY_REKOG_SESSION_RESULTS_MEAN_MS:400}
+      jitter-ms: ${LOADTEST_STUB_LATENCY_REKOG_SESSION_RESULTS_JITTER_MS:150}
+    rekog-compare-faces:
+      mean-ms: ${LOADTEST_STUB_LATENCY_REKOG_COMPARE_FACES_MEAN_MS:350}
+      jitter-ms: ${LOADTEST_STUB_LATENCY_REKOG_COMPARE_FACES_JITTER_MS:150}

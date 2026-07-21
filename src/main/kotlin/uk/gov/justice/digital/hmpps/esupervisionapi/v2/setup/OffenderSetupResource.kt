@@ -24,7 +24,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import java.time.Duration
 import java.util.UUID
 
@@ -98,10 +97,11 @@ class OffenderSetupResource(
       throw BadArgumentException("Setup process already completed or cancelled")
     }
 
-    val hash = resolveUploadHash(
-      sha256Base64 = hashRequest?.sha256,
-      slot = "setup-photo",
-    )
+//    val hash = resolveUploadHash(
+//      sha256Base64 = hashRequest?.sha256,
+//      slot = "setup-photo",
+//    )
+    val hash = null
 
     val duration = Duration.ofMinutes(5)
     val presigned = s3UploadService.generatePresignedUpload(setup.get(), contentType, duration, hash)

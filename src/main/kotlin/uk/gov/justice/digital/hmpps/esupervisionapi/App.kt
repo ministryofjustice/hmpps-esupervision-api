@@ -7,6 +7,7 @@ import org.springframework.cache.annotation.EnableCaching
 import org.springframework.context.annotation.Bean
 import org.springframework.scheduling.annotation.EnableAsync
 import org.springframework.scheduling.annotation.EnableScheduling
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.StubLatencyProperties
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.SurveyValueExpansionsConfig
 import java.time.Clock
 import java.time.ZoneId
@@ -17,7 +18,7 @@ private val defaultTimeZone = ZoneId.of(System.getenv("TZ") ?: "Europe/London")
 @EnableCaching
 @SpringBootApplication
 @EnableScheduling
-@EnableConfigurationProperties(SurveyValueExpansionsConfig::class)
+@EnableConfigurationProperties(SurveyValueExpansionsConfig::class, StubLatencyProperties::class)
 class EsupervisionApp {
   @Bean fun clock(): Clock = Clock.system(defaultTimeZone)
 }

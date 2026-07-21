@@ -1,0 +1,63 @@
+# NOTE: update the PUT to S3 with the path to your file: e.g. /Users/YOUR.NAME/Desktop/correct.png
+# Params:
+# - 'crn'
+# - 'photo_hash'
+
+### Start offender setup
+< {%
+    const setupUuid = $random.uuid
+    request.variables.set('setupUuid', setupUuid)
+%}
+POST {{HOST}}/v2/offender_setup
+Content-Type: application/json
+Authorization: Bearer {{hmpps_auth.token}}
+
+{
+  "setupUuid": "{{$uuid}}",
+  "practitionerId": "MPOPTestUser",
+  "crn": "{{crn}}",
+  "firstCheckin": "2026-07-10",
+  "checkinInterval": "FOUR_WEEKS",
+  "contactPreference": "PHONE"
+}
+
+> {%
+    if (response.status === 200) {
+        const offenderUuid = response.body["offenderUuid"]
+        client.log(`initiated setup uuid=${offenderUuid}`)
+        client.global.set("offender_uuid", offenderUuid)
+        client.global.set("setup_uuid", response.body["uuid"])
+    }
+%}
+
+### Photo upload location
+POST {{HOST}}/v2/offender_setup/{{setup_uuid}}/upload_location?content-type=image/png
+Content-Type: application/json
+Authorization: Bearer {{hmpps_auth.token}}
+
+{
+  "sha256": "{{photo_hash}}"
+}
+
+> {%
+    if (response.status === 200) {
+        const uploadLocation = response.body["locationInfo"]
+        client.global.set("upload_url", uploadLocation["url"])
+    }
+%}
+
+### Upload offender's reference image (using location info)
+PUT {{upload_url}}
+Content-Type: image/png
+
+< /Users/YOUR.NAME/Desktop/guy.png
+
+### Complete offender setup
+POST {{HOST}}/v2/offender_setup/{{setup_uuid}}/complete
+Authorization: Bearer {{hmpps_auth.token}}
+
+> {%
+    client.test("Response OK", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}

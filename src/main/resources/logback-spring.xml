@@ -36,6 +36,8 @@
     <appender-ref ref="consoleAppender"/>
   </logger>
 
+  <logger name="com.zaxxer.hikari.pool.HikariPool" level="DEBUG" />
+
   <root level="INFO">
     <appender-ref ref="consoleAppender"/>
   </root>

@@ -7,8 +7,8 @@ generic-service:
   ingress:
     host: esupervision-api-test.hmpps.service.justice.gov.uk
     annotations:
-      nginx.ingress.kubernetes.io/limit-rps: "20"
-      nginx.ingress.kubernetes.io/limit-rpm: "500"
+      nginx.ingress.kubernetes.io/limit-rps: "50"
+      nginx.ingress.kubernetes.io/limit-rpm: "2500"
       nginx.ingress.kubernetes.io/limit-burst: "50"
 
   env:
@@ -21,8 +21,21 @@ generic-service:
     POP_UI_URL: "https://probation-check-in-test.hmpps.service.justice.gov.uk"
     APP_ENV: "TEST"
     APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "-"
+    APP_SCHEDULING_V2_CHECKIN_CREATION_CRON: "0 5 9,11,12,13,14,15,16,17,18 * * *"
     APP_FEATURES_ESUP_1239: "true"
     APP_FEATURES_ESUP_1763: "true"
+    SPRING_PROFILES_ACTIVE: "stubrekog"
+    LOADTEST_STUB_LATENCY_ENABLED: "true"
+    LOADTEST_STUB_LATENCY_NDILIUS_VALIDATE_MEAN_MS: "250"
+    LOADTEST_STUB_LATENCY_NDILIUS_VALIDATE_JITTER_MS: "120"
+    LOADTEST_STUB_LATENCY_NDILIUS_CONTACT_MEAN_MS: "250"
+    LOADTEST_STUB_LATENCY_NDILIUS_CONTACT_JITTER_MS: "120"
+    LOADTEST_STUB_LATENCY_REKOG_CREATE_SESSION_MEAN_MS: "200"
+    LOADTEST_STUB_LATENCY_REKOG_CREATE_SESSION_JITTER_MS: "80"
+    LOADTEST_STUB_LATENCY_REKOG_SESSION_RESULTS_MEAN_MS: "165"
+    LOADTEST_STUB_LATENCY_REKOG_SESSION_RESULTS_JITTER_MS: "50"
+    LOADTEST_STUB_LATENCY_REKOG_COMPARE_FACES_MEAN_MS: "370"
+    LOADTEST_STUB_LATENCY_REKOG_COMPARE_FACES_JITTER_MS: "160"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
