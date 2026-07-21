@@ -55,7 +55,7 @@ data class ContactDetails(
   @field:Schema(description = "Person's name", required = true)
   override val name: Name,
 
-  @field:Schema(description = "Person's date of birth")
+  @field:Schema(description = "Person's date of birth", required = true)
   val dateOfBirth: LocalDate,
 
   @field:Schema(

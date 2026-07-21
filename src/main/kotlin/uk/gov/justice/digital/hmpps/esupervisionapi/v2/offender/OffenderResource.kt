@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -65,7 +64,6 @@ class OffenderResource(
   private val offenderSetupService: OffenderSetupService,
   private val offenderDeactivationService: OffenderDeactivationService,
   private val offenderService: OffenderService,
-  private val appConfig: AppConfig,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -444,10 +442,10 @@ class OffenderResource(
     try {
       contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
     } catch (e: Exception) {
-      // exception already logged and sanitised elswhere
+      // exception already logged and sanitised elsewhere
       LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
     }
-    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails, reason, sensitive)
+    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {
@@ -576,4 +574,4 @@ private fun newFirstCheckinDateIsToday(
  * Used only for audit events. We should log audit events if we have the CRN, but were unable
  * to get the full details from Ndelius for some reason
  */
-// private fun missingDetails(crn: String) = ContactDetails(crn, Name(forename = "missing", surname = "missing"))
+private fun missingDetails(crn: String) = ContactDetails(crn, Name(forename = "missing", surname = "missing"), dateOfBirth = LocalDate.now())
