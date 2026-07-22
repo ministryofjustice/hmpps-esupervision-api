@@ -1,22 +1,28 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns
 
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.LocalDate
 
+interface IArnsApiClient {
+  fun getRiskWidget(crn: String): ArnsWidget?
+}
+
 /**
  * Client for ARNS API CURRENTLY WITHOUT circuit breaker and retry resilience patterns
  * Based on OpenAPI spec provided
  */
+@Profile("!stubarns")
 @Service
 class ArnsApiClient(
   private val arnsApiWebClient: WebClient,
-) {
+) : IArnsApiClient {
 
-  fun getRiskWidget(crn: String): ArnsWidget? {
+  override fun getRiskWidget(crn: String): ArnsWidget? {
     LOGGER.info("Fetching risk widget for CRN: {}", crn)
 
     return try {

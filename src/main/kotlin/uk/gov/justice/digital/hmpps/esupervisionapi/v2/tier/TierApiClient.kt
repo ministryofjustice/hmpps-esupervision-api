@@ -1,23 +1,29 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier
 
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.LocalDate
-import java.util.UUID
+import java.util.*
+
+interface ITierApiClient {
+  fun getTierDetails(crn: String): TierDetails?
+}
 
 /**
  * Client for Tier API CURRENTLY WITHOUT circuit breaker and retry resilience patterns
  * Based on OpenAPI spec provided
  */
+@Profile("!stubtier")
 @Service
 class TierApiClient(
   private val tierApiWebClient: WebClient,
-) {
+) : ITierApiClient {
 
-  fun getTierDetails(crn: String): TierDetails? {
+  override fun getTierDetails(crn: String): TierDetails? {
     LOGGER.info("Fetching tier details for CRN: {}", crn)
 
     return try {

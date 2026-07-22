@@ -80,7 +80,6 @@ class OffenderResourceTest {
       offenderSetupService,
       offenderDeactivationService,
       offenderService,
-      appConfig,
     )
   }
 
