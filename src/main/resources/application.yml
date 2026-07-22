@@ -7,6 +7,8 @@ api:
     url:
       manage-users-api: ${MANAGE_USERS_API}
       ndilius-api: ${NDILIUS_API_URL:https://esupervision-and-delius-dev.hmpps.service.justice.gov.uk}
+      tier-api: ${TIER_API_URL:https://hmpps-tier-dev.hmpps.service.justice.gov.uk}
+      arns-api: ${ARNS_API_URL:https://assess-risks-and-needs-dev.hmpps.service.justice.gov.uk}
 
 app:
   env: ${APP_ENV}
@@ -118,6 +120,20 @@ spring:
             scope: read
 
           ndilius-api:
+            provider: hmpps-auth
+            client-id: ${API_CLIENT_ID}
+            client-secret: ${API_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+            scope: read
+
+          tier-api:
+            provider: hmpps-auth
+            client-id: ${API_CLIENT_ID}
+            client-secret: ${API_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+            scope: read
+
+          arns-api:
             provider: hmpps-auth
             client-id: ${API_CLIENT_ID}
             client-secret: ${API_CLIENT_SECRET}

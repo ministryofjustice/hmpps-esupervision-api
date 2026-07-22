@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import java.time.Clock
+import java.time.LocalDate
 import java.time.ZoneId
 
 class UtilsTest {
@@ -26,6 +27,7 @@ class UtilsTest {
     name = Name("John", "Doe"),
     events = events,
     contactSuspended = contactSuspended,
+    dateOfBirth = LocalDate.of(1980, 1, 1),
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)

@@ -153,6 +153,7 @@ class MigrationEventReplayServiceTest {
       crn = offender.crn,
       name = Name("John", "Smith"),
       events = listOf(Event(number = 7L, mainOffence = CodedDescription("OFF01", "Test"), sentence = null)),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(backfillRepository.findPendingEventSend(any()))
@@ -182,7 +183,12 @@ class MigrationEventReplayServiceTest {
   fun `replayActiveOffenderSetupEvents skips publish when Delius has no active events`() {
     val offender = newOffender(id = 100L)
     val row = SetupEventBackfill(offenderId = 100L, createdAt = clock.instant())
-    val contactDetails = ContactDetails(crn = offender.crn, name = Name("John", "Smith"), events = emptyList())
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Smith"),
+      events = emptyList(),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
 
     whenever(backfillRepository.findPendingEventSend(any()))
       .thenReturn(listOf(row))
@@ -243,6 +249,7 @@ class MigrationEventReplayServiceTest {
       crn = offender.crn,
       name = Name("John", "Smith"),
       events = listOf(Event(number = 7L, mainOffence = CodedDescription("OFF01", "Test"), sentence = null)),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(backfillRepository.findPendingEventSend(any()))
