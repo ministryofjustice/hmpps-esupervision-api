@@ -173,7 +173,7 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<Offender, Any?>>(any())).thenAnswer {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Pair<Offender, Any?>>>(0)
-      callback.doInTransaction(null)
+      callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())
     }
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
       .thenReturn(OffenderSetupPersistenceService.Result(checkin = null)) // because no contact info
@@ -365,7 +365,7 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
     whenever(transactionTemplate.execute<Offender>(any())).thenAnswer {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Offender>>(0)
-      callback.doInTransaction(null)
+      callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())
     }
     whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
 

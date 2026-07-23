@@ -1,10 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.slf4j.LoggerFactory
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import tools.jackson.module.kotlin.readValue
 import java.nio.file.ClosedWatchServiceException
 import java.nio.file.FileSystems
 import java.nio.file.Path
@@ -39,7 +38,7 @@ class StubDataWatcher(val path: Path) {
   @Volatile
   var keepWatchingChanges = true
 
-  private val objectMapper = jacksonObjectMapper().registerKotlinModule()
+  private val objectMapper = jacksonObjectMapper()
 
   init {
     if (path.isDirectory()) {
