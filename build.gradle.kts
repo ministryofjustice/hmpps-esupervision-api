@@ -80,6 +80,12 @@ dependencyCheck {
 tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+    // Pin the Kotlin module name: it becomes the `$suffix` on JVM-mangled `internal`
+    // members, which Jackson leaks into JSON (e.g. QuestionTemplateDto.policy ->
+    // "policy$hmpps_esupervision_api"). Frozen so gradle-plugin bumps don't shift the
+    // wire format and force lockstep frontend deploys. Remove once no `internal`
+    // member is serialised (see the stable `policy` key on QuestionTemplateDto).
+    compilerOptions.moduleName = "hmpps-esupervision-api"
   }
   withType<Test> {
     useJUnitPlatform()

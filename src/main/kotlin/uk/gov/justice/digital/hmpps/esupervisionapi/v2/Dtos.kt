@@ -692,7 +692,15 @@ data class QuestionTemplateDto(
 
   @field:Schema(description = "Question examples", required = false)
   val questionExamples: List<String>?,
-)
+) {
+  // Stable JSON key for `policy`. The `internal` constructor property serialises under
+  // the JVM-mangled name `policy$<module>`, which is coupled to the build coordinates.
+  // This getter exposes the same value under a plain `policy` key so consumers can
+  // migrate off the mangled key; once all consumers are on `policy`, drop `internal`
+  // from `policy`, remove this getter, and remove the moduleName pin in build.gradle.kts.
+  @get:JsonProperty("policy")
+  val policyKey: QuestionPolicy get() = policy
+}
 
 /**
  * Safely extract placeholder names (not including the "{{" or "}}" delimiters) from the response spec.
