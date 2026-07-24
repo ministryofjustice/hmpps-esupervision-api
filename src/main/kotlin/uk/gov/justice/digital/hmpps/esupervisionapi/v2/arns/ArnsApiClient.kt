@@ -2,9 +2,11 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns
 
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Profile
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import java.time.LocalDate
 
@@ -22,7 +24,7 @@ class ArnsApiClient(
   private val arnsApiWebClient: WebClient,
 ) : IArnsApiClient {
 
-  override fun getRiskWidget(crn: String): ArnsWidget? {
+  override fun getRiskWidget(crn: String): ArnsWidget {
     LOGGER.info("Fetching risk widget for CRN: {}", crn)
 
     return try {
@@ -33,7 +35,20 @@ class ArnsApiClient(
         .block()
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Risk widget not found for CRN: {}", crn)
-      return ArnsWidget()
+      ArnsWidget()
+    } catch (e: WebClientResponseException) {
+      LOGGER.error("Error fetching risk widget: {}", PiiSanitizer.sanitizeException(e, crn))
+      if (e.statusCode.is4xxClientError) {
+        throw ResponseStatusException(
+          e.statusCode,
+          "Could not verify risk widget in ARNS API for $crn.",
+          e,
+        )
+      }
+      throw ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Encountered an issue whilst retrieving the risk widget in ARNS API for $crn.",
+      )
     } catch (e: Exception) {
       LOGGER.error("Error fetching risk widget: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e

@@ -20,34 +20,42 @@ class OffenderService(
   fun getHeaderDetails(crn: String): OffenderHeaderDetails {
     val contactDetails = try {
       ndiliusApiClient.getContactDetails(crn)
-        ?: throw Exception("NDelius returned null contact details")
+        ?: throw ResponseStatusException(
+          HttpStatus.NOT_FOUND,
+          "Could not verify contact details in NDelius for $crn.",
+        )
+    } catch (e: ResponseStatusException) {
+      throw e
     } catch (e: Exception) {
       LOGGER.error("Failed to fetch contact details from NDelius for CRN: $crn", e)
       throw ResponseStatusException(
-        HttpStatus.NOT_FOUND,
+        HttpStatus.INTERNAL_SERVER_ERROR,
         "Could not verify contact details in NDelius for $crn.",
       )
     }
 
     val tierDetails = try {
       tierApiClient.getTierDetails(crn)
-        ?: throw Exception("Tier API returned null tier details")
+    } catch (e: ResponseStatusException) {
+      throw e
     } catch (e: Exception) {
       LOGGER.error("Failed to fetch tier details from Tier API for CRN: $crn", e)
       throw ResponseStatusException(
-        HttpStatus.NOT_FOUND,
+        HttpStatus.INTERNAL_SERVER_ERROR,
         "Could not verify tier details in Tier API for $crn.",
       )
     }
 
     val arnsWidget = try {
       arnsApiClient.getRiskWidget(crn)
-        ?: throw Exception("ARNS API returned null risk widget")
+    } catch (e: ResponseStatusException) {
+      throw e
     } catch (e: Exception) {
       LOGGER.error("Failed to fetch risk widget from ARNS API for CRN: $crn", e)
       throw ResponseStatusException(
-        HttpStatus.NOT_FOUND,
+        HttpStatus.INTERNAL_SERVER_ERROR,
         "Could not verify risk widget in ARNS API for $crn.",
+        e,
       )
     }
 

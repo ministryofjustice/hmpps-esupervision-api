@@ -115,7 +115,12 @@ class OffenderServiceTest {
   @Test
   fun `getHeaderDetails - tier details missing`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
-    whenever(tierApiClient.getTierDetails(crn)).thenReturn(null)
+    whenever(tierApiClient.getTierDetails(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.NOT_FOUND,
+        "Could not verify tier details in Tier API for $crn.",
+      ),
+    )
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       val response = service.getHeaderDetails(crn)
@@ -126,16 +131,21 @@ class OffenderServiceTest {
   }
 
   @Test
-  fun `getHeaderDetails - risk details missing`() {
+  fun `getHeaderDetails - risk details client error`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
     whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
-    whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(null)
+    whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Could not verify tier details in Tier API for $crn.",
+      ),
+    )
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       val response = service.getHeaderDetails(crn)
     }
 
-    assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
-    assertEquals("Could not verify risk widget in ARNS API for $crn.", exception.reason)
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertEquals("Could not verify tier details in Tier API for $crn.", exception.reason)
   }
 }
