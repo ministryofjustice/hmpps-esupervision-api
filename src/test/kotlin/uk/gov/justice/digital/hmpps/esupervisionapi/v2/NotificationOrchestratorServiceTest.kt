@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -327,8 +328,8 @@ class NotificationOrchestratorServiceTest {
       eq(offender.uuid),
       eq(offender.crn),
       any(),
-      eq(null),
-      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null)),
+      isNull(),
+      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode)),
     )
   }
 
@@ -387,7 +388,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = null, setupId = null)),
+      eq(AdditionalInformation(eventNumber = null, setupId = null, OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode)),
     )
   }
 
