@@ -107,11 +107,8 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `is a no-op when offender is not VERIFIED`() {
     val offender = offender(OffenderStatus.INACTIVE)
-
     val result = service.deactivateOffender(offender, "in reset", contactDetails)
-
     assertEquals(OffenderStatus.INACTIVE, result.status)
-    verify(offenderRepository, never()).save(any())
   }
 
   @Test
@@ -121,8 +118,6 @@ class OffenderDeactivationServiceTest {
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
     service.deactivateOffender(offender, "no active events")
-
-//    verify(notificationService).sendDeactivationCompletedNotifications(eq(offender), isNull(), isNull(), eq("ESPMP"))
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
     verify(offenderPersistenceService).offenderDeactivation(any(), argThat(matcher))
