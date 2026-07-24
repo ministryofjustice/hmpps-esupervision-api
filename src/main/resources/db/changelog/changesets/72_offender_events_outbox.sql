@@ -21,9 +21,9 @@ $$ LANGUAGE plpgsql;
 -- changeset roland.sadowski:72_offender_events_outbox-2 splitStatements:false
 
 CREATE TRIGGER trg_offender_status_update__outbox
-    AFTER UPDATE on offender_V2
+    AFTER UPDATE on offender_v2
     FOR EACH ROW
-    WHEN (NEW.status in ('INACTIVE'::offender_status_v2))
+    WHEN (NEW.status <> OLD.status and NEW.status = 'INACTIVE'::offender_status_v2)
 EXECUTE FUNCTION fn_add_outbox_record_on_offender_status_update();
 
 --rollback drop trigger trg_offender_status_update__outbox on offender_V2;
