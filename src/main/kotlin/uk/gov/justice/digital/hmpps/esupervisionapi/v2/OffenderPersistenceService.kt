@@ -1,0 +1,35 @@
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+
+@Service
+class OffenderPersistenceService(
+  private val offenderRepository: OffenderRepository,
+  private val checkinRepository: OffenderCheckinRepository,
+  private val questionListAssignmentRepository: QuestionListAssignmentRepository,
+  private val eventAuditService: EventAuditService,
+  private val appEventPublisher: ApplicationEventPublisher,
+) {
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
+    offenderRepository.save(offender)
+    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(offender.id)
+    val cancelledCheckins = checkinRepository.updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
+    if (cancelledCheckins > 0 || deletedAssignments > 0) {
+      LOGGER.info("Cancelled {} created/pending check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, offender.crn)
+    }
+    eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
+
+    appEventPublisher.publishEvent(event)
+  }
+
+  companion object {
+    val LOGGER = logger<OffenderPersistenceService>()
+  }
+}

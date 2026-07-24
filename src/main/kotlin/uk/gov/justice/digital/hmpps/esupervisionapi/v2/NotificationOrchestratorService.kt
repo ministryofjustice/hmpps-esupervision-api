@@ -156,12 +156,10 @@ class NotificationOrchestratorService(
 
   /** Send notifications for deactivation completed event */
   fun sendDeactivationCompletedNotifications(
-    offender: Offender,
-    contactDetails: ContactDetails? = null,
-    setupId: UUID? = null,
-    outcomeCode: String? = null,
+    event: OffenderDeactivatedEvent,
   ) {
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+    val offender = event.offender
+    val details = event.offender.personalDetails
 
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_REMOVED,
@@ -169,9 +167,9 @@ class NotificationOrchestratorService(
       crn = offender.crn,
       description = "Online check-ins stopped for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = details?.let { activeEventNumber(offender, it) },
-        setupId = setupId,
-        outcomeCode = outcomeCode,
+        eventNumber = event.activeEventNumber,
+        setupId = event.setup,
+        outcomeCode = event.auditEventType.deliusOutcomeCode,
       ),
     )
 
@@ -184,7 +182,7 @@ class NotificationOrchestratorService(
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
-            offenderId = offender.id,
+            offenderId = event.offenderId,
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,

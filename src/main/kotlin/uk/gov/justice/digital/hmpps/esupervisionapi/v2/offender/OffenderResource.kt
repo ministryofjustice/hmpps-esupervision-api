@@ -421,7 +421,8 @@ class OffenderResource(
       // exception already logged and sanitised elswhere
       LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
     }
-    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
+    val details = contactDetails ?: missingDetails(offender.crn)
+    eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {

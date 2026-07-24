@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.util.UUID
@@ -9,7 +10,34 @@ import java.util.UUID
  */
 interface IPartialEvent
 
-interface IEventBase {
+interface IOffenderEventBase {
+  val offenderId: Long
+  val offender: OffenderDto
+}
+
+/**
+ * Our listeners should be able to process any subclass of this.
+ */
+sealed interface IOffenderEvent : IOffenderEventBase {
+  val outboxItemCoords: Pair<OutboxItemType, Long>? get() = null
+}
+
+data class OffenderDeactivatedEvent(
+  override val offenderId: Long,
+  override val offender: OffenderDto,
+  val auditEventType: OffenderAuditEventType,
+  val setup: UUID?,
+  /**
+   * See [uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber]
+   */
+  val activeEventNumber: Long?,
+  val reason: String? = null,
+  val sensitive: Boolean = false,
+) : IOffenderEvent {
+  override val outboxItemCoords = OutboxItemType.OFFENDER_DEACTIVATED to offenderId
+}
+
+interface ICheckinEventBase {
   val checkinId: Long
   val offenderId: Long
   val practitionerId: ExternalUserId
@@ -20,7 +48,7 @@ interface IEventBase {
 /**
  * Our listeners should be able to process any subclass of this.
  */
-sealed interface ICheckinEvent : IEventBase {
+sealed interface ICheckinEvent : ICheckinEventBase {
   val outboxItemCoords: Pair<OutboxItemType, Long>? get() = null
 }
 
@@ -77,7 +105,7 @@ data class PartialCheckinCreatedEvent(
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
   override val currentEvent: Long?,
-) : IEventBase,
+) : ICheckinEventBase,
   IPartialEvent,
   ActiveEvent {
   fun finalise(checkin: OffenderCheckin): CheckinCreatedEvent {
@@ -102,7 +130,7 @@ data class PartialCheckinAnnotatedEvent(
   override val practitionerId: ExternalUserId,
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
-) : IEventBase,
+) : ICheckinEventBase,
   IPartialEvent {
   fun finalise(logEntry: OffenderEventLog): CheckinAnnotatedEvent = CheckinAnnotatedEvent(
     checkinId = checkinId,
