@@ -2,19 +2,14 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Propagation
-import org.springframework.transaction.annotation.Transactional
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import java.time.Clock
 
 /**
@@ -33,12 +28,8 @@ import java.time.Clock
 @Service
 class OffenderDeactivationService(
   private val clock: Clock,
-  private val offenderRepository: OffenderRepository,
-  private val checkinRepository: OffenderCheckinRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
-  private val questionService: QuestionService,
-  private val eventAuditService: EventAuditService,
-  private val notificationService: NotificationService,
+  private val offenderPersistenceService: OffenderPersistenceService,
 ) {
 
   /**
@@ -52,14 +43,13 @@ class OffenderDeactivationService(
    *   was stopped (in reset vs no active events) is queryable via the audit event_type.
    * @return the (possibly unchanged) offender
    *
-   * Runs in its own transaction (REQUIRES_NEW) so that a deactivation commits independently of any
+   * Spins its own transaction (REQUIRES_NEW) so that a deactivation commits independently of any
    * surrounding work. In particular, when called from [V2CheckinCreationJob]'s long-lived job
    * transaction this prevents a failure in one offender's audit/persistence (which would otherwise
    * mark the shared transaction rollback-only) from rolling back every other offender's check-in
    * creation and deactivation in the same run. It also makes each deactivation atomic for the
    * non-transactional callers (the reminder job and the deactivate endpoint).
    */
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   fun deactivateOffender(
     offender: Offender,
     reason: String,
@@ -74,26 +64,21 @@ class OffenderDeactivationService(
 
     offender.status = OffenderStatus.INACTIVE
     offender.updatedAt = clock.instant()
-    val saved = offenderRepository.save(offender)
 
-    questionService.deleteUpcomingAssignment(saved.crn)
+    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+    val event = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      auditEventType = auditEventType,
+      setup = setup?.uuid,
+      activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
+      reason = reason,
+      sensitive = sensitive,
+    )
 
-    // set any pending check ins to cancelled
-    val cancelled = checkinRepository.updateStatusForOffender(saved, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
-    if (cancelled > 0) {
-      LOGGER.info("Cancelled {} created/pending check ins for CRN {} due to offender deactivation", cancelled, saved.crn)
-    }
+    offenderPersistenceService.offenderDeactivation(offender, event)
 
-    eventAuditService.recordOffenderEvent(auditEventType, saved, contactDetails, reason, sensitive)
-
-    val setup = offenderSetupRepository.findByOffender(saved).orElse(null)
-    try {
-      notificationService.sendDeactivationCompletedNotifications(saved, contactDetails, setup?.setupId(), auditEventType.deliusOutcomeCode)
-    } catch (e: Exception) {
-      LOGGER.warn("Failed to send deactivation completed notifications for offender {}", saved.uuid, e)
-    }
-
-    return saved
+    return offender
   }
 
   companion object {
