@@ -816,11 +816,11 @@ class OffenderResourceTest {
     val result = resource.getOffenderHeaderByCrn(offender.crn)
     verify(offenderService, times(1)).getHeaderDetails(offender.crn)
     assertNotNull(result.body)
-    assertEquals(headerDetails.crn, result.body.crn)
-    assertEquals(headerDetails.dateOfBirth, result.body.dateOfBirth)
-    assertEquals(headerDetails.tierScore, result.body.tierScore)
-    assertEquals(headerDetails.tierDetailsLink, result.body.tierDetailsLink)
-    assertEquals(headerDetails.overallRisk, result.body.overallRisk)
+    assertEquals(headerDetails.crn, result.body?.crn)
+    assertEquals(headerDetails.dateOfBirth, result.body?.dateOfBirth)
+    assertEquals(headerDetails.tierScore, result.body?.tierScore)
+    assertEquals(headerDetails.tierDetailsLink, result.body?.tierDetailsLink)
+    assertEquals(headerDetails.overallRisk, result.body?.overallRisk)
   }
 
   @Test
