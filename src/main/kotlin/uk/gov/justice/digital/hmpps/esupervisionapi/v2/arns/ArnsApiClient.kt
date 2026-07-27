@@ -24,7 +24,7 @@ class ArnsApiClient(
   private val arnsApiWebClient: WebClient,
 ) : IArnsApiClient {
 
-  override fun getRiskWidget(crn: String): ArnsWidget {
+  override fun getRiskWidget(crn: String): ArnsWidget? {
     LOGGER.info("Fetching risk widget for CRN: {}", crn)
 
     return try {

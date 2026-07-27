@@ -25,7 +25,7 @@ class TierApiClient(
   private val tierApiWebClient: WebClient,
 ) : ITierApiClient {
 
-  override fun getTierDetails(crn: String): TierDetails {
+  override fun getTierDetails(crn: String): TierDetails? {
     LOGGER.info("Fetching tier details for CRN: {}", crn)
 
     return try {

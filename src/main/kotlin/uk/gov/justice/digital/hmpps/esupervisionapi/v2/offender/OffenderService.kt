@@ -35,7 +35,7 @@ class OffenderService(
     }
 
     val tierDetails = try {
-      tierApiClient.getTierDetails(crn)
+      tierApiClient.getTierDetails(crn) ?: throw Exception()
     } catch (e: ResponseStatusException) {
       throw e
     } catch (e: Exception) {
@@ -47,7 +47,7 @@ class OffenderService(
     }
 
     val arnsWidget = try {
-      arnsApiClient.getRiskWidget(crn)
+      arnsApiClient.getRiskWidget(crn) ?: throw Exception()
     } catch (e: ResponseStatusException) {
       throw e
     } catch (e: Exception) {
