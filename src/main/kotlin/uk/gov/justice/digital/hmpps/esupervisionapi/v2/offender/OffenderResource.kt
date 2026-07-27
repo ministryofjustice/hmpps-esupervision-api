@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Schema
@@ -19,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import tools.jackson.databind.annotation.JsonDeserialize
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus

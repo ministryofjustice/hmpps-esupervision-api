@@ -6,11 +6,11 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.Wait
 
 class TestContainersSessionListener : LauncherSessionListener {
-  override fun launcherSessionOpened(session: LauncherSession?) {
+  override fun launcherSessionOpened(session: LauncherSession) {
     postgres.start()
   }
 
-  override fun launcherSessionClosed(session: LauncherSession?) {
+  override fun launcherSessionClosed(session: LauncherSession) {
     postgres.stop()
   }
 
