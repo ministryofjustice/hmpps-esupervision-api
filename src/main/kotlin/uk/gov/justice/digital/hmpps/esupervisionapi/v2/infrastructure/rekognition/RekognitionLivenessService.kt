@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekogniti
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
+import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.services.rekognition.RekognitionAsyncClient
 import software.amazon.awssdk.services.rekognition.model.ChallengePreference
@@ -28,6 +29,7 @@ open class RekognitionLivenessService(
 
   @CircuitBreaker(name = "awsRekognition")
   @Retry(name = "awsRekognition")
+  @Timed("rekog.liveness.create-session", extraTags = [], description = "Time taken to create Rekognition liveness session")
   override fun createSession(): CompletableFuture<String> {
     LOGGER.info("Creating Rekognition Face Liveness session")
 
@@ -49,6 +51,7 @@ open class RekognitionLivenessService(
 
   @CircuitBreaker(name = "awsRekognition")
   @Retry(name = "awsRekognition")
+  @Timed("rekog.liveness.results", extraTags = [], description = "Time taken to get Rekognition liveness results")
   override fun getSessionResults(sessionId: String): CompletableFuture<GetFaceLivenessSessionResultsResponse> {
     LOGGER.info("Getting liveness session results for session: {}", sessionId)
 

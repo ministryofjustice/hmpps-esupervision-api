@@ -138,7 +138,7 @@ class CheckinNoteResendService(
   internal fun buildNotes(checkin: OffenderCheckin): String {
     val submitted = checkin.submittedAt ?: checkin.createdAt
     val sb = StringBuilder()
-    sb.appendLine("This note was resent due to a system issue. It contains the answers for the check in submitted on ${formatHumanReadableDateTime(submitted)}.")
+    sb.appendLine("This comment was added due to a system issue. It contains the answers for the check in submitted on ${formatHumanReadableDateTime(submitted)}.")
     sb.appendLine()
     sb.appendQuestionsAndAnswers(checkin.surveyResponse!!, expansionsConfig)
     return sb.toString().trimEnd('\n')

@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
+import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.context.annotation.Bean
@@ -34,7 +35,7 @@ class StubServicesConfiguration {
  *
  * The file can be edited at runtime and will be automatically reloaded.
  */
-class StubNdiliusApiClient(
+open class StubNdiliusApiClient(
   val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/ndelius-responses/default.json")),
   val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
 ) : INdiliusApiClient,
@@ -53,6 +54,7 @@ class StubNdiliusApiClient(
     return watcher.allowedCrns.contains(personalDetails.crn)
   }
 
+  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details (STUB)")
   override fun getContactDetails(crn: String): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {

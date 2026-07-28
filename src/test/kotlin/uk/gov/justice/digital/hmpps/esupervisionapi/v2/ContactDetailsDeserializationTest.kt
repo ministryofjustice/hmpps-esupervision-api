@@ -1,10 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import tools.jackson.module.kotlin.readValue
 
 /**
  * Locks in the JSON contract for the NDelius `contactSuspended` flag - the trigger for the

@@ -15,7 +15,7 @@ data class QuestionListItem(
 @Repository
 class DebugQuestionsRepository(
   private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
-  private val objectMapper: com.fasterxml.jackson.databind.ObjectMapper,
+  private val objectMapper: tools.jackson.databind.ObjectMapper,
 ) {
 
   fun findAllItems(): List<QuestionListItem> = jdbcTemplate.query("SELECT * FROM question_list_item", rowMapper)
@@ -32,7 +32,7 @@ class DebugQuestionsRepository(
       questionList = rs.getLong("question_list_id"),
       question = rs.getLong("question_id"),
       position = rs.getInt("position"),
-      params = objectMapper.readValue(rs.getString("params"), object : com.fasterxml.jackson.core.type.TypeReference<Map<String, Any>>() {}),
+      params = objectMapper.readValue(rs.getString("params"), object : tools.jackson.core.type.TypeReference<Map<String, Any>>() {}),
     )
   }
 

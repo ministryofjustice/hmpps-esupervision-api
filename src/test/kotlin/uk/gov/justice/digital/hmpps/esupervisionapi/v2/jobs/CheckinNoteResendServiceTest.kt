@@ -101,7 +101,7 @@ class CheckinNoteResendServiceTest {
     assertThat(logEntry.practitioner).isEqualTo("SYSTEM")
     assertThat(logEntry.sensitive).isTrue()
     assertThat(logEntry.checkin).isEqualTo(checkin.id)
-    assertThat(logEntry.comment).contains("This note was resent due to a system issue.")
+    assertThat(logEntry.comment).contains("This comment was added due to a system issue.")
     assertThat(logEntry.comment).contains("answers for the check in submitted on 12 May 2026 at 3:30pm")
     assertThat(logEntry.comment).contains("Check in answers:")
     assertThat(logEntry.comment).contains("How they have been feeling: Feeling great")
