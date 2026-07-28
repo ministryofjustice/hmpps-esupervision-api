@@ -211,17 +211,14 @@ class OffenderSetupService(
       return Pair(offender, setup?.setupId())
     }
 
+    val setup =
+      offenderSetupRepository.createReactivationSetupRecord(offender).orElse(null) ?: return Pair(offender, null)
+
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = clock.instant()
     val savedOffender = offenderRepository.save(offender)
 
-    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
-    setup?.let {
-      it.incrementSetupCounter()
-      offenderSetupRepository.save(it)
-    }
-
-    return Pair(savedOffender, setup?.setupId())
+    return Pair(savedOffender, setup.setupId())
   }
 
   /** Terminate offender setup (cancel registration) */
