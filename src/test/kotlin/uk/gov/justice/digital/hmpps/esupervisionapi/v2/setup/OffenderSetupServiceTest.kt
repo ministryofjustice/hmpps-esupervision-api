@@ -434,32 +434,31 @@ class OffenderSetupServiceTest {
   }
 
   @Test
-  fun `activateOffenderAndIncrementSetupCounter - INACTIVE offender - increments counter and activates`() {
+  fun `activateOffenderAndIncrementSetupCounter - INACTIVE offender - activates`() {
     val offender = makeOffender(clock, LocalDate.now(clock)).apply {
       status = OffenderStatus.INACTIVE
     }
     val setup = OffenderSetup(
       uuid = UUID.randomUUID(),
       offender = offender,
-      practitionerId = "PRACT001",
+      practitionerId = offender.practitionerId,
       createdAt = clock.instant(),
     )
 
     whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
     whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
-    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument<OffenderSetup>(0) }
+    whenever(offenderSetupRepository.createReactivationSetupRecord(any())).thenAnswer { Optional.of(setup) }
 
     val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
 
     assertEquals(OffenderStatus.VERIFIED, savedOffender.status)
-    assertEquals(2, setup.setupCounter)
+    assertEquals(1, setup.setupCounter)
     assertNotNull(setupId)
     verify(offenderRepository).save(offender)
-    verify(offenderSetupRepository).save(setup)
   }
 
   @Test
-  fun `activateOffenderAndIncrementSetupCounter - already VERIFIED - does not increment counter`() {
+  fun `activateOffenderAndIncrementSetupCounter - already VERIFIED - does not create a setup record`() {
     val offender = makeOffender(clock, LocalDate.now(clock)).apply {
       status = OffenderStatus.VERIFIED
     }
@@ -476,30 +475,30 @@ class OffenderSetupServiceTest {
 
     assertEquals(OffenderStatus.VERIFIED, returnedOffender.status)
     assertEquals(1, setup.setupCounter)
-    assertNotNull(setupId)
+    assertNull(setupId)
     verify(offenderRepository, never()).save(any())
-    verify(offenderSetupRepository, never()).save(any<OffenderSetup>())
+    verify(offenderSetupRepository).createReactivationSetupRecord(any())
   }
 
   @Test
-  fun `activateOffenderAndIncrementSetupCounter - no setup exists - returns null setupId`() {
+  fun `activateOffenderAndIncrementSetupCounter - no setup record could be created - returns null setupId, no activation`() {
     val offender = makeOffender(clock, LocalDate.now(clock)).apply {
       status = OffenderStatus.INACTIVE
     }
 
     whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.empty())
     whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(offenderSetupRepository.createReactivationSetupRecord(any())).thenAnswer { Optional.empty<OffenderSetup>() }
 
     val (savedOffender, setupId) = service.activateOffenderAndIncrementSetupCounter(offender)
 
-    assertEquals(OffenderStatus.VERIFIED, savedOffender.status)
+    assertEquals(OffenderStatus.INACTIVE, savedOffender.status)
     assertNull(setupId)
-    verify(offenderRepository).save(offender)
-    verify(offenderSetupRepository, never()).save(any<OffenderSetup>())
+    verify(offenderRepository, never()).save(offender)
   }
 
   @Test
-  fun `activateOffenderAndIncrementSetupCounter - idempotent across lifecycle`() {
+  fun `activateOffenderAndIncrementSetupCounter - create setup record only when offender is INACTIVE`() {
     val offender = makeOffender(clock, LocalDate.now(clock)).apply {
       status = OffenderStatus.INACTIVE
     }
@@ -512,16 +511,18 @@ class OffenderSetupServiceTest {
 
     whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
     whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
-    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.getArgument<OffenderSetup>(0) }
+    whenever(offenderSetupRepository.createReactivationSetupRecord(any())).thenReturn(
+      Optional.of(setup),
+      Optional.empty(),
+    )
 
-    // First call: INACTIVE -> VERIFIED, counter 1 -> 2
+    // First call: INACTIVE -> VERIFIED
     val (_, firstSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
-    assertEquals(2, setup.setupCounter)
+    assertEquals(1, setup.setupCounter)
 
-    // Second call: already VERIFIED, counter stays at 2
+    // Second call: already VERIFIED, no setup record created
     val (_, secondSetupId) = service.activateOffenderAndIncrementSetupCounter(offender)
-    assertEquals(2, setup.setupCounter)
-    assertEquals(firstSetupId, secondSetupId)
+    assertNull(secondSetupId)
   }
 
   @Nested

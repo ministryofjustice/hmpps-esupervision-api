@@ -9,8 +9,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.isNull
+import org.mockito.kotlin.isNotNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -264,7 +265,7 @@ class OffenderResourceTest {
     whenever(offenderSetupService.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.VERIFIED
-      Pair(o, null)
+      Pair(o, UUID.randomUUID())
     }
     whenever(checkinCreationService.createCheckin(any(), any(), any())).thenReturn(checkin)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
@@ -275,7 +276,7 @@ class OffenderResourceTest {
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
     verify(offenderSetupService).activateOffenderAndIncrementSetupCounter(offender)
-    verify(notificationService).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails), isNull())
+    verify(notificationService).sendReactivationCompletedNotifications(eq(offender), eq(contactDetails), isNotNull())
   }
 
   @Test
@@ -307,7 +308,7 @@ class OffenderResourceTest {
     whenever(offenderSetupService.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.VERIFIED
-      Pair(o, null)
+      Pair(o, UUID.randomUUID())
     }
 
     val result = resource.reactivateOffender(uuid, request)
@@ -391,7 +392,7 @@ class OffenderResourceTest {
     whenever(offenderSetupService.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.VERIFIED
-      Pair(o, null)
+      Pair(o, UUID.randomUUID())
     }
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
 
@@ -480,7 +481,7 @@ class OffenderResourceTest {
     whenever(offenderSetupService.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.VERIFIED
-      Pair(o, null)
+      Pair(o, UUID.randomUUID())
     }
 
     resource.reactivateOffender(uuid, request)
@@ -514,7 +515,7 @@ class OffenderResourceTest {
     whenever(offenderSetupService.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.VERIFIED
-      Pair(o, null)
+      Pair(o, UUID.randomUUID())
     }
 
     resource.reactivateOffender(uuid, request)
@@ -544,7 +545,7 @@ class OffenderResourceTest {
     whenever(offenderSetupService.activateOffenderAndIncrementSetupCounter(any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.VERIFIED
-      Pair(o, null)
+      Pair(o, UUID.randomUUID())
     }
 
     val result = resource.reactivateOffender(uuid, request)
@@ -553,7 +554,8 @@ class OffenderResourceTest {
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
 
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
-    verify(notificationService).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails), isNull())
+    verify(notificationService).sendReactivationCompletedNotifications(eq(offender), eq(myContactDetails), isNotNull())
+    verify(offenderRepository, never()).findById(any())
   }
 
   @Test

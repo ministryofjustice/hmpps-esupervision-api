@@ -257,8 +257,7 @@ class OffenderResource(
       3. Sends a registration notification to the offender
       4. Automatically creates a check in record for the 'firstCheckin' date. 
          - If a check in  for that date already exists, it will skip creation to prevent duplicates.
-         - If the date is in the future, the record is created in a 'CREATED' state for the background job to process later.
-      Note: V1 does not support reactivation, but V2 requires it due to unique CRN constraint.""",
+         - If the date is in the future, the record is created in a 'CREATED' state for the background job to process later.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender reactivated")
   @ApiResponse(responseCode = "400", description = "Offender not in INACTIVE status")
@@ -319,36 +318,52 @@ class OffenderResource(
       offender.contactPreference = pref.contactPreference
     }
 
-    val (savedOffender, setupId) = offenderSetupService.activateOffenderAndIncrementSetupCounter(offender)
-    notificationService.sendReactivationCompletedNotifications(savedOffender, contactDetails, setupId)
+    var (savedOffender, setupId) = offenderSetupService.activateOffenderAndIncrementSetupCounter(offender)
+    if (setupId != null && savedOffender.status == OffenderStatus.VERIFIED) {
+      notificationService.sendReactivationCompletedNotifications(savedOffender, contactDetails, setupId)
 
-    // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
-    val today = clock.today()
-    if (savedOffender.firstCheckin == today) {
-      // it's unlikely that there will be an existing check in because check ins become cancelled when PoPs are deactivated but we check in case
-      val existingCheckin = checkinRepository.findByOffenderAndDueDate(savedOffender, today)
-      val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
+      // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
+      val today = clock.today()
+      if (savedOffender.firstCheckin == today) {
+        // it's unlikely that there will be an existing check in because check ins become canceled when PoPs are deactivated but we check in case
+        val existingCheckin = checkinRepository.findByOffenderAndDueDate(savedOffender, today)
+        val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
 
-      if (!checkinExists) {
-        checkinCreationService.createCheckin(
-          offenderUuid = savedOffender.uuid,
-          dueDate = today,
-          createdBy = request.requestedBy,
-        )
-      } else {
-        LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
+        if (!checkinExists) {
+          checkinCreationService.createCheckin(
+            offenderUuid = savedOffender.uuid,
+            dueDate = today,
+            createdBy = request.requestedBy,
+          )
+        } else {
+          LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
+        }
+      }
+      recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, savedOffender, request.reason)
+    } else {
+      // if we couldn't crate a setup record, it's because offender flipped status to != INACTIVE, let's refresh it
+      savedOffender = offenderRepository.findById(savedOffender.id).orElseThrow { IllegalStateException("Offender id=${offender.id} not found in database.") }
+      if (savedOffender.status != OffenderStatus.VERIFIED) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender ${offender.crn} with status=${offender.status} could not be reactivated.")
       }
     }
 
     LOGGER.info(
-      "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
+      "Reactivation(result={}): offender(uuid={}, crn={}, status={}), requestedBy={}, reason={}",
+      if (setupId == null && offender.status == OffenderStatus.VERIFIED) {
+        "already active"
+      } else if (setupId == null) {
+        ""
+      } else {
+        ""
+      },
       uuid,
       offender.crn,
+      offender.status,
       request.requestedBy,
       request.reason,
     )
 
-    recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, savedOffender, request.reason)
     return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
   }
 

@@ -206,19 +206,14 @@ class OffenderSetupService(
    */
   @Transactional
   fun activateOffenderAndIncrementSetupCounter(offender: Offender): Pair<Offender, UUID?> {
-    if (offender.status != OffenderStatus.INACTIVE) {
-      val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
-      return Pair(offender, setup?.setupId())
-    }
-
-    val setup =
-      offenderSetupRepository.createReactivationSetupRecord(offender).orElse(null) ?: return Pair(offender, null)
+    val setup = offenderSetupRepository.createReactivationSetupRecord(offender).orElse(null)
+      ?: return Pair(offender, null)
 
     offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = clock.instant()
-    val savedOffender = offenderRepository.save(offender)
+    offenderRepository.save(offender)
 
-    return Pair(savedOffender, setup.setupId())
+    return Pair(offender, setup.setupId())
   }
 
   /** Terminate offender setup (cancel registration) */
