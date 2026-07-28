@@ -51,7 +51,12 @@ class EventAuditServiceTest {
 
   @Test
   fun `records the offender event when practitioner details are present`() {
-    val details = ContactDetails(crn = offender.crn, name = Name("John", "Doe"), practitioner = PractitionerDetails(Name("P", "Q")))
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      practitioner = PractitionerDetails(Name("P", "Q")),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
 
     service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, details, "reason")
 
@@ -61,7 +66,12 @@ class EventAuditServiceTest {
   @Test
   fun `records the offender event even when practitioner details are missing`() {
     // e.g. an automated deactivation of a POP in reset whose NDelius record has no practitioner
-    val details = ContactDetails(crn = offender.crn, name = Name("John", "Doe"), practitioner = null)
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      practitioner = null,
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
 
     service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, details, "no active events")
 
