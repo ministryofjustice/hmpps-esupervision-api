@@ -116,6 +116,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     var result = offenderPersistenceService.offenderReactivation(offender, event1)
     assertNull(result)
 
+    // pretend we deactivated the offender
     offender.status = OffenderStatus.INACTIVE
     offenderRepository.save(offender)
 
@@ -127,8 +128,8 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     assertEquals(OffenderStatus.VERIFIED, result.offender.status)
 
     val outboxItems = outboxItemRepository.findAll()
-    assertEquals(2, outboxItems.size) // one for saving inactive, one for the re-activation
-    assertEquals(1, outboxItems.filter { it.type == OutboxItemType.OFFENDER_SETUP_COMPLETE }.size)
+    assertEquals(1, outboxItems.size) // one for saving inactive, one for the re-activation
+    assertEquals(1, outboxItems.filter { it.type == OutboxItemType.OFFENDER_REACTIVATED }.size)
   }
 
   @Test
