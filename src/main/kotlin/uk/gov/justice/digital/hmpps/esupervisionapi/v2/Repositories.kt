@@ -244,7 +244,7 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Query(
     """
     SELECT c FROM OffenderCheckin c
-    WHERE c.offender.uuid = :offenderId
+    WHERE c.offender.id = :offenderId
       AND c.dueDate = :dueDate
     """,
   )
