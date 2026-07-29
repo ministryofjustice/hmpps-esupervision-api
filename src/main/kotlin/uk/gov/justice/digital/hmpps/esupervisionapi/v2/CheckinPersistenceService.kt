@@ -15,8 +15,7 @@ import java.util.UUID
  * (apart from calls to .finalise() on certain events).
  */
 @Service
-class
-CheckinPersistenceService(
+class CheckinPersistenceService(
   private val checkinRepository: OffenderCheckinRepository,
   private val eventAuditService: EventAuditService,
   private val appEventPublisher: ApplicationEventPublisher,

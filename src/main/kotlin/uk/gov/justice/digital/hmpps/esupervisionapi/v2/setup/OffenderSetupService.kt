@@ -197,26 +197,6 @@ class OffenderSetupService(
     return offender.dto(contactDetails)
   }
 
-  /**
-   * Atomically activate the offender and increment the setup counter.
-   * Only increments if the offender is currently INACTIVE, ensuring idempotency
-   * against concurrent or retried reactivation requests.
-   *
-   * @return the offender and setupId, or null setupId if no setup exists
-   */
-  @Deprecated("User OffenderPersistenceService and event based flow.")
-  @Transactional
-  fun activateOffenderAndIncrementSetupCounter(offender: Offender): Pair<Offender, UUID?> {
-    val setup = offenderSetupRepository.createReactivationSetupRecord(offender).orElse(null)
-      ?: return Pair(offender, null)
-
-    offender.status = OffenderStatus.VERIFIED
-    offender.updatedAt = clock.instant()
-    offenderRepository.save(offender)
-
-    return Pair(offender, setup.setupId())
-  }
-
   /** Terminate offender setup (cancel registration) */
   fun terminateOffenderSetup(uuid: UUID): OffenderDto {
     val setup =
