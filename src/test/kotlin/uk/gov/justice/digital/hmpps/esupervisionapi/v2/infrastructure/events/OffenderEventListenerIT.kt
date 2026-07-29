@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
@@ -20,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.LocalDate
+import java.util.UUID.randomUUID
 import java.util.concurrent.TimeUnit
 
 class OffenderEventListenerIT : IntegrationTestBase() {
@@ -29,6 +31,9 @@ class OffenderEventListenerIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var offenderRepository: OffenderRepository
+
+  @Autowired
+  private lateinit var offenderPersistenceService: OffenderPersistenceService
 
   @Autowired
   private lateinit var outboxItemRepository: OutboxItemRepository
@@ -46,15 +51,14 @@ class OffenderEventListenerIT : IntegrationTestBase() {
     offender = offenderRepository.save(offender)
 
     offender.status = OffenderStatus.INACTIVE
-    offenderRepository.save(offender) // this will trigger the creation of outbox item
-
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-      setup = null,
+      setup = Pair(1L, randomUUID()),
       activeEventNumber = null,
     )
+    offenderPersistenceService.offenderDeactivation(offender, event)
 
     offenderEventListener.processEvent(event).get(2, TimeUnit.SECONDS)
 
