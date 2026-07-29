@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
@@ -38,8 +39,11 @@ class OffenderEventListenerIT : IntegrationTestBase() {
   @Autowired
   private lateinit var outboxItemRepository: OutboxItemRepository
 
+  @Autowired private lateinit var offenderSetupRepository: OffenderSetupRepository
+
   @AfterEach
   fun cleanUp() {
+    offenderSetupRepository.deleteAll()
     outboxItemRepository.deleteAll()
     offenderRepository.deleteAll()
     offenderRepository.flush()
@@ -51,18 +55,19 @@ class OffenderEventListenerIT : IntegrationTestBase() {
     offender = offenderRepository.save(offender)
 
     offender.status = OffenderStatus.INACTIVE
+    val setup = Pair(1L, randomUUID())
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-      setup = Pair(1L, randomUUID()),
+      setup = setup,
       activeEventNumber = null,
     )
     offenderPersistenceService.offenderDeactivation(offender, event)
 
     offenderEventListener.processEvent(event).get(2, TimeUnit.SECONDS)
 
-    val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, offender.id).orElseThrow()
+    val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, setup.first).orElseThrow()
     assertEquals(OutboxItemStatus.SENT, outboxItem.status)
   }
 
