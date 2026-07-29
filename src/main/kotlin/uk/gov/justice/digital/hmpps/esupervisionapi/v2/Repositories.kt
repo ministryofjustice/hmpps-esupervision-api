@@ -848,4 +848,14 @@ interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
 
   @Query
   fun findByTypeAndEntityId(type: OutboxItemType, entityId: Long): Optional<OutboxItem>
+
+  @Query(
+    """
+    insert into outbox_items (type, entity_id, created_at, updated_at)
+    values (:#{#type.name()}, :entityId, now(), now())
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun addOutboxItem(type: OutboxItemType, entityId: Long): Int
 }

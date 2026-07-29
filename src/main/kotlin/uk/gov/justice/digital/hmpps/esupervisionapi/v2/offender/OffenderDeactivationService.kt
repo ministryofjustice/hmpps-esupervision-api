@@ -70,7 +70,7 @@ class OffenderDeactivationService(
       offenderId = offender.id,
       offender = offender.dto(contactDetails),
       auditEventType = auditEventType,
-      setup = setup?.uuid,
+      setup = setup?.let { Pair(it.id, it.uuid) },
       activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
       reason = reason,
       sensitive = sensitive,

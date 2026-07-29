@@ -13,6 +13,7 @@ class OffenderPersistenceService(
   private val offenderRepository: OffenderRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
   private val checkinRepository: OffenderCheckinRepository,
+  private val outboxItemRepository: OutboxItemRepository,
   private val questionListAssignmentRepository: QuestionListAssignmentRepository,
   private val eventAuditService: EventAuditService,
   private val appEventPublisher: ApplicationEventPublisher,
@@ -21,6 +22,9 @@ class OffenderPersistenceService(
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
     offenderRepository.save(offender)
+    if (event.setup != null) {
+      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.first)
+    }
     val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(offender.id)
     val cancelledCheckins = checkinRepository.updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
@@ -37,6 +41,7 @@ class OffenderPersistenceService(
     var finalised: OffenderReactivatedEvent? = null
     if (setup.isPresent) {
       offenderRepository.save(offender)
+      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)
       finalised = event.finalise(setup.get(), offender)
       eventAuditService.recordOffenderEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, finalised.offender, finalised.offender.personalDetails, finalised.reason)
 

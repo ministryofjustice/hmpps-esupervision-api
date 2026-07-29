@@ -26,6 +26,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.UUID.randomUUID
 
 class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
@@ -128,5 +129,40 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     val outboxItems = outboxItemRepository.findAll()
     assertEquals(2, outboxItems.size) // one for saving inactive, one for the re-activation
     assertEquals(1, outboxItems.filter { it.type == OutboxItemType.OFFENDER_SETUP_COMPLETE }.size)
+  }
+
+  @Test
+  fun `repeated reactivation does not create duplicate outbox items`() {
+    var offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity()
+    offenderRepository.save(offender)
+    assert(offenderSetupRepository.findByOffender(offender).isEmpty, { "Some test possibly didn't clean up correctly" })
+
+    val setup1 = Pair(0L, randomUUID())
+    offender.status = OffenderStatus.INACTIVE
+    val deactivationEvent = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(),
+      auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+      setup = setup1,
+      activeEventNumber = 101L,
+      reason = "deactivate 1",
+    )
+    offenderPersistenceService.offenderDeactivation(offender, deactivationEvent)
+
+    offender.status = OffenderStatus.VERIFIED
+    val partialEvent = PartialOffenderReactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(),
+      currentEvent = 102L,
+      reason = "reactivate 1",
+    )
+    offenderPersistenceService.offenderReactivation(offender, partialEvent)
+
+    val setup2 = offenderSetupRepository.findByOffender(offender).get()
+    offender.status = OffenderStatus.INACTIVE
+    offenderPersistenceService.offenderDeactivation(offender, deactivationEvent.copy(setup = Pair(setup2.id, setup2.uuid), reason = "deactivate 2"))
+
+    offender.status = OffenderStatus.VERIFIED
+    offenderPersistenceService.offenderReactivation(offender, partialEvent.copy(reason = "reactivate 2"))
   }
 }
