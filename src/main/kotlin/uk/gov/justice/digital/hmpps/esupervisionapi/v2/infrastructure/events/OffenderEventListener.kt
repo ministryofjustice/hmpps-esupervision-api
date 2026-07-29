@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IOffenderEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import java.util.concurrent.CompletableFuture
 
@@ -23,6 +24,7 @@ class OffenderEventListener(
     LOGGER.debug("processing offender event for offender CRN={} with status={}", event.offender.crn, event.offender.status.name)
     when (event) {
       is OffenderDeactivatedEvent -> notificationService.sendDeactivationCompletedNotifications(event)
+      is OffenderReactivatedEvent -> notificationService.sendReactivationCompletedNotifications(event)
     }
     event.outboxItemCoords?.let { (type, id) ->
       val result = outboxItemRepository.markAsSent(type.name, id)

@@ -271,27 +271,14 @@ class NotificationOrchestratorServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendReactivationCompletedNotifications(offender, contactDetails)
-
-    verify(domainEventService).publishDomainEvent(
-      eq(DomainEventType.V2_SETUP_COMPLETED),
-      eq(offender.uuid),
-      eq(offender.crn),
-      any(),
-      eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = null)),
+    val event = OffenderReactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      currentEvent = 12345L,
+      setup = Pair(1, UUID.randomUUID()),
+      reason = "whatever",
     )
-  }
-
-  @Test
-  fun `sendReactivationCompletedNotifications - publishes event without eventNumber when no events`() {
-    val offender = createOffender()
-    val contactDetails = createContactDetails().copy(events = emptyList())
-
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
-    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
-
-    service.sendReactivationCompletedNotifications(offender, contactDetails)
+    service.sendReactivationCompletedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_COMPLETED),
@@ -299,7 +286,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = null, setupId = null)),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = event.setup.second)),
     )
   }
 

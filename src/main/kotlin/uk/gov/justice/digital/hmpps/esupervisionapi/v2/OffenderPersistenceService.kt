@@ -6,10 +6,12 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 
 @Service
 class OffenderPersistenceService(
   private val offenderRepository: OffenderRepository,
+  private val offenderSetupRepository: OffenderSetupRepository,
   private val checkinRepository: OffenderCheckinRepository,
   private val questionListAssignmentRepository: QuestionListAssignmentRepository,
   private val eventAuditService: EventAuditService,
@@ -27,6 +29,21 @@ class OffenderPersistenceService(
     eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 
     appEventPublisher.publishEvent(event)
+  }
+
+  @Transactional
+  fun offenderReactivation(offender: Offender, event: PartialOffenderReactivatedEvent): OffenderReactivatedEvent? {
+    val setup = offenderSetupRepository.createReactivationSetupRecord(offender)
+    var finalised: OffenderReactivatedEvent? = null
+    if (setup.isPresent) {
+      offenderRepository.save(offender)
+      finalised = event.finalise(setup.get(), offender)
+      eventAuditService.recordOffenderEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, finalised.offender, finalised.offender.personalDetails, finalised.reason)
+
+      appEventPublisher.publishEvent(finalised)
+    }
+
+    return finalised
   }
 
   companion object {

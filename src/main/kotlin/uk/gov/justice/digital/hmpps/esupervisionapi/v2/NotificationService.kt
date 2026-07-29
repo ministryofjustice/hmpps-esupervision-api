@@ -2,7 +2,6 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
-import java.util.UUID
 
 /**
  * V2 Notification Service
@@ -31,8 +30,8 @@ class NotificationService(
   /**
    * Send notifications for reactivation completed event
    */
-  fun sendReactivationCompletedNotifications(offender: Offender, contactDetails: ContactDetails? = null, setupId: UUID? = null) {
-    orchestrator.sendReactivationCompletedNotifications(offender, contactDetails, setupId)
+  fun sendReactivationCompletedNotifications(event: OffenderReactivatedEvent) {
+    orchestrator.sendReactivationCompletedNotifications(event)
   }
 
   /**

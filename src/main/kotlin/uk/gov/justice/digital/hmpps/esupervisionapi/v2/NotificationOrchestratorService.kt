@@ -102,35 +102,33 @@ class NotificationOrchestratorService(
 
   /** Send notifications for reactivation completed event */
   fun sendReactivationCompletedNotifications(
-    offender: Offender,
-    contactDetails: ContactDetails? = null,
-    setupId: UUID? = null,
+    event: OffenderReactivatedEvent,
   ) {
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
-
+    val offender = event.offender
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner reactivated online check-ins for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = details?.let { activeEventNumber(offender, it) },
-        setupId = setupId,
+        eventNumber = event.currentEvent,
+        setupId = event.setup.second,
       ),
     )
 
-    if (details != null) {
+    if (offender.personalDetails != null) {
+      val details = offender.personalDetails
       try {
         val personalisation =
           mapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
             "date" to offender.firstCheckin.format(DATE_FORMATTER),
-            "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
+            "frequency" to formatCheckinFrequency(offender.checkinInterval),
           )
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
-            offenderId = offender.id,
+            offenderId = event.offenderId,
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,

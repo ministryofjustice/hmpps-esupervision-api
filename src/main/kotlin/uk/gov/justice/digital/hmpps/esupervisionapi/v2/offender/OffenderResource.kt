@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -29,10 +30,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -63,6 +68,8 @@ class OffenderResource(
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderSetupService: OffenderSetupService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val appEventPublisher: ApplicationEventPublisher,
+  private val offenderPersistenceService: OffenderPersistenceService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -318,15 +325,21 @@ class OffenderResource(
       offender.contactPreference = pref.contactPreference
     }
 
-    var (savedOffender, setupId) = offenderSetupService.activateOffenderAndIncrementSetupCounter(offender)
-    if (setupId != null && savedOffender.status == OffenderStatus.VERIFIED) {
-      notificationService.sendReactivationCompletedNotifications(savedOffender, contactDetails, setupId)
-
-      // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
+    val partialEvent = PartialOffenderReactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      currentEvent = activeEventNumber(offender, contactDetails),
+      reason = request.reason,
+    )
+    offender.status = OffenderStatus.VERIFIED
+    offender.updatedAt = clock.instant()
+    val event = offenderPersistenceService.offenderReactivation(offender, partialEvent)
+    if (event != null && event.offender.status == OffenderStatus.VERIFIED) {
+      val savedOffender = event.offender
       val today = clock.today()
+      // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
       if (savedOffender.firstCheckin == today) {
-        // it's unlikely that there will be an existing check in because check ins become canceled when PoPs are deactivated but we check in case
-        val existingCheckin = checkinRepository.findByOffenderAndDueDate(savedOffender, today)
+        val existingCheckin = checkinRepository.findByOffenderAndDueDate(offender.id, today)
         val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
 
         if (!checkinExists) {
@@ -339,24 +352,10 @@ class OffenderResource(
           LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
         }
       }
-      recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, savedOffender, request.reason)
-    } else {
-      // if we couldn't crate a setup record, it's because offender flipped status to != INACTIVE, let's refresh it
-      savedOffender = offenderRepository.findById(savedOffender.id).orElseThrow { IllegalStateException("Offender id=${offender.id} not found in database.") }
-      if (savedOffender.status != OffenderStatus.VERIFIED) {
-        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender ${offender.crn} with status=${offender.status} could not be reactivated.")
-      }
     }
 
     LOGGER.info(
-      "Reactivation(result={}): offender(uuid={}, crn={}, status={}), requestedBy={}, reason={}",
-      if (setupId == null && offender.status == OffenderStatus.VERIFIED) {
-        "already active"
-      } else if (setupId == null) {
-        ""
-      } else {
-        ""
-      },
+      "Reactivation: offender(uuid={}, crn={}, status={}), requestedBy={}, reason={}",
       uuid,
       offender.crn,
       offender.status,
@@ -364,7 +363,7 @@ class OffenderResource(
       request.reason,
     )
 
-    return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
+    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -479,6 +478,17 @@ data class OffenderSummaryDto(
   val contactPreference: ContactPreference,
   val photoUrl: String? = null,
   val details: OffenderSummaryDetails? = null,
+)
+
+private fun OffenderDto.toSummaryDto(photoUrl: String? = null) = OffenderSummaryDto(
+  uuid = uuid,
+  crn = crn,
+  status = status,
+  firstCheckin = firstCheckin,
+  checkinInterval = checkinInterval,
+  contactPreference = contactPreference,
+  photoUrl = photoUrl,
+  details = personalDetails?.let { OffenderSummaryDetails(it.name) },
 )
 
 private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: ContactDetails? = null) = OffenderSummaryDto(

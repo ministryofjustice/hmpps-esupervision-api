@@ -155,7 +155,7 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
     with existing_offender as (
         select id, crn, practitioner_id, status
         from offender_v2
-        where status = 'INACTIVE' and id = :offender.id
+        where status = 'INACTIVE' and id = :#{#offender.id}
     )
     insert into offender_setup_v2 (uuid, offender_id, practitioner_id, created_at, started_at)
     select uuid_generate_v4(), id, practitioner_id, now(), now()
@@ -164,7 +164,6 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
   """,
     nativeQuery = true,
   )
-  @Modifying
   fun createReactivationSetupRecord(offender: Offender): Optional<OffenderSetup>
 }
 
@@ -241,6 +240,15 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): Optional<OffenderCheckin>
+
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    WHERE c.offender.uuid = :offenderId
+      AND c.dueDate = :dueDate
+    """,
+  )
+  fun findByOffenderAndDueDate(offenderId: Long, dueDate: LocalDate): Optional<OffenderCheckin>
 
   /** Find all checkins by practitioner (created by) */
   @Query(

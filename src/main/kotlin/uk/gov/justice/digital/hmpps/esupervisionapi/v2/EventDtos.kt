@@ -37,6 +37,34 @@ data class OffenderDeactivatedEvent(
   override val outboxItemCoords = OutboxItemType.OFFENDER_DEACTIVATED to offenderId
 }
 
+data class PartialOffenderReactivatedEvent(
+  override val offenderId: Long,
+  override val offender: OffenderDto,
+  override val currentEvent: Long?,
+  val reason: String,
+) : IOffenderEventBase,
+  IPartialEvent,
+  ActiveEvent {
+  fun finalise(setup: OffenderSetup, offender: Offender): OffenderReactivatedEvent = OffenderReactivatedEvent(
+    offenderId = offenderId,
+    offender = offender.dto(this.offender.personalDetails),
+    currentEvent = this.currentEvent,
+    setup = setup.let { Pair(it.id, it.uuid) },
+    reason = this.reason,
+  )
+}
+
+data class OffenderReactivatedEvent(
+  override val offenderId: Long,
+  override val offender: OffenderDto,
+  override val currentEvent: Long?,
+  val setup: Pair<Long, UUID>,
+  val reason: String,
+) : IOffenderEvent,
+  ActiveEvent {
+  override val outboxItemCoords = Pair(OutboxItemType.OFFENDER_SETUP_COMPLETE, setup.first)
+}
+
 interface ICheckinEventBase {
   val checkinId: Long
   val offenderId: Long

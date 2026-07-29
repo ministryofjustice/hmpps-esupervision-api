@@ -204,6 +204,7 @@ class OffenderSetupService(
    *
    * @return the offender and setupId, or null setupId if no setup exists
    */
+  @Deprecated("User OffenderPersistenceService and event based flow.")
   @Transactional
   fun activateOffenderAndIncrementSetupCounter(offender: Offender): Pair<Offender, UUID?> {
     val setup = offenderSetupRepository.createReactivationSetupRecord(offender).orElse(null)
