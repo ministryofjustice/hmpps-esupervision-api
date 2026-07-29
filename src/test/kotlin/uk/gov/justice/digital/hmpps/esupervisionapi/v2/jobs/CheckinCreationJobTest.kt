@@ -170,7 +170,7 @@ class CheckinCreationJobTest {
     whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<Offender>(0) }
   }
 
-  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended)
+  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended, dateOfBirth = LocalDate.of(1980, 1, 1))
 
   private fun offender(crn: String) = Offender(
     uuid = UUID.randomUUID(),

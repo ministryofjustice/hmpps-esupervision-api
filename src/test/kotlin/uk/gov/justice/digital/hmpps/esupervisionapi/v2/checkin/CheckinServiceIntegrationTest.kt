@@ -156,6 +156,7 @@ class CheckinServiceIntegrationTest : IntegrationTestBase() {
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name(forename = "John", surname = "Doe"),
       email = "john@example.com",
       mobile = "07700900000",
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
 

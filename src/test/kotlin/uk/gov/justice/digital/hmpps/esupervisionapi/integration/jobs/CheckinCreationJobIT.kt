@@ -38,6 +38,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -97,6 +98,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
                 sentence = null,
               ),
             ),
+            dateOfBirth = LocalDate.of(1980, 1, 1),
           ),
           ContactDetails(
             crn = "A000002",
@@ -106,6 +108,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
             events = listOf(
               Event(number = 1L, mainOffence = CodedDescription("OFF01", "Test"), sentence = null),
             ),
+            dateOfBirth = LocalDate.of(1980, 1, 1),
           ),
         ).filter { it.crn in crns }
       }

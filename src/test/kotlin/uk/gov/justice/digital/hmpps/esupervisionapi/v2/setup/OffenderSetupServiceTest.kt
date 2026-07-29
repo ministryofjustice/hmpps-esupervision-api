@@ -252,7 +252,7 @@ class OffenderSetupServiceTest {
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     // Suspended even though an active event is present - suspension wins.
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
-      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), contactSuspended = true),
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), contactSuspended = true, dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
 
     assertThrows(BadArgumentException::class.java) {
@@ -276,7 +276,7 @@ class OffenderSetupServiceTest {
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
-      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList()),
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList(), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
 
     assertThrows(BadArgumentException::class.java) {
@@ -325,7 +325,7 @@ class OffenderSetupServiceTest {
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
-      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent)),
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any()))
       .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))

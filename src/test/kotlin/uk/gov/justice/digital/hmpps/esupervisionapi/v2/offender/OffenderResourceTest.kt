@@ -15,8 +15,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
-import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -29,7 +29,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
@@ -63,6 +62,8 @@ class OffenderResourceTest {
   private val offenderDeactivationService: OffenderDeactivationService = mock()
   private val appEventPublisher: ApplicationEventPublisher = mock()
   private val offenderPersistenceService: OffenderPersistenceService = mock()
+  private val offenderService: OffenderService = mock()
+  private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -83,6 +84,7 @@ class OffenderResourceTest {
       offenderDeactivationService,
       appEventPublisher,
       offenderPersistenceService,
+      offenderService,
     )
   }
 
@@ -102,6 +104,7 @@ class OffenderResourceTest {
       crn = offender.crn,
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
@@ -138,6 +141,7 @@ class OffenderResourceTest {
       crn = offender.crn,
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -222,6 +226,7 @@ class OffenderResourceTest {
       crn = offender.crn,
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
@@ -266,6 +271,7 @@ class OffenderResourceTest {
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -311,6 +317,7 @@ class OffenderResourceTest {
       mobile = "07700900123",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -400,6 +407,7 @@ class OffenderResourceTest {
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
@@ -427,6 +435,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = null,
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -456,6 +465,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       email = "",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -484,6 +494,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val completedCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
@@ -522,6 +533,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     val cancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
@@ -561,6 +573,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
       mobile = "07700900123",
       events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -597,6 +610,7 @@ class OffenderResourceTest {
       mobile = "07700900123",
       events = listOf(anEvent),
       contactSuspended = true,
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -623,6 +637,7 @@ class OffenderResourceTest {
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       mobile = "07700900123",
       events = emptyList(),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
@@ -809,6 +824,59 @@ class OffenderResourceTest {
     verify(ndiliusApiClient, times(1)).getContactDetails(offender.crn)
   }
 
+  @Test
+  fun `getOffenderHeaderByCrn - success`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+
+    val headerDetails = OffenderHeaderDetails(
+      crn = offender.crn,
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      tierScore = "D2",
+      tierDetailsLink = "https://tier.link/$offender.crn",
+      overallRisk = "VERY_HIGH",
+    )
+    whenever(offenderService.getHeaderDetails(offender.crn)).thenAnswer { headerDetails }
+
+    val result = resource.getOffenderHeaderByCrn(offender.crn)
+    verify(offenderService, times(1)).getHeaderDetails(offender.crn)
+    assertNotNull(result.body)
+    assertEquals(headerDetails.crn, result.body?.crn)
+    assertEquals(headerDetails.dateOfBirth, result.body?.dateOfBirth)
+    assertEquals(headerDetails.tierScore, result.body?.tierScore)
+    assertEquals(headerDetails.tierDetailsLink, result.body?.tierDetailsLink)
+    assertEquals(headerDetails.overallRisk, result.body?.overallRisk)
+  }
+
+  @Test
+  fun `getOffenderHeaderByCrn - offender not found - returns 404`() {
+    val crn = "Y124365"
+    whenever(offenderRepository.findByCrn(crn)).thenReturn(Optional.empty())
+
+    val result = resource.getOffenderHeaderByCrn(crn)
+    assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
+  }
+
+  @Test
+  fun `getOffenderHeaderByCrn - offenderService failure`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+
+    whenever(offenderService.getHeaderDetails(offender.crn)).thenAnswer {
+      throw ResponseStatusException(
+        HttpStatus.NOT_FOUND,
+        "Could not verify contact details in NDelius for ${offender.crn}.",
+      )
+    }
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      val result = resource.getOffenderHeaderByCrn(offender.crn)
+    }
+
+    assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
+    assertEquals("Could not verify contact details in NDelius for ${offender.crn}.", exception.reason)
+  }
+
   // ========================================
   // Helper Methods
   // ========================================
@@ -825,10 +893,4 @@ class OffenderResourceTest {
     updatedAt = clock.instant(),
     contactPreference = ContactPreference.PHONE,
   )
-
-  private fun mockOffenderSetup(setupId: Long, setupUuid: UUID): OffenderSetup {
-    val setup = OffenderSetup(setupUuid, mock(), "MOCKED", Instant.now(), Instant.now(), 1, null, null)
-    ReflectionTestUtils.setField(setup, "id", setupId)
-    return setup
-  }
 }
