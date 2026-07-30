@@ -354,7 +354,6 @@ class OffenderResource(
       currentEvent = activeEventNumber(offender, contactDetails),
       reason = request.reason,
     )
-    offender.status = OffenderStatus.VERIFIED
     offender.updatedAt = clock.instant()
     val event = offenderPersistenceService.offenderReactivation(offender, partialEvent)
     if (event != null && event.offender.status == OffenderStatus.VERIFIED) {

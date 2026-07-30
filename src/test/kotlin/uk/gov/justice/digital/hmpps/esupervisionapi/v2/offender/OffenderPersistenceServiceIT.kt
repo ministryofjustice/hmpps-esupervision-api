@@ -120,7 +120,6 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offender.status = OffenderStatus.INACTIVE
     offenderRepository.save(offender)
 
-    offender.status = OffenderStatus.VERIFIED
     val event2 = event1.copy(offender = offender.dto(), currentEvent = 1002L)
     result = offenderPersistenceService.offenderReactivation(offender, event2)
 
@@ -150,7 +149,6 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     )
     offenderPersistenceService.offenderDeactivation(offender, deactivationEvent)
 
-    offender.status = OffenderStatus.VERIFIED
     val partialEvent = PartialOffenderReactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(),
@@ -163,7 +161,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offender.status = OffenderStatus.INACTIVE
     offenderPersistenceService.offenderDeactivation(offender, deactivationEvent.copy(setup = Pair(setup2.id, setup2.uuid), reason = "deactivate 2"))
 
-    offender.status = OffenderStatus.VERIFIED
-    offenderPersistenceService.offenderReactivation(offender, partialEvent.copy(reason = "reactivate 2"))
+    val reactivation = offenderPersistenceService.offenderReactivation(offender, partialEvent.copy(reason = "reactivate 2"))
+    assertNotNull(reactivation)
   }
 }

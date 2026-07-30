@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 
 @Service
 class OffenderPersistenceService(
@@ -35,11 +36,17 @@ class OffenderPersistenceService(
     appEventPublisher.publishEvent(event)
   }
 
+  /**
+   * Updates records related to offender reactivation.
+   *
+   * Updates the offender status to VERIFIED, so the passed in entity should have INACTIVE status.
+   */
   @Transactional
   fun offenderReactivation(offender: Offender, event: PartialOffenderReactivatedEvent): OffenderReactivatedEvent? {
     val setup = offenderSetupRepository.createReactivationSetupRecord(offender)
     var finalised: OffenderReactivatedEvent? = null
     if (setup.isPresent) {
+      offender.status = OffenderStatus.VERIFIED
       offenderRepository.save(offender)
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)
       finalised = event.finalise(setup.get(), offender)
