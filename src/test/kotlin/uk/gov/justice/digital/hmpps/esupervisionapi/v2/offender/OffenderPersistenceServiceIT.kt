@@ -127,7 +127,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     assertEquals(OffenderStatus.VERIFIED, result.offender.status)
 
     val outboxItems = outboxItemRepository.findAll()
-    assertEquals(1, outboxItems.size) // one for saving inactive, one for the re-activation
+    assertEquals(1, outboxItems.size)
     assertEquals(1, outboxItems.filter { it.type == OutboxItemType.OFFENDER_REACTIVATED }.size)
   }
 
