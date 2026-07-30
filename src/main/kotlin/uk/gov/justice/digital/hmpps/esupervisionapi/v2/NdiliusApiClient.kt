@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 
@@ -56,6 +57,19 @@ class NdiliusApiClient(
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Contact details not found for CRN: {}", crn)
       null
+    } catch (e: WebClientResponseException) {
+      LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
+      if (e.statusCode.is4xxClientError) {
+        throw ResponseStatusException(
+          e.statusCode,
+          "Could not verify contact details in NDelius for $crn.",
+          e,
+        )
+      }
+      throw ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
+      )
     } catch (e: Exception) {
       LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e

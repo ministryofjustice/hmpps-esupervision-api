@@ -50,7 +50,7 @@ class OffenderDeactivationServiceTest {
     notificationService,
   )
 
-  private val contactDetails = ContactDetails(crn = "X123456", name = Name("John", "Doe"), mobile = "07700900123")
+  private val contactDetails = ContactDetails(crn = "X123456", name = Name("John", "Doe"), mobile = "07700900123", dateOfBirth = LocalDate.of(1980, 1, 1))
 
   @Test
   fun `deactivates a VERIFIED offender - status, audit and notification`() {

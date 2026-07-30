@@ -12,6 +12,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.nio.file.Path
 
 @Configuration
@@ -22,6 +26,20 @@ class StubServicesConfiguration {
   fun ndiliusApiClient(): INdiliusApiClient {
     LOG.info("Creating stubbed Ndilius API client")
     return StubNdiliusApiClient()
+  }
+
+  @Bean
+  @Profile("local & stubtier")
+  fun tierApiClient(): ITierApiClient {
+    LOG.info("Creating stubbed Tier API client")
+    return StubTierApiClient()
+  }
+
+  @Bean
+  @Profile("local & stubarns")
+  fun arnsApiClient(): IArnsApiClient {
+    LOG.info("Creating stubbed Arns API client")
+    return StubArnsApiClient()
   }
 
   companion object {
@@ -73,6 +91,62 @@ open class StubNdiliusApiClient(
     }
     LOG.debug("Not all CRNs found in allowed list: {}", incomingCrns.subtract(allowedCrns))
     return emptyList()
+  }
+
+  companion object {
+    val LOG = LoggerFactory.getLogger(this::class.java)
+  }
+}
+
+open class StubTierApiClient(
+  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/tier-api-responses/default.json")),
+  val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
+) : ITierApiClient,
+  DisposableBean {
+
+  init {
+    watcher.startWatchingChanges()
+  }
+
+  override fun destroy() {
+    watcher.stopWatchingChanges()
+  }
+
+  override fun getTierDetails(crn: String): TierDetails? {
+    LOG.debug("Fetching tier details for CRN: {}", crn)
+    if (watcher.allowedCrns.contains(crn)) {
+      return dataProvider.provideTierDetails(crn)
+    }
+    LOG.debug("CRN {} not found in allowed list", crn)
+    return null
+  }
+
+  companion object {
+    val LOG = LoggerFactory.getLogger(this::class.java)
+  }
+}
+
+open class StubArnsApiClient(
+  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/arns-api-responses/default.json")),
+  val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
+) : IArnsApiClient,
+  DisposableBean {
+
+  init {
+    watcher.startWatchingChanges()
+  }
+
+  override fun destroy() {
+    watcher.stopWatchingChanges()
+  }
+
+  override fun getRiskWidget(crn: String): ArnsWidget? {
+    LOG.debug("Fetching tier details for CRN: {}", crn)
+    if (watcher.allowedCrns.contains(crn)) {
+      return dataProvider.provideArnsWidget(crn)
+    }
+    LOG.debug("CRN {} not found in allowed list", crn)
+    return null
   }
 
   companion object {
