@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.SubmitTimeDistributionDto
@@ -223,6 +224,19 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     @Param("notificationType") notificationType: String,
     @Param("checkinWindowStart") checkinWindowStart: Instant,
   ): Stream<OffenderCheckin>
+
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    JOIN FETCH c.offender
+    WHERE c.status IN ('SUBMITTED', 'REVIEWED')
+      AND c.manualIdCheck in (:criteria)
+      AND c.submittedAt <= :cutoff
+      AND c.imageDeletedAt IS NULL
+    ORDER BY c.submittedAt ASC
+    """,
+  )
+  fun findEligibleForImageDeletion(criteria: Set<ManualIdVerificationResult>, cutoff: Instant, pageable: Pageable): List<OffenderCheckin>
 
   @Query(
     """

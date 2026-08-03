@@ -256,6 +256,9 @@ open class OffenderCheckin(
   open var riskFeedback: Boolean? = null,
   @Column(name = "sensitive", nullable = false)
   open var sensitive: Boolean = false,
+
+  @Column(name = "image_deleted_at", nullable = true)
+  open var imageDeletedAt: Instant? = null,
 ) : V2BaseEntity() {
   fun dto(
     personalDetails: ContactDetails? = null,
