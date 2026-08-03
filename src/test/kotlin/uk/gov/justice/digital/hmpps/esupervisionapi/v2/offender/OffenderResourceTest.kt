@@ -501,6 +501,7 @@ class OffenderResourceTest {
     whenever(completedCheckin.status).thenReturn(CheckinStatus.SUBMITTED)
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
+    whenever(checkinRepository.findByOffenderAndDueDate(offender.id, today)).thenReturn(Optional.of(completedCheckin))
     val setupUuid = UUID.randomUUID()
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
       offender.status = OffenderStatus.VERIFIED
@@ -542,6 +543,7 @@ class OffenderResourceTest {
     val setupUuid = UUID.randomUUID()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
+    whenever(checkinRepository.findByOffenderAndDueDate(offender.id, today)).thenReturn(Optional.of(cancelledCheckin))
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
       offender.status = OffenderStatus.VERIFIED
       OffenderReactivatedEvent(
