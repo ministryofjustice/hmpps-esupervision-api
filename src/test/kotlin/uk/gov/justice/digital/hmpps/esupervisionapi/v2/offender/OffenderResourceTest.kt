@@ -412,6 +412,16 @@ class OffenderResourceTest {
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     val setupUuid = UUID.randomUUID()
+    whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
+      offender.status = OffenderStatus.VERIFIED
+      OffenderReactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        currentEvent = anEvent.number,
+        setup = Pair(1, setupUuid),
+        reason = request.reason,
+      )
+    }
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)

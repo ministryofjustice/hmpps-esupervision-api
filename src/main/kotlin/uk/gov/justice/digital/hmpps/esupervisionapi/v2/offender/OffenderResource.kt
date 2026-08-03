@@ -374,6 +374,9 @@ class OffenderResource(
           LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
         }
       }
+    } else {
+      LOGGER.info("Offender reactivation failed: could not create setup recrod for CRN={}", offender.crn)
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Could not reactivate offender")
     }
 
     LOGGER.info(
