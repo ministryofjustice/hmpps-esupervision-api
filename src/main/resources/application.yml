@@ -57,7 +57,7 @@ app:
       dry-run: ${CHECKIN_LEGACY_CLEANUP_DRY_RUN:true}
       cron: ${CHECKIN_LEGACY_CLEANUP_CRON:0 20 */6 * * *}
     # ESUP-2057: delete retained check-in images once their retention period expires.
-    # MATCH/NO_MATCH images are deleted after standard-retention-days; MATCH_WITH_CONCERN
+    # NO_MATCH images are deleted after standard-retention-days; MATCH_WITH_CONCERN
     # images are kept for concern-retention-days (standard data retention policy, ~6 years).
     checkin-image-retention:
       cron: ${CHECKIN_IMAGE_RETENTION_CRON:0 0 20 * * *}  # 8pm daily
