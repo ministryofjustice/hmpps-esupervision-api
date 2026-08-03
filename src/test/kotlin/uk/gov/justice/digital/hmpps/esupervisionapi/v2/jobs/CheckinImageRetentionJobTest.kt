@@ -102,8 +102,8 @@ class CheckinImageRetentionJobTest {
 
   @Test
   fun `continues past a failed deletion, leaving that checkin unmarked and uncounted as deleted`() {
-    val failing = checkin(ManualIdVerificationResult.MATCH)
-    val succeeding = checkin(ManualIdVerificationResult.MATCH)
+    val failing = checkin(ManualIdVerificationResult.NO_MATCH)
+    val succeeding = checkin(ManualIdVerificationResult.NO_MATCH)
     whenever(mockStandardImageDeletionQuery()).thenReturn(listOf(failing, succeeding), emptyList())
     whenever(mockConcernImageDeletionQuery()).thenReturn(emptyList())
     whenever(s3UploadService.deleteCheckinSnapshot(eq(failing.uuid), any())).doThrow(RuntimeException("S3 unavailable"))
