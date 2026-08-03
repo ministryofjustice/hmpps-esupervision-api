@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import jakarta.persistence.EntityManager
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -7,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 
 @Service
 class OffenderPersistenceService(
@@ -17,6 +17,7 @@ class OffenderPersistenceService(
   private val outboxItemRepository: OutboxItemRepository,
   private val questionListAssignmentRepository: QuestionListAssignmentRepository,
   private val eventAuditService: EventAuditService,
+  private val entityManager: EntityManager,
   private val appEventPublisher: ApplicationEventPublisher,
 ) {
 
@@ -46,8 +47,7 @@ class OffenderPersistenceService(
     val setup = offenderSetupRepository.createReactivationSetupRecord(offender)
     var finalised: OffenderReactivatedEvent? = null
     if (setup.isPresent) {
-      offender.status = OffenderStatus.VERIFIED
-      offenderRepository.save(offender)
+      entityManager.refresh(offender)
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)
       finalised = event.finalise(setup.get(), offender)
       eventAuditService.recordOffenderEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, finalised.offender, finalised.offender.personalDetails, finalised.reason)

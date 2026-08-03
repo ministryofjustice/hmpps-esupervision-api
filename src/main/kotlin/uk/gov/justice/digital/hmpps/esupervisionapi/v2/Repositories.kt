@@ -148,19 +148,21 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
   fun findByOffender(offender: Offender): Optional<OffenderSetup>
 
   /**
-   * Creates a new setup record for the given offender only if the offender is inactive.
+   * Creates a new setup record for the given offender and updates the
+   * offender's status to VERIFIED only if the offender is INACTIVE.
    */
   @Query(
     """
-    with existing_offender as (
-        select id, crn, practitioner_id, status
-        from offender_v2
-        where status = 'INACTIVE' and id = :#{#offender.id}
-    )
-    insert into offender_setup_v2 (uuid, offender_id, practitioner_id, created_at, started_at)
-    select uuid_generate_v4(), id, practitioner_id, now(), now()
-    from existing_offender
-    returning *
+      with updated_offender as (
+            update offender_v2
+            set status = 'VERIFIED'
+            where status = 'INACTIVE' and id = :#{#offender.id}
+            returning id, practitioner_id
+        )
+        insert into offender_setup_v2 (uuid, offender_id, practitioner_id, created_at, started_at)
+        select uuid_generate_v4(), id, practitioner_id, now(), now()
+        from updated_offender
+        returning *
   """,
     nativeQuery = true,
   )
