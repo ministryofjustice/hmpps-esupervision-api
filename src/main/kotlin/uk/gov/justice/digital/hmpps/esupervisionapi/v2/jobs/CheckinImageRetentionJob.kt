@@ -28,7 +28,9 @@ import java.time.Duration
  * Processed in batches (default 100) to avoid holding long-running transactions: each batch is
  * fetched in its own short transaction, S3 deletes happen outside any transaction, and each
  * successfully-deleted checkin is marked (`imageDeletedAt`) in its own short transaction before
- * the next batch is fetched - so a re-run only ever picks up checkins that are still eligible.
+ * the next batch is fetched. Batches are fetched via keyset pagination on `id`, advancing past
+ * every row once it's been attempted regardless of outcome - so a checkin whose deletion fails
+ * is retried on the next scheduled run, not re-fetched in a loop within the same run.
  */
 @Component
 class CheckinImageRetentionJob(
@@ -75,13 +77,13 @@ class CheckinImageRetentionJob(
     var standardStats = Stats()
     var concernStats = Stats()
     try {
-      standardStats = runBatchLoop { pageable ->
+      standardStats = runBatchLoop { afterId, pageable ->
         val noConcern = setOf(ManualIdVerificationResult.NO_MATCH)
-        checkinRepository.findEligibleForImageDeletion(noConcern, standardCutoff, pageable)
+        checkinRepository.findEligibleForImageDeletion(noConcern, standardCutoff, afterId, pageable)
       }
-      concernStats = runBatchLoop { pageable ->
+      concernStats = runBatchLoop { afterId, pageable ->
         val withConcern = setOf(ManualIdVerificationResult.MATCH_WITH_CONCERN)
-        checkinRepository.findEligibleForImageDeletion(withConcern, concernCutoff, pageable)
+        checkinRepository.findEligibleForImageDeletion(withConcern, concernCutoff, afterId, pageable)
       }
     } catch (e: Exception) {
       LOGGER.error("V2 Checkin Image Retention Job(id={}) failed mid-run", logEntry.id, e)
@@ -115,13 +117,15 @@ class CheckinImageRetentionJob(
     }
   }
 
-  private fun runBatchLoop(fetch: (Pageable) -> List<OffenderCheckin>): Stats {
+  private fun runBatchLoop(fetch: (Long, Pageable) -> List<OffenderCheckin>): Stats {
     val stats = Stats()
     val pageable = PageRequest.of(0, batchSize)
+    var afterId = 0L
     while (true) {
-      val batch = transactionTemplate.execute { fetch(pageable) }
+      val batch = transactionTemplate.execute { fetch(afterId, pageable) }
       if (batch.isEmpty()) break
       stats.assessed += batch.size
+      afterId = batch.last().id
 
       for (checkin in batch) {
         try {

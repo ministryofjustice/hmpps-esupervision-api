@@ -86,6 +86,7 @@ class CheckinImageRetentionJobTest {
     eq(setOf(ManualIdVerificationResult.MATCH_WITH_CONCERN)),
     any(),
     any(),
+    any(),
   )
 
   private fun mockStandardImageDeletionQuery(): List<OffenderCheckin> = checkinRepository.findEligibleForImageDeletion(
@@ -94,6 +95,7 @@ class CheckinImageRetentionJobTest {
         ManualIdVerificationResult.NO_MATCH,
       ),
     ),
+    any(),
     any(),
     any(),
   )
@@ -122,13 +124,14 @@ class CheckinImageRetentionJobTest {
     job.process()
 
     val noConcern = setOf(ManualIdVerificationResult.NO_MATCH)
-    verify(checkinRepository, org.mockito.kotlin.times(1)).findEligibleForImageDeletion(argThat { crit -> crit == noConcern }, any(), any<Pageable>())
+    verify(checkinRepository, org.mockito.kotlin.times(1)).findEligibleForImageDeletion(argThat { crit -> crit == noConcern }, any(), any(), any<Pageable>())
     verify(checkinRepository, org.mockito.kotlin.times(1)).findEligibleForImageDeletion(
       argThat { crit ->
         crit == setOf(
           ManualIdVerificationResult.MATCH_WITH_CONCERN,
         )
       },
+      any(),
       any(),
       any<Pageable>(),
     )

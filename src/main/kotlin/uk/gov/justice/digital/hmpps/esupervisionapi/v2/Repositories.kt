@@ -233,10 +233,11 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
       AND c.manualIdCheck in (:criteria)
       AND c.submittedAt <= :cutoff
       AND c.imageDeletedAt IS NULL
-    ORDER BY c.submittedAt ASC
+      AND c.id > :afterId
+    ORDER BY c.id ASC
     """,
   )
-  fun findEligibleForImageDeletion(criteria: Set<ManualIdVerificationResult>, cutoff: Instant, pageable: Pageable): List<OffenderCheckin>
+  fun findEligibleForImageDeletion(criteria: Set<ManualIdVerificationResult>, cutoff: Instant, afterId: Long, pageable: Pageable): List<OffenderCheckin>
 
   @Query(
     """
