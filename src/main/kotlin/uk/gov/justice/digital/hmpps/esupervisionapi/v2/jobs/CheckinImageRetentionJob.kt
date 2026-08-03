@@ -21,7 +21,7 @@ import java.time.Duration
 /**
  * ESUP-2057: deletes retained check-in images once their retention period expires.
  *
- * MATCH/NO_MATCH images are safe to delete after `standard-retention-days` (default 28).
+ * NO_MATCH images are safe to delete after `standard-retention-days` (default 28).
  * MATCH_WITH_CONCERN images are kept for `concern-retention-days` (default ~6 years) before
  * deletion. Core feature - always enabled.
  *
