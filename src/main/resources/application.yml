@@ -56,6 +56,14 @@ app:
       enabled: ${CHECKIN_LEGACY_CLEANUP_ENABLED:false}
       dry-run: ${CHECKIN_LEGACY_CLEANUP_DRY_RUN:true}
       cron: ${CHECKIN_LEGACY_CLEANUP_CRON:0 20 */6 * * *}
+    # ESUP-2057: delete retained check-in images once their retention period expires.
+    # MATCH/NO_MATCH images are deleted after standard-retention-days; MATCH_WITH_CONCERN
+    # images are kept for concern-retention-days (standard data retention policy, ~6 years).
+    checkin-image-retention:
+      cron: ${CHECKIN_IMAGE_RETENTION_CRON:0 0 20 * * *}  # 8pm daily
+      standard-retention-days: 28
+      concern-retention-days: 2192
+      batch-size: 100
   features:
     # publish media proxy links to NDelius
     esup-1239: true
@@ -159,7 +167,7 @@ spring:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
   jpa:
-    open-in-view: true
+    open-in-view: false
     show-sql: false
     hibernate:
       ddl-auto: validate
