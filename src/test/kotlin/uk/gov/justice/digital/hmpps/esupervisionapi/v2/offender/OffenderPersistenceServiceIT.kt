@@ -113,7 +113,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       reason = "test",
     )
 
-    var result = offenderPersistenceService.offenderReactivation(offender, event1)
+    var result = offenderPersistenceService.offenderReactivation(offender.id, event1)
     assertNull(result)
 
     // pretend we deactivated the offender
@@ -121,7 +121,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offenderRepository.save(offender)
 
     val event2 = event1.copy(offender = offender.dto(), currentEvent = 1002L)
-    result = offenderPersistenceService.offenderReactivation(offender, event2)
+    result = offenderPersistenceService.offenderReactivation(offender.id, event2)
 
     assertNotNull(result)
     assertEquals(OffenderStatus.VERIFIED, result.offender.status)
@@ -149,19 +149,34 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     )
     offenderPersistenceService.offenderDeactivation(offender, deactivationEvent)
 
+    val dtoAfterDeactivation = offender.dto()
+    val dtoForReactivation = dtoAfterDeactivation.copy(firstCheckin = dtoAfterDeactivation.firstCheckin.plusWeeks(1))
     val partialEvent = PartialOffenderReactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(),
+      offender = dtoForReactivation,
       currentEvent = 102L,
       reason = "reactivate 1",
     )
-    offenderPersistenceService.offenderReactivation(offender, partialEvent)
+    val event = offenderPersistenceService.offenderReactivation(offender.id, partialEvent)
+    assertNotNull(event)
+
+    val offenderAfterReactivation = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(dtoForReactivation.firstCheckin, offenderAfterReactivation.firstCheckin)
+    assertEquals(OffenderStatus.VERIFIED, offenderAfterReactivation.status)
 
     val setup2 = offenderSetupRepository.findByOffender(offender).get()
-    offender.status = OffenderStatus.INACTIVE
-    offenderPersistenceService.offenderDeactivation(offender, deactivationEvent.copy(setup = Pair(setup2.id, setup2.uuid), reason = "deactivate 2"))
+    offenderAfterReactivation.status = OffenderStatus.INACTIVE
+    offenderPersistenceService.offenderDeactivation(
+      offenderAfterReactivation,
+      deactivationEvent.copy(
+        offender = offenderAfterReactivation.dto(),
+        setup = Pair(setup2.id, setup2.uuid),
+        reason = "deactivate 2",
+      ),
+    )
 
-    val reactivation = offenderPersistenceService.offenderReactivation(offender, partialEvent.copy(reason = "reactivate 2"))
+    val offenderAfterSecondDeactivation = offenderRepository.findById(offender.id).orElseThrow()
+    val reactivation = offenderPersistenceService.offenderReactivation(offenderAfterSecondDeactivation.id, partialEvent.copy(reason = "reactivate 2"))
     assertNotNull(reactivation)
   }
 }

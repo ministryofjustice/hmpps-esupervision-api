@@ -38,17 +38,23 @@ class OffenderPersistenceService(
   }
 
   /**
-   * Updates records related to offender reactivation.
+   * Updates records related to offender reactivation. Settings from the event.offender DTO will
+   * be used to update the offender record (e.g. checkin schedule).
    *
    * Updates the offender status to VERIFIED, so the passed in entity should have INACTIVE status.
    */
   @Transactional
-  fun offenderReactivation(offender: Offender, event: PartialOffenderReactivatedEvent): OffenderReactivatedEvent? {
-    val offender = offenderRepository.findById(offender.id).orElseThrow() // we need to fetch, to be able to refresh later
+  fun offenderReactivation(offenderId: Long, event: PartialOffenderReactivatedEvent): OffenderReactivatedEvent? {
+    val offender = offenderRepository.findById(offenderId).orElseThrow() // we need to fetch, to be able to refresh later
     val setup = offenderSetupRepository.createReactivationSetupRecord(offender)
     var finalised: OffenderReactivatedEvent? = null
     if (setup.isPresent) {
       entityManager.refresh(offender) // we want the latest state
+      offender.firstCheckin = event.offender.firstCheckin
+      offender.checkinInterval = event.offender.checkinInterval.duration
+      offender.contactPreference = event.offender.contactPreference
+      offenderRepository.save(offender)
+
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)
       finalised = event.finalise(setup.get(), offender)
       eventAuditService.recordOffenderEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, finalised.offender, finalised.offender.personalDetails, finalised.reason)
