@@ -46,7 +46,7 @@ class OffenderPersistenceService(
   @Transactional
   fun offenderReactivation(offenderId: Long, event: PartialOffenderReactivatedEvent): OffenderReactivatedEvent? {
     val offender = offenderRepository.findById(offenderId).orElseThrow() // we need to fetch, to be able to refresh later
-    val setup = offenderSetupRepository.createReactivationSetupRecord(offender)
+    val setup = offenderSetupRepository.reactivateOffenderAndCreateSetup(offender)
     var finalised: OffenderReactivatedEvent? = null
     if (setup.isPresent) {
       entityManager.refresh(offender) // we want the latest state

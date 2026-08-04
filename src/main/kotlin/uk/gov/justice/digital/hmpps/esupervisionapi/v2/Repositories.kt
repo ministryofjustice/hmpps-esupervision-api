@@ -166,7 +166,7 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
   """,
     nativeQuery = true,
   )
-  fun createReactivationSetupRecord(offender: Offender): Optional<OffenderSetup>
+  fun reactivateOffenderAndCreateSetup(offender: Offender): Optional<OffenderSetup>
 }
 
 /**
