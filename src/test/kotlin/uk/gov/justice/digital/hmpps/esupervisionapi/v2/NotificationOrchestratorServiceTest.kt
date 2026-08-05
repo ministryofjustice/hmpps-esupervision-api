@@ -271,11 +271,14 @@ class NotificationOrchestratorServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
+    val setupInfo = mock<SetupInfo>()
+    whenever(setupInfo.setupId).thenReturn(UUID.randomUUID())
+    whenever(setupInfo.primaryKey).thenReturn(1L)
     val event = OffenderReactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(contactDetails),
       currentEvent = 12345L,
-      setup = Pair(1, UUID.randomUUID()),
+      setup = setupInfo,
       reason = "whatever",
     )
     service.sendReactivationCompletedNotifications(event)
@@ -286,7 +289,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = event.setup.second)),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = event.setup.setupId)),
     )
   }
 

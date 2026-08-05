@@ -112,7 +112,7 @@ class NotificationOrchestratorService(
       description = "Practitioner reactivated online check-ins for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
         eventNumber = event.currentEvent,
-        setupId = event.setup.second,
+        setupId = event.setup.setupId,
       ),
     )
 

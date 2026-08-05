@@ -49,20 +49,29 @@ data class PartialOffenderReactivatedEvent(
     offenderId = offenderId,
     offender = offender.dto(this.offender.personalDetails),
     currentEvent = this.currentEvent,
-    setup = setup.let { Pair(it.id, it.uuid) },
+    setup = setup.let { SetupInfo.from(it) },
     reason = this.reason,
   )
+}
+
+data class SetupInfo private constructor(
+  val primaryKey: Long,
+  val setupId: UUID,
+) {
+  companion object {
+    fun from(setup: OffenderSetup) = SetupInfo(primaryKey = setup.id, setupId = setup.setupId())
+  }
 }
 
 data class OffenderReactivatedEvent(
   override val offenderId: Long,
   override val offender: OffenderDto,
   override val currentEvent: Long?,
-  val setup: Pair<Long, UUID>,
+  val setup: SetupInfo,
   val reason: String,
 ) : IOffenderEvent,
   ActiveEvent {
-  override val outboxItemCoords = Pair(OutboxItemType.OFFENDER_REACTIVATED, setup.first)
+  override val outboxItemCoords = Pair(OutboxItemType.OFFENDER_REACTIVATED, setup.primaryKey)
 }
 
 interface ICheckinEventBase {

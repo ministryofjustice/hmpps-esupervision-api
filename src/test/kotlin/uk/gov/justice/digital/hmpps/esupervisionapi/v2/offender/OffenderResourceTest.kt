@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
@@ -275,7 +276,8 @@ class OffenderResourceTest {
     )
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    val setupUuid = UUID.randomUUID()
+    val setupId = UUID.randomUUID()
+    val setupInfo = mockSetupInfo(101L, setupId)
     whenever(checkinCreationService.createCheckin(any(), any(), any())).thenReturn(checkin)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
@@ -284,7 +286,7 @@ class OffenderResourceTest {
         offenderId = offender.id,
         offender = offender.dto(contactDetails),
         currentEvent = anEvent.number,
-        setup = Pair(1, setupUuid),
+        setup = setupInfo,
         reason = request.reason,
       )
     }
@@ -322,14 +324,15 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    val setupUuid = UUID.randomUUID()
+    val setupId = UUID.randomUUID()
+    val setupInfo = mockSetupInfo(102L, setupId)
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
       offender.status = OffenderStatus.VERIFIED
       OffenderReactivatedEvent(
         offenderId = offender.id,
         offender = offender.dto(contactDetails),
         currentEvent = anEvent.number,
-        setup = Pair(1, setupUuid),
+        setup = setupInfo,
         reason = request.reason,
       )
     }
@@ -411,14 +414,15 @@ class OffenderResourceTest {
     )
 
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
-    val setupUuid = UUID.randomUUID()
+    val setupId = UUID.randomUUID()
+    val setupInfo = mockSetupInfo(103L, setupId)
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
       offender.status = OffenderStatus.VERIFIED
       OffenderReactivatedEvent(
         offenderId = offender.id,
         offender = offender.dto(contactDetails),
         currentEvent = anEvent.number,
-        setup = Pair(1, setupUuid),
+        setup = setupInfo,
         reason = request.reason,
       )
     }
@@ -512,14 +516,15 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
     whenever(checkinRepository.findByOffenderAndDueDate(offender.id, today)).thenReturn(Optional.of(completedCheckin))
-    val setupUuid = UUID.randomUUID()
+    val setupId = UUID.randomUUID()
+    val setupInfo = mockSetupInfo(104L, setupId)
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
       offender.status = OffenderStatus.VERIFIED
       OffenderReactivatedEvent(
         offenderId = offender.id,
         offender = offender.dto(myContactDetails),
         currentEvent = anEvent.number,
-        setup = Pair(1, setupUuid),
+        setup = setupInfo,
         reason = request.reason,
       )
     }
@@ -550,7 +555,8 @@ class OffenderResourceTest {
     val cancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
     whenever(cancelledCheckin.status).thenReturn(CheckinStatus.CANCELLED)
 
-    val setupUuid = UUID.randomUUID()
+    val setupId = UUID.randomUUID()
+    val setupInfo = mockSetupInfo(105L, setupId)
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
     whenever(checkinRepository.findByOffenderAndDueDate(offender.id, today)).thenReturn(Optional.of(cancelledCheckin))
@@ -560,7 +566,7 @@ class OffenderResourceTest {
         offenderId = offender.id,
         offender = offender.dto(myContactDetails),
         currentEvent = anEvent.number,
-        setup = Pair(1, setupUuid),
+        setup = setupInfo,
         reason = request.reason,
       )
     }
@@ -590,14 +596,15 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
-    val setupUuid = UUID.randomUUID()
+    val setupId = UUID.randomUUID()
+    val setupInfo = mockSetupInfo(106L, setupId)
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
       offender.status = OffenderStatus.VERIFIED
       OffenderReactivatedEvent(
         offenderId = offender.id,
         offender = offender.dto(myContactDetails),
         currentEvent = anEvent.number,
-        setup = Pair(1, setupUuid),
+        setup = setupInfo,
         reason = request.reason,
       )
     }
@@ -905,4 +912,11 @@ class OffenderResourceTest {
     updatedAt = clock.instant(),
     contactPreference = ContactPreference.PHONE,
   )
+
+  private fun mockSetupInfo(pk: Long, setupId: UUID): SetupInfo {
+    val setupInfo = mock<SetupInfo>()
+    whenever(setupInfo.setupId).thenReturn(setupId)
+    whenever(setupInfo.primaryKey).thenReturn(pk)
+    return setupInfo
+  }
 }
