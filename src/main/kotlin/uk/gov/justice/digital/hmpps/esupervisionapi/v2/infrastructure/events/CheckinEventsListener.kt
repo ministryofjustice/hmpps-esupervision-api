@@ -30,15 +30,20 @@ class CheckinEventsListener(
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   fun processEvent(event: ICheckinEvent): CompletableFuture<Void> {
     LOGGER.debug("processing checkin event for checkin uuid={} with status={}", event.checkin.uuid, event.checkin.status)
-    when (event) {
-      is CheckinCreatedEvent -> notificationService.sendCheckinCreatedNotifications(event)
-      is CheckinSubmittedEvent -> notificationService.sendCheckinSubmittedNotifications(event)
-      is CheckinReviewedEvent -> notificationService.sendCheckinReviewedNotifications(event)
-      is CheckinAnnotatedEvent -> notificationService.sendCheckinUpdatedNotifications(event)
-    }
-    event.outboxItemCoords?.let { (type, id) ->
-      val result = outboxItemRepository.markAsSent(type.name, id)
-      LOGGER.info("checkin={}, marked outbox item {} as sent, updated records: {}", event.checkin.uuid, type to id, result)
+    try {
+      when (event) {
+        is CheckinCreatedEvent -> notificationService.sendCheckinCreatedNotifications(event)
+        is CheckinSubmittedEvent -> notificationService.sendCheckinSubmittedNotifications(event)
+        is CheckinReviewedEvent -> notificationService.sendCheckinReviewedNotifications(event)
+        is CheckinAnnotatedEvent -> notificationService.sendCheckinUpdatedNotifications(event)
+      }
+      event.outboxItemCoords?.let { (type, id) ->
+        val result = outboxItemRepository.markAsSent(type.name, id)
+        LOGGER.info("checkin={}, marked outbox item {} as sent, updated records: {}", event.checkin.uuid, type to id, result)
+      }
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to process checkin event {} for checkin uuid={}", event.javaClass.simpleName, event.checkin.uuid, e)
+      throw e
     }
     return CompletableFuture.completedFuture(null)
   }

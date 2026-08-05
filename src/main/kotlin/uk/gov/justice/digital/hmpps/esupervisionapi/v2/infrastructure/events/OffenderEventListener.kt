@@ -22,13 +22,18 @@ class OffenderEventListener(
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   fun processEvent(event: IOffenderEvent): CompletableFuture<Void> {
     LOGGER.debug("processing offender event for offender CRN={} with status={}", event.offender.crn, event.offender.status.name)
-    when (event) {
-      is OffenderDeactivatedEvent -> notificationService.sendDeactivationCompletedNotifications(event)
-      is OffenderReactivatedEvent -> notificationService.sendReactivationCompletedNotifications(event)
-    }
-    event.outboxItemCoords?.let { (type, id) ->
-      val result = outboxItemRepository.markAsSent(type.name, id)
-      LOGGER.info("offender CRN={}, marked outbox item {} as sent, updated records: {}", event.offender.crn, type to id, result)
+    try {
+      when (event) {
+        is OffenderDeactivatedEvent -> notificationService.sendDeactivationCompletedNotifications(event)
+        is OffenderReactivatedEvent -> notificationService.sendReactivationCompletedNotifications(event)
+      }
+      event.outboxItemCoords?.let { (type, id) ->
+        val result = outboxItemRepository.markAsSent(type.name, id)
+        LOGGER.info("offender CRN={}, marked outbox item {} as sent, updated records: {}", event.offender.crn, type to id, result)
+      }
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to process offender event {} for offender CRN={}", event.javaClass.simpleName, event.offender.crn, e)
+      throw e
     }
 
     return CompletableFuture.completedFuture(null)
