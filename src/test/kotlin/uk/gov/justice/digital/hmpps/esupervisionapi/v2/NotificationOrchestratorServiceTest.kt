@@ -272,7 +272,8 @@ class NotificationOrchestratorServiceTest {
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
     val setupInfo = mock<SetupInfo>()
-    whenever(setupInfo.setupId).thenReturn(UUID.randomUUID())
+    val setupId = UUID.randomUUID()
+    whenever(setupInfo.setupId).thenReturn(setupId)
     whenever(setupInfo.primaryKey).thenReturn(1L)
     val event = OffenderReactivatedEvent(
       offenderId = offender.id,
@@ -289,7 +290,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = event.setup.setupId)),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = setupId)),
     )
   }
 
