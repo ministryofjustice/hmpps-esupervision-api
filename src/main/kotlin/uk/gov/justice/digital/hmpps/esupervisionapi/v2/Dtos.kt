@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
@@ -103,6 +104,9 @@ data class Name(
 
 /** Practitioner details from Ndilius API */
 data class PractitionerDetails(
+  @field:Schema(description = "Practitioner's staff code", required = false, example = "N01A001")
+  val code: String? = null,
+
   @field:Schema(description = "Practitioner's name", required = true)
   override val name: Name,
 
@@ -121,6 +125,9 @@ data class PractitionerDetails(
 
   @field:Schema(description = "Provider", required = false)
   val provider: OrganizationalUnit? = null,
+  // TODO once NDelius/PI-side change adds these to GET /case/{crn}:
+  // val unallocated: Boolean? = null,
+  // val username: String? = null,
 ) : INamedPerson
 
 /** Organizational unit (LAU, PDU, Provider) */
@@ -128,6 +135,32 @@ data class OrganizationalUnit(
   @field:Schema(description = "Unit code", required = true, example = "N01ABC") val code: String,
   @field:Schema(description = "Unit description", required = false, example = "London North LAU")
   val description: String? = null,
+)
+
+/** Request to update a person's contact details. Forwarded to esupervision-and-delius's
+ * PUT /case/{crn}/contact-details (PI-4356), which expects `mobileNumber`/`emailAddress` -
+ * see [NdiliusContactDetailsUpdateBody] for the field mapping onto that wire format. */
+data class ContactDetailsUpdateRequest(
+  @field:Schema(description = "Mobile phone number", required = false, example = "07700900123")
+  val mobile: String? = null,
+
+  @field:Schema(description = "Email address", required = false, example = "john.smith@example.com")
+  @field:Email
+  val email: String? = null,
+)
+
+/** Response to an update contact details request. esupervision-and-delius's PUT
+ * /case/{crn}/contact-details (PI-4356) returns no body, so this is synthesised from the
+ * request rather than parsed from a Delius response - see [NdiliusApiClient.updateContactDetails]. */
+data class ContactDetailsUpdateResponse(
+  @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
+  val crn: String,
+
+  @field:Schema(description = "Mobile phone number", required = false, example = "07700900123")
+  val mobile: String? = null,
+
+  @field:Schema(description = "Email address", required = false, example = "john.smith@example.com")
+  val email: String? = null,
 )
 
 /** Personal details for identity validation */

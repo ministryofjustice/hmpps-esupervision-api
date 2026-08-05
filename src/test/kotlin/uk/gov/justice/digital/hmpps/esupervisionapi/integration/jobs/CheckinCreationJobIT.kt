@@ -81,7 +81,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
     offenderTemplate.copy(crn = "A000002", uuid = UUID.randomUUID(), firstCheckin = clock.today(), status = OffenderStatus.VERIFIED)
       .toEntity().let { offenderRepository.save(it) }
 
-    val practitionerDetails = PractitionerDetails(Name("John", "Smith"), "foo@example.com")
+    val practitionerDetails = PractitionerDetails(name = Name("John", "Smith"), email = "foo@example.com")
     whenever(ndeliusApiClient.getContactDetailsForMultiple(any()))
       .thenAnswer { invocation ->
         val crns = invocation.getArgument<List<String>>(0)

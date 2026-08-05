@@ -15,12 +15,15 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
+import org.springframework.validation.BeanPropertyBindingResult
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
@@ -850,6 +853,72 @@ class OffenderResourceTest {
 
     assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
     assertEquals("Could not verify contact details in NDelius for ${offender.crn}.", exception.reason)
+  }
+
+  // ========================================
+  // Update Contact Details Tests
+  // ========================================
+
+  @Test
+  fun `updateContactDetails - happy path - forwards request and returns updated record`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    val crn = "x123456"
+    val request = ContactDetailsUpdateRequest(mobile = "07700900123", email = "john.smith@example.com")
+    val response = ContactDetailsUpdateResponse(crn = "X123456", mobile = request.mobile, email = request.email)
+    whenever(ndiliusApiClient.updateContactDetails("X123456", request)).thenReturn(response)
+
+    val binding = BeanPropertyBindingResult(request, "request")
+    val result = resource.updateContactDetails(crn, request, binding)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(response, result.body)
+    verify(ndiliusApiClient).updateContactDetails(eq("X123456"), eq(request))
+  }
+
+  @Test
+  fun `updateContactDetails - no fields provided - no-op and does not call ndilius`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    val request = ContactDetailsUpdateRequest(mobile = null, email = null)
+    val binding = BeanPropertyBindingResult(request, "request")
+
+    val result = resource.updateContactDetails(offender.crn, request, binding)
+
+    assertEquals(HttpStatus.NO_CONTENT, result.statusCode)
+    verify(ndiliusApiClient, times(0)).updateContactDetails(any(), any())
+  }
+
+  @Test
+  fun `updateContactDetails - offender not found - returns 404 and does not call ndilius`() {
+    val crn = "X999999"
+    whenever(offenderRepository.findByCrn(crn)).thenReturn(Optional.empty())
+    val request = ContactDetailsUpdateRequest(mobile = "07700900123", email = null)
+
+    val binding = BeanPropertyBindingResult(request, "request")
+    val result = resource.updateContactDetails(crn, request, binding)
+
+    assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
+    verify(ndiliusApiClient, times(0)).updateContactDetails(any(), any())
+  }
+
+  @Test
+  fun `updateContactDetails - CRN not found in ndilius - propagates 404`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    val crn = "x123456"
+    val request = ContactDetailsUpdateRequest(mobile = "07700900123", email = null)
+    whenever(ndiliusApiClient.updateContactDetails("X123456", request)).thenThrow(
+      ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for X123456."),
+    )
+
+    val binding = BeanPropertyBindingResult(request, "request")
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateContactDetails(crn, request, binding)
+    }
+
+    assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
+    assertEquals("Contact details not found in NDelius for X123456.", exception.reason)
   }
 
   // ========================================

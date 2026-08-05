@@ -54,7 +54,7 @@ class EventAuditServiceTest {
     val details = ContactDetails(
       crn = offender.crn,
       name = Name("John", "Doe"),
-      practitioner = PractitionerDetails(Name("P", "Q")),
+      practitioner = PractitionerDetails(name = Name("P", "Q")),
       dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 

@@ -32,6 +32,7 @@ class DefaultStubDataProvider : StubDataProvider {
     mobile = "07700900123",
     email = "john.smith@example.com",
     practitioner = PractitionerDetails(
+      code = "N01A001",
       name = Name(
         forename = "Sarah",
         surname = "Johnson",
@@ -100,6 +101,7 @@ class GeneratingStubDataProvider : StubDataProvider {
       mobile = "0770${parsed.person.padStart(4, '0')}",
       email = "person.number${parsed.person}@example.com",
       practitioner = PractitionerDetails(
+        code = "N${parsed.practitioner}A${parsed.unit}",
         name = Name(
           forename = "Practitioner",
           surname = "Number${parsed.practitioner}",
