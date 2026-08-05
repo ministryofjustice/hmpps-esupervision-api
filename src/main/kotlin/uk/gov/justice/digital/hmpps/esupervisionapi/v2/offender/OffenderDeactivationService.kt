@@ -7,6 +7,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -70,7 +71,7 @@ class OffenderDeactivationService(
       offenderId = offender.id,
       offender = offender.dto(contactDetails),
       auditEventType = auditEventType,
-      setup = setup?.let { Pair(it.id, it.uuid) },
+      setup = setup?.let { SetupInfo.from(it) },
       activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
       reason = reason,
       sensitive = sensitive,

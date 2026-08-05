@@ -26,7 +26,7 @@ data class OffenderDeactivatedEvent(
   override val offenderId: Long,
   override val offender: OffenderDto,
   val auditEventType: OffenderAuditEventType,
-  val setup: Pair<Long, UUID>?,
+  val setup: SetupInfo?,
   /**
    * See [uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber]
    */
@@ -34,7 +34,7 @@ data class OffenderDeactivatedEvent(
   val reason: String? = null,
   val sensitive: Boolean = false,
 ) : IOffenderEvent {
-  override val outboxItemCoords = setup?.let { OutboxItemType.OFFENDER_DEACTIVATED to setup.first }
+  override val outboxItemCoords = setup?.let { OutboxItemType.OFFENDER_DEACTIVATED to setup.primaryKey }
 }
 
 data class PartialOffenderReactivatedEvent(

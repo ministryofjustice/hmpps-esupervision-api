@@ -15,14 +15,17 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignment
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -47,6 +50,9 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var offenderSetupRepository: OffenderSetupRepository
+
+  @Autowired
+  private lateinit var clock: Clock
 
   @AfterEach
   fun cleanUp() {
@@ -136,14 +142,15 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     var offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity()
     offenderRepository.save(offender)
     assert(offenderSetupRepository.findByOffender(offender).isEmpty, { "Some test possibly didn't clean up correctly" })
+    val setup = OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant())
+    offenderSetupRepository.save(setup)
 
-    val setup1 = Pair(0L, randomUUID())
     offender.status = OffenderStatus.INACTIVE
     val deactivationEvent = OffenderDeactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-      setup = setup1,
+      setup = SetupInfo.from(setup),
       activeEventNumber = 101L,
       reason = "deactivate 1",
     )
@@ -170,7 +177,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       offenderAfterReactivation,
       deactivationEvent.copy(
         offender = offenderAfterReactivation.dto(),
-        setup = Pair(setup2.id, setup2.uuid),
+        setup = SetupInfo.from(setup2),
         reason = "deactivate 2",
       ),
     )

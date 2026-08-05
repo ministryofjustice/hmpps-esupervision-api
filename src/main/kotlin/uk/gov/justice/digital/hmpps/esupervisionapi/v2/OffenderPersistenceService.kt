@@ -25,7 +25,7 @@ class OffenderPersistenceService(
   fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
     offenderRepository.save(offender)
     if (event.setup != null) {
-      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.first)
+      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
     val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(offender.id)
     val cancelledCheckins = checkinRepository.updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)

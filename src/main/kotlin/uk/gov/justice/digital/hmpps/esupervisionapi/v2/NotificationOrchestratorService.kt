@@ -166,7 +166,7 @@ class NotificationOrchestratorService(
       description = "Online check-ins stopped for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
         eventNumber = event.activeEventNumber,
-        setupId = event.setup?.second,
+        setupId = event.setup?.setupId,
         outcomeCode = event.auditEventType.deliusOutcomeCode,
       ),
     )

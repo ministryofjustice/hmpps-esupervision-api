@@ -15,12 +15,15 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID.randomUUID
 import java.util.concurrent.TimeUnit
@@ -41,6 +44,8 @@ class OffenderEventListenerIT : IntegrationTestBase() {
 
   @Autowired private lateinit var offenderSetupRepository: OffenderSetupRepository
 
+  @Autowired private lateinit var clock: Clock
+
   @AfterEach
   fun cleanUp() {
     offenderSetupRepository.deleteAll()
@@ -53,21 +58,22 @@ class OffenderEventListenerIT : IntegrationTestBase() {
   fun `processEvent - offender deactivated - mark outbox item as sent - success`() {
     var offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity()
     offender = offenderRepository.save(offender)
+    val setup = OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant())
+    offenderSetupRepository.save(setup)
 
     offender.status = OffenderStatus.INACTIVE
-    val setup = Pair(1L, randomUUID())
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-      setup = setup,
+      setup = SetupInfo.from(setup),
       activeEventNumber = null,
     )
     offenderPersistenceService.offenderDeactivation(offender, event)
 
     offenderEventListener.processEvent(event).get(2, TimeUnit.SECONDS)
 
-    val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, setup.first).orElseThrow()
+    val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, event.setup!!.primaryKey).orElseThrow()
     assertEquals(OutboxItemStatus.SENT, outboxItem.status)
   }
 
