@@ -144,6 +144,10 @@ data class OrganizationalUnit(
  * PUT /case/{crn}/contact-details, which expects `mobileNumber`/`emailAddress`.
  * The request is mapped onto that wire format in `NdiliusApiClient.updateContactDetails`. */
 data class ContactDetailsUpdateRequest(
+  @field:Schema(description = "Practitioner ID making the update", required = true)
+  @field:NotBlank
+  val practitionerId: ExternalUserId,
+
   @field:Schema(description = "Mobile phone number", required = false, example = "07700900123")
   val mobile: String? = null,
 

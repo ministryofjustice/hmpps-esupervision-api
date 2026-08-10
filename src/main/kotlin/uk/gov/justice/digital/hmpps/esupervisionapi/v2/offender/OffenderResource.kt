@@ -144,7 +144,7 @@ class OffenderResource(
 
     val updated = ndiliusApiClient.updateContactDetails(normalisedCrn, request)
 
-    LOGGER.info("Updated contact details for CRN: {}", normalisedCrn)
+    LOGGER.info("Updated contact details for CRN: {} requested by practitioner: {}", normalisedCrn, request.practitionerId)
     return ResponseEntity.ok(updated)
   }
 

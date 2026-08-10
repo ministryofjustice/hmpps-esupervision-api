@@ -98,7 +98,7 @@ open class StubNdiliusApiClient(
   }
 
   override fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse {
-    LOG.debug("Updating contact details for CRN: {}", crn)
+    LOG.debug("Updating contact details for CRN: {} requested by practitioner: {}", crn, request.practitionerId)
     if (!watcher.allowedCrns.contains(crn)) {
       throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.")
     }

@@ -154,12 +154,16 @@ class NdiliusApiClient(
   @Retry(name = "ndiliusApi")
   @Timed("ndelius.update-contact-details", extraTags = ["method", "PUT", "endpoint", "/case/{crn}/contact-details"], description = "Time taken to update contact details")
   override fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse {
-    LOGGER.info("Updating contact details for CRN: {}", crn)
+    LOGGER.info("Updating contact details for CRN: {} requested by practitioner: {}", crn, request.practitionerId)
 
     return try {
       val merged = if (request.mobile == null || request.email == null) {
         val existing = self.getContactDetails(crn)
-        ContactDetailsUpdateRequest(mobile = request.mobile ?: existing?.mobile, email = request.email ?: existing?.email)
+        ContactDetailsUpdateRequest(
+          practitionerId = request.practitionerId,
+          mobile = request.mobile ?: existing?.mobile,
+          email = request.email ?: existing?.email,
+        )
       } else {
         request
       }
