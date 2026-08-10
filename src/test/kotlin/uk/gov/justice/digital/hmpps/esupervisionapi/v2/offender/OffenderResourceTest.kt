@@ -977,7 +977,7 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `getPractitionerDetailsByCrn - unallocated with no practitioner - returns 404`() {
+  fun `getPractitionerDetailsByCrn - no practitioner allocated - returns 404`() {
     val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       crn = "X123456",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
