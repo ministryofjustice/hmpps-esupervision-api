@@ -102,35 +102,33 @@ class NotificationOrchestratorService(
 
   /** Send notifications for reactivation completed event */
   fun sendReactivationCompletedNotifications(
-    offender: Offender,
-    contactDetails: ContactDetails? = null,
-    setupId: UUID? = null,
+    event: OffenderReactivatedEvent,
   ) {
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
-
+    val offender = event.offender
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
       uuid = offender.uuid,
       crn = offender.crn,
       description = "Practitioner reactivated online check-ins for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = details?.let { activeEventNumber(offender, it) },
-        setupId = setupId,
+        eventNumber = event.currentEvent,
+        setupId = event.setup.setupId,
       ),
     )
 
-    if (details != null) {
+    if (offender.personalDetails != null) {
+      val details = offender.personalDetails
       try {
         val personalisation =
           mapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
             "date" to offender.firstCheckin.format(DATE_FORMATTER),
-            "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
+            "frequency" to formatCheckinFrequency(offender.checkinInterval),
           )
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
-            offenderId = offender.id,
+            offenderId = event.offenderId,
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,
@@ -156,12 +154,10 @@ class NotificationOrchestratorService(
 
   /** Send notifications for deactivation completed event */
   fun sendDeactivationCompletedNotifications(
-    offender: Offender,
-    contactDetails: ContactDetails? = null,
-    setupId: UUID? = null,
-    outcomeCode: String? = null,
+    event: OffenderDeactivatedEvent,
   ) {
-    val details = contactDetails ?: ndiliusApiClient.getContactDetails(offender.crn)
+    val offender = event.offender
+    val details = event.offender.personalDetails
 
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_REMOVED,
@@ -169,9 +165,9 @@ class NotificationOrchestratorService(
       crn = offender.crn,
       description = "Online check-ins stopped for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = details?.let { activeEventNumber(offender, it) },
-        setupId = setupId,
-        outcomeCode = outcomeCode,
+        eventNumber = event.activeEventNumber,
+        setupId = event.setup?.setupId,
+        outcomeCode = event.auditEventType.deliusOutcomeCode,
       ),
     )
 
@@ -184,7 +180,7 @@ class NotificationOrchestratorService(
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
-            offenderId = offender.id,
+            offenderId = event.offenderId,
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,

@@ -147,16 +147,26 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
   )
   fun findByOffender(offender: Offender): Optional<OffenderSetup>
 
+  /**
+   * Creates a new setup record for the given offender and updates the
+   * offender's status to VERIFIED only if the offender is INACTIVE.
+   */
   @Query(
     """
-    SELECT s FROM OffenderSetup s
-    JOIN FETCH s.offender o
-    WHERE o.crn = :crn
-    ORDER BY s.createdAt DESC
-    LIMIT 1
+      with updated_offender as (
+            update offender_v2
+            set status = 'VERIFIED'
+            where status = 'INACTIVE' and id = :#{#offender.id}
+            returning id, practitioner_id
+        )
+        insert into offender_setup_v2 (uuid, offender_id, practitioner_id, created_at, started_at)
+        select uuid_generate_v4(), id, practitioner_id, now(), now()
+        from updated_offender
+        returning *
   """,
+    nativeQuery = true,
   )
-  fun findByCrn(crn: String): Optional<OffenderSetup>
+  fun reactivateOffenderAndCreateSetup(offender: Offender): Optional<OffenderSetup>
 }
 
 /**
@@ -232,6 +242,15 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): Optional<OffenderCheckin>
+
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    WHERE c.offender.id = :offenderId
+      AND c.dueDate = :dueDate
+    """,
+  )
+  fun findByOffenderAndDueDate(offenderId: Long, dueDate: LocalDate): Optional<OffenderCheckin>
 
   /** Find all checkins by practitioner (created by) */
   @Query(
@@ -831,4 +850,14 @@ interface OutboxItemRepository : JpaRepository<OutboxItem, Long> {
 
   @Query
   fun findByTypeAndEntityId(type: OutboxItemType, entityId: Long): Optional<OutboxItem>
+
+  @Query(
+    """
+    insert into outbox_items (type, entity_id, created_at, updated_at)
+    values (:#{#type.name()}, :entityId, now(), now())
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun addOutboxItem(type: OutboxItemType, entityId: Long): Int
 }

@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.util.UUID
@@ -9,7 +10,71 @@ import java.util.UUID
  */
 interface IPartialEvent
 
-interface IEventBase {
+interface IOffenderEventBase {
+  val offenderId: Long
+  val offender: OffenderDto
+}
+
+/**
+ * Our listeners should be able to process any subclass of this.
+ */
+sealed interface IOffenderEvent : IOffenderEventBase {
+  val outboxItemCoords: Pair<OutboxItemType, Long>? get() = null
+}
+
+data class OffenderDeactivatedEvent(
+  override val offenderId: Long,
+  override val offender: OffenderDto,
+  val auditEventType: OffenderAuditEventType,
+  val setup: SetupInfo?,
+  /**
+   * See [uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber]
+   */
+  val activeEventNumber: Long?,
+  val reason: String? = null,
+  val sensitive: Boolean = false,
+) : IOffenderEvent {
+  override val outboxItemCoords = setup?.let { OutboxItemType.OFFENDER_DEACTIVATED to setup.primaryKey }
+}
+
+data class PartialOffenderReactivatedEvent(
+  override val offenderId: Long,
+  override val offender: OffenderDto,
+  override val currentEvent: Long?,
+  val reason: String,
+) : IOffenderEventBase,
+  IPartialEvent,
+  ActiveEvent {
+  fun finalise(setup: OffenderSetup, offender: Offender): OffenderReactivatedEvent = OffenderReactivatedEvent(
+    offenderId = offenderId,
+    offender = offender.dto(this.offender.personalDetails),
+    currentEvent = this.currentEvent,
+    setup = setup.let { SetupInfo.from(it) },
+    reason = this.reason,
+  )
+}
+
+data class SetupInfo private constructor(
+  val primaryKey: Long,
+  val setupId: UUID,
+) {
+  companion object {
+    fun from(setup: OffenderSetup) = SetupInfo(primaryKey = setup.id, setupId = setup.setupId())
+  }
+}
+
+data class OffenderReactivatedEvent(
+  override val offenderId: Long,
+  override val offender: OffenderDto,
+  override val currentEvent: Long?,
+  val setup: SetupInfo,
+  val reason: String,
+) : IOffenderEvent,
+  ActiveEvent {
+  override val outboxItemCoords = Pair(OutboxItemType.OFFENDER_REACTIVATED, setup.primaryKey)
+}
+
+interface ICheckinEventBase {
   val checkinId: Long
   val offenderId: Long
   val practitionerId: ExternalUserId
@@ -20,7 +85,7 @@ interface IEventBase {
 /**
  * Our listeners should be able to process any subclass of this.
  */
-sealed interface ICheckinEvent : IEventBase {
+sealed interface ICheckinEvent : ICheckinEventBase {
   val outboxItemCoords: Pair<OutboxItemType, Long>? get() = null
 }
 
@@ -77,7 +142,7 @@ data class PartialCheckinCreatedEvent(
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
   override val currentEvent: Long?,
-) : IEventBase,
+) : ICheckinEventBase,
   IPartialEvent,
   ActiveEvent {
   fun finalise(checkin: OffenderCheckin): CheckinCreatedEvent {
@@ -102,7 +167,7 @@ data class PartialCheckinAnnotatedEvent(
   override val practitionerId: ExternalUserId,
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
-) : IEventBase,
+) : ICheckinEventBase,
   IPartialEvent {
   fun finalise(logEntry: OffenderEventLog): CheckinAnnotatedEvent = CheckinAnnotatedEvent(
     checkinId = checkinId,
