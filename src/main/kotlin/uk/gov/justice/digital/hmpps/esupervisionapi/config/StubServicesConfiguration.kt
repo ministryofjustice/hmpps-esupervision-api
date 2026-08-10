@@ -102,7 +102,12 @@ open class StubNdiliusApiClient(
     if (!watcher.allowedCrns.contains(crn)) {
       throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.")
     }
-    return ContactDetailsUpdateResponse(crn = crn, mobile = request.mobile, email = request.email)
+    val existing = if (request.mobile == null || request.email == null) dataProvider.provideCase(crn) else null
+    return ContactDetailsUpdateResponse(
+      crn = crn,
+      mobile = request.mobile ?: existing?.mobile,
+      email = request.email ?: existing?.email,
+    )
   }
 
   companion object {

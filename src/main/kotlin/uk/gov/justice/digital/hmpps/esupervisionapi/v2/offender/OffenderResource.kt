@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INamedPerson
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
@@ -522,27 +523,27 @@ data class OffenderSummaryDetails(
   val mobile: String? = null,
   val email: String? = null,
   val practitioner: PractitionerSummary? = null,
+  val events: List<Event> = emptyList(),
+  val contactSuspended: Boolean = false,
 ) : INamedPerson
 
 /**
  * Probation practitioner details available via NDelius's GET /case/{crn}.
- * NOTE: `unallocated` and `username` are not currently returned by NDelius and require
- * a Delius/PI-side change before they can be surfaced here.
  */
 data class PractitionerSummary(
   override val name: Name,
   val code: String? = null,
   val email: String? = null,
-  // TODO once NDelius/PI-side change adds these to GET /case/{crn}:
-  // val unallocated: Boolean? = null,
-  // val username: String? = null,
+  val unallocated: Boolean? = null,
+  val username: String? = null,
 ) : INamedPerson
 
 private fun PractitionerDetails.toSummary() = PractitionerSummary(
   name = name,
   code = code,
   email = email,
-  // TODO wire through once unallocated/username are added above: unallocated = unallocated, username = username,
+  unallocated = unallocated,
+  username = username,
 )
 
 /** Simple DTO for offender lookup - no PII by default */
@@ -565,7 +566,17 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   contactPreference = contactPreference,
   photoUrl = photoUrl,
-  details = contactDetails?.let { OffenderSummaryDetails(it.name, it.dateOfBirth, it.mobile, it.email, it.practitioner?.toSummary()) },
+  details = contactDetails?.let {
+    OffenderSummaryDetails(
+      name = it.name,
+      dateOfBirth = it.dateOfBirth,
+      mobile = it.mobile,
+      email = it.email,
+      practitioner = it.practitioner?.toSummary(),
+      events = it.events,
+      contactSuspended = it.contactSuspended,
+    )
+  },
 )
 
 data class OffenderHeaderDetails(

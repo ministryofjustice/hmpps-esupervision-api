@@ -50,6 +50,8 @@ class DefaultStubDataProvider : StubDataProvider {
         code = "PRV001",
         description = "London Probation Service",
       ),
+      unallocated = false,
+      username = "sarah.johnson",
     ),
   )
 
@@ -119,6 +121,8 @@ class GeneratingStubDataProvider : StubDataProvider {
           code = "PRV${parsed.unit.padStart(3, '0')}",
           description = "Provider ${parsed.unit}",
         ),
+        unallocated = false,
+        username = "practitioner.number${parsed.practitioner}",
       ),
       events = listOf(
         Event(

@@ -125,9 +125,12 @@ data class PractitionerDetails(
 
   @field:Schema(description = "Provider", required = false)
   val provider: OrganizationalUnit? = null,
-  // TODO once NDelius/PI-side change adds these to GET /case/{crn}:
-  // val unallocated: Boolean? = null,
-  // val username: String? = null,
+
+  @field:Schema(description = "Whether the person is currently unallocated to a practitioner", required = false)
+  val unallocated: Boolean? = null,
+
+  @field:Schema(description = "Practitioner's NDelius username", required = false)
+  val username: String? = null,
 ) : INamedPerson
 
 /** Organizational unit (LAU, PDU, Provider) */
@@ -150,8 +153,10 @@ data class ContactDetailsUpdateRequest(
 )
 
 /** Response to an update contact details request. esupervision-and-delius's PUT
- * /case/{crn}/contact-details (PI-4356) returns no body, so this is synthesised from the
- * request rather than parsed from a Delius response - see [NdiliusApiClient.updateContactDetails]. */
+ * /case/{crn}/contact-details (PI-4356) returns no body, so this is synthesised rather than
+ * parsed from a Delius response. If only one of mobile/email was supplied in the request, the
+ * other is filled in from the existing record before being echoed back here, since NDelius
+ * overwrites any omitted field with an empty value - see [NdiliusApiClient.updateContactDetails]. */
 data class ContactDetailsUpdateResponse(
   @field:Schema(description = "Case Reference Number", required = true, example = "X123456")
   val crn: String,

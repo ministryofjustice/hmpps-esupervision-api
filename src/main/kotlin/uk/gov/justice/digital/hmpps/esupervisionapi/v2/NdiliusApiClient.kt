@@ -139,8 +139,10 @@ class NdiliusApiClient(
   /**
    * Update contact details for a person on probation by CRN
    * PUT /case/{crn}/contact-details
-   * Depends on PI-4356 (esupervision-and-delius) being deployed. Endpoint returns 200 with no
-   * response body, so we echo the request back as the updated record - see PI-4356 PR.
+   * NDelius's endpoint is a full overwrite, not a partial update: any field omitted from the
+   * request body is persisted as empty, wiping the existing value. So if the caller only
+   * supplied one of mobile/email, we fetch the current record first and fill in the other
+   * field from it before sending, to avoid silently deleting it.
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "updateContactDetailsFallback")
   @Retry(name = "ndiliusApi")
@@ -149,14 +151,21 @@ class NdiliusApiClient(
     LOGGER.info("Updating contact details for CRN: {}", crn)
 
     return try {
+      val merged = if (request.mobile == null || request.email == null) {
+        val existing = getContactDetails(crn)
+        ContactDetailsUpdateRequest(mobile = request.mobile ?: existing?.mobile, email = request.email ?: existing?.email)
+      } else {
+        request
+      }
+
       ndiliusApiWebClient.put()
         .uri("/case/{crn}/contact-details", crn)
-        .bodyValue(NdiliusContactDetailsUpdateBody(mobileNumber = request.mobile, emailAddress = request.email))
+        .bodyValue(NdiliusContactDetailsUpdateBody(mobileNumber = merged.mobile, emailAddress = merged.email))
         .retrieve()
         .toBodilessEntity()
         .block()
 
-      ContactDetailsUpdateResponse(crn = crn, mobile = request.mobile, email = request.email)
+      ContactDetailsUpdateResponse(crn = crn, mobile = merged.mobile, email = merged.email)
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Contact details not found for CRN: {}", crn)
       throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.", e)
