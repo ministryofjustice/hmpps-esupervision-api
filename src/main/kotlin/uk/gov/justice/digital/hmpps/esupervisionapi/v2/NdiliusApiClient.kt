@@ -4,6 +4,8 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.Lazy
 import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -15,6 +17,16 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.P
 
 class NdiliusBatchFetchException(val crns: List<CRN>, message: String, cause: Exception) : RuntimeException(message, cause)
 
+/**
+ * Wire shape expected by esupervision-and-delius's PUT /case/{crn}/contact-details (PI-4356).
+ * Field names (`mobileNumber`/`emailAddress`) match their `UpdateContactDetails` request DTO,
+ * which differs from our own [ContactDetailsUpdateRequest]'s `mobile`/`email` naming.
+ */
+private data class NdiliusContactDetailsUpdateBody(
+  val mobileNumber: String?,
+  val emailAddress: String?,
+)
+
 interface INdiliusApiClient {
   fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
 
@@ -23,6 +35,12 @@ interface INdiliusApiClient {
    */
   fun getContactDetails(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
+
+  /**
+   * Update a person's contact details by CRN.
+   * NOTE: depends on PI-4356 (esupervision-and-delius PUT /case/{crn}/contact-details), not yet live.
+   */
+  fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse
 
   companion object {
     const val MAX_BATCH_SIZE = 500
@@ -38,6 +56,10 @@ interface INdiliusApiClient {
 class NdiliusApiClient(
   private val ndiliusApiWebClient: WebClient,
 ) : INdiliusApiClient {
+  @Autowired
+  @Lazy
+  private lateinit var self: INdiliusApiClient
+
   /**
    * Get contact details for a single person on probation by CRN
    * GET /case/{crn}
@@ -118,6 +140,63 @@ class NdiliusApiClient(
   private fun getContactDetailsForMultipleFallback(crns: List<String>?, e: Exception): List<ContactDetails> {
     LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns?.size}"))
     return emptyList()
+  }
+
+  /**
+   * Update contact details for a person on probation by CRN
+   * PUT /case/{crn}/contact-details
+   * NDelius's endpoint is a full overwrite, not a partial update: any field omitted from the
+   * request body is persisted as empty, wiping the existing value. So if the caller only
+   * supplied one of mobile/email, we fetch the current record first and fill in the other
+   * field from it before sending, to avoid silently deleting it.
+   */
+  @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "updateContactDetailsFallback")
+  @Retry(name = "ndiliusApi")
+  @Timed("ndelius.update-contact-details", extraTags = ["method", "PUT", "endpoint", "/case/{crn}/contact-details"], description = "Time taken to update contact details")
+  override fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse {
+    LOGGER.info("Updating contact details for CRN: {} requested by practitioner: {}", crn, request.practitionerId)
+
+    return try {
+      val merged = if (request.mobile == null || request.email == null) {
+        val existing = self.getContactDetails(crn)
+        ContactDetailsUpdateRequest(
+          practitionerId = request.practitionerId,
+          mobile = request.mobile ?: existing?.mobile,
+          email = request.email ?: existing?.email,
+        )
+      } else {
+        request
+      }
+
+      ndiliusApiWebClient.put()
+        .uri("/case/{crn}/contact-details", crn)
+        .bodyValue(NdiliusContactDetailsUpdateBody(mobileNumber = merged.mobile, emailAddress = merged.email))
+        .retrieve()
+        .toBodilessEntity()
+        .block()
+
+      ContactDetailsUpdateResponse(crn = crn, mobile = merged.mobile, email = merged.email)
+    } catch (e: WebClientResponseException.NotFound) {
+      LOGGER.warn("Contact details not found for CRN: {}", crn)
+      throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.", e)
+    } catch (e: WebClientResponseException) {
+      LOGGER.warn("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
+      if (e.statusCode.is4xxClientError) {
+        throw ResponseStatusException(e.statusCode, "Could not update contact details in NDelius for $crn.", e)
+      }
+      throw ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Encountered an issue whilst updating the contact details in NDelius for $crn.",
+      )
+    } catch (e: Exception) {
+      LOGGER.error("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
+      throw e
+    }
+  }
+
+  private fun updateContactDetailsFallback(crn: String, request: ContactDetailsUpdateRequest, e: Exception): ContactDetailsUpdateResponse {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "updateContactDetails, crn=$crn"))
+    throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Encountered an issue whilst updating the contact details in NDelius for $crn.")
   }
 
   /**
