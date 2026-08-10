@@ -965,6 +965,22 @@ class OffenderResourceTest {
     assertEquals("Contact details not found in NDelius for X123456.", exception.reason)
   }
 
+  @Test
+  fun `updateContactDetails - validation error - returns 400`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    val request = ContactDetailsUpdateRequest(mobile = "07700900123", email = "not-an-email")
+    val binding = BeanPropertyBindingResult(request, "request").apply {
+      rejectValue("email", "Email", "must be a well-formed email address")
+    }
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateContactDetails(offender.crn, request, binding)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(ndiliusApiClient, times(0)).updateContactDetails(any(), any())
+  }
+
   // ========================================
   // Helper Methods
   // ========================================

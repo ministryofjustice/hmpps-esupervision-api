@@ -4,6 +4,8 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.Lazy
 import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -54,6 +56,10 @@ interface INdiliusApiClient {
 class NdiliusApiClient(
   private val ndiliusApiWebClient: WebClient,
 ) : INdiliusApiClient {
+  @Autowired
+  @Lazy
+  private lateinit var self: INdiliusApiClient
+
   /**
    * Get contact details for a single person on probation by CRN
    * GET /case/{crn}
@@ -152,7 +158,7 @@ class NdiliusApiClient(
 
     return try {
       val merged = if (request.mobile == null || request.email == null) {
-        val existing = getContactDetails(crn)
+        val existing = self.getContactDetails(crn)
         ContactDetailsUpdateRequest(mobile = request.mobile ?: existing?.mobile, email = request.email ?: existing?.email)
       } else {
         request

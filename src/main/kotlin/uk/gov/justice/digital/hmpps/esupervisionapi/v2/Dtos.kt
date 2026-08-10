@@ -141,8 +141,8 @@ data class OrganizationalUnit(
 )
 
 /** Request to update a person's contact details. Forwarded to esupervision-and-delius's
- * PUT /case/{crn}/contact-details (PI-4356), which expects `mobileNumber`/`emailAddress` -
- * see [NdiliusContactDetailsUpdateBody] for the field mapping onto that wire format. */
+ * PUT /case/{crn}/contact-details, which expects `mobileNumber`/`emailAddress`.
+ * The request is mapped onto that wire format in `NdiliusApiClient.updateContactDetails`. */
 data class ContactDetailsUpdateRequest(
   @field:Schema(description = "Mobile phone number", required = false, example = "07700900123")
   val mobile: String? = null,
