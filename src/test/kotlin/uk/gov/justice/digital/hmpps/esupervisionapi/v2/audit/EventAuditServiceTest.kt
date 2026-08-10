@@ -54,11 +54,11 @@ class EventAuditServiceTest {
     val details = ContactDetails(
       crn = offender.crn,
       name = Name("John", "Doe"),
-      practitioner = PractitionerDetails(Name("P", "Q")),
+      practitioner = PractitionerDetails(name = Name("P", "Q")),
       dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
-    service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, details, "reason")
+    service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender.dto(details), details, "reason")
 
     verify(auditRepository).save(any())
   }
@@ -73,14 +73,14 @@ class EventAuditServiceTest {
       dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
-    service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, details, "no active events")
+    service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender.dto(details), details, "no active events")
 
     verify(auditRepository).save(any())
   }
 
   @Test
   fun `records when contact details are entirely absent`() {
-    service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender, null, "reason")
+    service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender.dto(null), null, "reason")
 
     verify(auditRepository).save(any())
   }

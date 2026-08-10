@@ -7,32 +7,43 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import tools.jackson.databind.annotation.JsonDeserialize
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INamedPerson
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -63,6 +74,8 @@ class OffenderResource(
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderSetupService: OffenderSetupService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val appEventPublisher: ApplicationEventPublisher,
+  private val offenderPersistenceService: OffenderPersistenceService,
   private val offenderService: OffenderService,
 ) {
 
@@ -96,6 +109,43 @@ class OffenderResource(
     }
     LOGGER.info("Found offender by CRN: crn={}, status={}, contactDetails={}", normalisedCrn, offender.status, detailsMesage)
     return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Update contact details by CRN",
+    description = """Updates a person's mobile number and/or email address.
+      Forwards the request to esupervision-and-delius's PUT /case/{crn}/contact-details endpoint (PI-4356).""",
+  )
+  @ApiResponse(responseCode = "200", description = "Contact details updated")
+  @ApiResponse(responseCode = "204", description = "No update required")
+  @ApiResponse(responseCode = "400", description = "Invalid input")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @PutMapping("/crn/{crn}/contact-details")
+  fun updateContactDetails(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+    @RequestBody @Valid request: ContactDetailsUpdateRequest,
+    binding: BindingResult,
+  ): ResponseEntity<ContactDetailsUpdateResponse> {
+    if (binding.hasErrors()) {
+      throw intoResponseStatusException(binding)
+    }
+
+    val normalisedCrn = crn.trim().uppercase()
+    val offender = offenderRepository.findByCrn(normalisedCrn).orElse(null)
+    if (offender == null) {
+      LOGGER.info("Offender not found for crn={}", crn)
+      return ResponseEntity.notFound().build()
+    }
+
+    if (request.mobile == null && request.email == null) {
+      return ResponseEntity.noContent().build()
+    }
+
+    val updated = ndiliusApiClient.updateContactDetails(normalisedCrn, request)
+
+    LOGGER.info("Updated contact details for CRN: {} requested by practitioner: {}", normalisedCrn, request.practitionerId)
+    return ResponseEntity.ok(updated)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -281,8 +331,7 @@ class OffenderResource(
       3. Sends a registration notification to the offender
       4. Automatically creates a check in record for the 'firstCheckin' date. 
          - If a check in  for that date already exists, it will skip creation to prevent duplicates.
-         - If the date is in the future, the record is created in a 'CREATED' state for the background job to process later.
-      Note: V1 does not support reactivation, but V2 requires it due to unique CRN constraint.""",
+         - If the date is in the future, the record is created in a 'CREATED' state for the background job to process later.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender reactivated")
   @ApiResponse(responseCode = "400", description = "Offender not in INACTIVE status")
@@ -343,37 +392,47 @@ class OffenderResource(
       offender.contactPreference = pref.contactPreference
     }
 
-    val (savedOffender, setupId) = offenderSetupService.activateOffenderAndIncrementSetupCounter(offender)
-    notificationService.sendReactivationCompletedNotifications(savedOffender, contactDetails, setupId)
+    val partialEvent = PartialOffenderReactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      currentEvent = activeEventNumber(offender, contactDetails),
+      reason = request.reason,
+    )
+    offender.updatedAt = clock.instant()
+    val event = offenderPersistenceService.offenderReactivation(offender.id, partialEvent)
+    if (event != null && event.offender.status == OffenderStatus.VERIFIED) {
+      val savedOffender = event.offender
+      val today = clock.today()
+      // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
+      if (savedOffender.firstCheckin == today) {
+        val existingCheckin = checkinRepository.findByOffenderAndDueDate(offender.id, today)
+        val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
 
-    // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
-    val today = clock.today()
-    if (savedOffender.firstCheckin == today) {
-      // it's unlikely that there will be an existing check in because check ins become cancelled when PoPs are deactivated but we check in case
-      val existingCheckin = checkinRepository.findByOffenderAndDueDate(savedOffender, today)
-      val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
-
-      if (!checkinExists) {
-        checkinCreationService.createCheckin(
-          offenderUuid = savedOffender.uuid,
-          dueDate = today,
-          createdBy = request.requestedBy,
-        )
-      } else {
-        LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
+        if (!checkinExists) {
+          checkinCreationService.createCheckin(
+            offenderUuid = savedOffender.uuid,
+            dueDate = today,
+            createdBy = request.requestedBy,
+          )
+        } else {
+          LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
+        }
       }
+    } else {
+      LOGGER.info("Offender reactivation failed: could not create setup recrod for CRN={}", offender.crn)
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Could not reactivate offender")
     }
 
     LOGGER.info(
-      "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
+      "Reactivation: offender(uuid={}, crn={}, status={}), requestedBy={}, reason={}",
       uuid,
       offender.crn,
+      offender.status,
       request.requestedBy,
       request.reason,
     )
 
-    recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, savedOffender, request.reason)
-    return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
+    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -445,7 +504,8 @@ class OffenderResource(
       // exception already logged and sanitised elsewhere
       LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
     }
-    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
+    val details = contactDetails ?: missingDetails(offender.crn)
+    eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {
@@ -475,7 +535,32 @@ class OffenderResource(
  */
 data class OffenderSummaryDetails(
   override val name: Name,
+  val dateOfBirth: LocalDate,
+  val mobile: String? = null,
+  val email: String? = null,
+  val practitioner: PractitionerSummary? = null,
+  val events: List<Event> = emptyList(),
+  val contactSuspended: Boolean = false,
 ) : INamedPerson
+
+/**
+ * Probation practitioner details available via NDelius's GET /case/{crn}.
+ */
+data class PractitionerSummary(
+  override val name: Name,
+  val code: String? = null,
+  val email: String? = null,
+  val unallocated: Boolean? = null,
+  val username: String? = null,
+) : INamedPerson
+
+private fun PractitionerDetails.toSummary() = PractitionerSummary(
+  name = name,
+  code = code,
+  email = email,
+  unallocated = unallocated,
+  username = username,
+)
 
 /** Simple DTO for offender lookup - no PII by default */
 data class OffenderSummaryDto(
@@ -497,7 +582,17 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   contactPreference = contactPreference,
   photoUrl = photoUrl,
-  details = contactDetails?.let { OffenderSummaryDetails(it.name) },
+  details = contactDetails?.let {
+    OffenderSummaryDetails(
+      name = it.name,
+      dateOfBirth = it.dateOfBirth,
+      mobile = it.mobile,
+      email = it.email,
+      practitioner = it.practitioner?.toSummary(),
+      events = it.events,
+      contactSuspended = it.contactSuspended,
+    )
+  },
 )
 
 data class OffenderHeaderDetails(

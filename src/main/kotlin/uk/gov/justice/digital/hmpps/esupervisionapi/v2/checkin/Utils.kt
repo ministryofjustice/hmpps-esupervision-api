@@ -23,7 +23,7 @@ fun activeEventNumber(offender: ActiveEvent, details: ContactDetails): Long? {
     return offender.currentEvent
   }
 
-  return details.events?.firstOrNull()?.number
+  return details.events.firstOrNull()?.number
 }
 
 /**
