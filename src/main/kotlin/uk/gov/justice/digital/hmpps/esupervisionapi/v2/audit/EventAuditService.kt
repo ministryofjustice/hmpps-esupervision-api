@@ -295,9 +295,18 @@ class EventAuditService(
         notes = "Reminder sent by scheduled job",
       )
 
-      CheckinAuditEventType.CHECKIN_IMAGE_DELETED -> throw IllegalArgumentException(
-        "CHECKIN_IMAGE_DELETED is recorded via recordCheckinImageDeleted(), not the ICheckinEvent path",
-      )
+      CheckinAuditEventType.CHECKIN_IMAGE_DELETED -> {
+        LOGGER.warn("Building CHECKIN_IMAGE_DELETED audit event for checkin {}, but recordCheckinImageDeleted() should be used", checkin.uuid)
+        buildAudit(
+          eventType = CheckinAuditEventType.CHECKIN_IMAGE_DELETED.name,
+          crn = checkin.offender.crn,
+          practitionerId = checkin.offender.practitionerId,
+          contactDetails = null,
+          checkin = checkin,
+          manualIdCheckResult = checkin.manualIdCheck?.name,
+          notes = "Check-in image deleted by scheduled retention job",
+        )
+      }
     }
   }
 
