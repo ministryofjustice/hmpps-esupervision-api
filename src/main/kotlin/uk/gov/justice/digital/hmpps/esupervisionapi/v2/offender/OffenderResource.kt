@@ -11,19 +11,25 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import tools.jackson.databind.annotation.JsonDeserialize
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INamedPerson
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
@@ -33,6 +39,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
@@ -102,6 +109,43 @@ class OffenderResource(
     }
     LOGGER.info("Found offender by CRN: crn={}, status={}, contactDetails={}", normalisedCrn, offender.status, detailsMesage)
     return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Update contact details by CRN",
+    description = """Updates a person's mobile number and/or email address.
+      Forwards the request to esupervision-and-delius's PUT /case/{crn}/contact-details endpoint (PI-4356).""",
+  )
+  @ApiResponse(responseCode = "200", description = "Contact details updated")
+  @ApiResponse(responseCode = "204", description = "No update required")
+  @ApiResponse(responseCode = "400", description = "Invalid input")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @PutMapping("/crn/{crn}/contact-details")
+  fun updateContactDetails(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+    @RequestBody @Valid request: ContactDetailsUpdateRequest,
+    binding: BindingResult,
+  ): ResponseEntity<ContactDetailsUpdateResponse> {
+    if (binding.hasErrors()) {
+      throw intoResponseStatusException(binding)
+    }
+
+    val normalisedCrn = crn.trim().uppercase()
+    val offender = offenderRepository.findByCrn(normalisedCrn).orElse(null)
+    if (offender == null) {
+      LOGGER.info("Offender not found for crn={}", crn)
+      return ResponseEntity.notFound().build()
+    }
+
+    if (request.mobile == null && request.email == null) {
+      return ResponseEntity.noContent().build()
+    }
+
+    val updated = ndiliusApiClient.updateContactDetails(normalisedCrn, request)
+
+    LOGGER.info("Updated contact details for CRN: {} requested by practitioner: {}", normalisedCrn, request.practitionerId)
+    return ResponseEntity.ok(updated)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -491,7 +535,32 @@ class OffenderResource(
  */
 data class OffenderSummaryDetails(
   override val name: Name,
+  val dateOfBirth: LocalDate,
+  val mobile: String? = null,
+  val email: String? = null,
+  val practitioner: PractitionerSummary? = null,
+  val events: List<Event> = emptyList(),
+  val contactSuspended: Boolean = false,
 ) : INamedPerson
+
+/**
+ * Probation practitioner details available via NDelius's GET /case/{crn}.
+ */
+data class PractitionerSummary(
+  override val name: Name,
+  val code: String? = null,
+  val email: String? = null,
+  val unallocated: Boolean? = null,
+  val username: String? = null,
+) : INamedPerson
+
+private fun PractitionerDetails.toSummary() = PractitionerSummary(
+  name = name,
+  code = code,
+  email = email,
+  unallocated = unallocated,
+  username = username,
+)
 
 /** Simple DTO for offender lookup - no PII by default */
 data class OffenderSummaryDto(
@@ -513,7 +582,17 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   checkinInterval = CheckinInterval.fromDuration(checkinInterval),
   contactPreference = contactPreference,
   photoUrl = photoUrl,
-  details = contactDetails?.let { OffenderSummaryDetails(it.name) },
+  details = contactDetails?.let {
+    OffenderSummaryDetails(
+      name = it.name,
+      dateOfBirth = it.dateOfBirth,
+      mobile = it.mobile,
+      email = it.email,
+      practitioner = it.practitioner?.toSummary(),
+      events = it.events,
+      contactSuspended = it.contactSuspended,
+    )
+  },
 )
 
 data class OffenderHeaderDetails(
