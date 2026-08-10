@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -13,6 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.asSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -269,27 +271,18 @@ class NotificationOrchestratorServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendReactivationCompletedNotifications(offender, contactDetails)
-
-    verify(domainEventService).publishDomainEvent(
-      eq(DomainEventType.V2_SETUP_COMPLETED),
-      eq(offender.uuid),
-      eq(offender.crn),
-      any(),
-      eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = null)),
+    val setupInfo = mock<SetupInfo>()
+    val setupId = UUID.randomUUID()
+    whenever(setupInfo.setupId).thenReturn(setupId)
+    whenever(setupInfo.primaryKey).thenReturn(1L)
+    val event = OffenderReactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      currentEvent = 12345L,
+      setup = setupInfo,
+      reason = "whatever",
     )
-  }
-
-  @Test
-  fun `sendReactivationCompletedNotifications - publishes event without eventNumber when no events`() {
-    val offender = createOffender()
-    val contactDetails = createContactDetails().copy(events = emptyList())
-
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
-    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
-
-    service.sendReactivationCompletedNotifications(offender, contactDetails)
+    service.sendReactivationCompletedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_COMPLETED),
@@ -297,7 +290,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = null, setupId = null)),
+      eq(AdditionalInformation(eventNumber = 12345L, setupId = setupId)),
     )
   }
 
@@ -309,15 +302,25 @@ class NotificationOrchestratorServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendDeactivationCompletedNotifications(offender, contactDetails)
+    val eventNumber = 12345L
+    val event = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      null,
+      eventNumber,
+      null,
+      false,
+    )
+    service.sendDeactivationCompletedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_REMOVED),
       eq(offender.uuid),
       eq(offender.crn),
       any(),
-      eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = null)),
+      isNull(),
+      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode)),
     )
   }
 
@@ -329,7 +332,17 @@ class NotificationOrchestratorServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendDeactivationCompletedNotifications(offender, contactDetails, outcomeCode = "ESPRS")
+    val eventNumber = 12345L
+    val event = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      null,
+      eventNumber,
+      null,
+      false,
+    )
+    service.sendDeactivationCompletedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_REMOVED),
@@ -337,7 +350,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = 12345L, setupId = null, outcomeCode = "ESPRS")),
+      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = "ESPRS")),
     )
   }
 
@@ -349,7 +362,16 @@ class NotificationOrchestratorServiceTest {
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
 
-    service.sendDeactivationCompletedNotifications(offender, contactDetails)
+    val event = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      null,
+      null,
+      null,
+      false,
+    )
+    service.sendDeactivationCompletedNotifications(event)
 
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_REMOVED),
@@ -357,7 +379,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = null, setupId = null)),
+      eq(AdditionalInformation(eventNumber = null, setupId = null, OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode)),
     )
   }
 

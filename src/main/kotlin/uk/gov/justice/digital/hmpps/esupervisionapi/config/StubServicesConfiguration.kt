@@ -6,10 +6,14 @@ import org.springframework.beans.factory.DisposableBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
+import org.springframework.http.HttpStatus
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
@@ -91,6 +95,19 @@ open class StubNdiliusApiClient(
     }
     LOG.debug("Not all CRNs found in allowed list: {}", incomingCrns.subtract(allowedCrns))
     return emptyList()
+  }
+
+  override fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse {
+    LOG.debug("Updating contact details for CRN: {} requested by practitioner: {}", crn, request.practitionerId)
+    if (!watcher.allowedCrns.contains(crn)) {
+      throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.")
+    }
+    val existing = if (request.mobile == null || request.email == null) dataProvider.provideCase(crn) else null
+    return ContactDetailsUpdateResponse(
+      crn = crn,
+      mobile = request.mobile ?: existing?.mobile,
+      email = request.email ?: existing?.email,
+    )
   }
 
   companion object {

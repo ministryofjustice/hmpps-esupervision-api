@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ICheckinEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
@@ -45,6 +46,7 @@ enum class CheckinAuditEventType {
   CHECKIN_REVIEWED,
   CHECKIN_EXPIRED,
   CHECKIN_REMINDER,
+  CHECKIN_IMAGE_DELETED,
 }
 
 /**
@@ -65,7 +67,7 @@ class EventAuditService(
    */
   fun recordSetupCompleted(offender: Offender, contactDetails: ContactDetails?, setup: OffenderSetupDto) = recordOffenderEvent(
     OffenderAuditEventType.SETUP_COMPLETED,
-    offender = offender,
+    offender = offender.dto(contactDetails),
     contactDetails = contactDetails,
     notes = "Eligibility: ${setup.eligibilityChoice?.name ?: "not provided"}\nRationale provided: ${!setup.rationale.isNullOrBlank()}",
     sensitive = false,
@@ -136,7 +138,30 @@ class EventAuditService(
    */
   fun recordCheckinReminded(checkins: Iterable<Pair<OffenderCheckin, ContactDetails?>>) = recordCheckinEvents(CheckinAuditEventType.CHECKIN_REMINDER, checkins)
 
-  fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: Offender, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
+  /**
+   * Record a check-in image deletion event (ESUP-2057 retention job).
+   * Recorded unconditionally, regardless of whether practitioner contact details are
+   * available - this is a system-initiated retention action, not a practitioner action.
+   */
+  fun recordCheckinImageDeleted(checkin: OffenderCheckin) {
+    try {
+      val audit = buildAudit(
+        eventType = CheckinAuditEventType.CHECKIN_IMAGE_DELETED.name,
+        crn = checkin.offender.crn,
+        practitionerId = checkin.offender.practitionerId,
+        contactDetails = null,
+        checkin = checkin,
+        manualIdCheckResult = checkin.manualIdCheck?.name,
+        notes = "Check-in image deleted by scheduled retention job",
+      )
+      transactionTemplate.execute { auditRepository.save(audit) }
+      LOGGER.info("Recorded CHECKIN_IMAGE_DELETED audit event for checkin {}", checkin.uuid)
+    } catch (e: Exception) {
+      LOGGER.error("Failed to record CHECKIN_IMAGE_DELETED audit event for checkin {}", checkin.uuid, e)
+    }
+  }
+
+  fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderDto, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
     if (contactDetails?.practitioner == null) {
       // Still record the event (e.g. an automated deactivation of a POP in reset) - the practitioner
       // org-unit columns are nullable, so we keep the audit trail rather than dropping it entirely.
@@ -189,7 +214,7 @@ class EventAuditService(
     sensitive = sensitive,
   )
 
-  private fun Offender.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false): EventAudit {
+  private fun OffenderDto.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false): EventAudit {
     val offender = this
     return when (eventType) {
       OffenderAuditEventType.SETUP_COMPLETED,
@@ -268,6 +293,10 @@ class EventAuditService(
         contactDetails = checkinDto.personalDetails,
         checkin = checkin,
         notes = "Reminder sent by scheduled job",
+      )
+
+      CheckinAuditEventType.CHECKIN_IMAGE_DELETED -> throw IllegalArgumentException(
+        "CHECKIN_IMAGE_DELETED is recorded via recordCheckinImageDeleted(), not the ICheckinEvent path",
       )
     }
   }
