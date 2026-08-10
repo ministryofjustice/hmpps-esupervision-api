@@ -137,7 +137,7 @@ class HmppsESupervisionExceptionHandler {
     .body(
       ErrorResponse(
         status = GONE,
-        userMessage = "This image is no longer available. It was removed in line with the service's data retention policy.",
+        userMessage = "This check-in media is no longer available. It was removed in line with the service's data retention policy.",
         developerMessage = e.message,
       ),
     ).also { log.info("Image retention expired: {}", e.message) }
