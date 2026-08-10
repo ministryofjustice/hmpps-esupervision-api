@@ -143,3 +143,5 @@ databaseChangeLog:
       file: db/changelog/changesets/71_checkin_note_resend.sql
   - include:
       file: db/changelog/changesets/72_offender_events_outbox.sql
+  - include:
+      file: db/changelog/changesets/73_add_checkin_image_retention.sql
