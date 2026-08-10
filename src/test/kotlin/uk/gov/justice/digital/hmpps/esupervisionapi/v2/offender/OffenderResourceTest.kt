@@ -900,13 +900,103 @@ class OffenderResourceTest {
   }
 
   // ========================================
+  // Personal Details Lookup Tests
+  // ========================================
+
+  @Test
+  fun `getPersonalDetailsByCrn - happy path - returns details without requiring local offender`() {
+    val crn = "x123456"
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = "X123456",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      mobile = "07700900123",
+      email = "john.doe@example.com",
+    )
+    whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(contactDetails)
+
+    val result = resource.getPersonalDetailsByCrn(crn)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals("X123456", result.body?.crn)
+    assertEquals("John", result.body?.name?.forename)
+    assertEquals("07700900123", result.body?.mobile)
+    assertEquals("john.doe@example.com", result.body?.email)
+    verify(offenderRepository, times(0)).findByCrn(any())
+  }
+
+  @Test
+  fun `getPersonalDetailsByCrn - not found in nDelius - returns 404`() {
+    whenever(ndiliusApiClient.getContactDetails("X999999")).thenReturn(null)
+
+    val result = resource.getPersonalDetailsByCrn("X999999")
+
+    assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
+  }
+
+  // ========================================
+  // Practitioner Details Lookup Tests
+  // ========================================
+
+  @Test
+  fun `getPractitionerDetailsByCrn - happy path - returns practitioner without requiring local offender`() {
+    val crn = "x123456"
+    val practitioner = uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails(
+      code = "N01A001",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
+      email = "jane.smith@example.com",
+      unallocated = false,
+      username = "AUTH_USER",
+    )
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = "X123456",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      practitioner = practitioner,
+    )
+    whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(contactDetails)
+
+    val result = resource.getPractitionerDetailsByCrn(crn)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals("N01A001", result.body?.code)
+    assertEquals("Jane", result.body?.name?.forename)
+    assertEquals("jane.smith@example.com", result.body?.email)
+    assertEquals(false, result.body?.unallocated)
+    assertEquals("AUTH_USER", result.body?.username)
+    verify(offenderRepository, times(0)).findByCrn(any())
+  }
+
+  @Test
+  fun `getPractitionerDetailsByCrn - crn not found in nDelius - returns 404`() {
+    whenever(ndiliusApiClient.getContactDetails("X999999")).thenReturn(null)
+
+    val result = resource.getPractitionerDetailsByCrn("X999999")
+
+    assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
+  }
+
+  @Test
+  fun `getPractitionerDetailsByCrn - no practitioner allocated - returns 404`() {
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = "X123456",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      practitioner = null,
+    )
+    whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(contactDetails)
+
+    val result = resource.getPractitionerDetailsByCrn("X123456")
+
+    assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
+  }
+
+  // ========================================
   // Update Contact Details Tests
   // ========================================
 
   @Test
   fun `updateContactDetails - happy path - forwards request and returns updated record`() {
-    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
-    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
     val crn = "x123456"
     val request = ContactDetailsUpdateRequest(practitionerId = "AUTH_USER", mobile = "07700900123", email = "john.smith@example.com")
     val response = ContactDetailsUpdateResponse(crn = "X123456", mobile = request.mobile, email = request.email)
@@ -922,34 +1012,32 @@ class OffenderResourceTest {
 
   @Test
   fun `updateContactDetails - no fields provided - no-op and does not call ndilius`() {
-    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
-    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
     val request = ContactDetailsUpdateRequest(practitionerId = "AUTH_USER", mobile = null, email = null)
     val binding = BeanPropertyBindingResult(request, "request")
 
-    val result = resource.updateContactDetails(offender.crn, request, binding)
+    val result = resource.updateContactDetails("X123456", request, binding)
 
     assertEquals(HttpStatus.NO_CONTENT, result.statusCode)
     verify(ndiliusApiClient, times(0)).updateContactDetails(any(), any())
   }
 
   @Test
-  fun `updateContactDetails - offender not found - returns 404 and does not call ndilius`() {
+  fun `updateContactDetails - offender not registered locally - still forwards to ndilius`() {
     val crn = "X999999"
-    whenever(offenderRepository.findByCrn(crn)).thenReturn(Optional.empty())
     val request = ContactDetailsUpdateRequest(practitionerId = "AUTH_USER", mobile = "07700900123", email = null)
+    val response = ContactDetailsUpdateResponse(crn = "X999999", mobile = request.mobile, email = request.email)
+    whenever(ndiliusApiClient.updateContactDetails("X999999", request)).thenReturn(response)
 
     val binding = BeanPropertyBindingResult(request, "request")
     val result = resource.updateContactDetails(crn, request, binding)
 
-    assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
-    verify(ndiliusApiClient, times(0)).updateContactDetails(any(), any())
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(response, result.body)
+    verify(ndiliusApiClient).updateContactDetails(eq("X999999"), eq(request))
   }
 
   @Test
   fun `updateContactDetails - CRN not found in ndilius - propagates 404`() {
-    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
-    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
     val crn = "x123456"
     val request = ContactDetailsUpdateRequest(practitionerId = "AUTH_USER", mobile = "07700900123", email = null)
     whenever(ndiliusApiClient.updateContactDetails("X123456", request)).thenThrow(
@@ -967,14 +1055,13 @@ class OffenderResourceTest {
 
   @Test
   fun `updateContactDetails - validation error - returns 400`() {
-    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
     val request = ContactDetailsUpdateRequest(practitionerId = "AUTH_USER", mobile = "07700900123", email = "not-an-email")
     val binding = BeanPropertyBindingResult(request, "request").apply {
       rejectValue("email", "Email", "must be a well-formed email address")
     }
 
     val exception = assertThrows(ResponseStatusException::class.java) {
-      resource.updateContactDetails(offender.crn, request, binding)
+      resource.updateContactDetails("X123456", request, binding)
     }
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
