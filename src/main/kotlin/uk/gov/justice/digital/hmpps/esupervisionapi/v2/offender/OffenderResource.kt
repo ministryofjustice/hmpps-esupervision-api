@@ -113,14 +113,67 @@ class OffenderResource(
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
+    summary = "Get personal details by CRN",
+    description = """Returns personal details straight from NDelius, without requiring the person to
+      already be registered for e-supervision. Used to look up details before starting setup.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Personal details found")
+  @ApiResponse(responseCode = "404", description = "CRN not found in NDelius")
+  @GetMapping("/crn/{crn}/personal-details")
+  fun getPersonalDetailsByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): ResponseEntity<PersonalDetailsSummary> {
+    val normalisedCrn = crn.trim().uppercase()
+    val contactDetails = ndiliusApiClient.getContactDetails(normalisedCrn)
+    if (contactDetails == null) {
+      LOGGER.info("Personal details not found for crn={}", normalisedCrn)
+      return ResponseEntity.notFound().build()
+    }
+
+    return ResponseEntity.ok(
+      PersonalDetailsSummary(
+        crn = contactDetails.crn,
+        name = contactDetails.name,
+        dateOfBirth = contactDetails.dateOfBirth,
+        mobile = contactDetails.mobile,
+        email = contactDetails.email,
+      ),
+    )
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Get probation practitioner by CRN",
+    description = """Returns the allocated probation practitioner straight from NDelius, without requiring
+      the person to already be registered for e-supervision. Used to look up details before starting setup.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Practitioner found")
+  @ApiResponse(responseCode = "404", description = "CRN not found in NDelius, or no practitioner allocated")
+  @GetMapping("/crn/{crn}/practitioner-details")
+  fun getPractitionerDetailsByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): ResponseEntity<PractitionerSummary> {
+    val normalisedCrn = crn.trim().uppercase()
+    val practitioner = ndiliusApiClient.getContactDetails(normalisedCrn)?.practitioner
+    if (practitioner == null) {
+      LOGGER.info("Practitioner not found for crn={}", normalisedCrn)
+      return ResponseEntity.notFound().build()
+    }
+
+    return ResponseEntity.ok(practitioner.toSummary())
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
     summary = "Update contact details by CRN",
     description = """Updates a person's mobile number and/or email address.
-      Forwards the request to esupervision-and-delius's PUT /case/{crn}/contact-details endpoint (PI-4356).""",
+      Forwards the request to esupervision-and-delius's PUT /case/{crn}/contact-details endpoint (PI-4356).
+      Does not require the person to already be registered for e-supervision.""",
   )
   @ApiResponse(responseCode = "200", description = "Contact details updated")
   @ApiResponse(responseCode = "204", description = "No update required")
   @ApiResponse(responseCode = "400", description = "Invalid input")
-  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @ApiResponse(responseCode = "404", description = "CRN not found in NDelius")
   @PutMapping("/crn/{crn}/contact-details")
   fun updateContactDetails(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
@@ -132,11 +185,6 @@ class OffenderResource(
     }
 
     val normalisedCrn = crn.trim().uppercase()
-    val offender = offenderRepository.findByCrn(normalisedCrn).orElse(null)
-    if (offender == null) {
-      LOGGER.info("Offender not found for crn={}", crn)
-      return ResponseEntity.notFound().build()
-    }
 
     if (request.mobile == null && request.email == null) {
       return ResponseEntity.noContent().build()
@@ -529,6 +577,17 @@ class OffenderResource(
     private val LOGGER = logger<OffenderResource>()
   }
 }
+
+/**
+ * Personal details looked up directly from NDelius by CRN, ahead of setup - before an [Offender] exists locally.
+ */
+data class PersonalDetailsSummary(
+  val crn: String,
+  override val name: Name,
+  val dateOfBirth: LocalDate,
+  val mobile: String? = null,
+  val email: String? = null,
+) : INamedPerson
 
 /**
  * Subset of [ContactDetails] that is returned in the summary DTO.
