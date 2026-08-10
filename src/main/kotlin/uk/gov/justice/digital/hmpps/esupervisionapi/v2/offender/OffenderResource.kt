@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -29,10 +30,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -63,6 +67,8 @@ class OffenderResource(
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderSetupService: OffenderSetupService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val appEventPublisher: ApplicationEventPublisher,
+  private val offenderPersistenceService: OffenderPersistenceService,
   private val offenderService: OffenderService,
 ) {
 
@@ -281,8 +287,7 @@ class OffenderResource(
       3. Sends a registration notification to the offender
       4. Automatically creates a check in record for the 'firstCheckin' date. 
          - If a check in  for that date already exists, it will skip creation to prevent duplicates.
-         - If the date is in the future, the record is created in a 'CREATED' state for the background job to process later.
-      Note: V1 does not support reactivation, but V2 requires it due to unique CRN constraint.""",
+         - If the date is in the future, the record is created in a 'CREATED' state for the background job to process later.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender reactivated")
   @ApiResponse(responseCode = "400", description = "Offender not in INACTIVE status")
@@ -343,37 +348,47 @@ class OffenderResource(
       offender.contactPreference = pref.contactPreference
     }
 
-    val (savedOffender, setupId) = offenderSetupService.activateOffenderAndIncrementSetupCounter(offender)
-    notificationService.sendReactivationCompletedNotifications(savedOffender, contactDetails, setupId)
+    val partialEvent = PartialOffenderReactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      currentEvent = activeEventNumber(offender, contactDetails),
+      reason = request.reason,
+    )
+    offender.updatedAt = clock.instant()
+    val event = offenderPersistenceService.offenderReactivation(offender.id, partialEvent)
+    if (event != null && event.offender.status == OffenderStatus.VERIFIED) {
+      val savedOffender = event.offender
+      val today = clock.today()
+      // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
+      if (savedOffender.firstCheckin == today) {
+        val existingCheckin = checkinRepository.findByOffenderAndDueDate(offender.id, today)
+        val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
 
-    // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
-    val today = clock.today()
-    if (savedOffender.firstCheckin == today) {
-      // it's unlikely that there will be an existing check in because check ins become cancelled when PoPs are deactivated but we check in case
-      val existingCheckin = checkinRepository.findByOffenderAndDueDate(savedOffender, today)
-      val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
-
-      if (!checkinExists) {
-        checkinCreationService.createCheckin(
-          offenderUuid = savedOffender.uuid,
-          dueDate = today,
-          createdBy = request.requestedBy,
-        )
-      } else {
-        LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
+        if (!checkinExists) {
+          checkinCreationService.createCheckin(
+            offenderUuid = savedOffender.uuid,
+            dueDate = today,
+            createdBy = request.requestedBy,
+          )
+        } else {
+          LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
+        }
       }
+    } else {
+      LOGGER.info("Offender reactivation failed: could not create setup recrod for CRN={}", offender.crn)
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Could not reactivate offender")
     }
 
     LOGGER.info(
-      "Reactivated offender: uuid={}, crn={}, requestedBy={}, reason={}",
+      "Reactivation: offender(uuid={}, crn={}, status={}), requestedBy={}, reason={}",
       uuid,
       offender.crn,
+      offender.status,
       request.requestedBy,
       request.reason,
     )
 
-    recordOffenderAuditEvent(OffenderAuditEventType.OFFENDER_REACTIVATED, savedOffender, request.reason)
-    return ResponseEntity.ok(savedOffender.toSummaryDto(getOffenderPhotoUrl(savedOffender)))
+    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender), contactDetails))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -445,7 +460,8 @@ class OffenderResource(
       // exception already logged and sanitised elsewhere
       LOGGER.info("Failed to get contact details for offender ${offender.crn} from NDelius. Using missing details instead.")
     }
-    eventAuditService.recordOffenderEvent(eventType, offender, contactDetails ?: missingDetails(offender.crn), reason, sensitive)
+    val details = contactDetails ?: missingDetails(offender.crn)
+    eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {

@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ICheckinEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
@@ -66,7 +67,7 @@ class EventAuditService(
    */
   fun recordSetupCompleted(offender: Offender, contactDetails: ContactDetails?, setup: OffenderSetupDto) = recordOffenderEvent(
     OffenderAuditEventType.SETUP_COMPLETED,
-    offender = offender,
+    offender = offender.dto(contactDetails),
     contactDetails = contactDetails,
     notes = "Eligibility: ${setup.eligibilityChoice?.name ?: "not provided"}\nRationale provided: ${!setup.rationale.isNullOrBlank()}",
     sensitive = false,
@@ -160,7 +161,7 @@ class EventAuditService(
     }
   }
 
-  fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: Offender, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
+  fun recordOffenderEvent(eventType: OffenderAuditEventType, offender: OffenderDto, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false) {
     if (contactDetails?.practitioner == null) {
       // Still record the event (e.g. an automated deactivation of a POP in reset) - the practitioner
       // org-unit columns are nullable, so we keep the audit trail rather than dropping it entirely.
@@ -213,7 +214,7 @@ class EventAuditService(
     sensitive = sensitive,
   )
 
-  private fun Offender.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false): EventAudit {
+  private fun OffenderDto.toAudit(eventType: OffenderAuditEventType, contactDetails: ContactDetails?, notes: String?, sensitive: Boolean = false): EventAudit {
     val offender = this
     return when (eventType) {
       OffenderAuditEventType.SETUP_COMPLETED,
