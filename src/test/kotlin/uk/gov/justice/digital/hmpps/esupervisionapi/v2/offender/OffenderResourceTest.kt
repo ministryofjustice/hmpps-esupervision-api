@@ -938,7 +938,6 @@ class OffenderResourceTest {
   // Practitioner Details Lookup Tests
   // ========================================
 
-
   @Test
   fun `getPractitionerDetailsByCrn - happy path - returns practitioner without requiring local offender`() {
     val crn = "x123456"
