@@ -847,21 +847,21 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `getOffenderHeaderByCrn - success`() {
-    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
-    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+  fun `getOffenderHeaderByCrn - success - does not require local offender`() {
+    val crn = "X123456"
 
     val headerDetails = OffenderHeaderDetails(
-      crn = offender.crn,
+      crn = crn,
       dateOfBirth = LocalDate.of(1980, 1, 1),
       tierScore = "D2",
-      tierDetailsLink = "https://tier.link/$offender.crn",
+      tierDetailsLink = "https://tier.link/$crn",
       overallRisk = "VERY_HIGH",
     )
-    whenever(offenderService.getHeaderDetails(offender.crn)).thenAnswer { headerDetails }
+    whenever(offenderService.getHeaderDetails(crn)).thenAnswer { headerDetails }
 
-    val result = resource.getOffenderHeaderByCrn(offender.crn)
-    verify(offenderService, times(1)).getHeaderDetails(offender.crn)
+    val result = resource.getOffenderHeaderByCrn(crn)
+    verify(offenderService, times(1)).getHeaderDetails(crn)
+    verify(offenderRepository, times(0)).findByCrn(any())
     assertNotNull(result.body)
     assertEquals(headerDetails.crn, result.body?.crn)
     assertEquals(headerDetails.dateOfBirth, result.body?.dateOfBirth)
@@ -871,32 +871,21 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `getOffenderHeaderByCrn - offender not found - returns 404`() {
+  fun `getOffenderHeaderByCrn - crn not found in ndelius - propagates 404`() {
     val crn = "Y124365"
-    whenever(offenderRepository.findByCrn(crn)).thenReturn(Optional.empty())
-
-    val result = resource.getOffenderHeaderByCrn(crn)
-    assertEquals(HttpStatus.NOT_FOUND, result.statusCode)
-  }
-
-  @Test
-  fun `getOffenderHeaderByCrn - offenderService failure`() {
-    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
-    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
-
-    whenever(offenderService.getHeaderDetails(offender.crn)).thenAnswer {
+    whenever(offenderService.getHeaderDetails(crn)).thenAnswer {
       throw ResponseStatusException(
         HttpStatus.NOT_FOUND,
-        "Could not verify contact details in NDelius for ${offender.crn}.",
+        "Could not verify contact details in NDelius for $crn.",
       )
     }
 
     val exception = assertThrows(ResponseStatusException::class.java) {
-      val result = resource.getOffenderHeaderByCrn(offender.crn)
+      resource.getOffenderHeaderByCrn(crn)
     }
 
     assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
-    assertEquals("Could not verify contact details in NDelius for ${offender.crn}.", exception.reason)
+    assertEquals("Could not verify contact details in NDelius for $crn.", exception.reason)
   }
 
   // ========================================
