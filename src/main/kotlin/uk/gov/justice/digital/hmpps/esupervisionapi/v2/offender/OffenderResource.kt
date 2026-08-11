@@ -199,7 +199,7 @@ class OffenderResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Get offender header by CRN",
-    description = "Returns offender header details. Returns 404 if not found.",
+    description = "Returns offender header details straight from NDelius. Returns 404 if not found.",
   )
   @ApiResponse(responseCode = "200", description = "Offender found")
   @ApiResponse(responseCode = "404", description = "Offender not found")
@@ -207,15 +207,9 @@ class OffenderResource(
   fun getOffenderHeaderByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
   ): ResponseEntity<OffenderHeaderDetails> {
-    val offender = offenderRepository.findByCrn(crn.trim().uppercase()).orElse(null)
-    if (offender == null) {
-      LOGGER.info("Offender not found for crn={}", crn)
-      return ResponseEntity.notFound().build()
-    }
-
     val headerDetails = offenderService.getHeaderDetails(crn.trim().uppercase())
 
-    LOGGER.info("Retrieved header details for offender by CRN: crn={}, status={}", offender.crn, offender.status)
+    LOGGER.info("Retrieved header details for offender by CRN: crn={}", crn)
     return ResponseEntity.ok(headerDetails)
   }
 
