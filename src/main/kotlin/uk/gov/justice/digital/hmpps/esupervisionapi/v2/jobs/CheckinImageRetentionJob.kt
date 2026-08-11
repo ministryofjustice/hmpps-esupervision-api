@@ -12,6 +12,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.TelemetryEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.TelemetryService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -40,6 +42,7 @@ class CheckinImageRetentionJob(
   private val jobLogRepository: JobLogRepository,
   private val transactionTemplate: TransactionTemplate,
   private val eventAuditService: EventAuditService,
+  private val telemetryService: TelemetryService,
   @Value("\${app.scheduling.checkin-image-retention.standard-retention-days:28}")
   private val standardRetentionDays: Long,
   @Value("\${app.scheduling.checkin-image-retention.concern-retention-days:2192}")
@@ -108,8 +111,19 @@ class CheckinImageRetentionJob(
       concernStats.failed,
       Duration.between(now, ended),
     )
+    telemetryService.trackEvent(
+      TelemetryService.Event(
+        name = TelemetryEvent.IMAGE_RETENTION_JOB_RESULTS.label,
+        properties = mapOf(),
+        metrics = mapOf(
+          "assessed" to (standardStats.assessed + concernStats.assessed).toDouble(),
+          "deleted" to (standardStats.deleted + concernStats.deleted).toDouble(),
+          "failed" to totalFailed.toDouble(),
+        ),
+      ),
+    )
     if (totalFailed > 0) {
-      LOGGER.error(
+      LOGGER.warn(
         "V2 Checkin Image Retention Job(id={}) had {} failed image deletion(s) - see preceding warnings",
         logEntry.id,
         totalFailed,
