@@ -42,8 +42,8 @@ class TelemetryServiceImpl(
     )
     telemetryClient.trackEvent(
       event.name,
-      event.properties.filterValues { it != null },
-      event.metrics.filterValues { it != null },
+      event.properties.filterValues { it != null }.mapValues { it.value!! }.toMutableMap(),
+      event.metrics.filterValues { it != null }.mapValues { it.value!! }.toMutableMap(),
     )
   }
 }
