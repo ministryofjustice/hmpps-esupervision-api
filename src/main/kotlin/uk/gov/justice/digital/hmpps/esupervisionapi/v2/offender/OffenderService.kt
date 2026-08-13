@@ -14,7 +14,7 @@ class OffenderService(
   private val ndiliusApiClient: INdiliusApiClient,
   private val tierApiClient: ITierApiClient,
   private val arnsApiClient: IArnsApiClient,
-  @Value("\${api.base.url.tier-api}") val tierApiBaseUri: String,
+  @Value("\${api.base.url.tier-ui}") val tierUiBaseUri: String,
 ) {
 
   fun getHeaderDetails(crn: String): OffenderHeaderDetails {
@@ -63,7 +63,7 @@ class OffenderService(
       crn = crn,
       dateOfBirth = contactDetails.dateOfBirth,
       tierScore = tierDetails.tierScore,
-      tierDetailsLink = "$tierApiBaseUri/case/$crn",
+      tierDetailsLink = "$tierUiBaseUri/case/$crn",
       overallRisk = arnsWidget.overallRisk,
     )
   }
