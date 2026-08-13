@@ -24,7 +24,7 @@ class OffenderServiceTest {
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val tierApiClient: TierApiClient = mock()
   private val arnsApiClient: ArnsApiClient = mock()
-  private val tierApiBaseUri: String = "http://tier-api.local"
+  private val tierUiBaseUri: String = "http://tier-ui.local"
   private val crn: String = "X123456"
   private val contactDetails = ContactDetails(
     crn = crn,
@@ -65,7 +65,7 @@ class OffenderServiceTest {
       ndiliusApiClient,
       tierApiClient,
       arnsApiClient,
-      tierApiBaseUri,
+      tierUiBaseUri,
     )
   }
 
@@ -79,7 +79,7 @@ class OffenderServiceTest {
     assertEquals(crn, response.crn)
     assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
     assertEquals(tierDetails.tierScore, response.tierScore)
-    assertEquals("$tierApiBaseUri/case/$crn", response.tierDetailsLink)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertEquals(riskWidget.overallRisk, response.overallRisk)
   }
 
@@ -96,7 +96,7 @@ class OffenderServiceTest {
     assertEquals(crn, response.crn)
     assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
     assertEquals(tierDetails.tierScore, response.tierScore)
-    assertEquals("$tierApiBaseUri/case/$crn", response.tierDetailsLink)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertEquals("NOT_FOUND", response.overallRisk)
   }
 
