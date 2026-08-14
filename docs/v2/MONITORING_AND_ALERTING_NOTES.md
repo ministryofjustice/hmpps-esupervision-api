@@ -2,7 +2,7 @@
 
 ## Summary
 
-We can emit custom events from our applicaiton code (via a `TelemetryClient`), then write a KQL query, which HMPPS infrastructure will run periodically and turn results in to a Slack message.
+We can emit custom events from our application code (via a `TelemetryClient`), then write a KQL query, which HMPPS infrastructure will run periodically and turn results into a Slack message.
 
 ## Querying data in Azure
 
@@ -26,8 +26,7 @@ See [Custom Alerts README][custom] for more information about how to set them up
 
 ## Our custom events
 
-You can find the events we emit by looking up `TelemetryEvent` enum and searching for usage of 
-`TelemetryService.track()`.
+You can find the events we emit by looking up the `TelemetryEvent` enum and searching for usage of `TelemetryService.track()`.
 
 ## Useful bits of information
 
