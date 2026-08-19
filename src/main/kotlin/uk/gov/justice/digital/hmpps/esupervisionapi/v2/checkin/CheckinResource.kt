@@ -305,6 +305,7 @@ class CheckinResource(
   )
   @ApiResponse(responseCode = "200", description = "Video URL")
   @ApiResponse(responseCode = "404", description = "Video not found")
+  @ApiResponse(responseCode = "410", description = "Video removed under retention policy")
   fun getVideoProxyUrl(
     @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
   ): ResponseEntity<Map<String, String>> {
@@ -320,6 +321,7 @@ class CheckinResource(
   )
   @ApiResponse(responseCode = "200", description = "Snapshot URL")
   @ApiResponse(responseCode = "404", description = "Snapshot not found")
+  @ApiResponse(responseCode = "410", description = "Snapshot removed under retention policy")
   fun getSnapshotProxyUrl(
     @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
     @Parameter(description = "Snapshot index", required = false)

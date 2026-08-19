@@ -6,15 +6,15 @@ import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
 
 @Service
 class OffenderService(
   private val ndiliusApiClient: INdiliusApiClient,
-  private val tierApiClient: TierApiClient,
-  private val arnsApiClient: ArnsApiClient,
-  @Value("\${api.base.url.tier-api}") val tierApiBaseUri: String,
+  private val tierApiClient: ITierApiClient,
+  private val arnsApiClient: IArnsApiClient,
+  @Value("\${api.base.url.tier-ui}") val tierUiBaseUri: String,
 ) {
 
   fun getHeaderDetails(crn: String): OffenderHeaderDetails {
@@ -63,8 +63,8 @@ class OffenderService(
       crn = crn,
       dateOfBirth = contactDetails.dateOfBirth,
       tierScore = tierDetails.tierScore,
-      tierDetailsLink = "$tierApiBaseUri/case/$crn",
-      overallRisk = arnsWidget.overallRisk,
+      tierDetailsLink = "$tierUiBaseUri/case/$crn",
+      overallRisk = arnsWidget.overallRisk ?: "NOT_FOUND",
     )
   }
 

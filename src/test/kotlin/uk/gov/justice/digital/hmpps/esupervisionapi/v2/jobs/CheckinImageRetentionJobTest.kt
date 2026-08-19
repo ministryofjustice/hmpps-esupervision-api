@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.TelemetryService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -47,6 +48,7 @@ class CheckinImageRetentionJobTest {
     }
   }
   private val eventAuditService: EventAuditService = mock()
+  private val telemetryService: TelemetryService = mock()
 
   private val job = CheckinImageRetentionJob(
     clock,
@@ -55,6 +57,7 @@ class CheckinImageRetentionJobTest {
     jobLogRepository,
     transactionTemplate,
     eventAuditService,
+    telemetryService,
     28L,
     2192L,
     100,

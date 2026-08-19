@@ -22,6 +22,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ImageRetentionExpiredException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.CheckinVerificationImages
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.FacialRecognitionOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
@@ -399,6 +400,7 @@ class CheckinService(
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
+    if (checkin.imageDeletedAt != null) throw ImageRetentionExpiredException(uuid)
 
     return s3UploadService.getCheckinVideo(checkin)
       ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found")
@@ -410,6 +412,7 @@ class CheckinService(
       checkinRepository.findByUuid(uuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
+    if (checkin.imageDeletedAt != null) throw ImageRetentionExpiredException(uuid)
 
     return s3UploadService.getCheckinSnapshot(checkin, index)
       ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Snapshot not found")

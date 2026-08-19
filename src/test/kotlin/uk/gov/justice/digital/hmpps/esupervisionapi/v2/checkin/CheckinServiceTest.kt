@@ -54,6 +54,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ImageRetentionExpiredException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.FacialRecognitionOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
@@ -241,6 +242,82 @@ class CheckinServiceTest {
     }
 
     assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
+  }
+
+  @Test
+  fun `getVideoProxyUrl - happy path - returns presigned URL`() {
+    val uuid = UUID.randomUUID()
+    val checkin = OffenderCheckin(
+      uuid = uuid,
+      offender = createOffender(),
+      status = CheckinStatus.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+    )
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val url = service.getVideoProxyUrl(uuid)
+
+    assertEquals("https://video/1", url.toString())
+  }
+
+  @Test
+  fun `getVideoProxyUrl - ESUP-2057 image removed under retention policy - throws ImageRetentionExpiredException`() {
+    val uuid = UUID.randomUUID()
+    val checkin = OffenderCheckin(
+      uuid = uuid,
+      offender = createOffender(),
+      status = CheckinStatus.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      imageDeletedAt = clock.instant(),
+    )
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    assertThrows(ImageRetentionExpiredException::class.java) {
+      service.getVideoProxyUrl(uuid)
+    }
+    verify(s3UploadService, never()).getCheckinVideo(any())
+  }
+
+  @Test
+  fun `getSnapshotProxyUrl - happy path - returns presigned URL`() {
+    val uuid = UUID.randomUUID()
+    val checkin = OffenderCheckin(
+      uuid = uuid,
+      offender = createOffender(),
+      status = CheckinStatus.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+    )
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    val url = service.getSnapshotProxyUrl(uuid, 0)
+
+    assertEquals("https://snapshot/1", url.toString())
+  }
+
+  @Test
+  fun `getSnapshotProxyUrl - ESUP-2057 image removed under retention policy - throws ImageRetentionExpiredException`() {
+    val uuid = UUID.randomUUID()
+    val checkin = OffenderCheckin(
+      uuid = uuid,
+      offender = createOffender(),
+      status = CheckinStatus.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      imageDeletedAt = clock.instant(),
+    )
+    whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+    assertThrows(ImageRetentionExpiredException::class.java) {
+      service.getSnapshotProxyUrl(uuid, 0)
+    }
+    verify(s3UploadService, never()).getCheckinSnapshot(any(), any())
   }
 
   @Test

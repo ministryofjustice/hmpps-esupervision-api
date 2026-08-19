@@ -4,6 +4,7 @@ import jakarta.validation.ValidationException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus.BAD_REQUEST
 import org.springframework.http.HttpStatus.FORBIDDEN
+import org.springframework.http.HttpStatus.GONE
 import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
 import org.springframework.http.HttpStatus.NOT_FOUND
 import org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
@@ -20,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException as V2BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ImageRetentionExpiredException as V2ImageRetentionExpiredException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException as V2ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.InvalidOffenderSetupState as V2InvalidOffenderSetupState
 
@@ -128,6 +130,17 @@ class HmppsESupervisionExceptionHandler {
         developerMessage = e.message,
       ),
     ).also { log.info("V2 Resource not found: {}", e.message) }
+
+  @ExceptionHandler(V2ImageRetentionExpiredException::class)
+  fun handleImageRetentionExpiredException(e: V2ImageRetentionExpiredException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(GONE)
+    .body(
+      ErrorResponse(
+        status = GONE,
+        userMessage = "This check-in media is no longer available. It was removed in line with the service's data retention policy.",
+        developerMessage = e.message,
+      ),
+    ).also { log.info("Image retention expired: {}", e.message) }
 
   @ExceptionHandler(V2InvalidOffenderSetupState::class)
   fun handleV2InvalidOffenderSetupState(e: V2InvalidOffenderSetupState): ResponseEntity<ErrorResponse> = ResponseEntity

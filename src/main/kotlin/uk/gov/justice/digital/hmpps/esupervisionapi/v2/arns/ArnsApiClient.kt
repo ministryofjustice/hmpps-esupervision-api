@@ -61,13 +61,13 @@ class ArnsApiClient(
 }
 
 data class ArnsWidget(
-  val overallRisk: String,
+  val overallRisk: String?,
   val assessedOn: LocalDate?,
   val riskInCommunity: RiskInSituation,
   val riskInCustody: RiskInSituation,
 ) {
   constructor() : this(
-    "NOT_FOUND",
+    null,
     null,
     RiskInSituation(),
     RiskInSituation(),
