@@ -61,7 +61,7 @@ class ArnsApiClient(
 }
 
 data class ArnsWidget(
-  val overallRisk: String,
+  val overallRisk: String?,
   val assessedOn: LocalDate?,
   val riskInCommunity: RiskInSituation,
   val riskInCustody: RiskInSituation,
