@@ -64,7 +64,7 @@ class OffenderService(
       dateOfBirth = contactDetails.dateOfBirth,
       tierScore = tierDetails.tierScore,
       tierDetailsLink = "$tierUiBaseUri/case/$crn",
-      overallRisk = arnsWidget.overallRisk ?: "NONE",
+      overallRisk = arnsWidget.overallRisk ?: "NOT_FOUND",
     )
   }
 
