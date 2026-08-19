@@ -67,7 +67,7 @@ data class ArnsWidget(
   val riskInCustody: RiskInSituation,
 ) {
   constructor() : this(
-    "NOT_FOUND",
+    null,
     null,
     RiskInSituation(),
     RiskInSituation(),
