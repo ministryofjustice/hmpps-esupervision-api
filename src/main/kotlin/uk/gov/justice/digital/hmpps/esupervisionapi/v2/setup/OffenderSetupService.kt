@@ -18,8 +18,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
@@ -75,6 +75,7 @@ class OffenderSetupService(
   private val transactionTemplate: TransactionTemplate,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService,
+  private val eligibilityChecker: EligibilityChecker,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -170,9 +171,7 @@ class OffenderSetupService(
     // reset). We only block when NDelius details are available - a transient fetch failure must not
     // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
     if (contactDetails != null) {
-      checkinIneligibilityReason(offender, contactDetails)?.let { reason ->
-        throw BadArgumentException("Cannot complete setup for CRN ${offender.crn}: ${reason.description}")
-      }
+      eligibilityChecker.check(offender, contactDetails)
     }
 
     val now = clock.instant()

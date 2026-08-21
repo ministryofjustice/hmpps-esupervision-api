@@ -18,7 +18,9 @@ import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.http.HttpStatus
 import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -36,6 +38,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
@@ -60,6 +64,7 @@ class OffenderSetupServiceTest {
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService = mock()
+  private val eligibilityChecker: EligibilityChecker = mock()
 
   private lateinit var service: OffenderSetupService
 
@@ -75,12 +80,13 @@ class OffenderSetupServiceTest {
       transactionTemplate,
       Duration.ofDays(3),
       offenderSetupPersistenceService,
+      eligibilityChecker,
     )
   }
 
   @AfterEach
   fun tearDown() {
-    reset(offenderRepository, offenderSetupRepository, s3UploadService, notificationService, ndiliusApiClient, transactionTemplate, offenderSetupPersistenceService)
+    reset(offenderRepository, offenderSetupRepository, s3UploadService, notificationService, ndiliusApiClient, transactionTemplate, offenderSetupPersistenceService, eligibilityChecker)
   }
 
   @Test
@@ -253,8 +259,9 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), contactSuspended = true, dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
+    whenever(eligibilityChecker.check(any(), any())).thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
 
-    assertThrows(BadArgumentException::class.java) {
+    assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
     }
     verify(offenderRepository, never()).save(any())
@@ -277,8 +284,9 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList(), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
+    whenever(eligibilityChecker.check(any(), any())).thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
 
-    assertThrows(BadArgumentException::class.java) {
+    assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
     }
     verify(offenderRepository, never()).save(any())
@@ -333,6 +341,62 @@ class OffenderSetupServiceTest {
 
     assertEquals(OffenderStatus.VERIFIED, result.status)
     verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(argThat { status == OffenderStatus.VERIFIED }, any(), any())
+  }
+
+  @Test
+  fun `completeOffenderSetup - throws when eligibility engine returns not eligible`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
+    )
+    whenever(eligibilityChecker.check(any(), any())).thenThrow(
+      ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "offender ineligible",
+      ),
+    )
+
+    assertThrows(ResponseStatusException::class.java) {
+      service.completeOffenderSetup(setup.uuid)
+    }
+    verify(offenderRepository, never()).save(any())
+    verify(notificationService, never()).sendSetupCompletedNotifications(any(), any(), any())
+  }
+
+  @Test
+  fun `completeOffenderSetup - return error when eligibility engine's source data is unavailable`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
+    )
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenThrow(EligibilityDataUnavailableException("SOME_CODE", "NDELIUS", RuntimeException("borked")))
+
+    assertThrows(EligibilityDataUnavailableException::class.java) {
+      service.completeOffenderSetup(setup.uuid)
+    }
+    verify(offenderRepository, never()).save(any())
+    verify(notificationService, never()).sendSetupCompletedNotifications(any(), any(), any())
   }
 
   @Test

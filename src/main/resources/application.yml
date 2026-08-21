@@ -93,6 +93,10 @@ app:
       otherSupport: "What they want us to know about (something else)"
       callback: "If they need us to contact them before their next appointment"
       callbackDetails: "What they want to talk about"
+  offender-eligibility:
+    rule-set: ${APP_OFFENDER_ELIGIBILITY_RULE_SET:PILOT_2026_08}
+    # How long we wait before timing out the source request
+    source-timout-ms: ${APP_OFFENDER_ELIGIBILITY_SOURCE_TIMEOUT_MS:2000}
 
 spring:
   application:
