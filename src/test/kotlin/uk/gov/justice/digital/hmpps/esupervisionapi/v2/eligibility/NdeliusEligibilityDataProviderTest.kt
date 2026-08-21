@@ -48,13 +48,12 @@ class NdeliusEligibilityDataProviderTest {
   }
 
   @Test
-  fun `fetch maps null contact details to null data points`() {
+  fun `failure to fetch data from NDelius completes exceptionally`() {
     whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(null)
 
-    val result = provider.fetch("X123456").join()
-
-    assertEquals(null, result["DECEASED_DATE"])
-    assertEquals(null, result["ACTIVE_EVENT"])
+    assertThrows(CompletionException::class.java) {
+      provider.fetch("X123456").join()
+    }
   }
 
   @Test
