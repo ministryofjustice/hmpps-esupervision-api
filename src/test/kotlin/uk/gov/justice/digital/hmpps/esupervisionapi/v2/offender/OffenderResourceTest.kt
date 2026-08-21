@@ -643,6 +643,8 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "Contact suspended"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -670,6 +672,8 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "No active events"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -1070,6 +1074,7 @@ class OffenderResourceTest {
   @Test
   fun `getEligibilityByCrn - eligible - returns eligible response`() {
     val crn = "x123456"
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
     whenever(eligibilityEvaluationEngine.evaluate("X123456", DEFAULT_RULE_SET)).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
         uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null),
@@ -1086,7 +1091,8 @@ class OffenderResourceTest {
   @Test
   fun `getEligibilityByCrn - not eligible - returns reason message`() {
     val crn = "X123456"
-    whenever(eligibilityEvaluationEngine.evaluate(crn, DEFAULT_RULE_SET)).thenReturn(
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.evaluate(crn, eligibilityEvaluationEngine.activeRuleSet)).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
         uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
