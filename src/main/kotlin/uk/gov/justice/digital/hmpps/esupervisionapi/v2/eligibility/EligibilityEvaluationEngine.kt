@@ -33,7 +33,7 @@ class EligibilityEvaluationEngine(
   private val ruleRepository: EligibilityRuleRepository,
   private val providerRegistry: EligibilityDataProviderRegistry,
   @Value($$"${app.offender-eligibility.rule-set}") val activeRuleSet: String,
-  @Value($$"${app.offender-eligibility.source-timout-ms:2000}") val sourceTimeoutMs: Long,
+  @Value($$"${app.offender-eligibility.source-timeout-ms:2000}") val sourceTimeoutMs: Long,
 ) {
   typealias DataSource = String // e.g. "NDELIUS", "NOMIS" etc
 
