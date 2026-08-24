@@ -22,6 +22,11 @@ class NdeliusEligibilityDataProviderTest {
   private val executor = Executors.newSingleThreadExecutor()
   private val provider = NdeliusEligibilityDataProvider(ndiliusApiClient, executor)
 
+  @org.junit.jupiter.api.AfterEach
+  fun tearDown() {
+    executor.shutdownNow()
+  }
+
   @Test
   fun `sourceKey is NDELIUS`() {
     assertEquals("NDELIUS", provider.sourceKey)
