@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -284,7 +285,7 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList(), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
+    whenever(eligibilityChecker.check(any(), any())).doThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
 
     assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
@@ -359,7 +360,7 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).thenThrow(
+    whenever(eligibilityChecker.check(any(), any())).doThrow(
       ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "offender ineligible",
@@ -390,7 +391,7 @@ class OffenderSetupServiceTest {
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
     whenever(eligibilityChecker.check(any(), any()))
-      .thenThrow(EligibilityDataUnavailableException("SOME_CODE", "NDELIUS", RuntimeException("borked")))
+      .doThrow(EligibilityDataUnavailableException("SOME_CODE", "NDELIUS", RuntimeException("borked")))
 
     assertThrows(EligibilityDataUnavailableException::class.java) {
       service.completeOffenderSetup(setup.uuid)

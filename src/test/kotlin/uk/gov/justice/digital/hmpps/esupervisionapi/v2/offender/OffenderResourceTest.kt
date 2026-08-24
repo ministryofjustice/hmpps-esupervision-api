@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -644,7 +645,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(eligibilityChecker.check(any(), any()))
-      .thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "Contact suspended"))
+      .doThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "Contact suspended"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
