@@ -7,10 +7,10 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 
 /**
- * NDelius-backed eligibility data. [INdiliusApiClient.getContactDetails] already collapses
- * "not found" and (via its own circuit-breaker fallback) "NDelius unavailable" into a null
- * result - both surface here as null data points, which downstream rules evaluate the same
- * way a genuinely missing value would. Any exception the client itself throws (e.g. a 4xx/5xx
+ * NDelius-backed eligibility data. If [INdiliusApiClient.getContactDetails] returns null (either
+ * because the CRN wasn't found or because the client's circuit-breaker fallback was triggered),
+ * we treat that as a source fetch failure so the engine can surface a 503 rather than silently
+ * evaluating rules against missing data. Any exception the client itself throws (e.g. a 4xx/5xx
  * not covered by its fallback) propagates through this future to the engine.
  */
 @Service
