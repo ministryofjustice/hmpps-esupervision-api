@@ -49,9 +49,7 @@ insert into offender_eligibility_rule
    outcome_on_match, message_on_match, outcome_on_no_match, message_on_no_match, comment)
 values
   -- rules for default rule set are not final, and for illustrative purposes only, atm.
-  (1, 'IS_ALIVE', 'Is the person alive?', 'NDELIUS', 'DECEASED_DATE', 'IS_NULL', null,
-   'CONTINUE', null, 'NOT_ELIGIBLE', 'The person is deceased', null),
-  (2, 'HAS_ACTIVE_EVENT', 'Do they have an active sentence?', 'NDELIUS', 'ACTIVE_EVENT', 'IS_NOT_NULL', null,
+  (1, 'HAS_ACTIVE_EVENT', 'Do they have an active sentence?', 'NDELIUS', 'ACTIVE_EVENT', 'IS_NOT_NULL', null,
    'CONTINUE', null, 'NOT_ELIGIBLE', 'No active sentence.', null);
 
 insert into offender_eligibility_rule
