@@ -10,7 +10,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import java.util.concurrent.ExecutionException
-import java.util.concurrent.TimeoutException
 
 /**
  * A shim around the [EligibilityEvaluationEngine] meant to hide the differences between the
@@ -37,9 +36,8 @@ class EligibilityChecker(
               "NDELIUS" to java.util.concurrent.CompletableFuture.completedFuture(contactDetails.eligibilityData()),
             ),
           ).get() // we rely on the engine already having timeouts for each data provider
-      } catch (_: TimeoutException) {
-        throw ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Eligibility evaluation timed out")
       } catch (_: InterruptedException) {
+        Thread.currentThread().interrupt()
         throw ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Eligibility evaluation interrupted")
       } catch (e: ExecutionException) {
         throw (e.cause as? EligibilityDataUnavailableException)
