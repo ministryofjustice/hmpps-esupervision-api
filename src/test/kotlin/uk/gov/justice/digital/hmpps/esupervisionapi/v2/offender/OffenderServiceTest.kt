@@ -1,9 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
@@ -97,23 +97,26 @@ class OffenderServiceTest {
     assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
     assertEquals(tierDetails.tierScore, response.tierScore)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
-    assertEquals("NOT_FOUND", response.overallRisk)
+    assertNull(response.overallRisk)
   }
 
   @Test
-  fun `getHeaderDetails - contact details missing`() {
+  fun `getHeaderDetails - NDelius contact details client error`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(null)
+    whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
+    whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(riskWidget)
 
-    val exception = assertThrows(ResponseStatusException::class.java) {
-      val response = service.getHeaderDetails(crn)
-    }
+    val response = service.getHeaderDetails(crn)
 
-    assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
-    assertEquals("Could not verify contact details in NDelius for $crn.", exception.reason)
+    assertEquals(crn, response.crn)
+    assertNull(response.dateOfBirth)
+    assertEquals(tierDetails.tierScore, response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    assertEquals(riskWidget.overallRisk, response.overallRisk)
   }
 
   @Test
-  fun `getHeaderDetails - tier details missing`() {
+  fun `getHeaderDetails - tier details client error`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
     whenever(tierApiClient.getTierDetails(crn)).thenThrow(
       ResponseStatusException(
@@ -121,13 +124,15 @@ class OffenderServiceTest {
         "Could not verify tier details in Tier API for $crn.",
       ),
     )
+    whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(riskWidget)
 
-    val exception = assertThrows(ResponseStatusException::class.java) {
-      val response = service.getHeaderDetails(crn)
-    }
+    val response = service.getHeaderDetails(crn)
 
-    assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
-    assertEquals("Could not verify tier details in Tier API for $crn.", exception.reason)
+    assertEquals(crn, response.crn)
+    assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
+    assertNull(response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    assertEquals(riskWidget.overallRisk, response.overallRisk)
   }
 
   @Test
@@ -141,11 +146,12 @@ class OffenderServiceTest {
       ),
     )
 
-    val exception = assertThrows(ResponseStatusException::class.java) {
-      val response = service.getHeaderDetails(crn)
-    }
+    val response = service.getHeaderDetails(crn)
 
-    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
-    assertEquals("Could not verify tier details in Tier API for $crn.", exception.reason)
+    assertEquals(crn, response.crn)
+    assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
+    assertEquals(tierDetails.tierScore, response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    assertNull(response.overallRisk)
   }
 }

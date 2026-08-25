@@ -650,10 +650,10 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
 
 data class OffenderHeaderDetails(
   val crn: String,
-  val dateOfBirth: LocalDate,
-  val tierScore: String,
-  val tierDetailsLink: String,
-  val overallRisk: String,
+  val dateOfBirth: LocalDate?,
+  val tierScore: String?,
+  val tierDetailsLink: String?,
+  val overallRisk: String?,
 )
 
 /** Request to deactivate an offender */

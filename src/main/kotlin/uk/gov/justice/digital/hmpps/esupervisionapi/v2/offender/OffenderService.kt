@@ -24,47 +24,31 @@ class OffenderService(
           HttpStatus.NOT_FOUND,
           "Could not verify contact details in NDelius for $crn.",
         )
-    } catch (e: ResponseStatusException) {
-      throw e
     } catch (e: Exception) {
       LOGGER.error("Failed to fetch contact details from NDelius for CRN: $crn", e)
-      throw ResponseStatusException(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Could not verify contact details in NDelius for $crn.",
-      )
+      null
     }
 
     val tierDetails = try {
       tierApiClient.getTierDetails(crn) ?: throw Exception()
-    } catch (e: ResponseStatusException) {
-      throw e
     } catch (e: Exception) {
       LOGGER.error("Failed to fetch tier details from Tier API for CRN: $crn", e)
-      throw ResponseStatusException(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Could not verify tier details in Tier API for $crn.",
-      )
+      null
     }
 
     val arnsWidget = try {
       arnsApiClient.getRiskWidget(crn) ?: throw Exception()
-    } catch (e: ResponseStatusException) {
-      throw e
     } catch (e: Exception) {
       LOGGER.error("Failed to fetch risk widget from ARNS API for CRN: $crn", e)
-      throw ResponseStatusException(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Could not verify risk widget in ARNS API for $crn.",
-        e,
-      )
+      null
     }
 
     return OffenderHeaderDetails(
       crn = crn,
-      dateOfBirth = contactDetails.dateOfBirth,
-      tierScore = tierDetails.tierScore,
+      dateOfBirth = contactDetails?.dateOfBirth,
+      tierScore = tierDetails?.tierScore,
       tierDetailsLink = "$tierUiBaseUri/case/$crn",
-      overallRisk = arnsWidget.overallRisk ?: "NOT_FOUND",
+      overallRisk = arnsWidget?.overallRisk,
     )
   }
 
