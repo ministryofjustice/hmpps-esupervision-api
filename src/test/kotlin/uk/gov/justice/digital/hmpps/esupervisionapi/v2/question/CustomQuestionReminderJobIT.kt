@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -119,6 +120,8 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
     job.process()
     verify(notificationService, times(1))
       .sendPractitionerCustomQuestionsReminder(argThat { info -> info.contactDetails.crn == "A000003" })
+    verify(notificationService, never())
+      .sendPractitionerCustomQuestionsReminder(argThat { info -> info.contactDetails.crn != "A000003" })
 
     (clock as MutableTestClock).advanceBy(Duration.ofDays(1))
     reset(notificationService)

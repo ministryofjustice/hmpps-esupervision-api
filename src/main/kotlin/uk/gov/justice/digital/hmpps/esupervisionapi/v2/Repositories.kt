@@ -82,7 +82,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   /**
    * Find offenders whose next checkin due date matches specific offsets from :today
    * - Status = VERIFIED
-   * - Next checkin due date matches (today + 1) OR (today + 4)
+   * - Next checkin due date matches (today + 4)
    * - No reminder sent yet for the next checkin
    * - No (upcoming) question list assignment for the offender exists
    */
