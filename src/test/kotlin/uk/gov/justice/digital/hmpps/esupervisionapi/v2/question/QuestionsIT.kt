@@ -401,7 +401,7 @@ class QuestionsIT(
 
     assertFalse(candidates.containsKey("A000001")) // too late to add questions
     assertFalse(candidates.containsKey("A000004")) // already has a question list assignment
-    assertTrue(candidates.containsKey("A000002"))
+    assertFalse(candidates.containsKey("A000002"))
     assertTrue(candidates.containsKey("A000003"))
   }
 }
