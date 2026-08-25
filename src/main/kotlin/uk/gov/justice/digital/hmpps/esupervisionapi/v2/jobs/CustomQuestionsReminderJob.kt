@@ -42,7 +42,7 @@ private data class OffenderInfo(
 
 /**
  * Job to send reminders to practitioners about adding custom questions to upcoming checkins.
- * Reminders are sent 1 day or 4 days before the checkin's due date.
+ * Reminders are sent 4 days before the checkin's due date.
  */
 @Component
 @ConditionalOnProperty(
