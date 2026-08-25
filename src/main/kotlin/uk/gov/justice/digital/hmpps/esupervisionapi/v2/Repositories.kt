@@ -82,7 +82,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   /**
    * Find offenders whose next checkin due date matches specific offsets from :today
    * - Status = VERIFIED
-   * - Next checkin due date matches (today + 1) OR (today + 4)
+   * - Next checkin due date matches (today + 4)
    * - No reminder sent yet for the next checkin
    * - No (upcoming) question list assignment for the offender exists
    */
@@ -99,11 +99,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
                      and gn.created_at >= :reminderWindowStart
           where o.status = 'VERIFIED'
           and o.first_checkin != :today
-          and (
-          MOD(CAST(((cast(:today as date) + '1 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
-              or
-          MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
-          )
+          and (MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
       )
       select * from the_offenders
       where question_list_assignment_id is null and generic_notification_id is null;
