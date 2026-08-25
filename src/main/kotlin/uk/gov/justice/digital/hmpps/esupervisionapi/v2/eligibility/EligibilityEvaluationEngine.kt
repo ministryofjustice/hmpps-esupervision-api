@@ -95,9 +95,11 @@ class EligibilityEvaluationEngine(
       return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null))
     }
     val rule = rules[index]
-    val sourceFuture = fetchCache
-      .getOrFetch(rule.source, crn)
-      .orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
+    val sourceFuture = try {
+      fetchCache.getOrFetch(rule.source, crn).orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
+    } catch (e: Exception) {
+      return CompletableFuture.failedFuture(e)
+    }
 
     return sourceFuture
       .thenCompose { sourceData ->
