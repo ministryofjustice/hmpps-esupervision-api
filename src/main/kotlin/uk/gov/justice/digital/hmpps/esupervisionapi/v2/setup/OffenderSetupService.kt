@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
@@ -171,7 +172,11 @@ class OffenderSetupService(
     // reset). We only block when NDelius details are available - a transient fetch failure must not
     // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
     if (contactDetails != null) {
-      eligibilityChecker.check(offender, contactDetails)
+      try {
+        eligibilityChecker.check(offender, contactDetails)
+      } catch (e: EligibilityDataUnavailableException) {
+        LOGGER.info("Eligibility data unavailable for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
+      }
     }
 
     val now = clock.instant()
