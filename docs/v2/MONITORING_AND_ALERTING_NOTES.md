@@ -42,7 +42,7 @@ You can find the events we emit by looking up the `TelemetryEvent` enum and sear
 
 ### Application Insights Severity Levels
 
-Severity levels are [defined][severity] lik this: `Alert severity (0=Critical, 1=Error, 2=Warning, 3=Informational, 4=Verbose)`
+Severity levels are [defined][severity] like this: `Alert severity (0=Critical, 1=Error, 2=Warning, 3=Informational, 4=Verbose)`
 
 
 [azure-access]: https://dsdmoj.atlassian.net/wiki/spaces/DSTT/pages/3897131056/DSO+Self-service+-+create+HMPPS+nomsdigitech+Azure+tenant+account
