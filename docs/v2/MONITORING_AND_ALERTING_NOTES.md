@@ -26,8 +26,7 @@ See [Custom Alerts README][custom] for more information about how to set them up
 
 ## Slack integration
 
-To receive the alerts on the alerts slack channel, the bot needs to have access to it:
-
+To receive these alerts in the Slack alerts channel, the bot needs access to it:
 ```
 /invite @hmpps-sre-relay-bot
 ```
