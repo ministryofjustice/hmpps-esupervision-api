@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
@@ -40,7 +41,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
@@ -375,7 +375,7 @@ class OffenderSetupServiceTest {
   }
 
   @Test
-  fun `completeOffenderSetup - return error when eligibility engine's source data is unavailable`() {
+  fun `completeOffenderSetup - do not block the setup when eligibility engine's source data is unavailable`() {
     val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
     val setup = OffenderSetup(
       uuid = UUID.randomUUID(),
@@ -390,14 +390,15 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any()))
-      .doThrow(EligibilityDataUnavailableException("SOME_CODE", "NDELIUS", RuntimeException("borked")))
+    whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any())).thenReturn(
+      OffenderSetupPersistenceService.Result(checkin = null),
+    )
 
-    assertThrows(EligibilityDataUnavailableException::class.java) {
+    assertDoesNotThrow {
       service.completeOffenderSetup(setup.uuid)
     }
     verify(offenderRepository, never()).save(any())
-    verify(notificationService, never()).sendSetupCompletedNotifications(any(), any(), any())
+    verify(notificationService, times(1)).sendSetupCompletedNotifications(any(), any(), any())
   }
 
   @Test
