@@ -393,6 +393,9 @@ class OffenderSetupServiceTest {
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any())).thenReturn(
       OffenderSetupPersistenceService.Result(checkin = null),
     )
+    whenever(eligibilityChecker.check(any(), any())).doThrow(
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException("RULE", "NDELIUS", RuntimeException("NDelius down")),
+    )
 
     assertDoesNotThrow {
       service.completeOffenderSetup(setup.uuid)
