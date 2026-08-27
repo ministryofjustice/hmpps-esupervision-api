@@ -10,5 +10,5 @@ class AsyncConfiguration {
   /** Backs [uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataProvider]
    *  implementations that wrap blocking client calls in a [java.util.concurrent.CompletableFuture]. */
   @Bean
-  fun eligibilityDataFetchExecutor(): ExecutorService = Executors.newFixedThreadPool(4)
+  fun eligibilityDataFetchExecutor(): ExecutorService = Executors.newFixedThreadPool(20)
 }
