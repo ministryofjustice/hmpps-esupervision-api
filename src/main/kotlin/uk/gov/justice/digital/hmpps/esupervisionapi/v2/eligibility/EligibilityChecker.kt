@@ -45,7 +45,7 @@ class EligibilityChecker(
       }
       LOGGER.info("Eligibility evaluation for {} result: {}", offender.crn, result)
       if (result.outcome == EligibilityCheckOutcome.INELIGIBLE) {
-        ineligibilityMessage = result.message
+        ineligibilityMessage = result.message ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"} failed"
       }
     } else {
       val ineligibility = checkinIneligibilityReason(offender, contactDetails)
