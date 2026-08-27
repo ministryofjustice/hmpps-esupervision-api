@@ -92,7 +92,10 @@ class CheckinNoteResendService(
         OffenderEventLog(
           comment = buildNotes(checkin),
           sensitive = checkin.sensitive,
-          createdAt = clock.instant(),
+          // Date the corrective note to the original submission, not "now", so NDelius (via
+          // EventDetailResponse.timestamp = annotation.createdAt) sorts it into the past instead of
+          // surfacing it as the "latest update" in MPoP. The resend time is recorded on row.sentAt.
+          createdAt = checkin.submittedAt ?: checkin.createdAt,
           logEntryType = LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
           practitioner = "SYSTEM",
           uuid = UUID.randomUUID(),
