@@ -147,3 +147,5 @@ databaseChangeLog:
       file: db/changelog/changesets/73_add_checkin_image_retention.sql
   - include:
       file: db/changelog/changesets/74_offender_eligibility_rules.sql
+  - include:
+      file: db/changelog/changesets/75_new_job_type.sql
