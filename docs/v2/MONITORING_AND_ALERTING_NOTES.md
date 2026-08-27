@@ -24,6 +24,16 @@ Unfortunately the query that we need to use for slack alerts uses sligthly diffe
 
 See [Custom Alerts README][custom] for more information about how to set them up, and look at our [API custom alerts][api-custom].
 
+## Slack integration
+
+To receive these alerts in the Slack alerts channel, the bot needs access to it:
+```
+/invite @hmpps-sre-relay-bot
+```
+
+To debug problems with slack alerts, the channel `#hmpps-app-insights-alerts-dev` can be useful (e.g. it shows whether
+the custom alert fired and if it was routed correctly).
+
 ## Our custom events
 
 You can find the events we emit by looking up the `TelemetryEvent` enum and searching for usage of `TelemetryService.track()`.
@@ -32,14 +42,7 @@ You can find the events we emit by looking up the `TelemetryEvent` enum and sear
 
 ### Application Insights Severity Levels
 
-| Name | Value | Description |
-| --- | --- | --- |
-| Verbose | 0 | Verbose severity level. |
-| Information | 1 | Information severity level. |
-| Warning | 2 | Warning severity level. |
-| Error | 3 | Error severity level. |
-| Critical | 4 | Critical severity level. |
-
+Severity levels are [defined][severity] like this: `Alert severity (0=Critical, 1=Error, 2=Warning, 3=Informational, 4=Verbose)`
 
 
 [azure-access]: https://dsdmoj.atlassian.net/wiki/spaces/DSTT/pages/3897131056/DSO+Self-service+-+create+HMPPS+nomsdigitech+Azure+tenant+account
@@ -47,3 +50,4 @@ You can find the events we emit by looking up the `TelemetryEvent` enum and sear
 [log query]:https://learn.microsoft.com/en-us/azure/azure-monitor/logs/log-query-overview
 [azure]: https://portal.azure.com/#view/Microsoft_OperationsManagementSuite_Workspace/Logs.ReactView/resourceId/%2Fsubscriptions%2Fc27cfedb-f5e9-45e6-9642-0fad1a5c94e7%2FresourceGroups%2Fnomisapi-t3-rg%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2Fnomisapi-t3/source/LogsBlade.AnalyticsShareLinkToQuery/q/H4sIAAAAAAAAA0XLPQ6AIAxA4d1TEBcmvIGbrg5ewDTQaBMLhAIuHt6%252Fwfm9zxbJgceKPktzqmPDhMruobhlDjtOwKj6Xm8coxgojrKBSPpfXz8QoxcKXjrBVMk%252BSLWfYvCwoil3kfYC23BX63AAAAA%253D/timespan/P1D
 [api-custom]: https://github.com/ministryofjustice/hmpps-application-insights-alerts/blob/main/custom_alerts/dev/hmpps-esupervision-api.tf
+[severity]:https://github.com/ministryofjustice/hmpps-application-insights-alerts/blob/main/modules/generic_alert/variables.tf#L61
