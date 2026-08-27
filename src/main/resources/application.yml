@@ -70,6 +70,7 @@ app:
     esup-1239: true
     # remove the checkin snapshot if the manual id check confirms it is a match without concern
     esup-1763: ${APP_FEATURES_ESUP_1763:false}
+    esup-2082: ${APP_FEATURES_ESUP_2082:false}
   offender-survey:
     # expand form values into human-readable strings in NDelius notes
     expansions:
@@ -93,6 +94,10 @@ app:
       otherSupport: "What they want us to know about (something else)"
       callback: "If they need us to contact them before their next appointment"
       callbackDetails: "What they want to talk about"
+  offender-eligibility:
+    rule-set: ${APP_OFFENDER_ELIGIBILITY_RULE_SET:PILOT_2026_08}
+    # How long we wait before timing out the source request
+    source-timeout-ms: ${APP_OFFENDER_ELIGIBILITY_SOURCE_TIMEOUT_MS:2000}
 
 spring:
   application:
