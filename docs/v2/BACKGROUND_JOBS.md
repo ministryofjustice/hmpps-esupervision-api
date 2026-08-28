@@ -152,6 +152,26 @@ Uses existing `shedlock` table shared with V1 jobs.
 
 ---
 
+## Batch-mode Jobs (K8s CronJob)
+
+Newer jobs run as one-shot K8s CronJob pods instead of `@Scheduled`/ShedLock in the
+long-running web pods — see `docs/HELM-AND-K8s-CRON-JOBS` for the full rationale.
+`OffenderEligibilitySyncJob` (`v2/jobs/OffenderEligibilitySyncJob.kt`) is the first job
+on this path; its body is currently a `TODO` and its CronJob is deployed `suspend: true`.
+
+- The pod is started with `BATCH_ENABLED=true` and `BATCH_TYPE=<name>` (from
+  `helm_deploy/hmpps-esupervision-api/values.yaml`'s `batchjobs[]`).
+- `BatchManager` (`jobs/batch/BatchManager.kt`) listens for `ContextRefreshedEvent`,
+  resolves `BATCH_TYPE` against the `BatchType` enum, dispatches to the matching job's
+  `process()`, then exits the pod via `SpringApplication.exit`.
+- No `@Scheduled`/`@SchedulerLock` — the CronJob's `concurrencyPolicy: Forbid` already
+  gives the single-run guarantee ShedLock provides for `@Scheduled` jobs.
+- To add a job on this path: give it a `process()` method (same shape as any job above,
+  including `JobLogV2` bookkeeping), add a constructor param + `when` branch to
+  `BatchManager`, add a `BatchType` entry, and register it in `values.yaml`'s `batchjobs[]`.
+
+---
+
 ## Job Logging
 
 Each job run creates a record in `job_log_v2`:

@@ -17,6 +17,7 @@ class JobControlResource(
   private val checkinExpiryJob: CheckinExpiryJob,
   private val customQuestionsReminderJob: CustomQuestionsReminderJob,
   private val checkinImageRetentionJob: CheckinImageRetentionJob,
+  private val offenderEligibilitySyncJob: OffenderEligibilitySyncJob,
 ) {
 
   @PostMapping("/checkin-creation")
@@ -45,5 +46,12 @@ class JobControlResource(
   @Operation(summary = "Trigger Checkin Image Retention Job")
   fun triggerCheckinImageRetention() {
     checkinImageRetentionJob.process()
+  }
+
+  @PostMapping("/offender-eligibility-sync")
+  @PreAuthorize("permitAll()")
+  @Operation(summary = "Trigger Offender Eligibility Sync Job")
+  fun triggerOffenderEligibilitySync() {
+    offenderEligibilitySyncJob.process()
   }
 }

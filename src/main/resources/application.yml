@@ -19,6 +19,11 @@ app:
   apiBaseUrl: ${API_BASE_URL}
   # how long should the presigned S3 URLs be valid for?
   upload-ttl-minutes: 10
+  # Set by the K8s CronJob batch-mode pods (see docs/HELM-AND-K8s-CRON-JOBS); jobs on this
+  # path run to completion and exit instead of being @Scheduled in the long-running web pods.
+  batch:
+    enabled: ${BATCH_ENABLED:false}
+    type: ${BATCH_TYPE:}
   scheduling:
     checkin-notification:
       # How long, starting from dueDate, do we accept checkin submissions.
