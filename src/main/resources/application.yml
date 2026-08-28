@@ -36,6 +36,10 @@ app:
     v2-checkin-reminder:
       cron: "0 0 9 * * *"  # Same time as initial checkin notification
       chunk-size: 100
+    # Re-evaluates every VERIFIED offender against the active eligibility rule set and
+    # deactivates anyone no longer eligible. Runs via BatchManager/K8s CronJob, not @Scheduled.
+    v2-offender-eligibility-sync:
+      chunk-size: 100
     v2-practitioner-custom-questions-reminder:
       cron: "0 15 8 * * *"
       enabled: true

@@ -79,6 +79,27 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     override val currentEvent: Long?
   }
 
+  @Query(
+    value = """
+    SELECT o.id as id, o.crn as crn
+    FROM offender_v2 o
+    WHERE o.status = 'VERIFIED'
+      AND o.id > coalesce(:lastOffenderId, 0)
+    ORDER BY o.id
+    FETCH FIRST :chunkSize ROWS ONLY
+    """,
+    nativeQuery = true,
+  )
+  fun findVerifiedForEligibilitySync(
+    chunkSize: Int = 100,
+    lastOffenderId: Long? = null,
+  ): List<IOffenderEligibilitySyncInfo>
+
+  interface IOffenderEligibilitySyncInfo {
+    val id: Long
+    val crn: CRN
+  }
+
   /**
    * Find offenders whose next checkin due date matches specific offsets from :today
    * - Status = VERIFIED

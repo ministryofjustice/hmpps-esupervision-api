@@ -4,6 +4,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.Index
 import jakarta.persistence.Table
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.persistence.V2BaseEntity
 import java.time.Instant
@@ -72,6 +73,53 @@ open class OffenderEligibilityRule(
 
   @Column(name = "comment", nullable = true)
   open var comment: String? = null,
+
+  /**
+   * Name of the [uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType] to
+   * record (and whose deliusOutcomeCode to send) when this rule terminates evaluation with
+   * NOT_ELIGIBLE. Only meaningful on rules that can produce that outcome; null otherwise.
+   */
+  @Column(name = "audit_event_type", nullable = true)
+  open var auditEventType: String? = null,
+
+  @Column(name = "created_at", nullable = false)
+  open var createdAt: Instant,
+
+  @Column(name = "updated_at", nullable = false)
+  open var updatedAt: Instant,
+) : V2BaseEntity()
+
+/**
+ * The last-known eligibility check outcome for an offender under a given rule set. One row per
+ * (offender, rule set) - upserted on every sync job run so re-running the job is idempotent and
+ * the outcome always reflects the most recent check.
+ */
+@Entity
+@Table(
+  name = "offender_eligibility_check",
+  indexes = [
+    Index(name = "idx_offender_eligibility_check_offender", columnList = "offender_id", unique = false),
+  ],
+)
+open class OffenderEligibilityCheck(
+  @Column(name = "offender_id", nullable = false)
+  open var offenderId: Long,
+
+  @Column(name = "rule_set", nullable = false)
+  open var ruleSet: String,
+
+  @Column(name = "outcome", nullable = false)
+  @Enumerated(EnumType.STRING)
+  open var outcome: EligibilityCheckOutcome,
+
+  @Column(name = "message", nullable = true)
+  open var message: String? = null,
+
+  @Column(name = "triggered_rule_code", nullable = true)
+  open var triggeredRuleCode: String? = null,
+
+  @Column(name = "checked_at", nullable = false)
+  open var checkedAt: Instant,
 
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,

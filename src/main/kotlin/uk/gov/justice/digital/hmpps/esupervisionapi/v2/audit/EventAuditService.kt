@@ -38,6 +38,14 @@ enum class OffenderAuditEventType(val deliusOutcomeCode: String? = null) {
 
   /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
   OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA"),
+
+  /**
+   * Fallback automated deactivation used by [uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.OffenderEligibilitySyncJob]
+   * when the triggered [uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligibilityRule]
+   * has no `auditEventType` configured. The "ESPIN" code is a placeholder pending confirmation
+   * with the NDelius/product team.
+   */
+  OFFENDER_AUTO_DEACTIVATED_INELIGIBLE("ESPIN"),
 }
 
 enum class CheckinAuditEventType {
@@ -222,6 +230,7 @@ class EventAuditService(
       OffenderAuditEventType.OFFENDER_DEACTIVATED,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
       -> buildAudit(
         eventType.name,
         offender.crn,

@@ -10,6 +10,14 @@ import java.util.concurrent.TimeUnit
 enum class EligibilityCheckOutcome {
   ELIGIBLE,
   INELIGIBLE,
+
+  /**
+   * Not returned by [EligibilityEvaluationEngine.evaluate] itself - it throws
+   * [EligibilityDataUnavailableException] instead so callers don't mistake a data gap for a
+   * verdict. Reserved for persisted-outcome callers (e.g. the eligibility sync job) that need a
+   * single enum covering "couldn't tell" alongside ELIGIBLE/INELIGIBLE.
+   */
+  DATA_UNAVAILABLE,
 }
 
 data class EligibilityResult(
