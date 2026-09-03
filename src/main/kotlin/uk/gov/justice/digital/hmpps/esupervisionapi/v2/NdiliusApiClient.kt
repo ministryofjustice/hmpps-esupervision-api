@@ -27,6 +27,13 @@ private data class NdiliusContactDetailsUpdateBody(
   val emailAddress: String?,
 )
 
+/**
+ * Wire shape returned by esupervision-and-delius's GET /user/{username}/alerts.
+ */
+private data class NdiliusAlertsResponse(
+  val count: Int,
+)
+
 interface INdiliusApiClient {
   fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
 
@@ -41,6 +48,12 @@ interface INdiliusApiClient {
    * NOTE: depends on PI-4356 (esupervision-and-delius PUT /case/{crn}/contact-details), not yet live.
    */
   fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse
+
+  /**
+   * Get the number of alerts for a practitioner by NDelius username.
+   * Returns null if the username is not found.
+   */
+  fun getAlertCount(username: String): Int?
 
   companion object {
     const val MAX_BATCH_SIZE = 500
@@ -81,21 +94,26 @@ class NdiliusApiClient(
       null
     } catch (e: WebClientResponseException) {
       LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(
-          e.statusCode,
-          "Could not verify contact details in NDelius for $crn.",
-          e,
-        )
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
-      )
+      rethrowAs4xxOrPropagate(e, "Could not verify contact details in NDelius for $crn.")
     } catch (e: Exception) {
       LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
     }
+  }
+
+  /**
+   * Client (4xx) errors from NDelius are translated to a [ResponseStatusException] with the same
+   * status immediately, since they're never retried/recorded by resilience4j anyway (see
+   * ignore-exceptions/record-exceptions in application.yml). Anything else (5xx, timeouts) is
+   * rethrown unchanged so the @Retry/@CircuitBreaker AOP wrapping this method - which matches on
+   * the exception type that actually escapes - can retry/record it and route to the fallback
+   * method once retries are exhausted.
+   */
+  private fun rethrowAs4xxOrPropagate(e: WebClientResponseException, clientErrorMessage: String): Nothing {
+    if (e.statusCode.is4xxClientError) {
+      throw ResponseStatusException(e.statusCode, clientErrorMessage, e)
+    }
+    throw e
   }
 
   private fun getContactDetailsFallback(crn: String, e: Exception): ContactDetails? {
@@ -181,13 +199,7 @@ class NdiliusApiClient(
       throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.", e)
     } catch (e: WebClientResponseException) {
       LOGGER.warn("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(e.statusCode, "Could not update contact details in NDelius for $crn.", e)
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst updating the contact details in NDelius for $crn.",
-      )
+      rethrowAs4xxOrPropagate(e, "Could not update contact details in NDelius for $crn.")
     } catch (e: Exception) {
       LOGGER.error("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
@@ -234,6 +246,41 @@ class NdiliusApiClient(
   private fun validatePersonalDetailsFallback(personalDetails: PersonalDetails, e: Exception): Boolean {
     LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "validatePersonalDetails, crn=${personalDetails.crn}"))
     return false
+  }
+
+  /**
+   * Get the number of alerts for a practitioner by NDelius username
+   * GET /user/{username}/alerts
+   */
+  @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getAlertCountFallback")
+  @Retry(name = "ndiliusApi")
+  @Timed("ndelius.get-alert-count", extraTags = ["method", "GET", "endpoint", "/user/{username}/alerts"], description = "Time taken to get alert count")
+  override fun getAlertCount(username: String): Int? {
+    LOGGER.info("Fetching alert count for username: {}", username)
+
+    return try {
+      ndiliusApiWebClient.get()
+        .uri("/user/{username}/alerts", username)
+        .retrieve()
+        .bodyToMono(NdiliusAlertsResponse::class.java)
+        .block()
+        ?.count
+        ?: throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Empty response whilst fetching alerts in NDelius for $username.")
+    } catch (e: WebClientResponseException.NotFound) {
+      LOGGER.warn("Alerts not found for username: {}", username)
+      null
+    } catch (e: WebClientResponseException) {
+      LOGGER.warn("Error fetching alert count for username {}: {}", username, PiiSanitizer.sanitizeException(e))
+      rethrowAs4xxOrPropagate(e, "Could not fetch alerts in NDelius for $username.")
+    } catch (e: Exception) {
+      LOGGER.error("Error fetching alert count for username {}: {}", username, PiiSanitizer.sanitizeException(e))
+      throw e
+    }
+  }
+
+  private fun getAlertCountFallback(username: String, e: Exception): Int? {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getAlertCount, username=$username"))
+    return null
   }
 
   companion object {

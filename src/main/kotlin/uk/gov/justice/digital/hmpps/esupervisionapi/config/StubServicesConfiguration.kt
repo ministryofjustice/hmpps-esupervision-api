@@ -52,8 +52,8 @@ class StubServicesConfiguration {
 }
 
 /**
- * This stub client takes CRNs from the file observed by StubDataWatcher and returns
- * generated data if given CRN is found in the file.
+ * This stub client takes CRNs and NDelius usernames from the file observed by StubDataWatcher
+ * and returns generated data if the given CRN/username is found in the file.
  *
  * The file can be edited at runtime and will be automatically reloaded.
  */
@@ -108,6 +108,15 @@ open class StubNdiliusApiClient(
       mobile = request.mobile ?: existing?.mobile,
       email = request.email ?: existing?.email,
     )
+  }
+
+  override fun getAlertCount(username: String): Int? {
+    LOG.debug("Fetching alert count for username: {}", username)
+    if (!watcher.allowedUsernames.contains(username)) {
+      LOG.debug("Username {} not found in allowed list", username)
+      return null
+    }
+    return username.hashCode().mod(5)
   }
 
   companion object {
