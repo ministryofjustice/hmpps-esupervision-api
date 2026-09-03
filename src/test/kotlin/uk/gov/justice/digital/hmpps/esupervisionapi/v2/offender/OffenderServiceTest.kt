@@ -116,6 +116,7 @@ class OffenderServiceTest {
     assertEquals(riskWidget.overallRisk, response.overallRisk)
     assertEquals("dateOfBirth", response.errors[0].field)
     assertEquals("SERVICE_UNAVAILABLE", response.errors[0].message)
+    assertEquals(1, response.errors.size)
   }
 
   @Test
@@ -138,6 +139,7 @@ class OffenderServiceTest {
     assertEquals(riskWidget.overallRisk, response.overallRisk)
     assertEquals("tierScore", response.errors[0].field)
     assertEquals("NOT_FOUND", response.errors[0].message)
+    assertEquals(1, response.errors.size)
   }
 
   @Test
@@ -160,6 +162,7 @@ class OffenderServiceTest {
     assertEquals(riskWidget.overallRisk, response.overallRisk)
     assertEquals("tierScore", response.errors[0].field)
     assertEquals("SERVICE_UNAVAILABLE", response.errors[0].message)
+    assertEquals(1, response.errors.size)
   }
 
   @Test
@@ -199,6 +202,7 @@ class OffenderServiceTest {
     assertNull(response.overallRisk)
     assertEquals("overallRisk", response.errors[0].field)
     assertEquals("NOT_FOUND", response.errors[0].message)
+    assertEquals(1, response.errors.size)
   }
 
   @Test
@@ -221,6 +225,7 @@ class OffenderServiceTest {
     assertNull(response.overallRisk)
     assertEquals("overallRisk", response.errors[0].field)
     assertEquals("SERVICE_UNAVAILABLE", response.errors[0].message)
+    assertEquals(1, response.errors.size)
   }
 
   @Test
@@ -257,5 +262,6 @@ class OffenderServiceTest {
     assertEquals("SERVICE_UNAVAILABLE", response.errors[1].message)
     assertEquals("overallRisk", response.errors[2].field)
     assertEquals("SERVICE_UNAVAILABLE", response.errors[2].message)
+    assertEquals(3, response.errors.size)
   }
 }
