@@ -32,13 +32,14 @@ class PractitionerResource(
   fun getAlertsByUsername(
     @Parameter(description = "NDelius username", required = true) @PathVariable username: String,
   ): ResponseEntity<AlertsSummary> {
-    val count = ndiliusApiClient.getAlertCount(username)
+    val trimmedUsername = username.trim()
+    val count = ndiliusApiClient.getAlertCount(trimmedUsername)
     if (count == null) {
-      LOGGER.info("Alerts not found for username: {}", username)
+      LOGGER.info("Alerts not found for username: {}", trimmedUsername)
       return ResponseEntity.notFound().build()
     }
 
-    LOGGER.info("Retrieved alert count for username: {}", username)
+    LOGGER.info("Retrieved alert count for username: {}", trimmedUsername)
     return ResponseEntity.ok(AlertsSummary(count = count))
   }
 

@@ -94,21 +94,26 @@ class NdiliusApiClient(
       null
     } catch (e: WebClientResponseException) {
       LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(
-          e.statusCode,
-          "Could not verify contact details in NDelius for $crn.",
-          e,
-        )
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
-      )
+      rethrowAs4xxOrPropagate(e, "Could not verify contact details in NDelius for $crn.")
     } catch (e: Exception) {
       LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
     }
+  }
+
+  /**
+   * Client (4xx) errors from NDelius are translated to a [ResponseStatusException] with the same
+   * status immediately, since they're never retried/recorded by resilience4j anyway (see
+   * ignore-exceptions/record-exceptions in application.yml). Anything else (5xx, timeouts) is
+   * rethrown unchanged so the @Retry/@CircuitBreaker AOP wrapping this method - which matches on
+   * the exception type that actually escapes - can retry/record it and route to the fallback
+   * method once retries are exhausted.
+   */
+  private fun rethrowAs4xxOrPropagate(e: WebClientResponseException, clientErrorMessage: String): Nothing {
+    if (e.statusCode.is4xxClientError) {
+      throw ResponseStatusException(e.statusCode, clientErrorMessage, e)
+    }
+    throw e
   }
 
   private fun getContactDetailsFallback(crn: String, e: Exception): ContactDetails? {
@@ -194,13 +199,7 @@ class NdiliusApiClient(
       throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.", e)
     } catch (e: WebClientResponseException) {
       LOGGER.warn("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(e.statusCode, "Could not update contact details in NDelius for $crn.", e)
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst updating the contact details in NDelius for $crn.",
-      )
+      rethrowAs4xxOrPropagate(e, "Could not update contact details in NDelius for $crn.")
     } catch (e: Exception) {
       LOGGER.error("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
@@ -271,23 +270,17 @@ class NdiliusApiClient(
       LOGGER.warn("Alerts not found for username: {}", username)
       null
     } catch (e: WebClientResponseException) {
-      LOGGER.warn("Error fetching alert count: {}", PiiSanitizer.sanitizeException(e, username))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(e.statusCode, "Could not fetch alerts in NDelius for $username.", e)
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst fetching alerts in NDelius for $username.",
-      )
+      LOGGER.warn("Error fetching alert count for username {}: {}", username, PiiSanitizer.sanitizeException(e))
+      rethrowAs4xxOrPropagate(e, "Could not fetch alerts in NDelius for $username.")
     } catch (e: Exception) {
-      LOGGER.error("Error fetching alert count: {}", PiiSanitizer.sanitizeException(e, username))
+      LOGGER.error("Error fetching alert count for username {}: {}", username, PiiSanitizer.sanitizeException(e))
       throw e
     }
   }
 
   private fun getAlertCountFallback(username: String, e: Exception): Int? {
     LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getAlertCount, username=$username"))
-    throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Encountered an issue whilst fetching alerts in NDelius for $username.")
+    return null
   }
 
   companion object {

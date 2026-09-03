@@ -23,6 +23,8 @@ class StubDataWatcher(val path: Path) {
   data class DataConfig(
     /** The CRNs we want to accept/handle in our service */
     val crns: Set<String> = emptySet(),
+    /** The NDelius usernames we want to accept/handle in our service */
+    val usernames: Set<String> = emptySet(),
   )
 
   data class WatchInfo(
@@ -34,6 +36,9 @@ class StubDataWatcher(val path: Path) {
 
   @Volatile
   var allowedCrns: Set<String> = emptySet()
+
+  @Volatile
+  var allowedUsernames: Set<String> = emptySet()
 
   @Volatile
   var keepWatchingChanges = true
@@ -114,7 +119,8 @@ class StubDataWatcher(val path: Path) {
     try {
       val wrapper = objectMapper.readValue<DataConfig>(path.toFile())
       allowedCrns = wrapper.crns
-      LOG.info("Loaded {} CRNs from {}", allowedCrns.size, path)
+      allowedUsernames = wrapper.usernames
+      LOG.info("Loaded {} CRNs and {} usernames from {}", allowedCrns.size, allowedUsernames.size, path)
     } catch (ex: Exception) {
       LOG.error("Failed to parse personalDetails from {}: {}", path, ex.message)
     }

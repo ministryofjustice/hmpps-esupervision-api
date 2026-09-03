@@ -52,8 +52,8 @@ class StubServicesConfiguration {
 }
 
 /**
- * This stub client takes CRNs from the file observed by StubDataWatcher and returns
- * generated data if given CRN is found in the file.
+ * This stub client takes CRNs and NDelius usernames from the file observed by StubDataWatcher
+ * and returns generated data if the given CRN/username is found in the file.
  *
  * The file can be edited at runtime and will be automatically reloaded.
  */
@@ -112,9 +112,8 @@ open class StubNdiliusApiClient(
 
   override fun getAlertCount(username: String): Int? {
     LOG.debug("Fetching alert count for username: {}", username)
-    // Magic sentinel to let local/UI testing exercise the 404 path, since there's no
-    // file-watcher-backed allow-list for usernames like there is for CRNs.
-    if (username == "unknown.user") {
+    if (!watcher.allowedUsernames.contains(username)) {
+      LOG.debug("Username {} not found in allowed list", username)
       return null
     }
     return username.hashCode().mod(5)
