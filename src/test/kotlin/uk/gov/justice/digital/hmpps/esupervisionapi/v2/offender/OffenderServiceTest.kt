@@ -81,6 +81,7 @@ class OffenderServiceTest {
     assertEquals(tierDetails.tierScore, response.tierScore)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertEquals(riskWidget.overallRisk, response.overallRisk)
+    assertEquals(0, response.errors.size)
   }
 
   @Test
