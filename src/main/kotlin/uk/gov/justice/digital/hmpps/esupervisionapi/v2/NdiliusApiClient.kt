@@ -265,7 +265,8 @@ class NdiliusApiClient(
         .retrieve()
         .bodyToMono(NdiliusAlertsResponse::class.java)
         .block()
-        ?.count ?: 0
+        ?.count
+        ?: throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Empty response whilst fetching alerts in NDelius for $username.")
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Alerts not found for username: {}", username)
       null

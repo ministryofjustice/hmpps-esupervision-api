@@ -112,6 +112,11 @@ open class StubNdiliusApiClient(
 
   override fun getAlertCount(username: String): Int? {
     LOG.debug("Fetching alert count for username: {}", username)
+    // Magic sentinel to let local/UI testing exercise the 404 path, since there's no
+    // file-watcher-backed allow-list for usernames like there is for CRNs.
+    if (username == "unknown.user") {
+      return null
+    }
     return username.hashCode().mod(5)
   }
 
