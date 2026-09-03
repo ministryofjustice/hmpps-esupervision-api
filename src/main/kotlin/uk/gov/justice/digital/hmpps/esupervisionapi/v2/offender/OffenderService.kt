@@ -76,16 +76,20 @@ class OffenderService(
     }
   } catch (e: Exception) {
     val code = classify(e)
-    // The clients log their own failures with a sanitised message; do the same here rather than
-    // attach the throwable, whose raw message and cause chain would bypass PiiSanitizer.
-    LOGGER.warn(
-      "Failed to fetch {} from {} ({}): {}: {}",
-      field,
-      source,
-      code,
-      e.javaClass.simpleName,
-      PiiSanitizer.sanitizeException(e, crn),
-    )
+    // The clients already log failures with a sanitised message. Keep a stack trace here too, but
+    // avoid leaking raw upstream messages by logging a sanitised throwable.
+    if (code != HeaderErrorCode.NOT_FOUND) {
+      val sanitized = RuntimeException(PiiSanitizer.sanitizeException(e, crn)).apply { stackTrace = e.stackTrace }
+      LOGGER.warn(
+        "Failed to fetch {} from {} ({}): {}: {}",
+        field,
+        source,
+        code,
+        e.javaClass.simpleName,
+        sanitized.message,
+        sanitized,
+      )
+    }
     FieldResult(field, null, code)
   }
 
