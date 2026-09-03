@@ -101,7 +101,9 @@ class OffenderService(
   private fun <T> await(field: String, task: Future<FieldResult<T>>): FieldResult<T> = try {
     task.get()
   } catch (e: ExecutionException) {
-    LOGGER.error("Lookup for {} failed unexpectedly: {}", field, e.cause?.javaClass?.simpleName)
+    // Only a non-Exception throwable reaches here (fetchField handles the rest), so there is no
+    // upstream response body in the message and the full trace can be kept.
+    LOGGER.error("Lookup for {} failed unexpectedly", field, e.cause ?: e)
     FieldResult(field, null, HeaderErrorCode.SERVICE_UNAVAILABLE)
   } catch (e: InterruptedException) {
     Thread.currentThread().interrupt()

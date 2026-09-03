@@ -209,12 +209,13 @@ class OffenderResource(
   fun getOffenderHeaderByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
   ): ResponseEntity<OffenderHeaderDetails> {
-    val headerDetails = offenderService.getHeaderDetails(crn.trim().uppercase())
+    val normalisedCrn = crn.trim().uppercase()
+    val headerDetails = offenderService.getHeaderDetails(normalisedCrn)
 
     if (headerDetails.errors.isEmpty()) {
-      LOGGER.info("Retrieved header details for offender by CRN: crn={}", crn)
+      LOGGER.info("Retrieved header details for offender by CRN: crn={}", normalisedCrn)
     } else {
-      LOGGER.warn("Retrieved partial header details for offender by CRN: crn={} missing={}", crn, headerDetails.errors)
+      LOGGER.warn("Retrieved partial header details for offender by CRN: crn={} missing={}", normalisedCrn, headerDetails.errors)
     }
     return ResponseEntity.ok(headerDetails)
   }
