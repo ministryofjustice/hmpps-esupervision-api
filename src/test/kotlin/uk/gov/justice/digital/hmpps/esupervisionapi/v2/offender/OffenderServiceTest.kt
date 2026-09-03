@@ -190,7 +190,7 @@ class OffenderServiceTest {
     whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(
       ResponseStatusException(
         HttpStatus.NOT_FOUND,
-        "Could not verify tier details in Tier API for $crn.",
+        "Failed to fetch risk widget from ARNS API for CRN: $crn.",
       ),
     )
 
@@ -213,7 +213,7 @@ class OffenderServiceTest {
     whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(
       ResponseStatusException(
         HttpStatus.SERVICE_UNAVAILABLE,
-        "Could not verify tier details in Tier API for $crn.",
+        "Failed to fetch risk widget from ARNS API for CRN: $crn.",
       ),
     )
 
@@ -246,7 +246,7 @@ class OffenderServiceTest {
     whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(
       ResponseStatusException(
         HttpStatus.SERVICE_UNAVAILABLE,
-        "Could not verify tier details in Tier API for $crn.",
+        "Failed to fetch risk widget from ARNS API for CRN: $crn.",
       ),
     )
 
