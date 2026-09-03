@@ -58,6 +58,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupServic
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
+import java.util.Collections.emptyList
 import java.util.UUID
 
 @RestController
@@ -202,7 +203,7 @@ class OffenderResource(
     description = "Returns offender header details straight from NDelius. Returns 404 if not found.",
   )
   @ApiResponse(responseCode = "200", description = "Offender found")
-  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @ApiResponse(responseCode = "404", description = "Offender not found in NDelius")
   @GetMapping("/header/{crn}")
   fun getOffenderHeaderByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
@@ -652,8 +653,14 @@ data class OffenderHeaderDetails(
   val crn: String,
   val dateOfBirth: LocalDate?,
   val tierScore: String?,
-  val tierDetailsLink: String?,
+  val tierDetailsLink: String,
   val overallRisk: String?,
+  val errors: List<ErrorDetails> = emptyList(),
+)
+
+data class ErrorDetails(
+  val field: String,
+  val message: String,
 )
 
 /** Request to deactivate an offender */

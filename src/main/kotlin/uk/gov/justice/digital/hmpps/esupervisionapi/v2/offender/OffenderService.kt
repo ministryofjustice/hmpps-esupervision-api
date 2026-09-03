@@ -7,7 +7,9 @@ import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
+import java.util.Collections.emptyList
 
 @Service
 class OffenderService(
@@ -18,28 +20,54 @@ class OffenderService(
 ) {
 
   fun getHeaderDetails(crn: String): OffenderHeaderDetails {
+    var errors = emptyList<ErrorDetails>()
+
     val contactDetails = try {
       ndiliusApiClient.getContactDetails(crn)
         ?: throw ResponseStatusException(
           HttpStatus.NOT_FOUND,
-          "Could not verify contact details in NDelius for $crn.",
+          "Could not find contact details in NDelius for $crn.",
         )
+    } catch (e: ResponseStatusException) {
+      LOGGER.error("Failed to fetch contact details from NDelius for CRN: {}", PiiSanitizer.sanitizeException(e, crn))
+      if (e.statusCode == HttpStatus.NOT_FOUND) {
+        throw e
+      }
+      errors.add(ErrorDetails("dateOfBirth", "SERVICE_UNAVAILABLE"))
+      null
     } catch (e: Exception) {
-      LOGGER.error("Failed to fetch contact details from NDelius for CRN: $crn", e)
+      LOGGER.error("Failed to fetch contact details from NDelius for CRN: {}", PiiSanitizer.sanitizeException(e, crn))
+      errors.add(ErrorDetails("dateOfBirth", "SERVICE_UNAVAILABLE"))
       null
     }
 
     val tierDetails = try {
-      tierApiClient.getTierDetails(crn) ?: throw Exception()
+      tierApiClient.getTierDetails(crn)
+    } catch (e: ResponseStatusException) {
+      LOGGER.error("Failed to fetch tier details from Tier API for CRN: {}", PiiSanitizer.sanitizeException(e, crn))
+      if (e.statusCode == HttpStatus.NOT_FOUND) {
+        errors.add(ErrorDetails("tierScore", "NOT_FOUND"))
+      }
+      errors.add(ErrorDetails("tierScore", "SERVICE_UNAVAILABLE"))
+      null
     } catch (e: Exception) {
-      LOGGER.error("Failed to fetch tier details from Tier API for CRN: $crn", e)
+      LOGGER.error("Failed to fetch tier details from Tier API for CRN: {}", PiiSanitizer.sanitizeException(e, crn))
+      errors.add(ErrorDetails("tierScore", "SERVICE_UNAVAILABLE"))
       null
     }
 
     val arnsWidget = try {
-      arnsApiClient.getRiskWidget(crn) ?: throw Exception()
+      arnsApiClient.getRiskWidget(crn)
+    } catch (e: ResponseStatusException) {
+      LOGGER.error("Failed to fetch risk widget from ARNS API for CRN:  {}", PiiSanitizer.sanitizeException(e, crn))
+      if (e.statusCode == HttpStatus.NOT_FOUND) {
+        errors.add(ErrorDetails("overallRisk", "NOT_FOUND"))
+      }
+      errors.add(ErrorDetails("overallRisk", "SERVICE_UNAVAILABLE"))
+      null
     } catch (e: Exception) {
-      LOGGER.error("Failed to fetch risk widget from ARNS API for CRN: $crn", e)
+      errors.add(ErrorDetails("overallRisk", "SERVICE_UNAVAILABLE"))
+      LOGGER.error("Failed to fetch risk widget from ARNS API for CRN:  {}", PiiSanitizer.sanitizeException(e, crn))
       null
     }
 
@@ -49,6 +77,7 @@ class OffenderService(
       tierScore = tierDetails?.tierScore,
       tierDetailsLink = "$tierUiBaseUri/case/$crn",
       overallRisk = arnsWidget?.overallRisk,
+      errors = errors,
     )
   }
 
