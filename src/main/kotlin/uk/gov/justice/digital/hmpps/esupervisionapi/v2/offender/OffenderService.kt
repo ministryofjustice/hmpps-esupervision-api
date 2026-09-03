@@ -10,7 +10,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
 import java.util.ArrayList
-import java.util.Collections.emptyList
 
 @Service
 class OffenderService(
