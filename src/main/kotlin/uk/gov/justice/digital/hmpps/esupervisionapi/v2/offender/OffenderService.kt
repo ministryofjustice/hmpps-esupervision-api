@@ -47,8 +47,9 @@ class OffenderService(
       LOGGER.error("Failed to fetch tier details from Tier API for CRN: {}", PiiSanitizer.sanitizeException(e, crn))
       if (e.statusCode == HttpStatus.NOT_FOUND) {
         errors.add(ErrorDetails("tierScore", "NOT_FOUND"))
+      } else {
+        errors.add(ErrorDetails("tierScore", "SERVICE_UNAVAILABLE"))
       }
-      else errors.add(ErrorDetails("tierScore", "SERVICE_UNAVAILABLE"))
       null
     } catch (e: Exception) {
       LOGGER.error("Failed to fetch tier details from Tier API for CRN: {}", PiiSanitizer.sanitizeException(e, crn))
@@ -62,8 +63,9 @@ class OffenderService(
       LOGGER.error("Failed to fetch risk widget from ARNS API for CRN:  {}", PiiSanitizer.sanitizeException(e, crn))
       if (e.statusCode == HttpStatus.NOT_FOUND) {
         errors.add(ErrorDetails("overallRisk", "NOT_FOUND"))
+      } else {
+        errors.add(ErrorDetails("overallRisk", "SERVICE_UNAVAILABLE"))
       }
-      else errors.add(ErrorDetails("overallRisk", "SERVICE_UNAVAILABLE"))
       null
     } catch (e: Exception) {
       errors.add(ErrorDetails("overallRisk", "SERVICE_UNAVAILABLE"))
