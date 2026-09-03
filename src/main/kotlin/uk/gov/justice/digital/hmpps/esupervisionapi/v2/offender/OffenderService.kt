@@ -1,9 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
-import org.springframework.beans.factory.DisposableBean
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
+import org.springframework.http.HttpStatusCode
 import org.springframework.stereotype.Service
+import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -11,8 +12,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
 import java.util.concurrent.Callable
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 
 @Service
 class OffenderService(
@@ -20,18 +22,7 @@ class OffenderService(
   private val tierApiClient: ITierApiClient,
   private val arnsApiClient: IArnsApiClient,
   @Value("\${api.base.url.tier-ui}") val tierUiBaseUri: String,
-) : DisposableBean {
-
-  /**
-   * Runs the Tier lookup alongside the ARNS lookup so a slow upstream costs the request
-   * max(tier, arns) rather than the sum. Virtual threads: each task just blocks on a WebClient
-   * call, and the number in flight is bounded by the servlet thread pool.
-   */
-  private val lookupExecutor: ExecutorService = Executors.newVirtualThreadPerTaskExecutor()
-
-  override fun destroy() {
-    lookupExecutor.shutdownNow()
-  }
+) {
 
   /**
    * Aggregates the case header from NDelius, the Tier API and ARNS.
@@ -46,11 +37,16 @@ class OffenderService(
       throw ResponseStatusException(HttpStatus.NOT_FOUND, "Could not find contact details in NDelius for $crn.")
     }
 
-    val tierLookup = lookupExecutor.submit(
-      Callable { fetchField("tierScore", "Tier API", crn) { tierApiClient.getTierDetails(crn)?.tierScore } },
-    )
-    val risk = fetchField("overallRisk", "ARNS API", crn) { arnsApiClient.getRiskWidget(crn)?.overallRisk }
-    val tier = tierLookup.get()
+    // Tier runs on a virtual thread alongside the ARNS lookup so a slow upstream costs the request
+    // max(tier, arns) rather than the sum. The per-call executor holds no pooled resources and
+    // close() joins the task, which get() has already done.
+    val (tier, risk) = Executors.newVirtualThreadPerTaskExecutor().use { executor ->
+      val tierLookup = executor.submit(
+        Callable { fetchField("tierScore", "Tier API", crn) { tierApiClient.getTierDetails(crn)?.tierScore } },
+      )
+      val risk = fetchField("overallRisk", "ARNS API", crn) { arnsApiClient.getRiskWidget(crn)?.overallRisk }
+      await("tierScore", tierLookup) to risk
+    }
 
     return OffenderHeaderDetails(
       crn = crn,
@@ -80,16 +76,46 @@ class OffenderService(
     }
   } catch (e: Exception) {
     val code = classify(e)
-    // The clients log their own failures; this records the classification with the stack trace
-    // that would otherwise be lost, since the exception goes no further.
-    LOGGER.warn("Failed to fetch {} from {} ({}): {}", field, source, code, PiiSanitizer.sanitizeException(e, crn), e)
+    // The clients log their own failures with a sanitised message; do the same here rather than
+    // attach the throwable, whose raw message and cause chain would bypass PiiSanitizer.
+    LOGGER.warn(
+      "Failed to fetch {} from {} ({}): {}: {}",
+      field,
+      source,
+      code,
+      e.javaClass.simpleName,
+      PiiSanitizer.sanitizeException(e, crn),
+    )
     FieldResult(field, null, code)
   }
 
-  private fun classify(e: Exception): HeaderErrorCode = when {
-    e is ResponseStatusException && e.statusCode == HttpStatus.NOT_FOUND -> HeaderErrorCode.NOT_FOUND
-    e is ResponseStatusException && e.statusCode.is4xxClientError -> HeaderErrorCode.REQUEST_REJECTED
-    else -> HeaderErrorCode.SERVICE_UNAVAILABLE
+  /**
+   * Joins a [fetchField] task. The task classifies its own exceptions, so only an [Error] escaping
+   * the callable or an interrupt of this thread can surface here; both degrade the field rather
+   * than fail the whole header.
+   */
+  private fun <T> await(field: String, task: Future<FieldResult<T>>): FieldResult<T> = try {
+    task.get()
+  } catch (e: ExecutionException) {
+    LOGGER.error("Lookup for {} failed unexpectedly: {}", field, e.cause?.javaClass?.simpleName)
+    FieldResult(field, null, HeaderErrorCode.SERVICE_UNAVAILABLE)
+  } catch (e: InterruptedException) {
+    Thread.currentThread().interrupt()
+    task.cancel(true)
+    FieldResult(field, null, HeaderErrorCode.SERVICE_UNAVAILABLE)
+  }
+
+  private fun classify(e: Exception): HeaderErrorCode = when (val status = e.upstreamStatus()) {
+    null -> HeaderErrorCode.SERVICE_UNAVAILABLE
+    HttpStatus.NOT_FOUND -> HeaderErrorCode.NOT_FOUND
+    else -> if (status.is4xxClientError) HeaderErrorCode.REQUEST_REJECTED else HeaderErrorCode.SERVICE_UNAVAILABLE
+  }
+
+  /** The HTTP status an upstream answered with, whether the client translated it or let it through raw. */
+  private fun Exception.upstreamStatus(): HttpStatusCode? = when (this) {
+    is ResponseStatusException -> statusCode
+    is WebClientResponseException -> statusCode
+    else -> null
   }
 
   companion object {

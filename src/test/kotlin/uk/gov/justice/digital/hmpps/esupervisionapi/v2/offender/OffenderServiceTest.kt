@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -12,7 +11,9 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -73,12 +74,9 @@ class OffenderServiceTest {
     whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(riskWidget)
   }
 
-  @AfterEach
-  fun teardown() {
-    service.destroy()
-  }
-
   private fun status(status: HttpStatus) = ResponseStatusException(status, "upstream said $status")
+
+  private fun upstream(status: HttpStatus) = WebClientResponseException.create(status.value(), status.reasonPhrase, HttpHeaders.EMPTY, ByteArray(0), null)
 
   @Test
   fun `getHeaderDetails - returns all details`() {
@@ -138,6 +136,26 @@ class OffenderServiceTest {
   @Test
   fun `getHeaderDetails - NDelius rejects request - reports REQUEST_REJECTED`() {
     whenever(ndiliusApiClient.getContactDetailsStrict(crn)).thenThrow(status(HttpStatus.FORBIDDEN))
+
+    val response = service.getHeaderDetails(crn)
+
+    assertNull(response.dateOfBirth)
+    assertEquals(listOf(ErrorDetails("dateOfBirth", HeaderErrorCode.REQUEST_REJECTED)), response.errors)
+  }
+
+  @Test
+  fun `getHeaderDetails - NDelius raw 5xx - degrades dateOfBirth`() {
+    whenever(ndiliusApiClient.getContactDetailsStrict(crn)).thenThrow(upstream(HttpStatus.BAD_GATEWAY))
+
+    val response = service.getHeaderDetails(crn)
+
+    assertNull(response.dateOfBirth)
+    assertEquals(listOf(ErrorDetails("dateOfBirth", HeaderErrorCode.SERVICE_UNAVAILABLE)), response.errors)
+  }
+
+  @Test
+  fun `getHeaderDetails - NDelius raw 4xx - reports REQUEST_REJECTED`() {
+    whenever(ndiliusApiClient.getContactDetailsStrict(crn)).thenThrow(upstream(HttpStatus.UNAUTHORIZED))
 
     val response = service.getHeaderDetails(crn)
 
@@ -230,6 +248,16 @@ class OffenderServiceTest {
 
     assertNull(response.overallRisk)
     assertEquals(listOf(ErrorDetails("overallRisk", HeaderErrorCode.SERVICE_UNAVAILABLE)), response.errors)
+  }
+
+  @Test
+  fun `getHeaderDetails - risk rejects request - reports REQUEST_REJECTED`() {
+    whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(status(HttpStatus.BAD_REQUEST))
+
+    val response = service.getHeaderDetails(crn)
+
+    assertNull(response.overallRisk)
+    assertEquals(listOf(ErrorDetails("overallRisk", HeaderErrorCode.REQUEST_REJECTED)), response.errors)
   }
 
   @Test

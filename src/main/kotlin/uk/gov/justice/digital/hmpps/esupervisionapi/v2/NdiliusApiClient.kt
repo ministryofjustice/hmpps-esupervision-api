@@ -42,9 +42,11 @@ interface INdiliusApiClient {
   /**
    * Get contact details by CRN, reserving null for a genuine NDelius 404.
    *
-   * Any other failure propagates: a [org.springframework.web.server.ResponseStatusException]
-   * carrying the upstream 4xx status, or SERVICE_UNAVAILABLE for 5xx; a raw exception for
-   * connection failures, timeouts and an open circuit breaker.
+   * Any other failure propagates untranslated, after the `ndiliusApi` retry policy has run:
+   * [org.springframework.web.reactive.function.client.WebClientResponseException] carrying the
+   * upstream status, [org.springframework.web.reactive.function.client.WebClientRequestException]
+   * for connection failures and timeouts, or
+   * [io.github.resilience4j.circuitbreaker.CallNotPermittedException] for an open circuit.
    */
   fun getContactDetailsStrict(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
@@ -84,7 +86,9 @@ class NdiliusApiClient(
 
   /**
    * As [getContactDetails] but without a swallowing fallback: only a 404 becomes null, every
-   * other failure (including an open circuit) propagates to the caller.
+   * other failure (including an open circuit) propagates to the caller. Exceptions leave
+   * [fetchContactDetails] untranslated so the `ndiliusApi` retry and circuit-breaker rules, which
+   * are keyed on WebClient exception types, can act on them.
    */
   @CircuitBreaker(name = "ndiliusApi")
   @Retry(name = "ndiliusApi")
@@ -103,21 +107,8 @@ class NdiliusApiClient(
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Contact details not found for CRN: {}", crn)
       null
-    } catch (e: WebClientResponseException) {
-      LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(
-          e.statusCode,
-          "Could not verify contact details in NDelius for $crn.",
-          e,
-        )
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
-      )
     } catch (e: Exception) {
-      LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
+      LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
     }
   }

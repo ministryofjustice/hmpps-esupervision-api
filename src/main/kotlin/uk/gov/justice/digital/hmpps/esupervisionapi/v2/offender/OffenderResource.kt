@@ -203,7 +203,7 @@ class OffenderResource(
       "Returns 404 only when the CRN is unknown to NDelius. Any other lookup failure degrades the " +
       "response rather than failing it: the affected field is null and `errors` lists the field and why.",
   )
-  @ApiResponse(responseCode = "200", description = "Offender found in NDelius; check `errors` for fields that could not be populated")
+  @ApiResponse(responseCode = "200", description = "Header returned; NDelius did not report the CRN as unknown. Check `errors` for fields that could not be populated")
   @ApiResponse(responseCode = "404", description = "Offender not found in NDelius")
   @GetMapping("/header/{crn}")
   fun getOffenderHeaderByCrn(
@@ -660,7 +660,7 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
  */
 data class OffenderHeaderDetails(
   val crn: String,
-  @field:Schema(description = "From NDelius. Null only if NDelius was unavailable (see errors)")
+  @field:Schema(description = "From NDelius. Null if the lookup failed (see errors)")
   val dateOfBirth: LocalDate?,
   @field:Schema(description = "From the Tier API. Null if the lookup failed (see errors)")
   val tierScore: String?,
