@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
+import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
@@ -84,25 +85,26 @@ class OffenderServiceTest {
   }
 
   @Test
-  fun `getHeaderDetails - returns all details when there is no risk info`() {
-    whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
+  fun `getHeaderDetails - NDelius CRN not found`() {
+    whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(null)
     whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
+    whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(riskWidget)
 
-    val emptyArnsWidget = ArnsWidget()
-    whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(emptyArnsWidget)
-
-    val response = service.getHeaderDetails(crn)
-
-    assertEquals(crn, response.crn)
-    assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
-    assertEquals(tierDetails.tierScore, response.tierScore)
-    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
-    assertNull(response.overallRisk)
+    try {
+      service.getHeaderDetails(crn)
+    } catch (e: ResponseStatusException) {
+      assertEquals(HttpStatus.NOT_FOUND, e.statusCode)
+    }
   }
 
   @Test
   fun `getHeaderDetails - NDelius contact details client error`() {
-    whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetails(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not verify contact details in NDelius for $crn.",
+      ),
+    )
     whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
     whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(riskWidget)
 
@@ -113,10 +115,12 @@ class OffenderServiceTest {
     assertEquals(tierDetails.tierScore, response.tierScore)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertEquals(riskWidget.overallRisk, response.overallRisk)
+    assertEquals("dateOfBirth", response.errors[0].field)
+    assertEquals("SERVICE_UNAVAILABLE", response.errors[0].message)
   }
 
   @Test
-  fun `getHeaderDetails - tier details client error`() {
+  fun `getHeaderDetails - tier details not found`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
     whenever(tierApiClient.getTierDetails(crn)).thenThrow(
       ResponseStatusException(
@@ -133,15 +137,56 @@ class OffenderServiceTest {
     assertNull(response.tierScore)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertEquals(riskWidget.overallRisk, response.overallRisk)
+    assertEquals("tierScore", response.errors[0].field)
+    assertEquals("NOT_FOUND", response.errors[0].message)
   }
 
   @Test
-  fun `getHeaderDetails - risk details client error`() {
+  fun `getHeaderDetails - tier details client error`() {
+    whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
+    whenever(tierApiClient.getTierDetails(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not verify tier details in Tier API for $crn.",
+      ),
+    )
+    whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(riskWidget)
+
+    val response = service.getHeaderDetails(crn)
+
+    assertEquals(crn, response.crn)
+    assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
+    assertNull(response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    assertEquals(riskWidget.overallRisk, response.overallRisk)
+    assertEquals("tierScore", response.errors[0].field)
+    assertEquals("SERVICE_UNAVAILABLE", response.errors[0].message)
+  }
+
+  @Test
+  fun `getHeaderDetails - ARNS returns empty risk details`() {
+    whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
+    whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
+
+    val emptyArnsWidget = ArnsWidget()
+    whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(emptyArnsWidget)
+
+    val response = service.getHeaderDetails(crn)
+
+    assertEquals(crn, response.crn)
+    assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
+    assertEquals(tierDetails.tierScore, response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    assertNull(response.overallRisk)
+  }
+
+  @Test
+  fun `getHeaderDetails - risk details not found`() {
     whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
     whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
     whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(
       ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.NOT_FOUND,
         "Could not verify tier details in Tier API for $crn.",
       ),
     )
@@ -153,5 +198,65 @@ class OffenderServiceTest {
     assertEquals(tierDetails.tierScore, response.tierScore)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertNull(response.overallRisk)
+    assertEquals("overallRisk", response.errors[0].field)
+    assertEquals("NOT_FOUND", response.errors[0].message)
+  }
+
+  @Test
+  fun `getHeaderDetails - risk details client error`() {
+    whenever(ndiliusApiClient.getContactDetails(crn)).thenReturn(contactDetails)
+    whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
+    whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not verify tier details in Tier API for $crn.",
+      ),
+    )
+
+    val response = service.getHeaderDetails(crn)
+
+    assertEquals(crn, response.crn)
+    assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
+    assertEquals(tierDetails.tierScore, response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    assertNull(response.overallRisk)
+    assertEquals("overallRisk", response.errors[0].field)
+    assertEquals("SERVICE_UNAVAILABLE", response.errors[0].message)
+  }
+
+  @Test
+  fun `getHeaderDetails - all clients error`() {
+    whenever(ndiliusApiClient.getContactDetails(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not verify contact details in NDelius for $crn.",
+      ),
+    )
+    whenever(tierApiClient.getTierDetails(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not verify tier details in Tier API for $crn.",
+      ),
+    )
+    whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(
+      ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not verify tier details in Tier API for $crn.",
+      ),
+    )
+
+    val response = service.getHeaderDetails(crn)
+
+    assertEquals(crn, response.crn)
+    assertNull(response.dateOfBirth)
+    assertNull(response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    assertNull(response.overallRisk)
+    assertEquals("dateOfBirth", response.errors[0].field)
+    assertEquals("SERVICE_UNAVAILABLE", response.errors[0].message)
+    assertEquals("tierScore", response.errors[1].field)
+    assertEquals("SERVICE_UNAVAILABLE", response.errors[1].message)
+    assertEquals("overallRisk", response.errors[2].field)
+    assertEquals("SERVICE_UNAVAILABLE", response.errors[2].message)
   }
 }
