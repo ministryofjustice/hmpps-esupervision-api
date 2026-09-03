@@ -110,6 +110,11 @@ open class StubNdiliusApiClient(
     )
   }
 
+  override fun getAlertCount(username: String): Int? {
+    LOG.debug("Fetching alert count for username: {}", username)
+    return username.hashCode().mod(5)
+  }
+
   companion object {
     val LOG = LoggerFactory.getLogger(this::class.java)
   }

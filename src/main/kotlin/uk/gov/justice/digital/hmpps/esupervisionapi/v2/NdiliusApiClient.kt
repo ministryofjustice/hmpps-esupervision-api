@@ -27,6 +27,13 @@ private data class NdiliusContactDetailsUpdateBody(
   val emailAddress: String?,
 )
 
+/**
+ * Wire shape returned by esupervision-and-delius's GET /user/{username}/alerts.
+ */
+private data class NdiliusAlertsResponse(
+  val count: Int,
+)
+
 interface INdiliusApiClient {
   fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
 
@@ -41,6 +48,12 @@ interface INdiliusApiClient {
    * NOTE: depends on PI-4356 (esupervision-and-delius PUT /case/{crn}/contact-details), not yet live.
    */
   fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse
+
+  /**
+   * Get the number of alerts for a practitioner by NDelius username.
+   * Returns null if the username is not found.
+   */
+  fun getAlertCount(username: String): Int?
 
   companion object {
     const val MAX_BATCH_SIZE = 500
@@ -234,6 +247,46 @@ class NdiliusApiClient(
   private fun validatePersonalDetailsFallback(personalDetails: PersonalDetails, e: Exception): Boolean {
     LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "validatePersonalDetails, crn=${personalDetails.crn}"))
     return false
+  }
+
+  /**
+   * Get the number of alerts for a practitioner by NDelius username
+   * GET /user/{username}/alerts
+   */
+  @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getAlertCountFallback")
+  @Retry(name = "ndiliusApi")
+  @Timed("ndelius.get-alert-count", extraTags = ["method", "GET", "endpoint", "/user/{username}/alerts"], description = "Time taken to get alert count")
+  override fun getAlertCount(username: String): Int? {
+    LOGGER.info("Fetching alert count for username: {}", username)
+
+    return try {
+      ndiliusApiWebClient.get()
+        .uri("/user/{username}/alerts", username)
+        .retrieve()
+        .bodyToMono(NdiliusAlertsResponse::class.java)
+        .block()
+        ?.count ?: 0
+    } catch (e: WebClientResponseException.NotFound) {
+      LOGGER.warn("Alerts not found for username: {}", username)
+      null
+    } catch (e: WebClientResponseException) {
+      LOGGER.warn("Error fetching alert count: {}", PiiSanitizer.sanitizeException(e, username))
+      if (e.statusCode.is4xxClientError) {
+        throw ResponseStatusException(e.statusCode, "Could not fetch alerts in NDelius for $username.", e)
+      }
+      throw ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Encountered an issue whilst fetching alerts in NDelius for $username.",
+      )
+    } catch (e: Exception) {
+      LOGGER.error("Error fetching alert count: {}", PiiSanitizer.sanitizeException(e, username))
+      throw e
+    }
+  }
+
+  private fun getAlertCountFallback(username: String, e: Exception): Int? {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getAlertCount, username=$username"))
+    throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Encountered an issue whilst fetching alerts in NDelius for $username.")
   }
 
   companion object {
