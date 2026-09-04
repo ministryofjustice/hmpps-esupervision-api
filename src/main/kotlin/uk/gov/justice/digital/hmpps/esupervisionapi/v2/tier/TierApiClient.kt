@@ -34,6 +34,9 @@ class TierApiClient(
         .retrieve()
         .bodyToMono(TierDetails::class.java)
         .block()
+    } catch (e: WebClientResponseException.NotFound) {
+      LOGGER.warn("Tier details not found for CRN: {}", crn)
+      throw ResponseStatusException(HttpStatus.NOT_FOUND, "Could not find tier details in Tier API for $crn.", e)
     } catch (e: WebClientResponseException) {
       LOGGER.error("Error fetching tier details: {}", PiiSanitizer.sanitizeException(e, crn))
       if (e.statusCode.is4xxClientError) {
