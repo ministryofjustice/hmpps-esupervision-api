@@ -35,7 +35,7 @@ class ArnsApiClient(
         .block()
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Risk widget not found for CRN: {}", crn)
-      ArnsWidget()
+      throw ResponseStatusException(HttpStatus.NOT_FOUND, "Could not find risk widget in ARNS API for $crn.", e)
     } catch (e: WebClientResponseException) {
       LOGGER.error("Error fetching risk widget: {}", PiiSanitizer.sanitizeException(e, crn))
       if (e.statusCode.is4xxClientError) {
@@ -65,14 +65,7 @@ data class ArnsWidget(
   val assessedOn: LocalDate?,
   val riskInCommunity: RiskInSituation,
   val riskInCustody: RiskInSituation,
-) {
-  constructor() : this(
-    null,
-    null,
-    RiskInSituation(),
-    RiskInSituation(),
-  )
-}
+)
 
 data class RiskInSituation(
   val public: String?,
@@ -80,12 +73,4 @@ data class RiskInSituation(
   val knownAdult: String?,
   val staff: String?,
   val prisoners: String?,
-) {
-  constructor() : this(
-    "NOT_FOUND",
-    "NOT_FOUND",
-    "NOT_FOUND",
-    "NOT_FOUND",
-    "NOT_FOUND",
-  )
-}
+)

@@ -58,7 +58,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupServic
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
-import java.util.Collections.emptyList
 import java.util.UUID
 
 @RestController
@@ -200,17 +199,24 @@ class OffenderResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Get offender header by CRN",
-    description = "Returns offender header details straight from NDelius. Returns 404 if not found.",
+    description = "Returns offender header details aggregated from NDelius, the Tier API and ARNS. " +
+      "Returns 404 only when the CRN is unknown to NDelius. Any other lookup failure degrades the " +
+      "response rather than failing it: the affected field is null and `errors` lists the field and why.",
   )
-  @ApiResponse(responseCode = "200", description = "Offender found")
+  @ApiResponse(responseCode = "200", description = "Header returned; NDelius did not report the CRN as unknown. Check `errors` for fields that could not be populated")
   @ApiResponse(responseCode = "404", description = "Offender not found in NDelius")
   @GetMapping("/header/{crn}")
   fun getOffenderHeaderByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
   ): ResponseEntity<OffenderHeaderDetails> {
-    val headerDetails = offenderService.getHeaderDetails(crn.trim().uppercase())
+    val normalisedCrn = crn.trim().uppercase()
+    val headerDetails = offenderService.getHeaderDetails(normalisedCrn)
 
-    LOGGER.info("Retrieved header details for offender by CRN: crn={}", crn)
+    if (headerDetails.errors.isEmpty()) {
+      LOGGER.info("Retrieved header details for offender by CRN: crn={}", normalisedCrn)
+    } else {
+      LOGGER.warn("Retrieved partial header details for offender by CRN: crn={} missing={}", normalisedCrn, headerDetails.errors)
+    }
     return ResponseEntity.ok(headerDetails)
   }
 
@@ -649,19 +655,39 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   },
 )
 
+/**
+ * Case header aggregated from several upstreams. NDelius must answer; the other fields are
+ * best-effort and null when their lookup failed, with the reason recorded in [errors].
+ */
 data class OffenderHeaderDetails(
   val crn: String,
+  @field:Schema(description = "From NDelius. Null if the lookup failed (see errors)")
   val dateOfBirth: LocalDate?,
+  @field:Schema(description = "From the Tier API. Null if the lookup failed (see errors)")
   val tierScore: String?,
   val tierDetailsLink: String,
+  @field:Schema(description = "From ARNS. Null if the lookup failed or no assessment exists (see errors)")
   val overallRisk: String?,
+  @field:Schema(description = "One entry per field that could not be populated. Empty on full success")
   val errors: List<ErrorDetails> = emptyList(),
 )
 
 data class ErrorDetails(
+  @field:Schema(description = "Name of the OffenderHeaderDetails field that is missing", example = "tierScore")
   val field: String,
-  val message: String,
+  val code: HeaderErrorCode,
 )
+
+enum class HeaderErrorCode {
+  /** The upstream has no record for this CRN. */
+  NOT_FOUND,
+
+  /** The upstream failed, timed out, or its circuit breaker is open. Expected to be transient. */
+  SERVICE_UNAVAILABLE,
+
+  /** The upstream rejected our request (4xx other than 404), e.g. missing role. Not transient. */
+  REQUEST_REJECTED,
+}
 
 /** Request to deactivate an offender */
 data class DeactivateOffenderRequest(
