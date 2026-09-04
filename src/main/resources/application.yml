@@ -401,3 +401,11 @@ resilience4j:
       awsRekognition:
         timeout-duration: 30s
         cancel-running-future: true
+
+springdoc:
+  swagger-ui:
+    # springdoc 3.0.3 was built against swagger-ui 5.32.2 and bakes that version into the
+    # webjar resource path (META-INF/resources/webjars/swagger-ui/<version>/). Any bump of the
+    # swagger-ui webjar without this property makes /swagger-ui/index.html 404 in the running
+    # app. Keep in lockstep with the org.webjars:swagger-ui pin in build.gradle.kts.
+    version: 5.32.14
