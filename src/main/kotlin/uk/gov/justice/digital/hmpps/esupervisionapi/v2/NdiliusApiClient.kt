@@ -42,11 +42,10 @@ interface INdiliusApiClient {
   /**
    * Get contact details by CRN, reserving null for a genuine NDelius 404.
    *
-   * Any other failure propagates untranslated, after the `ndiliusApi` retry policy has run:
-   * [org.springframework.web.reactive.function.client.WebClientResponseException] carrying the
-   * upstream status, [org.springframework.web.reactive.function.client.WebClientRequestException]
-   * for connection failures and timeouts, or
-   * [io.github.resilience4j.circuitbreaker.CallNotPermittedException] for an open circuit.
+   * Any other failure propagates: a [org.springframework.web.server.ResponseStatusException]
+   * carrying the upstream 4xx status, or SERVICE_UNAVAILABLE for 5xx; a raw exception for
+   * connection failures, timeouts and an open circuit breaker. Not retried, so the caller waits
+   * at most one request timeout.
    */
   fun getContactDetailsStrict(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
@@ -86,12 +85,14 @@ class NdiliusApiClient(
 
   /**
    * As [getContactDetails] but without a swallowing fallback: only a 404 becomes null, every
-   * other failure (including an open circuit) propagates to the caller. Exceptions leave
-   * [fetchContactDetails] untranslated so the `ndiliusApi` retry and circuit-breaker rules, which
-   * are keyed on WebClient exception types, can act on them.
+   * other failure (including an open circuit) propagates to the caller.
+   *
+   * Deliberately not annotated with @Retry. On [getContactDetails] the circuit-breaker fallback
+   * returns before the outer Retry aspect sees an exception, so it never retries. Without a
+   * fallback, Retry would run three attempts at the full request timeout each, which is far too
+   * long for an interactive caller that can degrade instead.
    */
   @CircuitBreaker(name = "ndiliusApi")
-  @Retry(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
   override fun getContactDetailsStrict(crn: String): ContactDetails? = fetchContactDetails(crn)
 
@@ -107,8 +108,24 @@ class NdiliusApiClient(
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Contact details not found for CRN: {}", crn)
       null
-    } catch (e: Exception) {
+    } catch (e: WebClientResponseException) {
+      // Translated rather than rethrown raw: the ndiliusApi breaker's record-exceptions list names
+      // WebClient types only, so an HTTP error response is not counted as a breaker failure. That
+      // is long-standing behaviour shared by every caller; changing it is a separate decision.
       LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
+      if (e.statusCode.is4xxClientError) {
+        throw ResponseStatusException(
+          e.statusCode,
+          "Could not verify contact details in NDelius for $crn.",
+          e,
+        )
+      }
+      throw ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
+      )
+    } catch (e: Exception) {
+      LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
     }
   }
