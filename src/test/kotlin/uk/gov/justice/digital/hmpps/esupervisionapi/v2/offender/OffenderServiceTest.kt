@@ -11,7 +11,9 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -73,6 +75,9 @@ class OffenderServiceTest {
   }
 
   private fun status(status: HttpStatus) = ResponseStatusException(status, "upstream said $status")
+
+  /** NDelius lets 5xx through raw so the circuit breaker can record it. */
+  private fun rawUpstream(status: HttpStatus) = WebClientResponseException.create(status.value(), status.reasonPhrase, HttpHeaders.EMPTY, ByteArray(0), null)
 
   @Test
   fun `getHeaderDetails - returns all details`() {
@@ -137,6 +142,16 @@ class OffenderServiceTest {
 
     assertNull(response.dateOfBirth)
     assertEquals(listOf(ErrorDetails("dateOfBirth", HeaderErrorCode.REQUEST_REJECTED)), response.errors)
+  }
+
+  @Test
+  fun `getHeaderDetails - NDelius raw 5xx - degrades dateOfBirth`() {
+    whenever(ndiliusApiClient.getContactDetailsStrict(crn)).thenThrow(rawUpstream(HttpStatus.BAD_GATEWAY))
+
+    val response = service.getHeaderDetails(crn)
+
+    assertNull(response.dateOfBirth)
+    assertEquals(listOf(ErrorDetails("dateOfBirth", HeaderErrorCode.SERVICE_UNAVAILABLE)), response.errors)
   }
 
   @Test

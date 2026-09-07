@@ -50,9 +50,8 @@ interface INdiliusApiClient {
    * Get contact details by CRN, reserving null for a genuine NDelius 404.
    *
    * Any other failure propagates: a [org.springframework.web.server.ResponseStatusException]
-   * carrying the upstream 4xx status, or SERVICE_UNAVAILABLE for 5xx; a raw exception for
-   * connection failures, timeouts and an open circuit breaker. Not retried, so the caller waits
-   * at most one request timeout.
+   * carrying the upstream 4xx status, or the raw exception for 5xx, connection failures, timeouts
+   * and an open circuit breaker. Not retried, so the caller waits at most one request timeout.
    */
   fun getContactDetailsStrict(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
@@ -122,22 +121,8 @@ class NdiliusApiClient(
       LOGGER.warn("Contact details not found for CRN: {}", crn)
       null
     } catch (e: WebClientResponseException) {
-      // Translated rather than rethrown raw: the ndiliusApi breaker's record-exceptions list names
-      // WebClient types only, so an HTTP error response is not counted as a breaker failure. That
-      // is long-standing behaviour shared by every caller; changing it is a separate decision.
       LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(
-          e.statusCode,
-          "Could not verify contact details in NDelius for $crn.",
-          e,
-        )
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
-        e,
-      )
+      rethrowAs4xxOrPropagate(e, "Could not verify contact details in NDelius for $crn.")
     } catch (e: Exception) {
       LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
