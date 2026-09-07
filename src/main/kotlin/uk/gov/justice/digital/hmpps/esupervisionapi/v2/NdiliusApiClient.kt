@@ -39,8 +39,21 @@ interface INdiliusApiClient {
 
   /**
    * Get contact details by CRN. Returns null if not found.
+   *
+   * NOTE: null also covers every failure mode (upstream error, timeout, open circuit), so callers
+   * cannot tell "no such CRN" apart from "NDelius unavailable". Use [getContactDetailsStrict]
+   * where that distinction matters.
    */
   fun getContactDetails(crn: String): ContactDetails?
+
+  /**
+   * Get contact details by CRN, reserving null for a genuine NDelius 404.
+   *
+   * Any other failure propagates: a [org.springframework.web.server.ResponseStatusException]
+   * carrying the upstream 4xx status, or the raw exception for 5xx, connection failures, timeouts
+   * and an open circuit breaker. Not retried, so the caller waits at most one request timeout.
+   */
+  fun getContactDetailsStrict(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
 
   /**
@@ -80,7 +93,22 @@ class NdiliusApiClient(
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsFallback")
   @Retry(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
-  override fun getContactDetails(crn: String): ContactDetails? {
+  override fun getContactDetails(crn: String): ContactDetails? = fetchContactDetails(crn)
+
+  /**
+   * As [getContactDetails] but without a swallowing fallback: only a 404 becomes null, every
+   * other failure (including an open circuit) propagates to the caller.
+   *
+   * Deliberately not annotated with @Retry. On [getContactDetails] the circuit-breaker fallback
+   * returns before the outer Retry aspect sees an exception, so it never retries. Without a
+   * fallback, Retry would run three attempts at the full request timeout each, which is far too
+   * long for an interactive caller that can degrade instead.
+   */
+  @CircuitBreaker(name = "ndiliusApi")
+  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
+  override fun getContactDetailsStrict(crn: String): ContactDetails? = fetchContactDetails(crn)
+
+  private fun fetchContactDetails(crn: String): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
 
     return try {
