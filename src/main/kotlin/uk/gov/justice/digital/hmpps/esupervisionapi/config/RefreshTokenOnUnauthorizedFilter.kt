@@ -15,15 +15,20 @@ import uk.gov.justice.hmpps.kotlin.auth.service.GlobalPrincipalOAuth2AuthorizedC
  * Evicts the cached client-credentials token and retries once when an upstream answers 401.
  *
  * `ServletOAuth2AuthorizedClientExchangeFilterFunction` caches the token until it is within the
- * provider's clock skew of expiry and, when it cannot resolve a client at all, falls through to
- * `exchangeAndHandleResponse(request, next)` and sends the request with no Authorization header
- * rather than failing. Both arrive here as the same thing - a 401 we would otherwise surface to
- * the caller. Dropping the cached client forces the next exchange back to HMPPS Auth, so a stale
- * or missing token costs one extra round trip instead of a failed lookup.
+ * provider's clock skew of expiry. Dropping the cached client forces the next exchange back to
+ * HMPPS Auth, so a stale token costs one extra round trip instead of a failed lookup.
+ *
+ * This does *not* cover a request that went out with no bearer at all - the filter's
+ * `authorizeClient` returns `Mono.empty()` when it cannot see a servlet request, and `filter()`
+ * then sends the request unauthenticated rather than failing. Retrying changes nothing there,
+ * because the second attempt is just as context-free as the first; that has to be fixed at the
+ * call site (see `OffenderService.onBehalfOfRequest`). The two are indistinguishable from here,
+ * which is why `TierApiClient` also logs the upstream's `WWW-Authenticate` challenge.
  *
  * Must be registered *before* the authorising filter so that the retried exchange runs through it
  * again; `authorisedWebClient` appends its filter, so anything added via `builder.filters {}`
- * already sits outside it.
+ * already sits outside it. The retry inherits the subscribing chain's Reactor context, so it is
+ * authorised on whichever thread the first response completed on.
  *
  * Only GETs are retried: replaying a request body through a second exchange is not safe in
  * general, and this filter is only used on read-only clients.

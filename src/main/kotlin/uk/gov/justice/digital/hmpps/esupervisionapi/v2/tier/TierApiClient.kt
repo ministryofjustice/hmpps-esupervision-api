@@ -72,15 +72,29 @@ class TierApiClient(
    */
   private fun describeResponse(e: WebClientResponseException): String {
     val challenge = e.headers.getFirst(HttpHeaders.WWW_AUTHENTICATE)
-    val body = e.responseBodyAsString.take(MAX_LOGGED_BODY_CHARS)
     return listOfNotNull(
       challenge?.let { "wwwAuthenticate=$it" },
-      body.ifBlank { null }?.let { "body=${PiiSanitizer.sanitizeMessage(it)}" },
+      sanitizedBody(e)?.let { "body=$it" },
     ).joinToString(" ").ifEmpty { "(no challenge or body)" }
   }
 
+  /**
+   * Sanitise *before* truncating. A cut through the middle of a PII field leaves
+   * `"forename":"Joh` behind, which [PiiSanitizer]'s `"forename"\s*:\s*"[^"]*"` no longer matches,
+   * so the partial name would survive into the log. The outer [RAW_BODY_SCAN_CHARS] bound keeps the
+   * regex work off a pathologically large body; any field it splits sits far beyond the
+   * [MAX_LOGGED_BODY_CHARS] we actually emit.
+   */
+  private fun sanitizedBody(e: WebClientResponseException): String? = e.responseBodyAsString
+    .take(RAW_BODY_SCAN_CHARS)
+    .ifBlank { return null }
+    .let { PiiSanitizer.sanitizeMessage(it) }
+    .take(MAX_LOGGED_BODY_CHARS)
+    .ifBlank { null }
+
   companion object {
     private const val MAX_LOGGED_BODY_CHARS = 500
+    private const val RAW_BODY_SCAN_CHARS = 8192
     private val LOGGER = LoggerFactory.getLogger(this::class.java)
   }
 }

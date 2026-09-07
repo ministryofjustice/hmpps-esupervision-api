@@ -75,10 +75,9 @@ class WebClientConfiguration(
     .authorisedWebClient(authorizedClientManager, registrationId = "ndilius-api", url = ndiliusApiBaseUri, timeout = timeout)
 
   /**
-   * Tier is the one upstream called off the request thread (see `OffenderService.getHeaderDetails`),
-   * and the one that has been intermittently 401ing on dev. [RefreshTokenOnUnauthorizedFilter] is
-   * added before the authorising filter so a rejected token is re-minted rather than degrading the
-   * case header.
+   * Tier is the one upstream called off the request thread (see `OffenderService.getHeaderDetails`)
+   * and the one that has been 401ing on dev. [RefreshTokenOnUnauthorizedFilter] is added before the
+   * authorising filter so a rejected token is re-minted rather than degrading the case header.
    */
   @Bean
   fun tierApiWebClient(
