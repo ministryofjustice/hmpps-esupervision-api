@@ -81,6 +81,22 @@ class TierApiClientTest {
   }
 
   @Test
+  fun `sanitises before truncating so a PII field split by the cut cannot leak`() {
+    // Position the forename value so the 500-character logging cut falls inside it. Truncating
+    // first would leave `"forename":"John` behind, which PiiSanitizer's `"[^"]*"` no longer
+    // matches, and the partial name would reach the log.
+    val padding = "x".repeat(470)
+    val response = ClientResponse.create(HttpStatus.BAD_REQUEST)
+      .body("""{"padding":"$padding","forename":"Johnathan","surname":"Doe"}""")
+      .build()
+
+    assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn) }
+
+    val logged = loggedMessages().single { it.startsWith("Error fetching tier details") }
+    assertFalse(logged.contains("John"), "a split forename leaked into: $logged")
+  }
+
+  @Test
   fun `a 404 stays a not-found and is not dressed up as an auth problem`() {
     val response = ClientResponse.create(HttpStatus.NOT_FOUND).build()
 
