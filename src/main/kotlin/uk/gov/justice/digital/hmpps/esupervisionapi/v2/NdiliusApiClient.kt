@@ -123,6 +123,7 @@ class NdiliusApiClient(
       throw ResponseStatusException(
         HttpStatus.SERVICE_UNAVAILABLE,
         "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
+        e,
       )
     } catch (e: Exception) {
       LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
