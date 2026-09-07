@@ -95,7 +95,7 @@ class TierApiClient(
   companion object {
     private const val MAX_LOGGED_BODY_CHARS = 500
     private const val RAW_BODY_SCAN_CHARS = 8192
-    private val LOGGER = LoggerFactory.getLogger(this::class.java)
+    private val LOGGER = LoggerFactory.getLogger(TierApiClient::class.java)
   }
 }
 
