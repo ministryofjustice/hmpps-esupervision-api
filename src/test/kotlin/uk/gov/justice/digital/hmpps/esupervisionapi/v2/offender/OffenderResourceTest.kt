@@ -876,7 +876,7 @@ class OffenderResourceTest {
     whenever(offenderService.getHeaderDetails(crn)).thenAnswer {
       throw ResponseStatusException(
         HttpStatus.NOT_FOUND,
-        "Could not verify contact details in NDelius for $crn.",
+        "Could not find contact details in NDelius for $crn.",
       )
     }
 
@@ -885,7 +885,7 @@ class OffenderResourceTest {
     }
 
     assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
-    assertEquals("Could not verify contact details in NDelius for $crn.", exception.reason)
+    assertEquals("Could not find contact details in NDelius for $crn.", exception.reason)
   }
 
   // ========================================
