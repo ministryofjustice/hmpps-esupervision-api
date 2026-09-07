@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.stereotype.Service
-import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -117,12 +116,8 @@ class OffenderService(
     else -> if (status.is4xxClientError) HeaderErrorCode.REQUEST_REJECTED else HeaderErrorCode.SERVICE_UNAVAILABLE
   }
 
-  /** The HTTP status an upstream answered with, whether the client translated it or let it through raw. */
-  private fun Exception.upstreamStatus(): HttpStatusCode? = when (this) {
-    is ResponseStatusException -> statusCode
-    is WebClientResponseException -> statusCode
-    else -> null
-  }
+  /** The HTTP status an upstream answered with. Every client translates to ResponseStatusException. */
+  private fun Exception.upstreamStatus(): HttpStatusCode? = (this as? ResponseStatusException)?.statusCode
 
   companion object {
     private val LOGGER = logger<OffenderService>()
