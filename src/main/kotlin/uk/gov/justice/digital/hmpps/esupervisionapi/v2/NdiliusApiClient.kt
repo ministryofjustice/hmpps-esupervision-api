@@ -152,9 +152,18 @@ class NdiliusApiClient(
   /**
    * Get contact details for multiple people on probation (max 500 CRNs)
    * POST /cases
+   *
+   * Deliberately has no `fallbackMethod`. It used to fall back to an empty list, which is
+   * indistinguishable from "NDelius holds none of these CRNs" - so when every call 401'd on dev the
+   * scheduled jobs read it as a batch of unknown CRNs, created nothing, and logged a clean run with
+   * `failed=0`. The callers already treat a throw as the failure signal (see
+   * `CheckinCreationJob`'s `catch (e: NdiliusBatchFetchException)`, which the fallback made
+   * unreachable), and every one of them wraps this call, so the exception is caught per batch
+   * rather than aborting a whole run.
+   *
    * @throws NdiliusBatchFetchException
    */
-  @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
+  @CircuitBreaker(name = "ndiliusApi")
   @Retry(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details-for-multiple", extraTags = ["method", "POST", "endpoint", "/cases"], description = "Time taken to get contact details")
   override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
@@ -181,11 +190,6 @@ class NdiliusApiClient(
       LOGGER.warn("Error fetching contact details for batch: {}", PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null) + " [batchSize=${batchCrns.size}]")
       throw NdiliusBatchFetchException(crns, "Error fetching contact details", e)
     }
-  }
-
-  private fun getContactDetailsForMultipleFallback(crns: List<String>?, e: Exception): List<ContactDetails> {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns?.size}"))
-    return emptyList()
   }
 
   /**
