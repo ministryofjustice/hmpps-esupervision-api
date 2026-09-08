@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.stereotype.Service
+import org.springframework.web.context.request.RequestAttributes
+import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
@@ -40,9 +42,12 @@ class OffenderService(
     // Tier runs on a virtual thread alongside the ARNS lookup so a slow upstream costs the request
     // max(tier, arns) rather than the sum. The per-call executor holds no pooled resources and
     // close() joins the task, which get() has already done.
+    val requestAttributes = RequestContextHolder.getRequestAttributes()
     val (tier, risk) = Executors.newVirtualThreadPerTaskExecutor().use { executor ->
       val tierLookup = executor.submit(
-        Callable { fetchField("tierScore", "Tier API", crn) { tierApiClient.getTierDetails(crn)?.tierScore } },
+        Callable {
+          onBehalfOfRequest(requestAttributes) { fetchField("tierScore", "Tier API", crn) { tierApiClient.getTierDetails(crn)?.tierScore } }
+        },
       )
       val risk = fetchField("overallRisk", "ARNS API", crn) { arnsApiClient.getRiskWidget(crn)?.overallRisk }
       await("tierScore", tierLookup) to risk
@@ -56,6 +61,37 @@ class OffenderService(
       overallRisk = risk.value,
       errors = listOfNotNull(contact.toErrorDetails(), tier.toErrorDetails(), risk.toErrorDetails()),
     )
+  }
+
+  /**
+   * Runs [block] on this thread with the spawning request's [RequestAttributes] rebound.
+   *
+   * `RequestContextHolder` is a plain ThreadLocal, so a task handed to another thread starts with
+   * an empty one. That matters more than it looks: hmpps-kotlin authorises upstream calls with
+   * `ServletOAuth2AuthorizedClientExchangeFilterFunction`, whose `authorizeClient` returns
+   * `Mono.empty()` when it cannot find an `HttpServletRequest`/`HttpServletResponse` among the
+   * request attributes - and its `filter()` then falls through to
+   * `exchangeAndHandleResponse(request, next)`, sending the request with *no* Authorization header
+   * instead of failing. The upstream answers 401 and nothing says why. Client credentials do not
+   * actually need the servlet request; the filter only null-checks it.
+   *
+   * Safe to share the attributes across threads here because the caller joins the task before
+   * returning, so the request outlives it.
+   *
+   * Restores whatever was bound before rather than clearing. Today that is always nothing - each
+   * task gets its own fresh virtual thread - but a pooled executor would hand us a thread that
+   * already carried a request, and clearing it would strand the next task on that thread with no
+   * context. `setRequestAttributes(null)` resets, so the no-previous case is unchanged.
+   */
+  private fun <T> onBehalfOfRequest(requestAttributes: RequestAttributes?, block: () -> T): T {
+    if (requestAttributes == null) return block()
+    val previous = RequestContextHolder.getRequestAttributes()
+    RequestContextHolder.setRequestAttributes(requestAttributes)
+    return try {
+      block()
+    } finally {
+      RequestContextHolder.setRequestAttributes(previous)
+    }
   }
 
   private data class FieldResult<T>(val field: String, val value: T?, val error: HeaderErrorCode?) {
