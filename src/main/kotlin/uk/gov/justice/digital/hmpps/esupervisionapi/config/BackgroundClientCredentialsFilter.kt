@@ -53,12 +53,16 @@ class BackgroundClientCredentialsFilter(
       return next.exchange(request)
     }
     // authorize() blocks on the token endpoint when the cache is cold, so keep it off the caller's
-    // thread. The empty case - a registration that cannot be authorised at all - falls through to
+    // thread; deferring it means subscribeOn governs where it runs. justOrEmpty states the
+    // null-to-empty step rather than leaning on fromCallable's implicit version of it, so the
+    // token reaching map is non-null by construction and a later change to authorize()'s return
+    // cannot quietly turn "no token" into a bearer of "null".
+    // The empty case - a registration that cannot be authorised at all - falls through to
     // the unmodified request, leaving it to fail against the upstream exactly as it did before
     // rather than here. Note the fallback applies to the *token*, not to the exchange: putting a
     // switchIfEmpty after the exchange would re-send the request unauthenticated if the exchange
     // ever completed empty, which for a batch POST means sending the body twice.
-    return Mono.fromCallable { authorize() }
+    return Mono.defer { Mono.justOrEmpty(authorize()) }
       .subscribeOn(Schedulers.boundedElastic())
       .map { token -> ClientRequest.from(request).headers { it.setBearerAuth(token) }.build() }
       .switchIfEmpty(Mono.just(request))
