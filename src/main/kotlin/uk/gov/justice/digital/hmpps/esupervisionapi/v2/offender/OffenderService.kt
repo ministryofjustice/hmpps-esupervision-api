@@ -77,14 +77,20 @@ class OffenderService(
    *
    * Safe to share the attributes across threads here because the caller joins the task before
    * returning, so the request outlives it.
+   *
+   * Restores whatever was bound before rather than clearing. Today that is always nothing - each
+   * task gets its own fresh virtual thread - but a pooled executor would hand us a thread that
+   * already carried a request, and clearing it would strand the next task on that thread with no
+   * context. `setRequestAttributes(null)` resets, so the no-previous case is unchanged.
    */
   private fun <T> onBehalfOfRequest(requestAttributes: RequestAttributes?, block: () -> T): T {
     if (requestAttributes == null) return block()
+    val previous = RequestContextHolder.getRequestAttributes()
     RequestContextHolder.setRequestAttributes(requestAttributes)
     return try {
       block()
     } finally {
-      RequestContextHolder.resetRequestAttributes()
+      RequestContextHolder.setRequestAttributes(previous)
     }
   }
 
