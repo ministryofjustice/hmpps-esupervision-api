@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import io.micrometer.core.annotation.Timed
@@ -153,17 +154,20 @@ class NdiliusApiClient(
    * Get contact details for multiple people on probation (max 500 CRNs)
    * POST /cases
    *
-   * Deliberately has no `fallbackMethod`. It used to fall back to an empty list, which is
-   * indistinguishable from "NDelius holds none of these CRNs" - so when every call 401'd on dev the
-   * scheduled jobs read it as a batch of unknown CRNs, created nothing, and logged a clean run with
-   * `failed=0`. The callers already treat a throw as the failure signal (see
-   * `CheckinCreationJob`'s `catch (e: NdiliusBatchFetchException)`, which the fallback made
-   * unreachable), and every one of them wraps this call, so the exception is caught per batch
-   * rather than aborting a whole run.
+   * Deliberately never falls back to an empty list. An empty list is indistinguishable from
+   * "NDelius holds none of these CRNs" - so when every call 401'd on dev the scheduled jobs read it
+   * as a batch of unknown CRNs, created nothing, and logged a clean run with `failed=0`. The
+   * callers already treat a throw as the failure signal (see `CheckinCreationJob`'s
+   * `catch (e: NdiliusBatchFetchException)`, which the old empty-list fallback made unreachable),
+   * and every one of them wraps this call, so the exception is caught per batch rather than
+   * aborting a whole run.
+   *
+   * The one remaining `fallbackMethod` exists purely to keep that promise for the open-circuit
+   * case: see [getContactDetailsForMultipleFallback].
    *
    * @throws NdiliusBatchFetchException
    */
-  @CircuitBreaker(name = "ndiliusApi")
+  @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
   @Retry(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details-for-multiple", extraTags = ["method", "POST", "endpoint", "/cases"], description = "Time taken to get contact details")
   override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
@@ -190,6 +194,27 @@ class NdiliusApiClient(
       LOGGER.warn("Error fetching contact details for batch: {}", PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null) + " [batchSize=${batchCrns.size}]")
       throw NdiliusBatchFetchException(crns, "Error fetching contact details", e)
     }
+  }
+
+  /**
+   * Covers the open-circuit case only, and still fails rather than returning an empty list.
+   *
+   * [CallNotPermittedException] is raised by the circuit-breaker aspect *before* the method body
+   * runs, so the body's own try/catch cannot turn it into an [NdiliusBatchFetchException]. Untyped
+   * it would escape callers that catch only that type - `CheckinCreationJob` catches it per chunk
+   * and counts `crns.size` towards `metrics.errors`, so a bare [CallNotPermittedException] would
+   * instead unwind to the job's outer handler, abandon the remaining chunks and still report
+   * `failed=0`. The `ndiliusApi` breaker is shared with the single-CRN calls (which do record 5xx
+   * and connection failures) and trips on slow calls too, so an open circuit is reachable here
+   * even though nothing this method throws is itself a recorded failure.
+   *
+   * Typed to [CallNotPermittedException] on purpose: resilience4j rethrows unchanged anything a
+   * fallback's parameter type does not match, so the [NdiliusBatchFetchException] thrown by the
+   * body still propagates as-is rather than being re-wrapped.
+   */
+  private fun getContactDetailsForMultipleFallback(crns: List<String>, e: CallNotPermittedException): List<ContactDetails> {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns.size}"))
+    throw NdiliusBatchFetchException(crns, "Circuit breaker open for NDelius batch fetch", e)
   }
 
   /**

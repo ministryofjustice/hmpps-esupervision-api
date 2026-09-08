@@ -3,10 +3,12 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration.v2
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import com.github.tomakehurst.wiremock.client.WireMock.post
+import com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -14,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.springframework.web.reactive.function.client.WebClientResponseException
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -67,12 +70,25 @@ class NdeliusBatchFailureIntegrationTest : IntegrationTestBase() {
     )
   }
 
+  /**
+   * Every failure inside the client is wrapped as [NdiliusBatchFetchException], so the throw alone
+   * proves nothing about *where* it came from - a broken auth stub or a refused connection would
+   * satisfy it just as well. Pin that NDelius was actually reached and answered.
+   */
+  private fun assertCasesAnsweredWith(status: Int, thrown: NdiliusBatchFetchException) {
+    upstreams.verify(postRequestedFor(urlEqualTo("/cases")))
+    val cause = thrown.cause
+    assertTrue(cause is WebClientResponseException, "expected an upstream HTTP failure, got $cause")
+    assertEquals(status, (cause as WebClientResponseException).statusCode.value())
+  }
+
   @Test
   fun `a 401 from NDelius throws rather than reporting an empty batch`() {
     stubCases(HttpStatus.UNAUTHORIZED.value())
 
     val thrown = assertThrows<NdiliusBatchFetchException> { ndiliusApiClient.getContactDetailsForMultiple(crns) }
 
+    assertCasesAnsweredWith(HttpStatus.UNAUTHORIZED.value(), thrown)
     // CheckinCreationJob counts `e.crns.size` towards its failure total, so the CRNs have to survive.
     assertEquals(crns, thrown.crns)
   }
@@ -81,7 +97,9 @@ class NdeliusBatchFailureIntegrationTest : IntegrationTestBase() {
   fun `a 5xx from NDelius throws rather than reporting an empty batch`() {
     stubCases(HttpStatus.INTERNAL_SERVER_ERROR.value())
 
-    assertThrows<NdiliusBatchFetchException> { ndiliusApiClient.getContactDetailsForMultiple(crns) }
+    val thrown = assertThrows<NdiliusBatchFetchException> { ndiliusApiClient.getContactDetailsForMultiple(crns) }
+
+    assertCasesAnsweredWith(HttpStatus.INTERNAL_SERVER_ERROR.value(), thrown)
   }
 
   @Test
@@ -89,5 +107,6 @@ class NdeliusBatchFailureIntegrationTest : IntegrationTestBase() {
     stubCases(HttpStatus.OK.value(), "[]")
 
     assertEquals(emptyList<Any>(), ndiliusApiClient.getContactDetailsForMultiple(crns))
+    upstreams.verify(postRequestedFor(urlEqualTo("/cases")))
   }
 }
