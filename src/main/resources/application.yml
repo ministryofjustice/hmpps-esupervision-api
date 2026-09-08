@@ -432,10 +432,6 @@ resilience4j:
         timeout-duration: 5s
         cancel-running-future: true
 
-      ndiliusApiAlerts:
-        timeout-duration: 5s
-        cancel-running-future: true
-
       govNotify:
         timeout-duration: 10s
         cancel-running-future: true
