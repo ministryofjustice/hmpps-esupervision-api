@@ -39,8 +39,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * to an executor puts it in the same context the scheduler uses: no request bound, no security
  * context.
  *
- * Consequently the response only reports that the job *started*. Read the outcome from the job's
- * own logging and its `job_log` row, exactly as for a scheduled run.
+ * Consequently the response only reports that the run was *accepted* - runs are serialised on one
+ * worker, so it may still be queued behind a longer job. Read the outcome from the job's own
+ * logging and its `job_log` row, exactly as for a scheduled run.
  *
  * ShedLock does not apply. `@EnableSchedulerLock` runs in its default `PROXY_SCHEDULER` mode, so
  * `@SchedulerLock` wraps the scheduler rather than the annotated methods, and a direct call bypasses
@@ -144,8 +145,16 @@ class JobControlResource(
   @PreDestroy
   fun shutdown() {
     executor.shutdown()
-    if (!executor.awaitTermination(SHUTDOWN_GRACE_SECONDS, TimeUnit.SECONDS)) {
-      LOGGER.warn("Shutting down with a manually triggered job still running; it will be abandoned")
+    try {
+      if (!executor.awaitTermination(SHUTDOWN_GRACE_SECONDS, TimeUnit.SECONDS)) {
+        LOGGER.warn("Shutting down with a manually triggered job still running; it will be abandoned")
+      }
+    } catch (e: InterruptedException) {
+      // Kotlin does not check this, so it would otherwise escape @PreDestroy as a context-close
+      // failure and swallow the interrupt with it. Restore the flag and let shutdown continue -
+      // the wait was only ever a courtesy.
+      Thread.currentThread().interrupt()
+      LOGGER.warn("Interrupted while waiting for a manually triggered job to finish", e)
     }
   }
 
