@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -27,12 +29,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * to reach in prod even with a valid token.
  *
  * **The job runs on a background thread, not the request thread, and that is the point.** These
- * jobs call NDelius, and an upstream call inherits its credentials from whether a servlet request
- * is in scope on the subscribing thread (see `BackgroundClientCredentialsFilter`). Triggering a job
- * inline would run it under a live request and authenticate by a route the 9am scheduler never
- * takes - so an auth fault could pass here and still fail on the real run, which is the class of
- * bug this endpoint most needs to be able to reproduce. Handing the work to an executor puts it in
- * the same context the scheduler uses: no request bound, no security context.
+ * jobs call NDelius, and how an upstream call is authorised depends on what is bound to the calling
+ * thread: `ServletOAuth2AuthorizedClientExchangeFilterFunction` picks up the servlet request and the
+ * security context from it, and behaves differently when it finds neither (see
+ * `OffenderService.onBehalfOfRequest`, which has to rebind them by hand to keep a call off the
+ * request thread authorised). Triggering a job inline would run it under a live request, down a
+ * route the 9am scheduler never takes - so an auth fault could pass here and still fail on the real
+ * run, which is the class of bug this endpoint most needs to be able to reproduce. Handing the work
+ * to an executor puts it in the same context the scheduler uses: no request bound, no security
+ * context.
  *
  * Consequently the response only reports that the job *started*. Read the outcome from the job's
  * own logging and its `job_log` row, exactly as for a scheduled run.
@@ -53,6 +58,8 @@ class JobControlResource(
   checkinExpiryJob: ObjectProvider<CheckinExpiryJob>,
   customQuestionsReminderJob: ObjectProvider<CustomQuestionsReminderJob>,
   checkinImageRetentionJob: ObjectProvider<CheckinImageRetentionJob>,
+  checkinNoteResendJob: ObjectProvider<CheckinNoteResendJob>,
+  checkinLegacyAssetCleanupJob: ObjectProvider<CheckinLegacyAssetCleanupJob>,
   migrationEventReplayJob: ObjectProvider<MigrationEventReplayJob>,
   monthlyStatsRefreshJob: ObjectProvider<MonthlyStatsRefreshJob>,
 ) {
@@ -67,6 +74,8 @@ class JobControlResource(
     checkinExpiryJob.ifAvailable { put("checkin-expiry", it::process) }
     customQuestionsReminderJob.ifAvailable { put("custom-questions-reminder", it::process) }
     checkinImageRetentionJob.ifAvailable { put("checkin-image-retention", it::process) }
+    checkinNoteResendJob.ifAvailable { put("checkin-note-resend", it::process) }
+    checkinLegacyAssetCleanupJob.ifAvailable { put("checkin-legacy-cleanup", it::process) }
     migrationEventReplayJob.ifAvailable { put("migration-event-replay", it::process) }
     monthlyStatsRefreshJob.ifAvailable { put("monthly-stats-refresh", it::refresh) }
   }
@@ -100,25 +109,48 @@ class JobControlResource(
     }
 
     LOGGER.info("Manually triggering job {}", jobName)
-    executor.execute {
-      try {
-        job()
-      } catch (e: Exception) {
-        // The jobs handle their own failures; this only catches an escape so the guard is released.
-        LOGGER.error("Manually triggered job {} failed", jobName, e)
-      } finally {
-        guard.set(false)
+    try {
+      executor.execute {
+        try {
+          job()
+        } catch (e: Exception) {
+          // The jobs handle their own failures; this only catches an escape so the guard is released.
+          LOGGER.error("Manually triggered job {} failed", jobName, e)
+        } finally {
+          guard.set(false)
+        }
       }
+    } catch (e: RejectedExecutionException) {
+      // Reachable once [shutdown] has run and a request is still in flight. The guard has to be
+      // released here because nothing else will: the task that would have cleared it never runs, and
+      // a latched guard would answer ALREADY_RUNNING for a job that is not running.
+      guard.set(false)
+      LOGGER.warn("Manual trigger of job {} rejected: the executor is shut down", jobName)
+      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .body(mapOf("job" to jobName, "status" to "SHUTTING_DOWN"))
     }
-    return ResponseEntity.accepted().body(mapOf("job" to jobName, "status" to "STARTED"))
+    // ACCEPTED, not STARTED: runs are serialised on the single worker, so this may still be queued
+    // behind a long job. Saying "started" would have an operator watching for logs that cannot
+    // appear yet and concluding the trigger did nothing.
+    return ResponseEntity.accepted().body(mapOf("job" to jobName, "status" to "ACCEPTED"))
   }
 
+  /**
+   * The thread is a daemon, so a job still running here is abandoned at JVM exit rather than holding
+   * shutdown up - and it spends its last moments running against a context that is being torn down.
+   * Wait briefly and say so, otherwise the truncated run and its unfinished `job_log` row look like
+   * a fault in the job.
+   */
   @PreDestroy
   fun shutdown() {
     executor.shutdown()
+    if (!executor.awaitTermination(SHUTDOWN_GRACE_SECONDS, TimeUnit.SECONDS)) {
+      LOGGER.warn("Shutting down with a manually triggered job still running; it will be abandoned")
+    }
   }
 
   companion object {
+    private const val SHUTDOWN_GRACE_SECONDS = 2L
     private val LOGGER = LoggerFactory.getLogger(JobControlResource::class.java)
   }
 }
