@@ -58,9 +58,15 @@ class WebClientConfiguration(
           Mono.just(req)
         },
       )
+      it.add(BackgroundClientCredentialsFilter(MANAGE_USERS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = "manage-users-api", url = manageUsersApiBaseUri, timeout = timeout)
+    .authorisedWebClient(authorizedClientManager, registrationId = MANAGE_USERS_API_REGISTRATION_ID, url = manageUsersApiBaseUri, timeout = timeout)
 
+  /**
+   * The scheduled jobs are the only NDelius callers with no request in scope - the batch
+   * `POST /cases` behind check-in creation and reminders - so [BackgroundClientCredentialsFilter]
+   * is what keeps those authenticated. See its KDoc.
+   */
   @Bean
   @Profile("!stubndilius")
   fun ndiliusApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
@@ -71,8 +77,9 @@ class WebClientConfiguration(
           Mono.just(req)
         },
       )
+      it.add(BackgroundClientCredentialsFilter(NDILIUS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = "ndilius-api", url = ndiliusApiBaseUri, timeout = timeout)
+    .authorisedWebClient(authorizedClientManager, registrationId = NDILIUS_API_REGISTRATION_ID, url = ndiliusApiBaseUri, timeout = timeout)
 
   /**
    * Tier is the one upstream called off the request thread (see `OffenderService.getHeaderDetails`)
@@ -93,6 +100,8 @@ class WebClientConfiguration(
         },
       )
       it.add(RefreshTokenOnUnauthorizedFilter(TIER_API_REGISTRATION_ID, authorizedClientService))
+      // Inside the refresh filter, so its retry re-mints rather than replaying the evicted token.
+      it.add(BackgroundClientCredentialsFilter(TIER_API_REGISTRATION_ID, authorizedClientManager))
     }
     .authorisedWebClient(authorizedClientManager, registrationId = TIER_API_REGISTRATION_ID, url = tierApiBaseUri, timeout = timeout)
 
@@ -105,8 +114,9 @@ class WebClientConfiguration(
           Mono.just(req)
         },
       )
+      it.add(BackgroundClientCredentialsFilter(ARNS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = "arns-api", url = arnsApiBaseUri, timeout = timeout)
+    .authorisedWebClient(authorizedClientManager, registrationId = ARNS_API_REGISTRATION_ID, url = arnsApiBaseUri, timeout = timeout)
 
   // HMPPS Auth health ping is required if your service calls HMPPS Auth to get a token to call other services
   @Bean
@@ -114,6 +124,9 @@ class WebClientConfiguration(
 
   companion object {
     private const val TIER_API_REGISTRATION_ID = "tier-api"
+    private const val NDILIUS_API_REGISTRATION_ID = "ndilius-api"
+    private const val MANAGE_USERS_API_REGISTRATION_ID = "manage-users-api"
+    private const val ARNS_API_REGISTRATION_ID = "arns-api"
     private val log = LoggerFactory.getLogger(this::class.java)
   }
 }
