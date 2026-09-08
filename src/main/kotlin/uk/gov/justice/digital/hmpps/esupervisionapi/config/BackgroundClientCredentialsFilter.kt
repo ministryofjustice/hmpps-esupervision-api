@@ -7,7 +7,9 @@ import org.springframework.security.core.Authentication
 import org.springframework.security.core.authority.AuthorityUtils
 import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager
+import org.springframework.web.context.request.RequestAttributes
 import org.springframework.web.context.request.RequestContextHolder
+import org.springframework.web.context.request.ServletRequestAttributes
 import org.springframework.web.reactive.function.client.ClientRequest
 import org.springframework.web.reactive.function.client.ClientResponse
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction
@@ -47,16 +49,36 @@ class BackgroundClientCredentialsFilter(
 
   override fun filter(request: ClientRequest, next: ExchangeFunction): Mono<ClientResponse> {
     // Read on the subscribing thread, which is where the authorising filter would look too.
-    if (RequestContextHolder.getRequestAttributes() != null || request.headers().getFirst(HttpHeaders.AUTHORIZATION) != null) {
+    if (authorisingFilterWillAttachABearer() || request.headers().getFirst(HttpHeaders.AUTHORIZATION) != null) {
       return next.exchange(request)
     }
     // authorize() blocks on the token endpoint when the cache is cold, so keep it off the caller's
-    // thread; switchIfEmpty covers a registration that cannot be authorised at all, leaving the
-    // request to fail against the upstream exactly as it did before rather than here.
+    // thread. The empty case - a registration that cannot be authorised at all - falls through to
+    // the unmodified request, leaving it to fail against the upstream exactly as it did before
+    // rather than here. Note the fallback applies to the *token*, not to the exchange: putting a
+    // switchIfEmpty after the exchange would re-send the request unauthenticated if the exchange
+    // ever completed empty, which for a batch POST means sending the body twice.
     return Mono.fromCallable { authorize() }
       .subscribeOn(Schedulers.boundedElastic())
-      .flatMap { token -> next.exchange(ClientRequest.from(request).headers { it.setBearerAuth(token) }.build()) }
-      .switchIfEmpty(Mono.defer { next.exchange(request) })
+      .map { token -> ClientRequest.from(request).headers { it.setBearerAuth(token) }.build() }
+      .switchIfEmpty(Mono.just(request))
+      .flatMap { next.exchange(it) }
+  }
+
+  /**
+   * Mirrors the precondition `ServletOAuth2AuthorizedClientExchangeFilterFunction.authorizeClient`
+   * actually applies, rather than the looser "is anything bound?".
+   *
+   * `SecurityReactorContextConfiguration` only publishes the servlet request/response pair when a
+   * [ServletRequestAttributes] is bound, and reads each half separately; `authorizeClient` then
+   * returns `Mono.empty()` - sending the call unauthenticated - if *either* is null. A bare
+   * `getRequestAttributes() != null` would leave this filter inert against a response-less binding
+   * (as `RequestContextListener` produces) or a non-servlet [RequestAttributes], which is precisely
+   * the gap it exists to close, and silently: even the warn below would not be reached.
+   */
+  private fun authorisingFilterWillAttachABearer(): Boolean {
+    val attributes = RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes ?: return false
+    return attributes.response != null
   }
 
   private fun authorize(): String? {
@@ -71,11 +93,14 @@ class BackgroundClientCredentialsFilter(
   }
 
   companion object {
-    private val log = LoggerFactory.getLogger(this::class.java)
+    private val log = LoggerFactory.getLogger(BackgroundClientCredentialsFilter::class.java)
 
     /**
-     * Only the name is load-bearing: it is the key the authorized-client store caches against, and
-     * matching the request path's key is what keeps the two sharing a token.
+     * `AuthorizedClientServiceOAuth2AuthorizedClientManager` insists on a principal, but hmpps-kotlin's
+     * `GlobalPrincipalOAuth2AuthorizedClientService` ignores whichever one it is handed and keys every
+     * entry on the literal [GLOBAL_SYSTEM_PRINCIPAL] - that, not this token, is what keeps background
+     * and request callers sharing one cached token. The name is set to match anyway, so the key still
+     * lines up if the store is ever swapped for a principal-keyed one.
      */
     private val backgroundPrincipal: Authentication = AnonymousAuthenticationToken(
       "esupervision-background",
