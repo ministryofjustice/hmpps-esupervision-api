@@ -65,6 +65,12 @@ app:
       standard-retention-days: 28
       concern-retention-days: 2192
       batch-size: 100
+  jobs:
+    # Exposes POST /v2/jobs/{name}/run so a scheduled job can be started on demand, for verifying a
+    # change in a deployed environment without waiting for its cron. Non-production only: with this
+    # false the controller bean is not created at all, so the endpoints 404 rather than 403.
+    manual-trigger:
+      enabled: ${APP_JOBS_MANUAL_TRIGGER_ENABLED:false}
   features:
     # publish media proxy links to NDelius
     esup-1239: true
