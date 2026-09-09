@@ -23,6 +23,7 @@ generic-service:
     TIER_UI_URL: "https://tier-dev.hmpps.service.justice.gov.uk"
     ARNS_API_URL: "https://assess-risks-and-needs-dev.hmpps.service.justice.gov.uk"
     APP_ENV: "DEV"
+    APP_JOBS_MANUAL_TRIGGER_ENABLED: "true"
     APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "0 */15 * * * *"
     APP_SCHEDULING_CHECKIN_NOTE_RESEND_CRON: "0 */15 * * * *"
     APP_SCHEDULING_V2_CHECKIN_REMINDER_CRON: "0 15 9,15,16 * * *"

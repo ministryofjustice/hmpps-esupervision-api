@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import io.micrometer.core.annotation.Timed
@@ -27,13 +28,33 @@ private data class NdiliusContactDetailsUpdateBody(
   val emailAddress: String?,
 )
 
+/**
+ * Wire shape returned by esupervision-and-delius's GET /user/{username}/alerts.
+ */
+private data class NdiliusAlertsResponse(
+  val count: Int,
+)
+
 interface INdiliusApiClient {
   fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
 
   /**
    * Get contact details by CRN. Returns null if not found.
+   *
+   * NOTE: null also covers every failure mode (upstream error, timeout, open circuit), so callers
+   * cannot tell "no such CRN" apart from "NDelius unavailable". Use [getContactDetailsStrict]
+   * where that distinction matters.
    */
   fun getContactDetails(crn: String): ContactDetails?
+
+  /**
+   * Get contact details by CRN, reserving null for a genuine NDelius 404.
+   *
+   * Any other failure propagates: a [org.springframework.web.server.ResponseStatusException]
+   * carrying the upstream 4xx status, or the raw exception for 5xx, connection failures, timeouts
+   * and an open circuit breaker. Not retried, so the caller waits at most one request timeout.
+   */
+  fun getContactDetailsStrict(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
 
   /**
@@ -41,6 +62,12 @@ interface INdiliusApiClient {
    * NOTE: depends on PI-4356 (esupervision-and-delius PUT /case/{crn}/contact-details), not yet live.
    */
   fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse
+
+  /**
+   * Get the number of alerts for a practitioner by NDelius username.
+   * Returns null if the username is not found.
+   */
+  fun getAlertCount(username: String): Int?
 
   companion object {
     const val MAX_BATCH_SIZE = 500
@@ -67,7 +94,22 @@ class NdiliusApiClient(
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsFallback")
   @Retry(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
-  override fun getContactDetails(crn: String): ContactDetails? {
+  override fun getContactDetails(crn: String): ContactDetails? = fetchContactDetails(crn)
+
+  /**
+   * As [getContactDetails] but without a swallowing fallback: only a 404 becomes null, every
+   * other failure (including an open circuit) propagates to the caller.
+   *
+   * Deliberately not annotated with @Retry. On [getContactDetails] the circuit-breaker fallback
+   * returns before the outer Retry aspect sees an exception, so it never retries. Without a
+   * fallback, Retry would run three attempts at the full request timeout each, which is far too
+   * long for an interactive caller that can degrade instead.
+   */
+  @CircuitBreaker(name = "ndiliusApi")
+  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
+  override fun getContactDetailsStrict(crn: String): ContactDetails? = fetchContactDetails(crn)
+
+  private fun fetchContactDetails(crn: String): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
 
     return try {
@@ -81,21 +123,26 @@ class NdiliusApiClient(
       null
     } catch (e: WebClientResponseException) {
       LOGGER.warn("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(
-          e.statusCode,
-          "Could not verify contact details in NDelius for $crn.",
-          e,
-        )
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst retrieving the contact details in NDelius for $crn.",
-      )
+      rethrowAs4xxOrPropagate(e, "Could not verify contact details in NDelius for $crn.")
     } catch (e: Exception) {
       LOGGER.error("Error fetching contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
     }
+  }
+
+  /**
+   * Client (4xx) errors from NDelius are translated to a [ResponseStatusException] with the same
+   * status immediately, since they're never retried/recorded by resilience4j anyway (see
+   * ignore-exceptions/record-exceptions in application.yml). Anything else (5xx, timeouts) is
+   * rethrown unchanged so the @Retry/@CircuitBreaker AOP wrapping this method - which matches on
+   * the exception type that actually escapes - can retry/record it and route to the fallback
+   * method once retries are exhausted.
+   */
+  private fun rethrowAs4xxOrPropagate(e: WebClientResponseException, clientErrorMessage: String): Nothing {
+    if (e.statusCode.is4xxClientError) {
+      throw ResponseStatusException(e.statusCode, clientErrorMessage, e)
+    }
+    throw e
   }
 
   private fun getContactDetailsFallback(crn: String, e: Exception): ContactDetails? {
@@ -106,6 +153,18 @@ class NdiliusApiClient(
   /**
    * Get contact details for multiple people on probation (max 500 CRNs)
    * POST /cases
+   *
+   * Deliberately never falls back to an empty list. An empty list is indistinguishable from
+   * "NDelius holds none of these CRNs" - so when every call 401'd on dev the scheduled jobs read it
+   * as a batch of unknown CRNs, created nothing, and logged a clean run with `failed=0`. The
+   * callers already treat a throw as the failure signal (see `CheckinCreationJob`'s
+   * `catch (e: NdiliusBatchFetchException)`, which the old empty-list fallback made unreachable),
+   * and every one of them wraps this call, so the exception is caught per batch rather than
+   * aborting a whole run.
+   *
+   * The one remaining `fallbackMethod` exists purely to keep that promise for the open-circuit
+   * case: see [getContactDetailsForMultipleFallback].
+   *
    * @throws NdiliusBatchFetchException
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
@@ -137,9 +196,25 @@ class NdiliusApiClient(
     }
   }
 
-  private fun getContactDetailsForMultipleFallback(crns: List<String>?, e: Exception): List<ContactDetails> {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns?.size}"))
-    return emptyList()
+  /**
+   * Covers the open-circuit case only, and still fails rather than returning an empty list.
+   *
+   * [CallNotPermittedException] is raised by the circuit-breaker aspect *before* the method body
+   * runs, so the body's own try/catch cannot turn it into an [NdiliusBatchFetchException]. Untyped
+   * it would escape callers that catch only that type - `CheckinCreationJob` catches it per chunk
+   * and counts `crns.size` towards `metrics.errors`, so a bare [CallNotPermittedException] would
+   * instead unwind to the job's outer handler, abandon the remaining chunks and still report
+   * `failed=0`. The `ndiliusApi` breaker is shared with the single-CRN calls (which do record 5xx
+   * and connection failures) and trips on slow calls too, so an open circuit is reachable here
+   * even though nothing this method throws is itself a recorded failure.
+   *
+   * Typed to [CallNotPermittedException] on purpose: resilience4j rethrows unchanged anything a
+   * fallback's parameter type does not match, so the [NdiliusBatchFetchException] thrown by the
+   * body still propagates as-is rather than being re-wrapped.
+   */
+  private fun getContactDetailsForMultipleFallback(crns: List<String>, e: CallNotPermittedException): List<ContactDetails> {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns.size}"))
+    throw NdiliusBatchFetchException(crns, "Circuit breaker open for NDelius batch fetch", e)
   }
 
   /**
@@ -181,13 +256,7 @@ class NdiliusApiClient(
       throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found in NDelius for $crn.", e)
     } catch (e: WebClientResponseException) {
       LOGGER.warn("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
-      if (e.statusCode.is4xxClientError) {
-        throw ResponseStatusException(e.statusCode, "Could not update contact details in NDelius for $crn.", e)
-      }
-      throw ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Encountered an issue whilst updating the contact details in NDelius for $crn.",
-      )
+      rethrowAs4xxOrPropagate(e, "Could not update contact details in NDelius for $crn.")
     } catch (e: Exception) {
       LOGGER.error("Error updating contact details: {}", PiiSanitizer.sanitizeException(e, crn))
       throw e
@@ -234,6 +303,41 @@ class NdiliusApiClient(
   private fun validatePersonalDetailsFallback(personalDetails: PersonalDetails, e: Exception): Boolean {
     LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "validatePersonalDetails, crn=${personalDetails.crn}"))
     return false
+  }
+
+  /**
+   * Get the number of alerts for a practitioner by NDelius username
+   * GET /user/{username}/alerts
+   */
+  @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getAlertCountFallback")
+  @Retry(name = "ndiliusApi")
+  @Timed("ndelius.get-alert-count", extraTags = ["method", "GET", "endpoint", "/user/{username}/alerts"], description = "Time taken to get alert count")
+  override fun getAlertCount(username: String): Int? {
+    LOGGER.info("Fetching alert count for username: {}", username)
+
+    return try {
+      ndiliusApiWebClient.get()
+        .uri("/user/{username}/alerts", username)
+        .retrieve()
+        .bodyToMono(NdiliusAlertsResponse::class.java)
+        .block()
+        ?.count
+        ?: throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Empty response whilst fetching alerts in NDelius for $username.")
+    } catch (e: WebClientResponseException.NotFound) {
+      LOGGER.warn("Alerts not found for username: {}", username)
+      null
+    } catch (e: WebClientResponseException) {
+      LOGGER.warn("Error fetching alert count for username {}: {}", username, PiiSanitizer.sanitizeException(e))
+      rethrowAs4xxOrPropagate(e, "Could not fetch alerts in NDelius for $username.")
+    } catch (e: Exception) {
+      LOGGER.error("Error fetching alert count for username {}: {}", username, PiiSanitizer.sanitizeException(e))
+      throw e
+    }
+  }
+
+  private fun getAlertCountFallback(username: String, e: Exception): Int? {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getAlertCount, username=$username"))
+    return null
   }
 
   companion object {
