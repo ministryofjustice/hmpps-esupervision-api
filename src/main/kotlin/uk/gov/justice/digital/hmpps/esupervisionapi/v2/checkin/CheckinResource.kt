@@ -41,6 +41,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UploadLocationsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 /** V2 Checkin REST Controller */
 @RestController
@@ -162,10 +163,7 @@ class CheckinResource(
     @Parameter(description = "Number of snapshots to compare", required = false)
     @RequestParam(name = "numSnapshots", defaultValue = "1")
     numSnapshots: Int,
-  ): ResponseEntity<FacialRecognitionResult> {
-    val result = checkinService.verifyFace(uuid, numSnapshots)
-    return ResponseEntity.ok(result)
-  }
+  ): CompletableFuture<ResponseEntity<FacialRecognitionResult>> = checkinService.verifyFace(uuid, numSnapshots).thenApply { ResponseEntity.ok(it) }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/liveness/session")
@@ -178,10 +176,7 @@ class CheckinResource(
   @ApiResponse(responseCode = "400", description = "Invalid checkin state")
   fun createLivenessSession(
     @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
-  ): ResponseEntity<LivenessSessionResponse> {
-    val session = checkinService.createLivenessSession(uuid)
-    return ResponseEntity.ok(session)
-  }
+  ): CompletableFuture<ResponseEntity<LivenessSessionResponse>> = checkinService.createLivenessSession(uuid).thenApply { ResponseEntity.ok(it) }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/{uuid}/liveness/credentials")
@@ -212,10 +207,7 @@ class CheckinResource(
   fun verifyLiveness(
     @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
     @RequestBody @Valid request: LivenessVerifyRequest,
-  ): ResponseEntity<LivenessVerificationResponse> {
-    val result = checkinService.verifyLiveness(uuid, request.sessionId)
-    return ResponseEntity.ok(result)
-  }
+  ): CompletableFuture<ResponseEntity<LivenessVerificationResponse>> = checkinService.verifyLiveness(uuid, request.sessionId).thenApply { ResponseEntity.ok(it) }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @PostMapping("/{uuid}/liveness/client-failure")
