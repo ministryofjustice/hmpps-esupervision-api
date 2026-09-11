@@ -11,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ApiUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
@@ -77,7 +78,7 @@ open class StubNdiliusApiClient(
   }
 
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details (STUB)")
-  override fun getContactDetails(crn: String): ContactDetails? {
+  override fun getContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideCase(crn)
@@ -86,9 +87,9 @@ open class StubNdiliusApiClient(
     return null
   }
 
-  override fun getContactDetailsStrict(crn: String): ContactDetails? = getContactDetails(crn)
+  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = getContactDetails(crn)
 
-  override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
+  override fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase): List<ContactDetails> {
     LOG.debug("Fetching contact details for {} CRNs, starting with {}", crns.size, crns.take(4))
     val incomingCrns = HashSet<String>(crns)
     val allowedCrns = watcher.allowedCrns
