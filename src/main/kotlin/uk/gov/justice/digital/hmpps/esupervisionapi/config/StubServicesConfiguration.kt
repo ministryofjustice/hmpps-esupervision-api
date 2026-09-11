@@ -87,7 +87,7 @@ open class StubNdiliusApiClient(
     return null
   }
 
-  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = getContactDetails(crn)
+  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = getContactDetails(crn, useCase)
 
   override fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase): List<ContactDetails> {
     LOG.debug("Fetching contact details for {} CRNs, starting with {}", crns.size, crns.take(4))
