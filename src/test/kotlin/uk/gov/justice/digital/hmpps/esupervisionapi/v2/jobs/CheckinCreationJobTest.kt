@@ -154,7 +154,7 @@ class CheckinCreationJobTest {
     whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), anyOrNull()))
       .thenReturn(offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.currentEvent) })
     whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<Offender>())
-    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any(), any())).thenReturn(detailsByCrn.values.toList())
     whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenAnswer { arg ->
       val offender = arg.getArgument<Offender>(0)
       OffenderCheckin(

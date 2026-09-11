@@ -17,7 +17,7 @@ import java.lang.reflect.InvocationTargetException
  */
 class NdiliusApiClientTest {
 
-  private val client = NdiliusApiClient(WebClient.builder().build())
+  private val client = NdiliusApiClient(WebClient.builder().build(), WebClient.builder().build())
 
   @Test
   fun `getAlertCountFallback fails open, returning null`() {

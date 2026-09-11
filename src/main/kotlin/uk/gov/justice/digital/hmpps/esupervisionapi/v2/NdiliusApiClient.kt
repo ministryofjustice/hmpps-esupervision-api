@@ -35,9 +35,10 @@ private data class NdiliusAlertsResponse(
   val count: Int,
 )
 
-interface INdiliusApiClient {
-  fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
-
+/**
+ * API for nDelius queries common for different contexts (e.g. eligibility checks and getting contact details).
+ */
+interface INdeliusCommonApiClient {
   /**
    * Get contact details by CRN. Returns null if not found.
    *
@@ -45,7 +46,7 @@ interface INdiliusApiClient {
    * cannot tell "no such CRN" apart from "NDelius unavailable". Use [getContactDetailsStrict]
    * where that distinction matters.
    */
-  fun getContactDetails(crn: String): ContactDetails?
+  fun getContactDetails(crn: String, useCase: ApiUseCase = ApiUseCase.GENERAL): ContactDetails?
 
   /**
    * Get contact details by CRN, reserving null for a genuine NDelius 404.
@@ -54,8 +55,12 @@ interface INdiliusApiClient {
    * carrying the upstream 4xx status, or the raw exception for 5xx, connection failures, timeouts
    * and an open circuit breaker. Not retried, so the caller waits at most one request timeout.
    */
-  fun getContactDetailsStrict(crn: String): ContactDetails?
-  fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
+  fun getContactDetailsStrict(crn: String, useCase: ApiUseCase = ApiUseCase.GENERAL): ContactDetails?
+  fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase = ApiUseCase.GENERAL): List<ContactDetails>
+}
+
+interface INdiliusApiClient : INdeliusCommonApiClient {
+  fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean
 
   /**
    * Update a person's contact details by CRN.
@@ -82,6 +87,7 @@ interface INdiliusApiClient {
 @Service
 class NdiliusApiClient(
   private val ndiliusApiWebClient: WebClient,
+  private val ndeliusEligibilityWebClient: WebClient,
 ) : INdiliusApiClient {
   @Autowired
   @Lazy
@@ -94,7 +100,7 @@ class NdiliusApiClient(
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsFallback")
   @Retry(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
-  override fun getContactDetails(crn: String): ContactDetails? = fetchContactDetails(crn)
+  override fun getContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? = fetchContactDetails(crn, useCase)
 
   /**
    * As [getContactDetails] but without a swallowing fallback: only a 404 becomes null, every
@@ -107,13 +113,16 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
-  override fun getContactDetailsStrict(crn: String): ContactDetails? = fetchContactDetails(crn)
+  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = fetchContactDetails(crn, useCase)
 
-  private fun fetchContactDetails(crn: String): ContactDetails? {
+  private fun fetchContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
 
     return try {
-      ndiliusApiWebClient.get()
+      when (useCase) {
+        ApiUseCase.GENERAL -> ndiliusApiWebClient
+        ApiUseCase.ELIGIBILITY_CHECK -> ndeliusEligibilityWebClient
+      }.get()
         .uri("/case/{crn}", crn)
         .retrieve()
         .bodyToMono(ContactDetails::class.java)
@@ -170,7 +179,7 @@ class NdiliusApiClient(
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
   @Retry(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details-for-multiple", extraTags = ["method", "POST", "endpoint", "/cases"], description = "Time taken to get contact details")
-  override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
+  override fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase): List<ContactDetails> {
     if (crns.isEmpty()) {
       return emptyList()
     }
@@ -183,7 +192,10 @@ class NdiliusApiClient(
     LOGGER.info("Fetching contact details for {} CRNs in batch", batchCrns.size)
 
     return try {
-      ndiliusApiWebClient.post()
+      when (useCase) {
+        ApiUseCase.GENERAL -> ndiliusApiWebClient
+        ApiUseCase.ELIGIBILITY_CHECK -> ndeliusEligibilityWebClient
+      }.post()
         .uri("/cases")
         .bodyValue(batchCrns)
         .retrieve()

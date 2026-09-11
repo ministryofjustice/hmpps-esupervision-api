@@ -111,7 +111,7 @@ class CheckinReminderJobTest {
 
   private fun stub(checkins: List<OffenderCheckin>, details: List<ContactDetails>) {
     whenever(checkinRepository.findEligibleForReminder(any(), any(), any())).thenReturn(Stream.of(*checkins.toTypedArray()))
-    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(details)
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any(), any())).thenReturn(details)
     whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<Offender>(0) }
   }
 

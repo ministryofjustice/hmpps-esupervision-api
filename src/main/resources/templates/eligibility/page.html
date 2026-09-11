@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Offender Eligibility Rules</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f2f2f2;
+      color: #222;
+      margin: 0;
+      padding: 2rem;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .intro {
+      color: #555;
+      margin-bottom: 2rem;
+    }
+    .rule-set {
+      margin-bottom: 3rem;
+    }
+    .rule-set h2 {
+      border-bottom: 2px solid #333;
+      padding-bottom: 0.3rem;
+    }
+    ol.rules {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    li.rule {
+      background: #999999;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+      padding: 1rem 1.25rem;
+    }
+    li.rule.disabled {
+      opacity: 0.6;
+      background: #eee;
+    }
+    .rule-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .rule-order {
+      color: #626262;
+      font-size: 0.85rem;
+    }
+    .rule-code {
+      font-weight: bold;
+      font-size: 1.05rem;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      color: #fff;
+    }
+    .badge.enabled { background: #2e7d32; }
+    .badge.disabled { background: #999; }
+    .question {
+      font-size: 1rem;
+      margin: 0.25rem 0 0.75rem 0;
+    }
+    table.condition {
+      border-collapse: collapse;
+      margin-bottom: 0.75rem;
+    }
+    table.condition td {
+      padding: 0.15rem 0.5rem;
+      vertical-align: top;
+    }
+    table.condition td.label {
+      color: #4a4a4a;
+      white-space: nowrap;
+    }
+    table.outcomes {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+    }
+    table.outcomes th, table.outcomes td {
+      border: 1px solid #ddd;
+      padding: 0.5rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.outcomes th {
+      background: #f7f7f7;
+      width: 8rem;
+    }
+    .outcome-tag {
+      font-weight: bold;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.8rem;
+    }
+    .outcome-tag.continue { background: #757575; }
+    .outcome-tag.eligible { background: #2e7d32; }
+    .outcome-tag.not_eligible { background: #c62828; }
+    .rule-comment {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      color: #666;
+      font-style: italic;
+    }
+    .empty {
+      font-size: 1.1rem;
+      color: #666;
+    }
+    footer {
+      margin-top: 2rem;
+      color: #999;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Offender Eligibility Rules</h1>
+  <p class="intro">
+    Rules are evaluated in order within each rule set. Evaluation stops as soon as a rule
+    produces an <span class="outcome-tag eligible">ELIGIBLE</span> or
+    <span class="outcome-tag not_eligible">NOT_ELIGIBLE</span> outcome; a
+    <span class="outcome-tag continue">CONTINUE</span> outcome moves on to the next rule.
+  </p>
+  {{body}}
+  <footer>Generated from the current contents of the offender_eligibility_rule table.</footer>
+</body>
+</html>
