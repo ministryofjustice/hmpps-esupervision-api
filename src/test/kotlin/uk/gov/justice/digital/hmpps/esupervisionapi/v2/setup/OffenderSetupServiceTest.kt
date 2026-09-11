@@ -176,7 +176,7 @@ class OffenderSetupServiceTest {
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<Offender, Any?>>(any())).thenAnswer {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Pair<Offender, Any?>>>(0)
       callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())
@@ -235,7 +235,7 @@ class OffenderSetupServiceTest {
 
     whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(false)
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenReturn(null)
 
     // When / Then
     assertThrows(InvalidOffenderSetupState::class.java) {
@@ -430,7 +430,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.of(setup))
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenReturn(null)
     whenever(transactionTemplate.execute<Offender>(any())).thenAnswer {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Offender>>(0)
       callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())

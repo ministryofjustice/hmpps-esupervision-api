@@ -63,7 +63,7 @@ class NdeliusEligibilityDataProviderTest {
 
   @Test
   fun `fetch completes exceptionally when the client throws`() {
-    whenever(ndiliusApiClient.getContactDetails(any())).thenThrow(RuntimeException("NDelius down"))
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenThrow(RuntimeException("NDelius down"))
 
     val future = provider.fetch("X123456")
 

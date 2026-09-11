@@ -232,7 +232,7 @@ class MigrationEventReplayServiceTest {
       .thenReturn(emptyList())
     whenever(offenderRepository.findAllById(listOf(100L))).thenReturn(listOf(offender))
     doThrow(NdiliusBatchFetchException(listOf(offender.crn), "boom", RuntimeException("boom")))
-      .whenever(ndiliusApiClient).getContactDetailsForMultiple(any())
+      .whenever(ndiliusApiClient).getContactDetailsForMultiple(any(), any())
 
     val sent = service.replayActiveOffenderSetupEvents(batchSize = 50)
 
