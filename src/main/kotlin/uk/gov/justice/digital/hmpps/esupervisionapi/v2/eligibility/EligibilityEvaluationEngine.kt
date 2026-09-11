@@ -64,6 +64,7 @@ class EligibilityEvaluationEngine(
   }
 
   fun evaluate(crn: CRN, ruleSet: String): CompletableFuture<EligibilityResult> = evaluateFrom(
+    ruleSet,
     ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
     0,
     crn,
@@ -79,6 +80,7 @@ class EligibilityEvaluationEngine(
     ruleSet: String,
     prePopulatedCache: Map<DataSource, CompletableFuture<Map<String, Any?>>>,
   ): CompletableFuture<EligibilityResult> = evaluateFrom(
+    ruleSet,
     ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
     0,
     crn,
@@ -86,11 +88,13 @@ class EligibilityEvaluationEngine(
   )
 
   private fun evaluateFrom(
+    ruleSet: String,
     rules: List<OffenderEligibilityRule>,
     index: Int,
     crn: String,
     fetchCache: FetchCache,
   ): CompletableFuture<EligibilityResult> {
+    require(rules.isNotEmpty()) { "No rules found for ruleSet $ruleSet" }
     if (index >= rules.size) {
       return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null))
     }
@@ -104,18 +108,22 @@ class EligibilityEvaluationEngine(
     }
 
     return sourceFuture
+      .exceptionallyCompose { throwable ->
+        CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, throwable))
+      }
       .thenCompose { sourceData ->
+        if (!sourceData.containsKey(rule.dataPoint)) {
+          // we could get here if our data providers and rules are not in sync
+          throw RuntimeException("Data point ${rule.dataPoint} not fetched for source=${rule.source}, rule=${rule.code}")
+        }
         val matched = EligibilityConditionEvaluator.evaluate(rule.operator, sourceData[rule.dataPoint], rule.comparisonValue)
         val outcome = if (matched) rule.outcomeOnMatch else rule.outcomeOnNoMatch
         val message = if (matched) rule.messageOnMatch else rule.messageOnNoMatch
         when (outcome) {
-          EligibilityRuleOutcome.CONTINUE -> evaluateFrom(rules, index + 1, crn, fetchCache)
+          EligibilityRuleOutcome.CONTINUE -> evaluateFrom(ruleSet, rules, index + 1, crn, fetchCache)
           EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code))
           EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code))
         }
-      }
-      .exceptionallyCompose { throwable ->
-        CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, throwable))
       }
   }
 

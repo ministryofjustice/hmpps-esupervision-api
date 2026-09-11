@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertInstanceOf
+import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
@@ -57,6 +59,16 @@ class EligibilityEvaluationEngineTest {
     val provider: EligibilityDataProvider = mock()
     whenever(provider.sourceKey).thenReturn(sourceKey)
     whenever(provider.fetch(org.mockito.kotlin.any())).thenReturn(CompletableFuture.completedFuture(data))
+    whenever(providerRegistry.get(sourceKey)).thenReturn(provider)
+    return provider
+  }
+
+  private fun failingMockProvider(sourceKey: String, data: Map<String, Any?>): EligibilityDataProvider {
+    val provider: EligibilityDataProvider = mock()
+    whenever(provider.sourceKey).thenReturn(sourceKey)
+    whenever(provider.fetch(org.mockito.kotlin.any()))
+      .thenReturn(CompletableFuture.failedFuture(RuntimeException("Something went wrong with source $sourceKey")))
+    // .thenThrow(RuntimeException())
     whenever(providerRegistry.get(sourceKey)).thenReturn(provider)
     return provider
   }
@@ -126,6 +138,42 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
+    verify(provider, times(1)).fetch(org.mockito.kotlin.any())
+  }
+
+  @Test
+  fun `failure on second rule surfaces the right exception`() {
+    val first = rule("ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
+    val second = rule("NOMIS_THING", 2.0, "NOMIS", "ACTIVE_EVENT", EligibilityRuleOperator.IS_NOT_NULL)
+    val third = rule("BREATHING", 3.0, "NDELIUS", "PULSE", EligibilityRuleOperator.IS_NOT_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(first, second, third))
+    val provider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null, "ACTIVE_EVENT" to "ACTIVE", "PULSE" to "YES"))
+    val providerFail = failingMockProvider("NOMIS", mapOf("ACTIVE_EVENT" to "ACTIVE"))
+
+    val ex = assertThrows<CompletionException> {
+      engine.evaluate("X123456", DEFAULT_RULE_SET).join()
+    }
+    assertInstanceOf<EligibilityDataUnavailableException>(ex.cause)
+    assertTrue(ex.message!!.contains("NOMIS"))
+
+    verify(provider, times(1)).fetch(org.mockito.kotlin.any())
+    verify(providerFail, times(1)).fetch(org.mockito.kotlin.any())
+  }
+
+  @Test
+  fun `force failure on out-of sync rules & data providers`() {
+    val first = rule("ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
+    val second = rule("BREATHING", 3.0, "NDELIUS", "PULSE", EligibilityRuleOperator.IS_NOT_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(first, second))
+    val provider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null))
+
+    val ex = assertThrows<RuntimeException> {
+      engine.evaluate("X123456", DEFAULT_RULE_SET).join()
+    }
+    assertTrue(ex.message!!.contains("Data point PULSE not fetched"))
+
     verify(provider, times(1)).fetch(org.mockito.kotlin.any())
   }
 
