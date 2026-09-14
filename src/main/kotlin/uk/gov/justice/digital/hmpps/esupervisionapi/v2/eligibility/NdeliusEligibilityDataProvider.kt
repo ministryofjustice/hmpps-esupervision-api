@@ -1,11 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ApiUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executor
 
 /**
  * NDelius-backed eligibility data. If [INdiliusApiClient.getContactDetails] returns null (either
@@ -17,7 +18,7 @@ import java.util.concurrent.ExecutorService
 @Service
 class NdeliusEligibilityDataProvider(
   private val ndiliusApiClient: INdiliusApiClient,
-  private val eligibilityDataFetchExecutor: ExecutorService,
+  @Qualifier("eligibilityDataFetchExecutor") private val eligibilityDataFetchExecutor: Executor,
 ) : EligibilityDataProvider {
   override val sourceKey: String = "NDELIUS"
 
