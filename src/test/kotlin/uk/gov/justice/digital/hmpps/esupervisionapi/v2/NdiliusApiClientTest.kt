@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.web.reactive.function.client.WebClient
 import java.lang.reflect.InvocationTargetException
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker as CircuitBreakerAnnotation
 
 /**
  * Resilience4j only invokes a @CircuitBreaker's fallbackMethod through the AOP proxy when the
@@ -18,6 +19,20 @@ import java.lang.reflect.InvocationTargetException
 class NdiliusApiClientTest {
 
   private val client = NdiliusApiClient(WebClient.builder().build(), WebClient.builder().build())
+
+  @Test
+  fun `strict calls use separate circuit breakers for general and eligibility traffic`() {
+    assertEquals(
+      "ndiliusApi",
+      NdiliusApiClient::class.java.getDeclaredMethod("getContactDetailsStrictGeneral", String::class.java)
+        .getAnnotation(CircuitBreakerAnnotation::class.java).name,
+    )
+    assertEquals(
+      "ndiliusEligibilityApi",
+      NdiliusApiClient::class.java.getDeclaredMethod("getContactDetailsStrictEligibility", String::class.java)
+        .getAnnotation(CircuitBreakerAnnotation::class.java).name,
+    )
+  }
 
   @Test
   fun `getAlertCountFallback fails open, returning null`() {

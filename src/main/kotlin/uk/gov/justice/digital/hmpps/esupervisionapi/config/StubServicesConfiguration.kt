@@ -89,6 +89,10 @@ open class StubNdiliusApiClient(
 
   override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = getContactDetails(crn, useCase)
 
+  override fun getContactDetailsStrictGeneral(crn: String): ContactDetails? = getContactDetailsStrict(crn, ApiUseCase.GENERAL)
+
+  override fun getContactDetailsStrictEligibility(crn: String): ContactDetails? = getContactDetailsStrict(crn, ApiUseCase.ELIGIBILITY_CHECK)
+
   override fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase): List<ContactDetails> {
     LOG.debug("Fetching contact details for {} CRNs, starting with {}", crns.size, crns.take(4))
     val incomingCrns = HashSet<String>(crns)

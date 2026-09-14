@@ -56,6 +56,12 @@ interface INdeliusCommonApiClient {
    * and an open circuit breaker. Not retried, so the caller waits at most one request timeout.
    */
   fun getContactDetailsStrict(crn: String, useCase: ApiUseCase = ApiUseCase.GENERAL): ContactDetails?
+
+  /** Internal proxy entry point for strict general calls. */
+  fun getContactDetailsStrictGeneral(crn: String): ContactDetails?
+
+  /** Internal proxy entry point for strict eligibility calls. */
+  fun getContactDetailsStrictEligibility(crn: String): ContactDetails?
   fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase = ApiUseCase.GENERAL): List<ContactDetails>
 }
 
@@ -111,9 +117,17 @@ class NdiliusApiClient(
    * fallback, Retry would run three attempts at the full request timeout each, which is far too
    * long for an interactive caller that can degrade instead.
    */
-  @CircuitBreaker(name = "ndiliusApi")
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
-  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = fetchContactDetails(crn, useCase)
+  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = when (useCase) {
+    ApiUseCase.GENERAL -> self.getContactDetailsStrictGeneral(crn)
+    ApiUseCase.ELIGIBILITY_CHECK -> self.getContactDetailsStrictEligibility(crn)
+  }
+
+  @CircuitBreaker(name = "ndiliusApi")
+  override fun getContactDetailsStrictGeneral(crn: String): ContactDetails? = fetchContactDetails(crn, ApiUseCase.GENERAL)
+
+  @CircuitBreaker(name = "ndiliusEligibilityApi")
+  override fun getContactDetailsStrictEligibility(crn: String): ContactDetails? = fetchContactDetails(crn, ApiUseCase.ELIGIBILITY_CHECK)
 
   private fun fetchContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
