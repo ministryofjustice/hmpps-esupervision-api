@@ -309,8 +309,8 @@ class NdiliusApiClient(
    * Get the number of alerts for a practitioner by NDelius username
    * GET /user/{username}/alerts
    */
-  @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getAlertCountFallback")
-  @Retry(name = "ndiliusApi")
+  @CircuitBreaker(name = "ndiliusApiAlerts", fallbackMethod = "getAlertCountFallback")
+  @Retry(name = "ndiliusApiAlerts")
   @Timed("ndelius.get-alert-count", extraTags = ["method", "GET", "endpoint", "/user/{username}/alerts"], description = "Time taken to get alert count")
   override fun getAlertCount(username: String): Int? {
     LOGGER.info("Fetching alert count for username: {}", username)
