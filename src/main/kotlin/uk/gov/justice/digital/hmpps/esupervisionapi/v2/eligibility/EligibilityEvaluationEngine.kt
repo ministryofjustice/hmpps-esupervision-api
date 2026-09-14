@@ -102,7 +102,7 @@ class EligibilityEvaluationEngine(
     val sourceFuture = try {
       // NOTE: the WebClient executing the actual request should have
       // appropriate timeouts configured
-      fetchCache.getOrFetch(rule.source, crn).orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
+      fetchCache.getOrFetch(rule.source, crn).thenApply { it }.orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
     } catch (e: Exception) {
       return CompletableFuture.failedFuture(e)
     }
