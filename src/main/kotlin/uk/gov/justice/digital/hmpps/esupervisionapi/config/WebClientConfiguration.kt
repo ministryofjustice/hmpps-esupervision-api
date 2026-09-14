@@ -84,7 +84,15 @@ class WebClientConfiguration(
 
   @Bean
   fun ndeliusEligibilityWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
-    .filters { /* same NDelius filters */ }
+    .filters {
+      it.add(
+        ExchangeFilterFunction.ofRequestProcessor { req ->
+          log.info("Requesting nDelius eligibility URL: {}", req.url())
+          Mono.just(req)
+        },
+      )
+      it.add(BackgroundClientCredentialsFilter(NDILIUS_API_REGISTRATION_ID, authorizedClientManager))
+    }
     .authorisedWebClient(
       authorizedClientManager,
       registrationId = NDILIUS_API_REGISTRATION_ID,
