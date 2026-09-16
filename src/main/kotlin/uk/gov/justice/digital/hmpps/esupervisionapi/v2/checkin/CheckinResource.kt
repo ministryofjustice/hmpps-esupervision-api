@@ -44,7 +44,7 @@ import java.util.UUID
 
 private const val PAST_DUE_DATE_NOTE =
   "A past due date is only accepted where manual job triggers are enabled (dev and local); " +
-    "to be picked up by the expiry job it must be more than the grace period (3 days) ago. " +
+    "to be picked up by the expiry job it must be at least the expiry grace period ago. " +
     "Notifications are sent as for any new checkin."
 
 /** V2 Checkin REST Controller */
