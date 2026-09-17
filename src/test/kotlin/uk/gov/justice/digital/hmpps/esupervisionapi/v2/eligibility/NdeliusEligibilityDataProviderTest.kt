@@ -54,7 +54,7 @@ class NdeliusEligibilityDataProviderTest {
 
   @Test
   fun `failure to fetch data from NDelius completes exceptionally`() {
-    whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetailsStrict("X123456", uk.gov.justice.digital.hmpps.esupervisionapi.v2.ApiUseCase.ELIGIBILITY_CHECK)).thenReturn(null)
 
     assertThrows(CompletionException::class.java) {
       provider.fetch("X123456").join()
