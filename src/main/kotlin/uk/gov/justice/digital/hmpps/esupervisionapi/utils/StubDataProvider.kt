@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.RiskInSituation
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.time.LocalDate
 import java.time.ZoneId
@@ -19,6 +20,7 @@ interface StubDataProvider {
   fun provideCase(crn: CRN): ContactDetails
   fun provideTierDetails(crn: CRN): TierDetails
   fun provideArnsWidget(crn: CRN): ArnsWidget
+  fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails
 }
 
 class DefaultStubDataProvider : StubDataProvider {
@@ -80,6 +82,12 @@ class DefaultStubDataProvider : StubDataProvider {
       prisoners = "VERY_HIGH",
     ),
   )
+
+  override fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails = SupervisionPackageDetails(
+    supervisionPackage = CodedDescription("SPC", "C"),
+    phase = CodedDescription("STD", "Standard supervision"),
+    recallStatus = null,
+  )
 }
 
 /**
@@ -89,6 +97,9 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> "11" will become part of the practitioner's local admin, probation delivery and provider code
  * - X001122 -> First & last character "X2" will become the tier score
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
+ * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
+ *   "2" final third, "3" post-recall release (with a recall status), "4" no active package,
+ *   anything else standard supervision
  */
 class GeneratingStubDataProvider : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
@@ -170,6 +181,18 @@ class GeneratingStubDataProvider : StubDataProvider {
         prisoners = "VERY_HIGH",
       ),
     )
+  }
+
+  override fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails {
+    val packageC = CodedDescription("SPC", "C")
+    return when (crn.last()) {
+      '1' -> SupervisionPackageDetails(packageC, CodedDescription("INIT", "Early engagement"), recallStatus = null)
+      '2' -> SupervisionPackageDetails(packageC, CodedDescription("FTHRD", "Final third"), recallStatus = null)
+      // The recall status is a Delius NSI status; this code is illustrative, not a real reference value.
+      '3' -> SupervisionPackageDetails(packageC, CodedDescription("RRL", "Post-recall release"), CodedDescription("STUB_REC", "Recall (stub)"))
+      '4' -> SupervisionPackageDetails(supervisionPackage = null, phase = null, recallStatus = null)
+      else -> SupervisionPackageDetails(packageC, CodedDescription("STD", "Standard supervision"), recallStatus = null)
+    }
   }
 
   private data class CrnIds(

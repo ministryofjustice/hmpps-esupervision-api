@@ -18,4 +18,19 @@ class DataProviderTest {
     Assertions.assertEquals(case2.practitioner?.name, case3.practitioner?.name)
     Assertions.assertNotEquals(case2.practitioner?.localAdminUnit, case3.practitioner?.localAdminUnit)
   }
+
+  @Test
+  fun `supervision package phase is chosen by the last CRN digit`() {
+    val provider = GeneratingStubDataProvider()
+
+    Assertions.assertEquals("INIT", provider.provideSupervisionPackageDetails("X000001").phase?.code)
+    Assertions.assertEquals("FTHRD", provider.provideSupervisionPackageDetails("X000002").phase?.code)
+    val recalled = provider.provideSupervisionPackageDetails("X000003")
+    Assertions.assertEquals("RRL", recalled.phase?.code)
+    Assertions.assertNotNull(recalled.recallStatus)
+    val noPackage = provider.provideSupervisionPackageDetails("X000004")
+    Assertions.assertNull(noPackage.supervisionPackage)
+    Assertions.assertNull(noPackage.phase)
+    Assertions.assertEquals("STD", provider.provideSupervisionPackageDetails("X000005").phase?.code)
+  }
 }
