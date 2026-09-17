@@ -11,6 +11,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
+import java.time.LocalDate
 
 /**
  * Raised when Supervision Packages could not be asked - an upstream error, a timeout, an open
@@ -29,10 +30,34 @@ class SupervisionPackagesFetchException(val crn: CRN, message: String, cause: Th
 data class SupervisionPackageDetails(
   /** Package type - `SPA`-`SPG`, or `SPNA` not applicable, `SPNK` not yet known, `SPX` supervised on another sentence. */
   val supervisionPackage: CodedDescription?,
-  /** Current phase - e.g. `INIT` early engagement, `STD` standard, `FTHRD` final third, `RRL` post-recall release. */
+  /** Current phase - e.g. `INIT` early engagement, `STD` standard, `SENT` in custody, `FTHRD` final third, `RRL` post-recall release. */
   val phase: CodedDescription?,
-  /** Status of the person's active recall (`REC`) NSI. */
+  /**
+   * Status of the active recall (`REC`) NSI: how far a recall *request* has got - `REC01` "Recall
+   * Initiated" through `REC09`, or `REC05` / `REC10` rejected or withdrawn. It does not mean the
+   * person has been recalled; [custody] records that.
+   */
   val recallStatus: CodedDescription?,
+  /** One entry per custodial sentence in the current supervision period; empty when there are none. */
+  val custody: List<CustodyDetails> = emptyList(),
+)
+
+/**
+ * Where a custodial sentence stands, from Delius's custody, release and recall records.
+ *
+ * [latestRecallDate] is the recall recorded against the most recent release. It is set when the
+ * person was recalled after that release and has not been released since - that is, they are
+ * recalled now. A recall followed by a later release is not reported here; the phase shows that as
+ * `RRL`.
+ */
+data class CustodyDetails(
+  val eventNumber: String,
+  /** Custody status - e.g. `A` "Sentenced - In Custody", `B` "Released - On Licence". */
+  val status: CodedDescription,
+  /** The most recent release from custody on this sentence; null if never released. */
+  val latestReleaseDate: LocalDate?,
+  /** The recall that ended the most recent release; null if that release has not been recalled. */
+  val latestRecallDate: LocalDate?,
 )
 
 interface ISupervisionPackagesApiClient {
@@ -102,13 +127,41 @@ private data class FrontendContextResponse(
     val phase: CodedDescription,
   )
 
+  // The API serialises non_null, so absent collections arrive as missing keys - hence the defaults.
   data class Context(
     val recallStatus: CodedDescription?,
+    val sentences: List<Sentence> = emptyList(),
+  )
+
+  data class Sentence(
+    val eventNumber: String,
+    val custody: Custody?,
+  )
+
+  data class Custody(
+    val status: CodedDescription,
+    val releases: List<Release> = emptyList(),
+  )
+
+  data class Release(
+    val releaseDate: LocalDate,
+    val recallDate: LocalDate?,
   )
 
   fun toDetails() = SupervisionPackageDetails(
     supervisionPackage = currentPhase?.supervisionPackage,
     phase = currentPhase?.phase,
     recallStatus = context?.recallStatus,
+    custody = context?.sentences.orEmpty().mapNotNull { sentence ->
+      sentence.custody?.let { custody ->
+        val latestRelease = custody.releases.maxByOrNull { it.releaseDate }
+        CustodyDetails(
+          eventNumber = sentence.eventNumber,
+          status = custody.status,
+          latestReleaseDate = latestRelease?.releaseDate,
+          latestRecallDate = latestRelease?.recallDate,
+        )
+      }
+    },
   )
 }

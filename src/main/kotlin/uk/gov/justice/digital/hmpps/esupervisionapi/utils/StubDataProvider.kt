@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.RiskInSituation
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.CustodyDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.time.LocalDate
@@ -98,7 +99,7 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> First & last character "X2" will become the tier score
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
  * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
- *   "2" final third, "3" post-recall release (with a recall status), "4" no active package,
+ *   "2" final third, "3" recalled and back in custody, "4" no active package,
  *   anything else standard supervision
  */
 class GeneratingStubDataProvider : StubDataProvider {
@@ -188,8 +189,22 @@ class GeneratingStubDataProvider : StubDataProvider {
     return when (crn.last()) {
       '1' -> SupervisionPackageDetails(packageC, CodedDescription("INIT", "Early engagement"), recallStatus = null)
       '2' -> SupervisionPackageDetails(packageC, CodedDescription("FTHRD", "Final third"), recallStatus = null)
-      // REC01 is a real r_nsi_status for the REC ("Request for Recall") NSI type.
-      '3' -> SupervisionPackageDetails(packageC, CodedDescription("RRL", "Post-recall release"), CodedDescription("REC01", "Recall Initiated"))
+      // Released, then recalled, and not released since. REC01 is a real r_nsi_status for the REC
+      // ("Request for Recall") NSI type; custody status C "Recalled" comes from Supervision Packages'
+      // own test data and is not confirmed as the Delius code.
+      '3' -> SupervisionPackageDetails(
+        packageC,
+        CodedDescription("SENT", "In Custody"),
+        CodedDescription("REC01", "Recall Initiated"),
+        custody = listOf(
+          CustodyDetails(
+            eventNumber = "1",
+            status = CodedDescription("C", "Recalled"),
+            latestReleaseDate = LocalDate.of(2026, 1, 12),
+            latestRecallDate = LocalDate.of(2026, 3, 2),
+          ),
+        ),
+      )
       '4' -> SupervisionPackageDetails(supervisionPackage = null, phase = null, recallStatus = null)
       else -> SupervisionPackageDetails(packageC, CodedDescription("STD", "Standard supervision"), recallStatus = null)
     }

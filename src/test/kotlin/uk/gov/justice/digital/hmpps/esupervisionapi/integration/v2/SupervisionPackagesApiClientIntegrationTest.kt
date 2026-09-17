@@ -24,9 +24,11 @@ import tools.jackson.module.kotlin.jacksonObjectMapper
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.CustodyDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.ISupervisionPackagesApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackagesFetchException
+import java.time.LocalDate
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 
@@ -75,15 +77,25 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   private fun json(body: String) = aResponse().withHeader("Content-Type", "application/json").withBody(body)
 
   /**
-   * `GET /frontend-context/Y051990` captured from dev, with the name replaced: package A, in early
-   * engagement, on a community order, with no recall status - so, as the API sends it, no
-   * `recallStatus` key at all. It carries fields the client does not map, which must be ignored.
-   * [adjust] edits a copy to produce the other cases from the same real shape.
+   * Real `GET /frontend-context/{crn}` responses captured from dev, with names replaced. They carry
+   * fields the client does not map, which must be ignored. [adjust] edits a copy to produce the other
+   * cases from the same real shape.
+   * - `Y051990`: package A, early engagement, community order, no recall status - so, as the API
+   *   sends it, no `recallStatus` key at all.
+   * - `Y050768`: package not yet known, in custody on an adult custody sentence, never released.
    */
-  private fun frontendContext(adjust: ObjectNode.() -> Unit = {}): ResponseDefinitionBuilder {
-    val response = javaClass.getResourceAsStream("/supervision-packages-api-responses/frontend-context-Y051990.json")!!
+  private fun frontendContext(capturedCrn: String = "Y051990", adjust: ObjectNode.() -> Unit = {}): ResponseDefinitionBuilder {
+    val response = javaClass.getResourceAsStream("/supervision-packages-api-responses/frontend-context-$capturedCrn.json")!!
       .use { mapper.readTree(it) as ObjectNode }
     return json(mapper.writeValueAsString(response.apply(adjust)))
+  }
+
+  private fun inCustody(adjust: ObjectNode.() -> Unit = {}) = frontendContext("Y050768", adjust)
+
+  /** Replaces the first sentence's releases - no dev response seen so far has any. */
+  private fun ObjectNode.withReleases(releases: String) {
+    val custody = get("context").get("sentences").get(0).get("custody") as ObjectNode
+    custody.set("releases", mapper.readTree(releases))
   }
 
   /**
@@ -155,6 +167,61 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
     assertEquals(SupervisionPackageDetails(null, null, CodedDescription("REC01", "Recall Initiated")), details)
+  }
+
+  @Test
+  fun `a community sentence has no custody details`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext()))
+
+    val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
+
+    assertEquals(emptyList<CustodyDetails>(), details?.custody)
+  }
+
+  @Test
+  fun `a custodial sentence never released reports its custody status and no release or recall`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(inCustody()))
+
+    val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
+
+    assertEquals(CodedDescription("SENT", "In Custody"), details?.phase)
+    assertEquals(
+      listOf(CustodyDetails("1", CodedDescription("A", "Sentenced - In Custody"), latestReleaseDate = null, latestRecallDate = null)),
+      details?.custody,
+    )
+  }
+
+  @Test
+  fun `a recall on the most recent release is reported as the latest recall`() {
+    upstream.stubFor(
+      get(urlEqualTo(contextUrl)).willReturn(
+        inCustody { withReleases("""[{"releaseDate": "2026-01-12", "recallDate": "2026-03-02"}]""") },
+      ),
+    )
+
+    val custody = offRequestThread { client.getSupervisionPackageDetails(crn) }!!.custody.single()
+
+    assertEquals(LocalDate.of(2026, 1, 12), custody.latestReleaseDate)
+    assertEquals(LocalDate.of(2026, 3, 2), custody.latestRecallDate)
+  }
+
+  @Test
+  fun `a recall followed by a later release is not reported as the latest recall`() {
+    // Deliberately out of date order, so the latest release is chosen by date rather than position.
+    upstream.stubFor(
+      get(urlEqualTo(contextUrl)).willReturn(
+        inCustody {
+          withReleases(
+            """[{"releaseDate": "2026-05-01"}, {"releaseDate": "2026-01-12", "recallDate": "2026-03-02"}]""",
+          )
+        },
+      ),
+    )
+
+    val custody = offRequestThread { client.getSupervisionPackageDetails(crn) }!!.custody.single()
+
+    assertEquals(LocalDate.of(2026, 5, 1), custody.latestReleaseDate)
+    assertNull(custody.latestRecallDate)
   }
 
   @Test
