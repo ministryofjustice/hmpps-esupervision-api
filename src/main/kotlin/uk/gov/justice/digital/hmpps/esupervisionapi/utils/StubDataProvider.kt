@@ -188,8 +188,8 @@ class GeneratingStubDataProvider : StubDataProvider {
     return when (crn.last()) {
       '1' -> SupervisionPackageDetails(packageC, CodedDescription("INIT", "Early engagement"), recallStatus = null)
       '2' -> SupervisionPackageDetails(packageC, CodedDescription("FTHRD", "Final third"), recallStatus = null)
-      // The recall status is a Delius NSI status; this code is illustrative, not a real reference value.
-      '3' -> SupervisionPackageDetails(packageC, CodedDescription("RRL", "Post-recall release"), CodedDescription("STUB_REC", "Recall (stub)"))
+      // REC01 is a real r_nsi_status for the REC ("Request for Recall") NSI type.
+      '3' -> SupervisionPackageDetails(packageC, CodedDescription("RRL", "Post-recall release"), CodedDescription("REC01", "Recall Initiated"))
       '4' -> SupervisionPackageDetails(supervisionPackage = null, phase = null, recallStatus = null)
       else -> SupervisionPackageDetails(packageC, CodedDescription("STD", "Standard supervision"), recallStatus = null)
     }
