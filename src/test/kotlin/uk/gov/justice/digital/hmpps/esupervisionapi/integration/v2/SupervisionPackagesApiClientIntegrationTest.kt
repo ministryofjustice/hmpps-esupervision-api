@@ -83,6 +83,8 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
    * - `Y051990`: package A, early engagement, community order, no recall status - so, as the API
    *   sends it, no `recallStatus` key at all.
    * - `Y050768`: package not yet known, in custody on an adult custody sentence, never released.
+   * - `Y058556`: package not yet known, community order, with an open "Request for Recall" NSI - set
+   *   up on dev by Probation Integration.
    */
   private fun frontendContext(capturedCrn: String = "Y051990", adjust: ObjectNode.() -> Unit = {}): ResponseDefinitionBuilder {
     val response = javaClass.getResourceAsStream("/supervision-packages-api-responses/frontend-context-$capturedCrn.json")!!
@@ -92,19 +94,12 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
 
   private fun inCustody(adjust: ObjectNode.() -> Unit = {}) = frontendContext("Y050768", adjust)
 
+  private fun openRecallRequest(adjust: ObjectNode.() -> Unit = {}) = frontendContext("Y058556", adjust)
+
   /** Replaces the first sentence's releases - no dev response seen so far has any. */
   private fun ObjectNode.withReleases(releases: String) {
     val custody = get("context").get("sentences").get(0).get("custody") as ObjectNode
     custody.set("releases", mapper.readTree(releases))
-  }
-
-  /**
-   * No dev response seen so far carries a recall status, so it is added here. `REC01` "Recall Initiated"
-   * is a real `r_nsi_status` for the `REC` ("Request for Recall") NSI type - see Supervision Packages'
-   * dev `TestData` and the `Status` enum in court-case-and-delius's `InterventionService`.
-   */
-  private fun ObjectNode.withRecallStatus() {
-    (get("context") as ObjectNode).set("recallStatus", mapper.readTree("""{"code": "REC01", "description": "Recall Initiated"}"""))
   }
 
   private fun ObjectNode.withNoCurrentPhase() {
@@ -144,23 +139,27 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `returns a recall status when there is one`() {
-    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext { withRecallStatus() }))
+  fun `returns the status of an open recall request`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(openRecallRequest()))
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
-    assertEquals(CodedDescription("REC01", "Recall Initiated"), details?.recallStatus)
-    assertEquals(CodedDescription("SPA", "A"), details?.supervisionPackage)
+    assertEquals(
+      SupervisionPackageDetails(
+        supervisionPackage = CodedDescription("SPNK", "Not Yet Known"),
+        phase = CodedDescription("SPNK", "Not Yet Known"),
+        recallStatus = CodedDescription("REC01", "Recall Initiated"),
+        custody = emptyList(),
+      ),
+      details,
+    )
   }
 
   @Test
   fun `a known CRN with no current phase has no package or phase, but keeps its recall status`() {
     upstream.stubFor(
       get(urlEqualTo(contextUrl)).willReturn(
-        frontendContext {
-          withNoCurrentPhase()
-          withRecallStatus()
-        },
+        openRecallRequest { withNoCurrentPhase() },
       ),
     )
 

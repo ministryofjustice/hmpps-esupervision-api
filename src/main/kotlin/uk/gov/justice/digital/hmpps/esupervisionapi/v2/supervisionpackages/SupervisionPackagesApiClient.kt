@@ -33,9 +33,13 @@ data class SupervisionPackageDetails(
   /** Current phase - e.g. `INIT` early engagement, `STD` standard, `SENT` in custody, `FTHRD` final third, `RRL` post-recall release. */
   val phase: CodedDescription?,
   /**
-   * Status of the active recall (`REC`) NSI: how far a recall *request* has got - `REC01` "Recall
-   * Initiated" through `REC09`, or `REC05` / `REC10` rejected or withdrawn. It does not mean the
-   * person has been recalled; [custody] records that.
+   * Status of an open "Request for Recall" (`REC`) NSI - how far an undecided recall request has
+   * got, e.g. `REC01` "Recall Initiated".
+   *
+   * Present only while the request awaits a decision. Setting its outcome - recalled, rejected or
+   * withdrawn - requires an end date, which terminates the NSI, and Supervision Packages returns
+   * only active recall NSIs. So null does not mean "not recalled": a completed recall looks the
+   * same as none. Whether the person was actually recalled is in [custody].
    */
   val recallStatus: CodedDescription?,
   /** One entry per custodial sentence in the current supervision period; empty when there are none. */
