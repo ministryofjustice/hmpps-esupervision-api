@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.v2
 
 import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
 import com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import com.github.tomakehurst.wiremock.client.WireMock.equalTo
 import com.github.tomakehurst.wiremock.client.WireMock.get
@@ -18,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import tools.jackson.databind.node.ObjectNode
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
@@ -31,12 +34,16 @@ import java.util.concurrent.Executors
  * Exercises the real client bean - WebClient, authorising filters and resilience4j aspects - against
  * a stubbed Supervision Packages API.
  *
+ * Responses are built from a real dev response (see [frontendContext]) rather than one written from
+ * the upstream models, so the tests hold the client to what the API actually sends - notably that it
+ * serialises non_null, omitting absent fields rather than sending them as null.
+ *
  * Calls run off a request thread, as the scheduled jobs will, so the bearer comes from
  * `BackgroundClientCredentialsFilter` rather than a servlet request in scope.
  */
 class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
 
-  private val crn = "X980484"
+  private val crn = "Y051990"
   private val contextUrl = "/frontend-context/$crn"
   private val tokenUrl = "/auth/oauth/token"
 
@@ -63,53 +70,30 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
     hmppsAuth.stubGrantToken()
   }
 
+  private val mapper = jacksonObjectMapper()
+
   private fun json(body: String) = aResponse().withHeader("Content-Type", "application/json").withBody(body)
 
   /**
-   * The full `FrontendComponentResponse` shape, including the fields the client does not map, so the
-   * test also proves those are ignored rather than failing deserialisation.
+   * `GET /frontend-context/Y051990` captured from dev, with the name replaced: package A, in early
+   * engagement, on a community order, with no recall status - so, as the API sends it, no
+   * `recallStatus` key at all. It carries fields the client does not map, which must be ignored.
+   * [adjust] edits a copy to produce the other cases from the same real shape.
    */
-  private fun frontendContext(currentPhase: String?, recallStatus: String?) = json(
-    """
-    {
-      "currentPhase": $currentPhase,
-      "earlyEngagement": {"startDate": "2026-06-01T00:00:00+01:00", "endDate": "2026-08-24T00:00:00+01:00", "weeks": 12, "completed": 4},
-      "currentYear": {"startDate": "2026-06-01", "endDate": "2027-05-31", "maximum": 24, "completed": 4},
-      "nextAppointment": {"id": 123, "date": "2026-09-20", "startTime": "10:00:00", "type": {"code": "COAP", "description": "Office appointment"}, "description": null},
-      "createdAt": "2026-06-01T09:00:00+01:00",
-      "updatedAt": "2026-06-02T09:00:00+01:00",
-      "context": {
-        "name": {"forename": "John", "middleNames": null, "surname": "Doe"},
-        "gender": "Male",
-        "sentences": [
-          {
-            "eventNumber": "1",
-            "startDate": "2026-06-01",
-            "endDate": "2028-06-01",
-            "supervisionPackage": {"code": "SPC", "description": "C"},
-            "type": {"code": "SC", "description": "CJA - Std Determinate Custody", "isCustodial": true},
-            "custody": {"status": {"code": "B", "description": "Released - On Licence"}, "location": null, "finalThirdDate": "2027-10-01", "releases": [{"releaseDate": "2026-06-01", "recallDate": null}]},
-            "inBreach": false
-          }
-        ],
-        "integratedOffenderManagementRedRated": false,
-        "offenderPersonalDisorderPathway": false,
-        "intensiveSupervisionCourt": false,
-        "nationalSecurityDivision": false,
-        "contactSuspendedDate": null,
-        "finalThirdEligibility": {"eligible": true, "since": null},
-        "liferCategory": null,
-        "recallStatus": $recallStatus
-      }
-    }
-    """.trimIndent(),
-  )
+  private fun frontendContext(adjust: ObjectNode.() -> Unit = {}): ResponseDefinitionBuilder {
+    val response = javaClass.getResourceAsStream("/supervision-packages-api-responses/frontend-context-Y051990.json")!!
+      .use { mapper.readTree(it) as ObjectNode }
+    return json(mapper.writeValueAsString(response.apply(adjust)))
+  }
 
-  private val earlyEngagementPhase = """
-    {"supervisionPackage": {"code": "SPC", "description": "C"}, "phase": {"code": "INIT", "description": "Early engagement"}, "eventNumber": "1", "startDate": "2026-06-01T00:00:00+01:00", "endDate": "2026-08-24T00:00:00+01:00"}
-  """.trimIndent()
+  /** A recall status is not present in any dev response seen so far, so this code is illustrative. */
+  private fun ObjectNode.withRecallStatus() {
+    (get("context") as ObjectNode).set("recallStatus", mapper.readTree("""{"code": "REC01", "description": "Recall initiated"}"""))
+  }
 
-  private val recallInProgress = """{"code": "REC01", "description": "Recall initiated"}"""
+  private fun ObjectNode.withNoCurrentPhase() {
+    remove("currentPhase")
+  }
 
   private fun callsTo(url: String) = upstream.allServeEvents.filter { it.request.url == url }
 
@@ -126,16 +110,16 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `returns package, phase and recall status, sent with a bearer`() {
-    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext(earlyEngagementPhase, recallInProgress)))
+  fun `returns package and phase from a real response, with no recall status, sent with a bearer`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext()))
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
     assertEquals(
       SupervisionPackageDetails(
-        supervisionPackage = CodedDescription("SPC", "C"),
-        phase = CodedDescription("INIT", "Early engagement"),
-        recallStatus = CodedDescription("REC01", "Recall initiated"),
+        supervisionPackage = CodedDescription("SPA", "A"),
+        phase = CodedDescription("INIT", "Early Engagement"),
+        recallStatus = null,
       ),
       details,
     )
@@ -144,8 +128,25 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `a known CRN with no active package has no package or phase, but keeps its recall status`() {
-    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext(currentPhase = "null", recallStatus = recallInProgress)))
+  fun `returns a recall status when there is one`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext { withRecallStatus() }))
+
+    val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
+
+    assertEquals(CodedDescription("REC01", "Recall initiated"), details?.recallStatus)
+    assertEquals(CodedDescription("SPA", "A"), details?.supervisionPackage)
+  }
+
+  @Test
+  fun `a known CRN with no current phase has no package or phase, but keeps its recall status`() {
+    upstream.stubFor(
+      get(urlEqualTo(contextUrl)).willReturn(
+        frontendContext {
+          withNoCurrentPhase()
+          withRecallStatus()
+        },
+      ),
+    )
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
@@ -153,12 +154,20 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `no recall status is null`() {
-    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext(earlyEngagementPhase, recallStatus = "null")))
+  fun `absent fields read as null, as the real API omits them`() {
+    // Also captured from dev (names replaced): a known CRN with no supervised sentences, so neither
+    // currentPhase nor recallStatus is present - not sent as null, just missing.
+    upstream.stubFor(
+      get(urlEqualTo(contextUrl)).willReturn(
+        json(
+          """{"context":{"name":{"forename":"Test","surname":"Person"},"gender":"Male","sentences":[],"integratedOffenderManagementRedRated":false,"offenderPersonalDisorderPathway":false,"intensiveSupervisionCourt":false,"nationalSecurityDivision":false,"finalThirdEligibility":{"eligible":false}}}""",
+        ),
+      ),
+    )
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
-    assertNull(details?.recallStatus)
+    assertEquals(SupervisionPackageDetails(null, null, null), details)
   }
 
   @Test
@@ -196,7 +205,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   @Test
   fun `a rejected token is evicted, re-minted, and the retry carries the new one`() {
     // Warm this registration's cached token first, so the grant under test is the re-mint.
-    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext(earlyEngagementPhase, recallStatus = "null")))
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext()))
     offRequestThread { client.getSupervisionPackageDetails(crn) }
     upstream.resetRequests()
 
@@ -207,12 +216,12 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
     )
     upstream.stubFor(
       get(urlEqualTo(contextUrl)).withHeader("Authorization", equalTo("Bearer FRESH"))
-        .willReturn(frontendContext(earlyEngagementPhase, recallStatus = "null")),
+        .willReturn(frontendContext()),
     )
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
-    assertEquals(CodedDescription("INIT", "Early engagement"), details?.phase)
+    assertEquals(CodedDescription("INIT", "Early Engagement"), details?.phase)
     assertEquals(listOf("Bearer ABCDE", "Bearer FRESH"), callsTo(contextUrl).reversed().map { it.request.getHeader("Authorization") })
   }
 }
