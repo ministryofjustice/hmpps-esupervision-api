@@ -3,7 +3,9 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
@@ -14,6 +16,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Clock
@@ -188,11 +191,51 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     assertEquals("V200001", results[0].offender.crn)
   }
 
+  @Test
+  fun `saving SCHEDULED offender with null checkinInterval fails constraint`() {
+    val offender = createOffenderV2(
+      crn = "V200010",
+      firstCheckin = LocalDate.now(),
+      checkinInterval = null,
+      mode = CheckinMode.SCHEDULED,
+    )
+    assertThrows<DataIntegrityViolationException> {
+      offenderRepository.saveAndFlush(offender)
+    }
+  }
+
+  @Test
+  fun `saving AD_HOC offender with non-null checkinInterval fails constraint`() {
+    val offender = createOffenderV2(
+      crn = "V200011",
+      firstCheckin = LocalDate.now(),
+      checkinInterval = Duration.ofDays(7),
+      mode = CheckinMode.AD_HOC,
+    )
+    assertThrows<DataIntegrityViolationException> {
+      offenderRepository.saveAndFlush(offender)
+    }
+  }
+
+  @Test
+  fun `saving AD_HOC offender with null checkinInterval succeeds`() {
+    val offender = createOffenderV2(
+      crn = "V200012",
+      firstCheckin = LocalDate.now(),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+    )
+    val saved = offenderRepository.saveAndFlush(offender)
+    assertEquals(CheckinMode.AD_HOC, saved.mode)
+    assertEquals(null, saved.checkinInterval)
+  }
+
   private fun createOffenderV2(
     crn: String,
     firstCheckin: LocalDate,
-    checkinInterval: Duration,
+    checkinInterval: Duration? = Duration.ofDays(7),
     status: OffenderStatus = OffenderStatus.VERIFIED,
+    mode: CheckinMode = CheckinMode.SCHEDULED,
   ): Offender = Offender(
     uuid = UUID.randomUUID(),
     crn = crn,
@@ -200,6 +243,7 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     status = status,
     firstCheckin = firstCheckin,
     checkinInterval = checkinInterval,
+    mode = mode,
     createdAt = Instant.now(),
     createdBy = "SYSTEM",
     updatedAt = Instant.now(),

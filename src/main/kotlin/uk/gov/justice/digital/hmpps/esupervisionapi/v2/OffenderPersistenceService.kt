@@ -51,7 +51,7 @@ class OffenderPersistenceService(
     if (setup.isPresent) {
       entityManager.refresh(offender) // we want the latest state
       offender.firstCheckin = event.offender.firstCheckin
-      offender.checkinInterval = event.offender.checkinInterval.duration
+      offender.checkinInterval = event.offender.checkinInterval?.duration
       offender.contactPreference = event.offender.contactPreference
       offenderRepository.save(offender)
 

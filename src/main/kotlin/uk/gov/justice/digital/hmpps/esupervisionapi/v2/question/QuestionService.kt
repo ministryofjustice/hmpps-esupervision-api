@@ -27,12 +27,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UpcomingQuestionListItems
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinScheduleLowerBound
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.isCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.collections.emptyMap
 import kotlin.jvm.optionals.getOrNull
@@ -85,7 +87,10 @@ class QuestionService(
   fun upcomingAssignment(offender: Offender): UpcomingQuestionAssignmentInfo {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender status is ${offender.status}" }
     val today = clock.today()
-    val next = nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY)
+    val next = when (offender.mode) {
+      CheckinMode.SCHEDULED -> nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY)
+      CheckinMode.AD_HOC -> offender.firstCheckin
+    }
     val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, next, checkinWindow.toDays())
 
     return UpcomingQuestionAssignmentInfo(
@@ -112,8 +117,14 @@ class QuestionService(
       throw BadArgumentException("Can't add question to offender with status ${offender.status}")
     }
     val today = clock.today()
+    validateUpcomingCheckin(offender, clock.today())
+
     val checkin = checkinRepository.findByOffenderAndDueDate(offender, today).getOrNull()
-    if ((checkin == null && isCheckinDay(offender, today)) || (checkin != null && checkin.status == CheckinStatus.CREATED)) {
+    val isDueToday = when (offender.mode) {
+      CheckinMode.SCHEDULED -> isCheckinDay(offender, today)
+      CheckinMode.AD_HOC -> offender.firstCheckin == today
+    }
+    if ((checkin == null && isDueToday) || (checkin != null && checkin.status == CheckinStatus.CREATED)) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
@@ -136,7 +147,11 @@ class QuestionService(
       throw BadArgumentException("Too late to assign questions. Checkin possibly CREATED for offender=$crn: firstCheckin=${offender.firstCheckin}, interval=${offender.checkinInterval}")
     }
 
-    return AssignCustomQuestionsResponse(nextCheckinDay(offender, today), listId)
+    val nextCheckin = when (offender.mode) {
+      CheckinMode.SCHEDULED -> nextCheckinDay(offender, today)
+      CheckinMode.AD_HOC -> offender.firstCheckin
+    }
+    return AssignCustomQuestionsResponse(nextCheckin, listId)
   }
 
   @Transactional
@@ -159,6 +174,15 @@ class QuestionService(
     val items = if (listId != null) questionsRepository.getListItems(listId, language) else questionsRepository.defaultListItems(language)
     LOG.info("checkinQuestions: returning {} items for checkin UUID={}, listId={}", items.size, checkinUuid, listId)
     return items
+  }
+
+  private fun validateUpcomingCheckin(offender: Offender, today: LocalDate) {
+    when (offender.mode) {
+      CheckinMode.AD_HOC -> if (offender.firstCheckin < today) {
+        throw BadArgumentException("offender does not have an upcoming check-in")
+      }
+      CheckinMode.SCHEDULED -> null
+    }
   }
 
   companion object {
