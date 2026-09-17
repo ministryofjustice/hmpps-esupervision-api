@@ -86,9 +86,13 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
     return json(mapper.writeValueAsString(response.apply(adjust)))
   }
 
-  /** A recall status is not present in any dev response seen so far, so this code is illustrative. */
+  /**
+   * No dev response seen so far carries a recall status, so it is added here. `REC01` "Recall Initiated"
+   * is a real `r_nsi_status` for the `REC` ("Request for Recall") NSI type - see Supervision Packages'
+   * dev `TestData` and the `Status` enum in court-case-and-delius's `InterventionService`.
+   */
   private fun ObjectNode.withRecallStatus() {
-    (get("context") as ObjectNode).set("recallStatus", mapper.readTree("""{"code": "REC01", "description": "Recall initiated"}"""))
+    (get("context") as ObjectNode).set("recallStatus", mapper.readTree("""{"code": "REC01", "description": "Recall Initiated"}"""))
   }
 
   private fun ObjectNode.withNoCurrentPhase() {
@@ -133,7 +137,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
-    assertEquals(CodedDescription("REC01", "Recall initiated"), details?.recallStatus)
+    assertEquals(CodedDescription("REC01", "Recall Initiated"), details?.recallStatus)
     assertEquals(CodedDescription("SPA", "A"), details?.supervisionPackage)
   }
 
@@ -150,7 +154,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
-    assertEquals(SupervisionPackageDetails(null, null, CodedDescription("REC01", "Recall initiated")), details)
+    assertEquals(SupervisionPackageDetails(null, null, CodedDescription("REC01", "Recall Initiated")), details)
   }
 
   @Test
