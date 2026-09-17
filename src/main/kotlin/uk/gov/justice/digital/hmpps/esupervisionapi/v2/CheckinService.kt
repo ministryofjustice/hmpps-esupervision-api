@@ -70,6 +70,10 @@ class CheckinService(
   private val gracePeriodDays: Int,
   private val appConfig: AppConfig,
   private val transactionTemplate: TransactionTemplate,
+  // Non-production only: lets the DEBUG checkin creation endpoints accept a past due date, so the
+  // expiry journeys can be tested without waiting. Shares the manual job trigger switch.
+  @param:Value("\${app.jobs.manual-trigger.enabled:false}")
+  private val allowPastDueDate: Boolean,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(gracePeriodDays)
@@ -905,7 +909,10 @@ class CheckinService(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender not verified")
     }
     if (dueDate.isBefore(clock.today())) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Due date must be in the future")
+      if (!allowPastDueDate) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Due date must not be in the past")
+      }
+      LOGGER.warn("DEBUG: Creating checkin for offender {} with past due date {}", offender.uuid, dueDate)
     }
 
     val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)

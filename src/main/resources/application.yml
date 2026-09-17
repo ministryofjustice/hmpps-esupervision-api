@@ -69,6 +69,8 @@ app:
     # Exposes POST /v2/jobs/{name}/run so a scheduled job can be started on demand, for verifying a
     # change in a deployed environment without waiting for its cron. Non-production only: with this
     # false the controller bean is not created at all, so the endpoints 404 rather than 403.
+    # Also lets the DEBUG checkin creation endpoints accept a past due date (ESUP-2238), for
+    # testing the expiry journeys.
     manual-trigger:
       enabled: ${APP_JOBS_MANUAL_TRIGGER_ENABLED:false}
   features:
