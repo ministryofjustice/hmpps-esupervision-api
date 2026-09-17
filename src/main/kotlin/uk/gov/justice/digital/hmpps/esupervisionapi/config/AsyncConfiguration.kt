@@ -13,7 +13,7 @@ import java.util.concurrent.Executors
 class AsyncConfiguration {
 
   /**
-   * We need to define this to make sure any custom executor does not interfere with th default.
+   * We need to define this to make sure any custom executor does not interfere with the default.
    */
   @Bean(name = ["taskExecutor", "applicationTaskExecutor"])
   @Primary
