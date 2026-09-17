@@ -91,7 +91,7 @@ class QuestionService(
       CheckinMode.SCHEDULED -> nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY)
       CheckinMode.AD_HOC -> offender.firstCheckin
     }
-    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, next, checkinWindow.toDays())
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, today, next, checkinWindow.toDays())
 
     return UpcomingQuestionAssignmentInfo(
       info.dueDate,

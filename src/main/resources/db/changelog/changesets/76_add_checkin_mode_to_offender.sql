@@ -27,7 +27,7 @@ ALTER TABLE offender_v2
 
 drop function get_upcoming_assignment_info(p_offender_id bigint, p_next_checkin_date date, p_checkin_window_days bigint);
 
-create function get_upcoming_assignment_info(p_offender_id bigint, p_next_checkin_date date, p_checkin_window_days bigint)
+create function get_upcoming_assignment_info(p_offender_id bigint, p_today date, p_next_checkin_date date, p_checkin_window_days bigint)
     returns TABLE(question_list_id bigint, due_date date, explicit_assignment boolean)
     stable
     language plpgsql
@@ -46,7 +46,7 @@ BEGIN
             LIMIT 1
         ),
              the_offender AS (
-                 SELECT id, first_checkin, checkin_interval
+                 SELECT id, first_checkin, checkin_interval, checkin_mode
                  FROM offender_v2
                  WHERE id = p_offender_id
              ),
@@ -71,8 +71,8 @@ BEGIN
             COALESCE(i.question_list_id, d.question_list_id) AS question_list_id,
             CASE
                 WHEN rc.status = 'CREATED'::offender_checkin_status_v2 THEN rc.due_date
-                WHEN the_offender.checkin_interval is not null THEN (p_next_checkin_date + the_offender.checkin_interval)::date
-                WHEN the_offender.checkin_interval is null and now()::date > p_next_checkin_date THEN null
+                WHEN rc.status <> 'CREATED'::offender_checkin_status_v2 and the_offender.checkin_interval is not null THEN (p_next_checkin_date + the_offender.checkin_interval)::date
+                WHEN the_offender.checkin_mode = 'AD_HOC'::checkin_mode and p_next_checkin_date < p_today THEN null
                 ELSE p_next_checkin_date
             END AS due_date,
             (i.question_list_id IS NOT NULL) AS explicit_assignment

@@ -823,10 +823,10 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
    * In case of no explicit assignment, question list id will be set to the default list id.
    */
   @Query(
-    """select * from get_upcoming_assignment_info(:offenderId, cast(:nextCheckinDate as date), :checkinWindowDays)""",
+    """select * from get_upcoming_assignment_info(:offenderId, cast(:today as date), cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignmentAndDueDate(offenderId: Long, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
+  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.
