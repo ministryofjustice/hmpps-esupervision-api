@@ -27,11 +27,14 @@ class DataProviderTest {
     Assertions.assertEquals("FTHRD", provider.provideSupervisionPackageDetails("X000002").phase?.code)
     val recalled = provider.provideSupervisionPackageDetails("X000003")
     Assertions.assertEquals("SENT", recalled.phase?.code)
-    Assertions.assertNotNull(recalled.recallStatus)
+    Assertions.assertNull(recalled.recallStatus, "a decided recall has no open request")
     Assertions.assertNotNull(recalled.custody.single().latestRecallDate)
     val noPackage = provider.provideSupervisionPackageDetails("X000004")
     Assertions.assertNull(noPackage.supervisionPackage)
     Assertions.assertNull(noPackage.phase)
     Assertions.assertEquals("STD", provider.provideSupervisionPackageDetails("X000005").phase?.code)
+    val recallRequested = provider.provideSupervisionPackageDetails("X000006")
+    Assertions.assertEquals("REC01", recallRequested.recallStatus?.code)
+    Assertions.assertTrue(recallRequested.custody.isEmpty(), "an undecided request has no recall recorded")
   }
 }

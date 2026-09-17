@@ -99,8 +99,8 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> First & last character "X2" will become the tier score
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
  * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
- *   "2" final third, "3" recalled and back in custody, "4" no active package,
- *   anything else standard supervision
+ *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
+ *   request, anything else standard supervision
  */
 class GeneratingStubDataProvider : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
@@ -189,13 +189,13 @@ class GeneratingStubDataProvider : StubDataProvider {
     return when (crn.last()) {
       '1' -> SupervisionPackageDetails(packageC, CodedDescription("INIT", "Early engagement"), recallStatus = null)
       '2' -> SupervisionPackageDetails(packageC, CodedDescription("FTHRD", "Final third"), recallStatus = null)
-      // Released, then recalled, and not released since. REC01 is a real r_nsi_status for the REC
-      // ("Request for Recall") NSI type; custody status C "Recalled" comes from Supervision Packages'
-      // own test data and is not confirmed as the Delius code.
+      // Released, then recalled, and not released since. Custody status C "Recalled" comes from
+      // Supervision Packages' own test data and is not confirmed as the Delius code.
       '3' -> SupervisionPackageDetails(
         packageC,
         CodedDescription("SENT", "In Custody"),
-        CodedDescription("REC01", "Recall Initiated"),
+        // The recall has been decided, which end-dates the request NSI, so no recall status remains.
+        recallStatus = null,
         custody = listOf(
           CustodyDetails(
             eventNumber = "1",
@@ -206,6 +206,13 @@ class GeneratingStubDataProvider : StubDataProvider {
         ),
       )
       '4' -> SupervisionPackageDetails(supervisionPackage = null, phase = null, recallStatus = null)
+      // An undecided recall request, like Y058556 on dev: REC01 is a real r_nsi_status for the REC
+      // ("Request for Recall") NSI type. Nothing is recalled yet, so there is no custody record.
+      '6' -> SupervisionPackageDetails(
+        CodedDescription("SPNK", "Not Yet Known"),
+        CodedDescription("SPNK", "Not Yet Known"),
+        CodedDescription("REC01", "Recall Initiated"),
+      )
       else -> SupervisionPackageDetails(packageC, CodedDescription("STD", "Standard supervision"), recallStatus = null)
     }
   }
