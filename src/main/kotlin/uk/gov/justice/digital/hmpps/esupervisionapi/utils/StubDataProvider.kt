@@ -8,6 +8,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.RiskInSituation
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.CustodyDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.time.LocalDate
 import java.time.ZoneId
@@ -19,6 +21,7 @@ interface StubDataProvider {
   fun provideCase(crn: CRN): ContactDetails
   fun provideTierDetails(crn: CRN): TierDetails
   fun provideArnsWidget(crn: CRN): ArnsWidget
+  fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails
 }
 
 class DefaultStubDataProvider : StubDataProvider {
@@ -80,6 +83,12 @@ class DefaultStubDataProvider : StubDataProvider {
       prisoners = "VERY_HIGH",
     ),
   )
+
+  override fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails = SupervisionPackageDetails(
+    supervisionPackage = CodedDescription("SPC", "C"),
+    phase = CodedDescription("STD", "Standard supervision"),
+    recallStatus = null,
+  )
 }
 
 /**
@@ -89,6 +98,9 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> "11" will become part of the practitioner's local admin, probation delivery and provider code
  * - X001122 -> First & last character "X2" will become the tier score
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
+ * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
+ *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
+ *   request, anything else standard supervision
  */
 class GeneratingStubDataProvider : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
@@ -170,6 +182,39 @@ class GeneratingStubDataProvider : StubDataProvider {
         prisoners = "VERY_HIGH",
       ),
     )
+  }
+
+  override fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails {
+    val packageC = CodedDescription("SPC", "C")
+    return when (crn.last()) {
+      '1' -> SupervisionPackageDetails(packageC, CodedDescription("INIT", "Early engagement"), recallStatus = null)
+      '2' -> SupervisionPackageDetails(packageC, CodedDescription("FTHRD", "Final third"), recallStatus = null)
+      // Released, then recalled, and not released since. Custody status C "Recalled" comes from
+      // Supervision Packages' own test data and is not confirmed as the Delius code.
+      '3' -> SupervisionPackageDetails(
+        packageC,
+        CodedDescription("SENT", "In Custody"),
+        // The recall has been decided, which end-dates the request NSI, so no recall status remains.
+        recallStatus = null,
+        custody = listOf(
+          CustodyDetails(
+            eventNumber = "1",
+            status = CodedDescription("C", "Recalled"),
+            latestReleaseDate = LocalDate.of(2026, 1, 12),
+            latestRecallDate = LocalDate.of(2026, 3, 2),
+          ),
+        ),
+      )
+      '4' -> SupervisionPackageDetails(supervisionPackage = null, phase = null, recallStatus = null)
+      // An undecided recall request, like Y058556 on dev: REC01 is a real r_nsi_status for the REC
+      // ("Request for Recall") NSI type. Nothing is recalled yet, so there is no custody record.
+      '6' -> SupervisionPackageDetails(
+        CodedDescription("SPNK", "Not Yet Known"),
+        CodedDescription("SPNK", "Not Yet Known"),
+        CodedDescription("REC01", "Recall Initiated"),
+      )
+      else -> SupervisionPackageDetails(packageC, CodedDescription("STD", "Standard supervision"), recallStatus = null)
+    }
   }
 
   private data class CrnIds(

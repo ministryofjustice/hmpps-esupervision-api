@@ -19,6 +19,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.ISupervisionPackagesApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.nio.file.Path
@@ -45,6 +47,13 @@ class StubServicesConfiguration {
   fun arnsApiClient(): IArnsApiClient {
     LOG.info("Creating stubbed Arns API client")
     return StubArnsApiClient()
+  }
+
+  @Bean
+  @Profile("local & stubsupervisionpackages")
+  fun supervisionPackagesApiClient(): ISupervisionPackagesApiClient {
+    LOG.info("Creating stubbed Supervision Packages API client")
+    return StubSupervisionPackagesApiClient()
   }
 
   companion object {
@@ -177,6 +186,34 @@ open class StubArnsApiClient(
     LOG.debug("Fetching tier details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideArnsWidget(crn)
+    }
+    LOG.debug("CRN {} not found in allowed list", crn)
+    return null
+  }
+
+  companion object {
+    val LOG = LoggerFactory.getLogger(this::class.java)
+  }
+}
+
+open class StubSupervisionPackagesApiClient(
+  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/supervision-packages-api-responses/default.json")),
+  val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
+) : ISupervisionPackagesApiClient,
+  DisposableBean {
+
+  init {
+    watcher.startWatchingChanges()
+  }
+
+  override fun destroy() {
+    watcher.stopWatchingChanges()
+  }
+
+  override fun getSupervisionPackageDetails(crn: String): SupervisionPackageDetails? {
+    LOG.debug("Fetching supervision package details for CRN: {}", crn)
+    if (watcher.allowedCrns.contains(crn)) {
+      return dataProvider.provideSupervisionPackageDetails(crn)
     }
     LOG.debug("CRN {} not found in allowed list", crn)
     return null

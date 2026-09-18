@@ -24,6 +24,7 @@ class WebClientConfiguration(
   @Value("\${api.base.url.ndilius-api}") val ndiliusApiBaseUri: String,
   @Value("\${api.base.url.tier-api}") val tierApiBaseUri: String,
   @Value("\${api.base.url.arns-api}") val arnsApiBaseUri: String,
+  @Value("\${api.base.url.supervision-packages-api}") val supervisionPackagesApiBaseUri: String,
   @Value("\${hmpps-auth.url}") val hmppsAuthBaseUri: String,
   @Value("\${api.health-timeout:2s}") val healthTimeout: Duration,
   @Value("\${api.timeout:20s}") val timeout: Duration,
@@ -137,6 +138,30 @@ class WebClientConfiguration(
     }
     .authorisedWebClient(authorizedClientManager, registrationId = ARNS_API_REGISTRATION_ID, url = arnsApiBaseUri, timeout = timeout)
 
+  /**
+   * Eligibility checks will run from the scheduled jobs as well as requests, so this carries both
+   * filters: [BackgroundClientCredentialsFilter] for the jobs, and [RefreshTokenOnUnauthorizedFilter]
+   * outside it so a rejected token is re-minted rather than replayed.
+   */
+  @Bean
+  @Profile("!stubsupervisionpackages")
+  fun supervisionPackagesApiWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    authorizedClientService: OAuth2AuthorizedClientService,
+    builder: WebClient.Builder,
+  ): WebClient = builder
+    .filters {
+      it.add(
+        ExchangeFilterFunction.ofRequestProcessor { req ->
+          log.info("Requesting Supervision Packages API URL: {}", req.url())
+          Mono.just(req)
+        },
+      )
+      it.add(RefreshTokenOnUnauthorizedFilter(SUPERVISION_PACKAGES_API_REGISTRATION_ID, authorizedClientService))
+      it.add(BackgroundClientCredentialsFilter(SUPERVISION_PACKAGES_API_REGISTRATION_ID, authorizedClientManager))
+    }
+    .authorisedWebClient(authorizedClientManager, registrationId = SUPERVISION_PACKAGES_API_REGISTRATION_ID, url = supervisionPackagesApiBaseUri, timeout = timeout)
+
   // HMPPS Auth health ping is required if your service calls HMPPS Auth to get a token to call other services
   @Bean
   fun hmppsAuthHealthWebClient(builder: WebClient.Builder): WebClient = builder.healthWebClient(hmppsAuthBaseUri, healthTimeout)
@@ -146,6 +171,7 @@ class WebClientConfiguration(
     private const val NDILIUS_API_REGISTRATION_ID = "ndilius-api"
     private const val MANAGE_USERS_API_REGISTRATION_ID = "manage-users-api"
     private const val ARNS_API_REGISTRATION_ID = "arns-api"
+    private const val SUPERVISION_PACKAGES_API_REGISTRATION_ID = "supervision-packages-api"
     private val log = LoggerFactory.getLogger(this::class.java)
   }
 }
