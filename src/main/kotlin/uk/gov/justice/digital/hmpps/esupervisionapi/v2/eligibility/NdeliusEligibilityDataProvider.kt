@@ -28,11 +28,7 @@ class NdeliusEligibilityDataProvider(
       if (contactDetails == null) {
         throw RuntimeException("Could not fetch eligibility details from NDelius for CRN: $crn")
       } else {
-        mapOf(
-          // "DECEASED_DATE" to contactDetails?.deceasedDate,
-          "ACTIVE_EVENT" to contactDetails.events.firstOrNull(),
-          "CONTACT_SUSPENDED" to contactDetails.contactSuspended,
-        )
+        contactDetails.eligibilityData()
       }
     },
     eligibilityDataFetchExecutor,
