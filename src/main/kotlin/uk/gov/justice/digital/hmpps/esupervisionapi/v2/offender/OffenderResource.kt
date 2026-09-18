@@ -50,7 +50,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateCheckinMode
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
@@ -518,7 +518,7 @@ is *today*.""",
     val modeChanged = request.checkinSchedule?.mode != offender.mode
     if (request.checkinSchedule != null) {
       val mode = request.checkinSchedule.mode ?: offender.mode
-      validate(request.checkinSchedule, mode)
+      validate(request.checkinSchedule, offender.mode)
       val scheduleUpdate = request.checkinSchedule
       offender.mode = mode
       offender.firstCheckin = scheduleUpdate.firstCheckin
@@ -533,7 +533,6 @@ is *today*.""",
         offender.updatedAt = clock.instant()
       }
     }
-    checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)
 
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null || request.contactPreference != null) {
@@ -562,11 +561,19 @@ is *today*.""",
     eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
-  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, mode: CheckinMode) {
+  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) {
     if (scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
     }
-    validateCheckinMode(mode, scheduleUpdate.checkinInterval)
+    when (scheduleUpdate.mode) {
+      CheckinMode.AD_HOC -> if (scheduleUpdate.checkinInterval != null) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval cannot be specified for ad-hoc check-ins.")
+      }
+      CheckinMode.SCHEDULED -> if (scheduleUpdate.checkinInterval == null) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval is required for scheduled check-ins.")
+      }
+      null -> validateScheduleSettings(currentMode, scheduleUpdate.checkinInterval)
+    }
   }
 
   private fun getOffenderPhotoUrl(offender: Offender): String? {
