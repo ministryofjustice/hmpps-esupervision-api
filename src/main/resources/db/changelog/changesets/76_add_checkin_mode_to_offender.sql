@@ -21,13 +21,11 @@ ALTER TABLE offender_v2
 --rollback UPDATE offender_v2 SET checkin_interval = INTERVAL '1 month' where checkin_interval is null;
 --rollback ALTER TABLE offender_v2 ALTER column checkin_interval SET NOT NULL;
 --rollback ALTER TABLE offender_v2 DROP column checkin_mode;
---rollback ALTER TABLE offender_v2 alter column checkin_interval set not null;
+--rollback DROP TYPE checkin_mode;
 
 --changeset hmpps:76_add_checkin_mode_to_offender-2 splitStatements:false
 
-drop function get_upcoming_assignment_info(p_offender_id bigint, p_next_checkin_date date, p_checkin_window_days bigint);
-
-create function get_upcoming_assignment_info(p_offender_id bigint, p_today date, p_next_checkin_date date, p_checkin_window_days bigint)
+create function get_upcoming_assignment_info_v2(p_offender_id bigint, p_today date, p_next_checkin_date date, p_checkin_window_days bigint)
     returns TABLE(question_list_id bigint, due_date date, explicit_assignment boolean)
     stable
     language plpgsql
@@ -83,3 +81,5 @@ BEGIN
                  LEFT JOIN default_question_list d ON TRUE;
 END;
 $$;
+
+--rollback drop function get_upcoming_assignment_info_v2(p_offender_id bigint, p_today date, p_next_checkin_date date, p_checkin_window_days bigint);
