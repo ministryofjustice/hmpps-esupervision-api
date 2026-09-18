@@ -77,6 +77,7 @@ open class Offender(
   open override var firstCheckin: LocalDate,
 
   @Column(name = "checkin_mode", nullable = false)
+  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
   @Enumerated(EnumType.STRING)
   open var mode: CheckinMode = CheckinMode.SCHEDULED,
 
