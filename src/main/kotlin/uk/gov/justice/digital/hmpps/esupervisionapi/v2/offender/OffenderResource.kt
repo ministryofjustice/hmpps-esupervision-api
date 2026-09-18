@@ -514,8 +514,6 @@ is *today*.""",
     }
 
     val offenderBefore = offender.toSummaryDto()
-
-    val modeChanged = request.checkinSchedule?.mode != offender.mode
     if (request.checkinSchedule != null) {
       val mode = request.checkinSchedule.mode ?: offender.mode
       validate(request.checkinSchedule, offender.mode)
