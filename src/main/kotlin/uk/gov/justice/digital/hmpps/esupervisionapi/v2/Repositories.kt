@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional
 import tools.jackson.core.type.TypeReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
@@ -46,7 +47,8 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         o.id as id, 
         o.crn as crn, 
         o.practitioner_id as practitionerId, 
-        o.contact_preference as contactPreference, 
+        o.contact_preference as contactPreference,
+        o.checkin_mode as checkinMode,
         o.current_event as currentEvent FROM offender_v2 o
     WHERE o.status = 'VERIFIED'
       AND (
@@ -80,6 +82,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     val crn: CRN
     val practitionerId: ExternalUserId
     val contactPreference: ContactPreference
+    val checkinMode: CheckinMode
     override val currentEvent: Long?
   }
 

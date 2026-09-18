@@ -166,7 +166,7 @@ class CheckinCreationJob(
         ),
         offenderContactPreference = info.contactPreference,
         currentEvent = eventNumber,
-        checkinMode = offenderRef.mode,
+        checkinMode = info.checkinMode,
       )
       result = Pair(checkin, event)
     }
