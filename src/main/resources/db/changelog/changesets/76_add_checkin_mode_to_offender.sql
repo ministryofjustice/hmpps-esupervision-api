@@ -18,7 +18,7 @@ ALTER TABLE offender_v2
 
 --rollback:
 --rollback ALTER TABLE offender_v2 DROP CONSTRAINT offender_v2_checkin_mode_check;
---rollback UPDATE offender_v2 SET checkin_interval = INTERVAL '1 month' where checkin_interval is null;
+--rollback UPDATE offender_v2 SET checkin_interval = INTERVAL '4 weeks' where checkin_interval is null;
 --rollback ALTER TABLE offender_v2 ALTER column checkin_interval SET NOT NULL;
 --rollback ALTER TABLE offender_v2 DROP column checkin_mode;
 --rollback DROP TYPE checkin_mode;
