@@ -10,6 +10,7 @@ api:
       tier-api: ${TIER_API_URL:https://hmpps-tier-dev.hmpps.service.justice.gov.uk}
       tier-ui: ${TIER_UI_URL:https://tier-dev.hmpps.service.justice.gov.uk}
       arns-api: ${ARNS_API_URL:https://assess-risks-and-needs-dev.hmpps.service.justice.gov.uk}
+      supervision-packages-api: ${SUPERVISION_PACKAGES_API_URL:https://supervision-packages-api-dev.hmpps.service.justice.gov.uk}
 
 app:
   env: ${APP_ENV}
@@ -160,6 +161,13 @@ spring:
             authorization-grant-type: client_credentials
             scope: read
 
+          supervision-packages-api:
+            provider: hmpps-auth
+            client-id: ${API_CLIENT_ID}
+            client-secret: ${API_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+            scope: read
+
   datasource:
     url: jdbc:postgresql://${POSTGRES_ENDPOINT}/${POSTGRES_DATABASE}?stringtype=unspecified
     driver-class-name: org.postgresql.Driver
@@ -301,6 +309,29 @@ resilience4j:
           - org.springframework.web.reactive.function.client.WebClientResponseException.Unauthorized
           - org.springframework.web.reactive.function.client.WebClientResponseException.Forbidden
 
+      supervisionPackagesApi:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 60s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 3s
+        record-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadGateway
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout
+        ignore-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest
+          - org.springframework.web.reactive.function.client.WebClientResponseException.NotFound
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Unauthorized
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Forbidden
+
       govNotify:
         register-health-indicator: true
         sliding-window-type: COUNT_BASED
@@ -364,6 +395,18 @@ resilience4j:
           - org.springframework.web.reactive.function.client.WebClientResponseException.NotFound
           - org.springframework.web.reactive.function.client.WebClientResponseException.Unauthorized
           - org.springframework.web.reactive.function.client.WebClientResponseException.Forbidden
+
+      supervisionPackagesApi:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadGateway
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout
 
       govNotify:
         max-attempts: 3
