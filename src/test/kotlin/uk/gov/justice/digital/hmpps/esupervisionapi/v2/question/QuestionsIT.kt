@@ -384,7 +384,7 @@ class QuestionsIT(
     clock.advanceBy(Duration.ofDays(1))
     val checkin2 = offenderCheckinService.debugCreateCheckin(offender, clock)
     // the assignment should have the checkin set
-    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, clock.today(), checkinWindow.toDays())
+    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
     assertEquals(assignment1.listId, upcoming2.questionListId)
     assertNotEquals(defaultListId, upcoming2.questionListId)
 
@@ -397,11 +397,11 @@ class QuestionsIT(
     assertEquals(upcoming2.questionListId, upcoming3.questionList)
 
     val submission2 = offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
-    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, clock.today(), checkinWindow.toDays())
+    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
     assertEquals(defaultListId, upcoming4.questionListId)
 
     val assignment2 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, clock.today(), checkinWindow.toDays())
+    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
     assertNotEquals(defaultListId, upcoming5.questionListId)
     assertEquals(assignment2.listId, upcoming5.questionListId)
   }
