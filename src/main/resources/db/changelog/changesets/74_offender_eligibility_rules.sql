@@ -30,7 +30,9 @@ create table offender_eligibility_rule(
     constraint offender_eligibility_rule_match_message_check
         check ((outcome_on_match = 'CONTINUE') = (message_on_match is null)),
     constraint offender_eligibility_rule_no_match_message_check
-        check ((outcome_on_no_match = 'CONTINUE') = (message_on_no_match is null))
+        check ((outcome_on_no_match = 'CONTINUE') = (message_on_no_match is null)),
+    constraint offender_eligibility_rule_equals_null_check
+         check ((operator = 'EQUALS') = (comparison_value is not null))
 );
 
 create index idx_offender_eligibility_rule_lookup
