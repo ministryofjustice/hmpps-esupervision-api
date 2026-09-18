@@ -22,8 +22,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.RiskInSituation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersionSwitch
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
+import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 class OffenderServiceTest {
@@ -61,16 +66,22 @@ class OffenderServiceTest {
 
   private lateinit var service: OffenderService
 
+  /** Tier v2 unless [v3From] is given, as in production before 1 October 2026. */
+  private fun serviceWithTier(v3From: String = "") = OffenderService(
+    ndiliusApiClient,
+    tierApiClient,
+    arnsApiClient,
+    TierApiVersionSwitch(v3From, Clock.fixed(Instant.parse("2026-10-01T09:00:00Z"), ZoneId.of("Europe/London"))),
+    tierUiBaseUri,
+  )
+
+  private val v3Details = tierDetails.copy(tierScore = "D", provisional = false)
+
   @BeforeEach
   fun setup() {
-    service = OffenderService(
-      ndiliusApiClient,
-      tierApiClient,
-      arnsApiClient,
-      tierUiBaseUri,
-    )
+    service = serviceWithTier()
     whenever(ndiliusApiClient.getContactDetailsStrict(crn)).thenReturn(contactDetails)
-    whenever(tierApiClient.getTierDetails(crn)).thenReturn(tierDetails)
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V2)).thenReturn(tierDetails)
     whenever(arnsApiClient.getRiskWidget(crn)).thenReturn(riskWidget)
   }
 
@@ -92,6 +103,40 @@ class OffenderServiceTest {
   }
 
   @Test
+  fun `getHeaderDetails - before the v3 switch-over - uses Tier v2 and the v2 link`() {
+    val response = serviceWithTier(v3From = "2026-10-01T10:00:00Z").getHeaderDetails(crn)
+
+    assertEquals("D2", response.tierScore)
+    assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
+    verify(tierApiClient, never()).getTierDetails(crn, TierApiVersion.V3)
+  }
+
+  @Test
+  fun `getHeaderDetails - from the v3 switch-over - uses Tier v3 and the v3 link`() {
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V3)).thenReturn(v3Details)
+
+    val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
+
+    assertEquals("D", response.tierScore)
+    assertEquals("$tierUiBaseUri/v3/case/$crn", response.tierDetailsLink)
+    assertTrue(response.errors.isEmpty())
+    verify(tierApiClient, never()).getTierDetails(crn, TierApiVersion.V2)
+  }
+
+  @Test
+  fun `getHeaderDetails - v3 has no tier for the case - tierScore NOT_FOUND rather than a placeholder`() {
+    for (placeholder in listOf(TierDetails.NOT_SUPERVISED, TierDetails.MISSING)) {
+      whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V3)).thenReturn(v3Details.copy(tierScore = placeholder))
+
+      val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
+
+      assertNull(response.tierScore, placeholder)
+      assertEquals(listOf(ErrorDetails("tierScore", HeaderErrorCode.NOT_FOUND)), response.errors, placeholder)
+      assertEquals("$tierUiBaseUri/v3/case/$crn", response.tierDetailsLink)
+    }
+  }
+
+  @Test
   fun `getHeaderDetails - NDelius CRN not found - throws 404 without calling other clients`() {
     whenever(ndiliusApiClient.getContactDetailsStrict(crn)).thenReturn(null)
 
@@ -99,7 +144,7 @@ class OffenderServiceTest {
 
     assertEquals(HttpStatus.NOT_FOUND, e.statusCode)
     assertEquals("Could not find contact details in NDelius for $crn.", e.reason)
-    verify(tierApiClient, never()).getTierDetails(any())
+    verify(tierApiClient, never()).getTierDetails(any(), any())
     verify(arnsApiClient, never()).getRiskWidget(any())
   }
 
@@ -156,7 +201,7 @@ class OffenderServiceTest {
 
   @Test
   fun `getHeaderDetails - tier details not found`() {
-    whenever(tierApiClient.getTierDetails(crn)).thenThrow(status(HttpStatus.NOT_FOUND))
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V2)).thenThrow(status(HttpStatus.NOT_FOUND))
 
     val response = service.getHeaderDetails(crn)
 
@@ -169,7 +214,7 @@ class OffenderServiceTest {
 
   @Test
   fun `getHeaderDetails - tier client returns null - reported as NOT_FOUND`() {
-    whenever(tierApiClient.getTierDetails(crn)).thenReturn(null)
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V2)).thenReturn(null)
 
     val response = service.getHeaderDetails(crn)
 
@@ -179,7 +224,7 @@ class OffenderServiceTest {
 
   @Test
   fun `getHeaderDetails - tier details unavailable`() {
-    whenever(tierApiClient.getTierDetails(crn)).thenThrow(status(HttpStatus.SERVICE_UNAVAILABLE))
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V2)).thenThrow(status(HttpStatus.SERVICE_UNAVAILABLE))
 
     val response = service.getHeaderDetails(crn)
 
@@ -190,7 +235,7 @@ class OffenderServiceTest {
 
   @Test
   fun `getHeaderDetails - tier rejects request - reports REQUEST_REJECTED`() {
-    whenever(tierApiClient.getTierDetails(crn)).thenThrow(status(HttpStatus.UNAUTHORIZED))
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V2)).thenThrow(status(HttpStatus.UNAUTHORIZED))
 
     val response = service.getHeaderDetails(crn)
 
@@ -200,7 +245,7 @@ class OffenderServiceTest {
 
   @Test
   fun `getHeaderDetails - tier client throws unexpectedly - reported as SERVICE_UNAVAILABLE`() {
-    whenever(tierApiClient.getTierDetails(crn)).thenThrow(IllegalStateException("JSON decoding error"))
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V2)).thenThrow(IllegalStateException("JSON decoding error"))
 
     val response = service.getHeaderDetails(crn)
 
@@ -254,7 +299,7 @@ class OffenderServiceTest {
   @Test
   fun `getHeaderDetails - all clients error - errors listed in field order`() {
     whenever(ndiliusApiClient.getContactDetailsStrict(crn)).thenThrow(status(HttpStatus.SERVICE_UNAVAILABLE))
-    whenever(tierApiClient.getTierDetails(crn)).thenThrow(status(HttpStatus.SERVICE_UNAVAILABLE))
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V2)).thenThrow(status(HttpStatus.SERVICE_UNAVAILABLE))
     whenever(arnsApiClient.getRiskWidget(crn)).thenThrow(status(HttpStatus.SERVICE_UNAVAILABLE))
 
     val response = service.getHeaderDetails(crn)

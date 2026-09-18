@@ -13,7 +13,7 @@ import java.time.LocalDate
 import java.util.*
 
 interface ITierApiClient {
-  fun getTierDetails(crn: String): TierDetails?
+  fun getTierDetails(crn: String, version: TierApiVersion): TierDetails?
 }
 
 /**
@@ -30,12 +30,12 @@ class TierApiClient(
   private val tierApiWebClient: WebClient,
 ) : ITierApiClient {
 
-  override fun getTierDetails(crn: String): TierDetails? {
-    LOGGER.info("Fetching tier details for CRN: {}", crn)
+  override fun getTierDetails(crn: String, version: TierApiVersion): TierDetails? {
+    LOGGER.info("Fetching {} tier details for CRN: {}", version, crn)
 
     return try {
       tierApiWebClient.get()
-        .uri("/v2/crn/{crn}/tier", crn)
+        .uri(version.tierPath, crn)
         .retrieve()
         .bodyToMono(TierDetails::class.java)
         .block()
@@ -99,9 +99,20 @@ class TierApiClient(
   }
 }
 
+/**
+ * v2 scores look like "D2". v3 scores are a single letter A-G, or [TierDetails.NOT_SUPERVISED] /
+ * [TierDetails.MISSING] when no tier applies.
+ */
 data class TierDetails(
   val tierScore: String,
   val calculationId: UUID,
   val calculationDate: LocalDate,
   val changeReason: String?,
-)
+  /** v3 only. */
+  val provisional: Boolean? = null,
+) {
+  companion object {
+    const val NOT_SUPERVISED = "NOT_SUPERVISED"
+    const val MISSING = "MISSING"
+  }
+}
