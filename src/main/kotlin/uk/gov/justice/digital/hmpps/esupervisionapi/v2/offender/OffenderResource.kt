@@ -432,6 +432,7 @@ class OffenderResource(
 
     request.checkinSchedule?.let { schedule ->
       validate(schedule, offender.mode)
+      offender.mode = schedule.mode ?: offender.mode
       offender.firstCheckin = schedule.firstCheckin
       offender.checkinInterval = schedule.checkinInterval?.duration
     }

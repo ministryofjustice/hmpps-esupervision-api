@@ -50,6 +50,7 @@ class OffenderPersistenceService(
     var finalised: OffenderReactivatedEvent? = null
     if (setup.isPresent) {
       entityManager.refresh(offender) // we want the latest state
+      offender.mode = event.offender.mode
       offender.firstCheckin = event.offender.firstCheckin
       offender.checkinInterval = event.offender.checkinInterval?.duration
       offender.contactPreference = event.offender.contactPreference
