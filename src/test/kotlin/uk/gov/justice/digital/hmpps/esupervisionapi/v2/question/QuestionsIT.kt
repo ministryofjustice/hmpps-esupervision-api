@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
-import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.whenever
@@ -279,7 +278,7 @@ class QuestionsIT(
 
     // no check-in scheduled => can't assign questions
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
-    assertThrows<BadArgumentException> {
+    assertThrows(BadArgumentException::class.java) {
       questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
     }
 
