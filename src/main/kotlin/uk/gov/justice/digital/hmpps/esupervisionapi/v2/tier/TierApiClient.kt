@@ -106,6 +106,10 @@ class TierApiClient(
 data class TierDetails(
   val tierScore: String,
   val calculationId: UUID,
+  /**
+   * Upstream sends a date-time on both v2 and v3 (e.g. "2026-10-01T08:15:30.123"). Jackson's
+   * LocalDate deserializer accepts an ISO date-time and keeps the date - see TierApiClientTest.
+   */
   val calculationDate: LocalDate,
   val changeReason: String?,
   /** v3 only. */
