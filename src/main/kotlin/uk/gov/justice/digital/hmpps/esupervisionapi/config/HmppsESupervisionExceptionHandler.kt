@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus.FORBIDDEN
 import org.springframework.http.HttpStatus.GONE
 import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
 import org.springframework.http.HttpStatus.NOT_FOUND
+import org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE
 import org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException as V2BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ImageRetentionExpiredException as V2ImageRetentionExpiredException
@@ -152,6 +154,17 @@ class HmppsESupervisionExceptionHandler {
         developerMessage = e.message,
       ),
     ).also { log.info("V2 Invalid offender setup state: {}", e.message) }
+
+  @ExceptionHandler(EligibilityDataUnavailableException::class)
+  fun handleEligibilityDataUnavailableException(e: EligibilityDataUnavailableException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(SERVICE_UNAVAILABLE)
+    .body(
+      ErrorResponse(
+        status = SERVICE_UNAVAILABLE,
+        userMessage = e.message,
+        developerMessage = e.message,
+      ),
+    ).also { log.warn("Eligibility data unavailable: {}", e.message) }
 
   @ExceptionHandler(NoResourceFoundException::class)
   fun handleNoResourceFoundException(e: NoResourceFoundException): ResponseEntity<ErrorResponse> = ResponseEntity

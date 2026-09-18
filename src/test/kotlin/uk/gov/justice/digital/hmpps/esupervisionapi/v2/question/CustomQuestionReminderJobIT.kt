@@ -113,7 +113,7 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
   @Test
   fun `execute the job`() {
-    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any(), any())).thenReturn(
       listOf("A000002", "A000003").map { dataProvider.provideCase(it) },
     )
 
