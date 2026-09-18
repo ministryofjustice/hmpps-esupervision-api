@@ -168,8 +168,8 @@ class NdiliusApiClient(
     throw e
   }
 
-  private fun getContactDetailsFallback(crn: String, e: Exception): ContactDetails? {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetails, crn=$crn"))
+  private fun getContactDetailsFallback(crn: String, useCase: ApiUseCase, e: Exception): ContactDetails? {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetails, crn=$crn, $useCase"))
     return null
   }
 
@@ -238,7 +238,7 @@ class NdiliusApiClient(
    * fallback's parameter type does not match, so the [NdiliusBatchFetchException] thrown by the
    * body still propagates as-is rather than being re-wrapped.
    */
-  private fun getContactDetailsForMultipleFallback(crns: List<String>, e: CallNotPermittedException): List<ContactDetails> {
+  private fun getContactDetailsForMultipleFallback(crns: List<String>, useCase: ApiUseCase, e: CallNotPermittedException): List<ContactDetails> {
     LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns.size}"))
     throw NdiliusBatchFetchException(crns, "Circuit breaker open for NDelius batch fetch", e)
   }
