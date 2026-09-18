@@ -17,6 +17,7 @@ import org.springframework.web.reactive.function.client.ClientResponse
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.server.ResponseStatusException
 import reactor.core.publisher.Mono
+import java.time.LocalDate
 
 class TierApiClientTest {
 
@@ -49,7 +50,7 @@ class TierApiClientTest {
       .header(HttpHeaders.WWW_AUTHENTICATE, challenge)
       .build()
 
-    val thrown = assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn) }
+    val thrown = assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn, TierApiVersion.V2) }
 
     assertEquals(HttpStatus.UNAUTHORIZED, thrown.statusCode)
     val logged = loggedMessages().single { it.startsWith("Error fetching tier details") }
@@ -60,7 +61,7 @@ class TierApiClientTest {
   fun `says so explicitly when the upstream offers no explanation at all`() {
     val response = ClientResponse.create(HttpStatus.UNAUTHORIZED).build()
 
-    assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn) }
+    assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn, TierApiVersion.V2) }
 
     val logged = loggedMessages().single { it.startsWith("Error fetching tier details") }
     assertTrue(logged.contains("(no challenge or body)"), "expected the empty marker in: $logged")
@@ -72,7 +73,7 @@ class TierApiClientTest {
       .body("""{"crn":"$crn","forename":"John","surname":"Doe","message":"bad request"}""")
       .build()
 
-    assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn) }
+    assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn, TierApiVersion.V2) }
 
     val logged = loggedMessages().single { it.startsWith("Error fetching tier details") }
     assertFalse(logged.contains("John"), "forename leaked into: $logged")
@@ -90,7 +91,7 @@ class TierApiClientTest {
       .body("""{"padding":"$padding","forename":"Johnathan","surname":"Doe"}""")
       .build()
 
-    assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn) }
+    assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn, TierApiVersion.V2) }
 
     val logged = loggedMessages().single { it.startsWith("Error fetching tier details") }
     assertFalse(logged.contains("John"), "a split forename leaked into: $logged")
@@ -100,7 +101,7 @@ class TierApiClientTest {
   fun `a 404 stays a not-found and is not dressed up as an auth problem`() {
     val response = ClientResponse.create(HttpStatus.NOT_FOUND).build()
 
-    val thrown = assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn) }
+    val thrown = assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn, TierApiVersion.V2) }
 
     assertEquals(HttpStatus.NOT_FOUND, thrown.statusCode)
   }
@@ -109,8 +110,29 @@ class TierApiClientTest {
   fun `a 5xx degrades to service unavailable`() {
     val response = ClientResponse.create(HttpStatus.BAD_GATEWAY).build()
 
-    val thrown = assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn) }
+    val thrown = assertThrows<ResponseStatusException> { clientReturning(response).getTierDetails(crn, TierApiVersion.V2) }
 
     assertEquals(HttpStatus.SERVICE_UNAVAILABLE, thrown.statusCode)
+  }
+
+  @Test
+  fun `asks the version's path and reads the v3 shape, including its date-time and provisional flag`() {
+    // Verbatim shape of hmpps-tier's TierV3Dto: calculationDate is a LocalDateTime upstream.
+    val body = """{"tierScore":"D","calculationId":"11111111-2222-3333-4444-555555555555","calculationDate":"2026-10-01T08:15:30.123","changeReason":null,"provisional":true}"""
+    val requested = mutableListOf<String>()
+    val client = TierApiClient(
+      WebClient.builder().exchangeFunction { request ->
+        requested += request.url().path
+        Mono.just(ClientResponse.create(HttpStatus.OK).header(HttpHeaders.CONTENT_TYPE, "application/json").body(body).build())
+      }.build(),
+    )
+
+    val details = client.getTierDetails(crn, TierApiVersion.V3)!!
+    client.getTierDetails(crn, TierApiVersion.V2)
+
+    assertEquals(listOf("/v3/crn/$crn/tier", "/v2/crn/$crn/tier"), requested)
+    assertEquals("D", details.tierScore)
+    assertEquals(LocalDate.of(2026, 10, 1), details.calculationDate)
+    assertEquals(true, details.provisional)
   }
 }
