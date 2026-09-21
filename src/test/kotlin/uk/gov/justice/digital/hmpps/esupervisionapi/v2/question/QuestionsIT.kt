@@ -274,7 +274,7 @@ class QuestionsIT(
     offenderRepository.save(offender)
 
     val assignment = questionService.upcomingAssignment(offender)
-    assertNull(assignment.expectedCheckinDate, "No check-in scheduled,, there should be no expected checkin date")
+    assertNull(assignment.expectedCheckinDate, "No check-in scheduled, there should be no expected checkin date")
 
     // no check-in scheduled => can't assign questions
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)

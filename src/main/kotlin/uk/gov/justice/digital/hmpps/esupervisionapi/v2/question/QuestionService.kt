@@ -34,7 +34,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
-import java.time.LocalDate
 import java.util.UUID
 import kotlin.collections.emptyMap
 import kotlin.jvm.optionals.getOrNull
@@ -117,7 +116,12 @@ class QuestionService(
       throw BadArgumentException("Can't add question to offender with status ${offender.status}")
     }
     val today = clock.today()
-    validateUpcomingCheckin(offender, clock.today())
+    when (offender.mode) {
+      CheckinMode.AD_HOC -> if (offender.firstCheckin <= today) {
+        throw BadArgumentException("offender does not have an upcoming check-in")
+      }
+      CheckinMode.SCHEDULED -> null
+    }
 
     val checkin = checkinRepository.findByOffenderAndDueDate(offender, today).getOrNull()
     val isDueToday = when (offender.mode) {
@@ -174,15 +178,6 @@ class QuestionService(
     val items = if (listId != null) questionsRepository.getListItems(listId, language) else questionsRepository.defaultListItems(language)
     LOG.info("checkinQuestions: returning {} items for checkin UUID={}, listId={}", items.size, checkinUuid, listId)
     return items
-  }
-
-  private fun validateUpcomingCheckin(offender: Offender, today: LocalDate) {
-    when (offender.mode) {
-      CheckinMode.AD_HOC -> if (offender.firstCheckin < today) {
-        throw BadArgumentException("offender does not have an upcoming check-in")
-      }
-      CheckinMode.SCHEDULED -> null
-    }
   }
 
   companion object {
