@@ -10,6 +10,7 @@ import com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import tools.jackson.databind.node.ArrayNode
 import tools.jackson.databind.node.ObjectNode
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
@@ -95,6 +97,13 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   private fun inCustody(adjust: ObjectNode.() -> Unit = {}) = frontendContext("Y050768", adjust)
 
   private fun openRecallRequest(adjust: ObjectNode.() -> Unit = {}) = frontendContext("Y058556", adjust)
+
+  /** Replaces the first sentence's custody status and, if given, its location. */
+  private fun ObjectNode.withCustody(status: String, location: String? = null) {
+    val custody = get("context").get("sentences").get(0).get("custody") as ObjectNode
+    custody.set("status", mapper.readTree(status))
+    location?.let { custody.set("location", mapper.readTree(it)) }
+  }
 
   /** Replaces the first sentence's releases - no dev response seen so far has any. */
   private fun ObjectNode.withReleases(releases: String) {
@@ -185,9 +194,70 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
 
     assertEquals(CodedDescription("SENT", "In Custody"), details?.phase)
     assertEquals(
-      listOf(CustodyDetails("1", CodedDescription("A", "Sentenced - In Custody"), latestReleaseDate = null, latestRecallDate = null)),
+      listOf(
+        CustodyDetails(
+          eventNumber = "1",
+          status = CodedDescription("A", "Sentenced - In Custody"),
+          location = CodedDescription("UNKNOW", "Unknown"),
+          latestReleaseDate = null,
+          latestRecallDate = null,
+        ),
+      ),
       details?.custody,
     )
+    assertFalse(details!!.isRecalled)
+    assertFalse(details.isUnlawfullyAtLarge)
+  }
+
+  @Test
+  fun `custody status C is recalled`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(inCustody { withCustody(status = """{"code": "C", "description": "Recalled"}""") }))
+
+    val details = offRequestThread { client.getSupervisionPackageDetails(crn) }!!
+
+    assertTrue(details.isRecalled)
+    assertFalse(details.isUnlawfullyAtLarge)
+  }
+
+  @Test
+  fun `location UATLRG is unlawfully at large`() {
+    upstream.stubFor(
+      get(urlEqualTo(contextUrl)).willReturn(
+        inCustody {
+          withCustody(
+            status = """{"code": "C", "description": "Recalled"}""",
+            location = """{"code": "UATLRG", "description": "Unlawfully at Large"}""",
+          )
+        },
+      ),
+    )
+
+    val details = offRequestThread { client.getSupervisionPackageDetails(crn) }!!
+
+    assertEquals(CodedDescription("UATLRG", "Unlawfully at Large"), details.custody.single().location)
+    assertTrue(details.isUnlawfullyAtLarge)
+    assertTrue(details.isRecalled)
+  }
+
+  @Test
+  fun `a recall on any sentence counts, not only the first`() {
+    // The captured in-custody sentence is left as it is; a second, recalled one is added after it.
+    upstream.stubFor(
+      get(urlEqualTo(contextUrl)).willReturn(
+        inCustody {
+          val sentences = get("context").get("sentences") as ArrayNode
+          val second = sentences.get(0).deepCopy() as ObjectNode
+          second.put("eventNumber", "2")
+          (second.get("custody") as ObjectNode).set("status", mapper.readTree("""{"code": "C", "description": "Recalled"}"""))
+          sentences.add(second)
+        },
+      ),
+    )
+
+    val details = offRequestThread { client.getSupervisionPackageDetails(crn) }!!
+
+    assertEquals(listOf("A", "C"), details.custody.map { it.status.code })
+    assertTrue(details.isRecalled)
   }
 
   @Test

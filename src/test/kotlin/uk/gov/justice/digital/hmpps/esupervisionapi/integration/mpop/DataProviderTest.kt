@@ -30,6 +30,8 @@ class DataProviderTest {
     Assertions.assertEquals("SENT", recalled.phase?.code)
     Assertions.assertNull(recalled.recallStatus, "a decided recall has no open request")
     Assertions.assertNotNull(recalled.custody.single().latestRecallDate)
+    Assertions.assertTrue(recalled.isRecalled)
+    Assertions.assertFalse(recalled.isUnlawfullyAtLarge)
     val noPackage = provider.provideSupervisionPackageDetails("X000004")
     Assertions.assertNull(noPackage.supervisionPackage)
     Assertions.assertNull(noPackage.phase)
@@ -37,6 +39,10 @@ class DataProviderTest {
     val recallRequested = provider.provideSupervisionPackageDetails("X000006")
     Assertions.assertEquals("REC01", recallRequested.recallStatus?.code)
     Assertions.assertTrue(recallRequested.custody.isEmpty(), "an undecided request has no recall recorded")
+    Assertions.assertFalse(recallRequested.isRecalled)
+    val atLarge = provider.provideSupervisionPackageDetails("X000007")
+    Assertions.assertTrue(atLarge.isRecalled)
+    Assertions.assertTrue(atLarge.isUnlawfullyAtLarge)
   }
 
   @Test
