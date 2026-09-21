@@ -292,6 +292,29 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionService - upcoming questions for ad-hoc check-ins`() {
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val dueDate = clock.today()
+    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate).toEntity()
+    offenderRepository.save(offender)
+
+    val assignment1 = questionService.upcomingAssignment(offender)
+    assertEquals(dueDate, assignment1.expectedCheckinDate)
+
+    val checkin1 = offenderCheckinService.debugCreateCheckin(offender, clock)
+    offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
+
+    val assignment2 = questionService.upcomingAssignment(offender)
+    assertNull(assignment2.expectedCheckinDate)
+
+    offender.firstCheckin = clock.today().plusDays(4)
+    offenderRepository.save(offender)
+
+    val assignment3 = questionService.upcomingAssignment(offender)
+    assertEquals(offender.firstCheckin, assignment3.expectedCheckinDate)
+  }
+
+  @Test
   fun `QuestionService - no checkin, correct expected check in date returned`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val dueDate = clock.today().plusDays(1)
@@ -375,32 +398,35 @@ class QuestionsIT(
     offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
 
     val assignment1 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
+    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), clock.today(), checkinWindow.toDays())
     assertNotNull(upcoming1)
     assertEquals(assignment1.listId, upcoming1.questionListId)
+    assertEquals(dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming1.dueDate)
 
     // ----- DAY 2
     clock.advanceBy(Duration.ofDays(1))
     val checkin2 = offenderCheckinService.debugCreateCheckin(offender, clock)
     // the assignment should have the checkin set
-    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
+    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
     assertEquals(assignment1.listId, upcoming2.questionListId)
     assertNotEquals(defaultListId, upcoming2.questionListId)
+    assertEquals(checkin2.dueDate, upcoming2.dueDate)
 
     assertThrows(BadArgumentException::class.java, {
       questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
     }, "We can't assign questions until check-in is submitted/expired")
 
-    // Verify out assignment hasn't changed
+    // Verify our assignment hasn't changed
     val upcoming3 = questionService.upcomingAssignment(offender)
     assertEquals(upcoming2.questionListId, upcoming3.questionList)
 
     val submission2 = offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
-    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
+    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
     assertEquals(defaultListId, upcoming4.questionListId)
+    assertEquals(checkin1.dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming4.dueDate)
 
     val assignment2 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
+    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
     assertNotEquals(defaultListId, upcoming5.questionListId)
     assertEquals(assignment2.listId, upcoming5.questionListId)
   }

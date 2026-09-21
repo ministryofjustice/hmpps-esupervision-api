@@ -78,21 +78,38 @@ class OffenderRepositoryTest : IntegrationTestBase() {
       checkinInterval = Duration.ofDays(7),
     )
 
-    offenderRepository.saveAll(listOf(offender1, offender2, offender3, offender4))
+    // Offender 5: Ad-hoc, scheduled for today
+    val offender5 = createOffenderV2(
+      crn = "V200005",
+      firstCheckin = today,
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+    )
+
+    // Offender 6: Ad-hoc, NOT scheduled for today (first checkin 2 days from now)
+    val offender6 = createOffenderV2(
+      crn = "V200006",
+      firstCheckin = today.plusDays(2),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+    )
+
+    offenderRepository.saveAll(listOf(offender1, offender2, offender3, offender4, offender5, offender6))
 
     val result = offenderRepository.findEligibleForCheckinCreation(today, today.plusDays(1))
 
     // we want only offender 1 and 2
-    assertEquals(2, result.size) { "Should only find offenders 1 and 2, but found: ${result.map { it.crn }}" }
+    assertEquals(3, result.size) { "Should only find offenders 1 and 2, and 5, but found: ${result.map { it.crn }}" }
     val crns = result.map { it.crn }.toSet()
     assert(crns.contains("V200001"))
     assert(crns.contains("V200002"))
+    assert(crns.contains("V200005"))
 
     // ensure we skip offenders who already have a checkin in the DB
-    val checkin = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin(
+    val checkin = OffenderCheckin(
       uuid = UUID.randomUUID(),
       offender = offender1,
-      status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus.CREATED,
+      status = CheckinStatus.CREATED,
       dueDate = today,
       createdAt = Instant.now(),
       createdBy = "SYSTEM",
@@ -100,8 +117,8 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     checkinV2Repository.save(checkin)
 
     val resultNoOffender1 = offenderRepository.findEligibleForCheckinCreation(today, today.plusDays(1))
-    assertEquals(1, resultNoOffender1.size)
-    assertEquals("V200002", resultNoOffender1.first().crn)
+    assertEquals(2, resultNoOffender1.size)
+    assertEquals(setOf(offender2.crn, offender5.crn), resultNoOffender1.map { it.crn }.toSet())
   }
 
   @Test

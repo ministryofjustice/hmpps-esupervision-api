@@ -56,12 +56,10 @@ BEGIN
              recent_checkin AS (
                  SELECT c.due_date, c.status
                  FROM offender_checkin_v2 c
-                          JOIN the_offender ON c.offender_id = the_offender.id
-                 WHERE (c.offender_id = p_offender_id
-                     AND c.status = 'CREATED'::offender_checkin_status_v2)
-                    OR (((p_next_checkin_date - c.due_date) < p_checkin_window_days)
-                     AND MOD(c.due_date - the_offender.first_checkin,
-                             (EXTRACT(EPOCH FROM the_offender.checkin_interval)) / 86400) = 0)
+                 JOIN the_offender ON c.offender_id = the_offender.id
+                 WHERE c.offender_id = p_offender_id
+                   AND (c.status = 'CREATED'::offender_checkin_status_v2
+                        OR (c.status <> 'CREATED'::offender_checkin_status_v2 AND c.due_date = p_today))
                  ORDER BY c.created_at DESC
                  LIMIT 1
              )
@@ -69,9 +67,19 @@ BEGIN
             COALESCE(i.question_list_id, d.question_list_id) AS question_list_id,
             CASE
                 WHEN rc.status = 'CREATED'::offender_checkin_status_v2 THEN rc.due_date
-                WHEN rc.status <> 'CREATED'::offender_checkin_status_v2 and the_offender.checkin_interval is not null THEN (p_next_checkin_date + the_offender.checkin_interval)::date
-                WHEN the_offender.checkin_mode = 'AD_HOC'::checkin_mode and p_next_checkin_date < p_today THEN null
-                ELSE p_next_checkin_date
+                WHEN rc.status <> 'CREATED'::offender_checkin_status_v2 THEN
+                    CASE
+                        WHEN rc.due_date = p_today AND the_offender.checkin_mode = 'AD_HOC'::checkin_mode AND p_next_checkin_date > p_today THEN p_next_checkin_date
+                        WHEN rc.due_date = p_today AND the_offender.checkin_mode = 'AD_HOC'::checkin_mode THEN NULL
+                        WHEN rc.due_date = p_today AND the_offender.checkin_mode = 'SCHEDULED'::checkin_mode AND p_next_checkin_date > p_today THEN p_next_checkin_date
+                        WHEN rc.due_date = p_today AND the_offender.checkin_mode = 'SCHEDULED'::checkin_mode THEN (p_next_checkin_date + the_offender.checkin_interval)::date
+                    END
+                ELSE
+                    CASE
+                        WHEN the_offender.checkin_mode = 'SCHEDULED'::checkin_mode THEN p_next_checkin_date
+                        WHEN the_offender.checkin_mode = 'AD_HOC'::checkin_mode AND p_next_checkin_date >= p_today THEN p_next_checkin_date
+                        ELSE NULL
+                    END
             END AS due_date,
             (i.question_list_id IS NOT NULL) AS explicit_assignment
         FROM (SELECT 1) AS dummy
