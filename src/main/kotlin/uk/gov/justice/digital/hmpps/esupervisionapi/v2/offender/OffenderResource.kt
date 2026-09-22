@@ -38,6 +38,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
@@ -640,6 +641,8 @@ data class PractitionerSummary(
   val email: String? = null,
   val unallocated: Boolean? = null,
   val username: String? = null,
+  @field:Schema(description = "Probation Delivery Unit", required = false)
+  val probationDeliveryUnit: OrganizationalUnit? = null,
 ) : INamedPerson
 
 private fun PractitionerDetails.toSummary() = PractitionerSummary(
@@ -648,6 +651,7 @@ private fun PractitionerDetails.toSummary() = PractitionerSummary(
   email = email,
   unallocated = unallocated,
   username = username,
+  probationDeliveryUnit = probationDeliveryUnit,
 )
 
 /** Simple DTO for offender lookup - no PII by default */
