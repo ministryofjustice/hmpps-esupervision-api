@@ -9,8 +9,8 @@ class SupervisionPackageService(
 ) {
   /**
    * Whether the person is on a supervision package - see [SupervisionPackageDetails.isOnSupervisionPackage].
-   * A CRN Supervision Packages does not know is not on one.
+   * Null when Supervision Packages does not know the CRN.
    * @throws SupervisionPackagesFetchException when Supervision Packages could not be asked
    */
-  fun isOnSupervisionPackage(crn: CRN): Boolean = supervisionPackagesApiClient.getSupervisionPackageDetails(crn)?.isOnSupervisionPackage ?: false
+  fun isOnSupervisionPackage(crn: CRN): Boolean? = supervisionPackagesApiClient.getSupervisionPackageDetails(crn)?.isOnSupervisionPackage
 }

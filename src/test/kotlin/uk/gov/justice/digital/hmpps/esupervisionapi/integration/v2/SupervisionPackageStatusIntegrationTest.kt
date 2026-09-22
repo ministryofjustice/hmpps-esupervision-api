@@ -131,10 +131,10 @@ class SupervisionPackageStatusIntegrationTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `a CRN Supervision Packages does not know is not on a supervision package`() {
+  fun `a CRN Supervision Packages does not know is 404, not false`() {
     upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(aResponse().withStatus(HttpStatus.NOT_FOUND.value())))
 
-    expectOnSupervisionPackage(false)
+    fetchStatus().expectStatus().isNotFound
   }
 
   @Test
