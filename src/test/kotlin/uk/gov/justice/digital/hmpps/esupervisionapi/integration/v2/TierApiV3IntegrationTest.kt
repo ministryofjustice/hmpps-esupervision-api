@@ -53,8 +53,8 @@ class TierApiV3IntegrationTest : IntegrationTestBase() {
 
   private fun json(body: String) = aResponse().withHeader("Content-Type", "application/json").withBody(body)
 
-  private fun tierV3(score: String) = json(
-    """{"tierScore":"$score","calculationId":"11111111-2222-3333-4444-555555555555","calculationDate":"2026-10-01T08:15:30.123","changeReason":null,"provisional":false}""",
+  private fun tierV3(score: String, provisional: Boolean = false) = json(
+    """{"tierScore":"$score","calculationId":"11111111-2222-3333-4444-555555555555","calculationDate":"2026-10-01T08:15:30.123","changeReason":null,"provisional":$provisional}""",
   )
 
   private fun fetchHeader() = webTestClient.get()
@@ -69,8 +69,19 @@ class TierApiV3IntegrationTest : IntegrationTestBase() {
     fetchHeader().expectStatus().isOk
       .expectBody()
       .jsonPath("$.tierScore").isEqualTo("E")
+      .jsonPath("$.tierScoreProvisional").isEqualTo(false)
       .jsonPath("$.tierDetailsLink").isEqualTo("https://tier-ui.test/v3/case/$crn")
       .jsonPath("$.errors[?(@.field == 'tierScore')]").doesNotExist()
+  }
+
+  @Test
+  fun `a provisional v3 tier is flagged as such`() {
+    upstreams.stubFor(get(urlEqualTo("/v3/crn/$crn/tier")).willReturn(tierV3("E", provisional = true)))
+
+    fetchHeader().expectStatus().isOk
+      .expectBody()
+      .jsonPath("$.tierScore").isEqualTo("E")
+      .jsonPath("$.tierScoreProvisional").isEqualTo(true)
   }
 
   @Test
@@ -80,6 +91,7 @@ class TierApiV3IntegrationTest : IntegrationTestBase() {
     fetchHeader().expectStatus().isOk
       .expectBody()
       .jsonPath("$.tierScore").doesNotExist()
+      .jsonPath("$.tierScoreProvisional").doesNotExist()
       .jsonPath("$.errors[?(@.field == 'tierScore')].code").isEqualTo("NOT_FOUND")
   }
 }

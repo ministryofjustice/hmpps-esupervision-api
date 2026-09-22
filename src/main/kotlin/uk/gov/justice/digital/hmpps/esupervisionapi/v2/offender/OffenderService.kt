@@ -51,7 +51,11 @@ class OffenderService(
     val (tier, risk) = Executors.newVirtualThreadPerTaskExecutor().use { executor ->
       val tierLookup = executor.submit(
         Callable {
-          onBehalfOfRequest(requestAttributes) { fetchField("tierScore", "Tier API", crn) { tierApiClient.getTierDetails(crn, tierVersion)?.tierScore?.takeUnless { it in NO_TIER_SCORES } } }
+          onBehalfOfRequest(requestAttributes) {
+            fetchField("tierScore", "Tier API", crn) {
+              tierApiClient.getTierDetails(crn, tierVersion)?.takeUnless { it.tierScore in NO_TIER_SCORES }
+            }
+          }
         },
       )
       val risk = fetchField("overallRisk", "ARNS API", crn) { arnsApiClient.getRiskWidget(crn)?.overallRisk }
@@ -61,7 +65,8 @@ class OffenderService(
     return OffenderHeaderDetails(
       crn = crn,
       dateOfBirth = contact.value?.dateOfBirth,
-      tierScore = tier.value,
+      tierScore = tier.value?.tierScore,
+      tierScoreProvisional = tier.value?.provisional,
       tierDetailsLink = tierUiBaseUri + tierVersion.uiCasePath.replace("{crn}", crn),
       overallRisk = risk.value,
       errors = listOfNotNull(contact.toErrorDetails(), tier.toErrorDetails(), risk.toErrorDetails()),
