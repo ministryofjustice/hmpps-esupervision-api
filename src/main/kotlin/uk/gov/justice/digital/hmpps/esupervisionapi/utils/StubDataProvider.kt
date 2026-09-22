@@ -10,6 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.RiskInSituation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.CustodyDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.time.LocalDate
 import java.time.ZoneId
@@ -19,7 +20,7 @@ typealias CRN = String
 
 interface StubDataProvider {
   fun provideCase(crn: CRN): ContactDetails
-  fun provideTierDetails(crn: CRN): TierDetails
+  fun provideTierDetails(crn: CRN, version: TierApiVersion): TierDetails
   fun provideArnsWidget(crn: CRN): ArnsWidget
   fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails
 }
@@ -58,8 +59,8 @@ class DefaultStubDataProvider : StubDataProvider {
     ),
   )
 
-  override fun provideTierDetails(crn: String): TierDetails = TierDetails(
-    tierScore = "D2",
+  override fun provideTierDetails(crn: String, version: TierApiVersion): TierDetails = TierDetails(
+    tierScore = if (version == TierApiVersion.V3) "D" else "D2",
     calculationId = UUID.randomUUID(),
     calculationDate = LocalDate.of(2026, 1, 1),
     changeReason = "A registration was added",
@@ -96,7 +97,9 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> "001122" will become part of the offender's surname and contact info
  * - X001122 -> "00" will become part of the practitioner's surname and contact info
  * - X001122 -> "11" will become part of the practitioner's local admin, probation delivery and provider code
- * - X001122 -> First & last character "X2" will become the tier score
+ * - X001122 -> First & last character "X2" will become the v2 tier score
+ * - X001122 -> Last character will decide the v3 tier score: "0"-"6" become "A"-"G", "7" NOT_SUPERVISED,
+ *   "8" MISSING, "9" "D"
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
  * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
  *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
@@ -149,8 +152,11 @@ class GeneratingStubDataProvider : StubDataProvider {
     )
   }
 
-  override fun provideTierDetails(crn: String): TierDetails = TierDetails(
-    tierScore = "${crn.substring(0)}${crn.substring(5)}",
+  override fun provideTierDetails(crn: String, version: TierApiVersion): TierDetails = TierDetails(
+    tierScore = when (version) {
+      TierApiVersion.V2 -> "${crn.substring(0)}${crn.substring(5)}"
+      TierApiVersion.V3 -> V3_SCORES_BY_LAST_DIGIT[crn.last().digitToInt()]
+    },
     calculationId = UUID.randomUUID(),
     calculationDate = LocalDate.of(2026, 1, 1),
     changeReason = "A registration was added",
@@ -226,5 +232,9 @@ class GeneratingStubDataProvider : StubDataProvider {
   private fun parseCrn(crn: CRN): CrnIds {
     assert(crn.matches(Regex("[A-Z][0-9]{6}"))) { "Invalid CRN supplied: $crn" }
     return CrnIds(crn.substring(1), crn.substring(1, 3), crn.substring(3, 5))
+  }
+
+  private companion object {
+    val V3_SCORES_BY_LAST_DIGIT = listOf("A", "B", "C", "D", "E", "F", "G", TierDetails.NOT_SUPERVISED, TierDetails.MISSING, "D")
   }
 }

@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.ISupervisionPackagesApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.nio.file.Path
 
@@ -149,10 +150,10 @@ open class StubTierApiClient(
     watcher.stopWatchingChanges()
   }
 
-  override fun getTierDetails(crn: String): TierDetails? {
-    LOG.debug("Fetching tier details for CRN: {}", crn)
+  override fun getTierDetails(crn: String, version: TierApiVersion): TierDetails? {
+    LOG.debug("Fetching {} tier details for CRN: {}", version, crn)
     if (watcher.allowedCrns.contains(crn)) {
-      return dataProvider.provideTierDetails(crn)
+      return dataProvider.provideTierDetails(crn, version)
     }
     LOG.debug("CRN {} not found in allowed list", crn)
     return null

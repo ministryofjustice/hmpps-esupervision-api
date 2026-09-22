@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration.mpop
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 
 class DataProviderTest {
   @Test
@@ -36,5 +37,13 @@ class DataProviderTest {
     val recallRequested = provider.provideSupervisionPackageDetails("X000006")
     Assertions.assertEquals("REC01", recallRequested.recallStatus?.code)
     Assertions.assertTrue(recallRequested.custody.isEmpty(), "an undecided request has no recall recorded")
+  }
+
+  @Test
+  fun `v3 tier score is chosen by the last CRN digit`() {
+    val provider = GeneratingStubDataProvider()
+    val scores = (0..9).map { provider.provideTierDetails("X00000$it", TierApiVersion.V3).tierScore }
+
+    Assertions.assertEquals(listOf("A", "B", "C", "D", "E", "F", "G", "NOT_SUPERVISED", "MISSING", "D"), scores)
   }
 }
