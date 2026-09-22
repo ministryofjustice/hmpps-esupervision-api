@@ -104,7 +104,7 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
  * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
  *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
- *   request, anything else standard supervision
+ *   request, "7" recalled and unlawfully at large, anything else standard supervision
  */
 class GeneratingStubDataProvider : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
@@ -197,8 +197,8 @@ class GeneratingStubDataProvider : StubDataProvider {
     return when (crn.last()) {
       '1' -> SupervisionPackageDetails(packageC, CodedDescription("INIT", "Early engagement"), recallStatus = null)
       '2' -> SupervisionPackageDetails(packageC, CodedDescription("FTHRD", "Final third"), recallStatus = null)
-      // Released, then recalled, and not released since. Custody status C "Recalled" comes from
-      // Supervision Packages' own test data and is not confirmed as the Delius code.
+      // Released, then recalled, and back in prison. C "Recalled" is confirmed by Manage People on
+      // Probation; the prison is from Supervision Packages' own test data.
       '3' -> SupervisionPackageDetails(
         packageC,
         CodedDescription("SENT", "In Custody"),
@@ -208,6 +208,7 @@ class GeneratingStubDataProvider : StubDataProvider {
           CustodyDetails(
             eventNumber = "1",
             status = CodedDescription("C", "Recalled"),
+            location = CodedDescription("SWIHMP", "Swansea (HMP)"),
             latestReleaseDate = LocalDate.of(2026, 1, 12),
             latestRecallDate = LocalDate.of(2026, 3, 2),
           ),
@@ -220,6 +221,23 @@ class GeneratingStubDataProvider : StubDataProvider {
         CodedDescription("SPNK", "Not Yet Known"),
         CodedDescription("SPNK", "Not Yet Known"),
         CodedDescription("REC01", "Recall Initiated"),
+      )
+      // Recalled but not returned to custody. UATLRG is the location Manage People on Probation checks
+      // for "unlawfully at large". It does not count as recalled. Unlawfully at large is not in custody, so the phase is not SENT; what
+      // Supervision Packages reports for it is not confirmed, so it is left as not yet known.
+      '7' -> SupervisionPackageDetails(
+        packageC,
+        CodedDescription("SPNK", "Not Yet Known"),
+        recallStatus = null,
+        custody = listOf(
+          CustodyDetails(
+            eventNumber = "1",
+            status = CodedDescription("C", "Recalled"),
+            location = CodedDescription("UATLRG", "Unlawfully at Large"),
+            latestReleaseDate = LocalDate.of(2026, 1, 12),
+            latestRecallDate = LocalDate.of(2026, 3, 2),
+          ),
+        ),
       )
       else -> SupervisionPackageDetails(packageC, CodedDescription("STD", "Standard supervision"), recallStatus = null)
     }
