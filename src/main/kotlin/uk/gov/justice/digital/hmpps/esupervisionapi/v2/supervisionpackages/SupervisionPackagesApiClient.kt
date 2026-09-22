@@ -46,20 +46,27 @@ data class SupervisionPackageDetails(
   val custody: List<CustodyDetails> = emptyList(),
 ) {
   /**
-   * Recalled on any sentence - custody status `C`. Checks every sentence, not only the primary one,
-   * as Manage People on Probation does before showing "has been recalled. Their appointments are
-   * paused."
+   * Recalled on any sentence - custody status `C` - and not unlawfully at large on that sentence.
+   * Checks every sentence, not only the primary one, as Manage People on Probation does before
+   * showing "has been recalled. Their appointments are paused."
+   *
+   * Someone recalled but not returned to custody also has status `C`; they are reported by
+   * [isUnlawfullyAtLarge] instead, and do not count as recalled here.
    */
-  val isRecalled: Boolean get() = custody.any { it.status.code == CustodyDetails.RECALLED }
+  val isRecalled: Boolean get() = custody.any { it.status.code == CustodyDetails.RECALLED && !it.isUnlawfullyAtLarge }
 
-  /** Unlawfully at large on any sentence - custody location `UATLRG`, as Manage People on Probation checks. */
-  val isUnlawfullyAtLarge: Boolean get() = custody.any { it.location?.code == CustodyDetails.UNLAWFULLY_AT_LARGE }
+  /**
+   * Unlawfully at large on any sentence - custody location `UATLRG`, as Manage People on Probation checks.
+   * Treated separately from recalled and in custody: they are not held.
+   */
+  val isUnlawfullyAtLarge: Boolean get() = custody.any { it.isUnlawfullyAtLarge }
 }
 
 /**
  * Where a custodial sentence stands, from Delius's custody, release and recall records.
  *
- * [status] `C` is the direct signal that the person is recalled. [latestRecallDate] agrees with it
+ * [status] `C` is the direct signal that the person is recalled, though an unlawfully at large
+ * person has it too (see [isUnlawfullyAtLarge]). [latestRecallDate] agrees with it
  * and dates it: the recall recorded against the most recent release, so set only when they were
  * recalled after that release and have not been released since. A recall followed by a later
  * release is not reported here; the phase shows that as `RRL`.
@@ -73,13 +80,16 @@ data class CustodyDetails(
    * `T` Terminated.
    */
   val status: CodedDescription,
-  /** Where they are held - a prison, or `UATLRG` when unlawfully at large. */
+  /** Custody location - the prison holding them, or `UATLRG` when unlawfully at large and not held. */
   val location: CodedDescription?,
   /** The most recent release from custody on this sentence; null if never released. */
   val latestReleaseDate: LocalDate?,
   /** The recall that ended the most recent release; null if that release has not been recalled. */
   val latestRecallDate: LocalDate?,
 ) {
+  /** Custody location `UATLRG`: recalled or escaped, and not held. */
+  val isUnlawfullyAtLarge: Boolean get() = location?.code == UNLAWFULLY_AT_LARGE
+
   companion object {
     const val RECALLED = "C"
     const val UNLAWFULLY_AT_LARGE = "UATLRG"

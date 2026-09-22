@@ -221,10 +221,11 @@ class GeneratingStubDataProvider : StubDataProvider {
         CodedDescription("REC01", "Recall Initiated"),
       )
       // Recalled but not returned to custody. UATLRG is the location Manage People on Probation checks
-      // for "unlawfully at large"; the phase for an at-large recall is not confirmed.
+      // for "unlawfully at large". It does not count as recalled. Unlawfully at large is not in custody, so the phase is not SENT; what
+      // Supervision Packages reports for it is not confirmed, so it is left as not yet known.
       '7' -> SupervisionPackageDetails(
         packageC,
-        CodedDescription("SENT", "In Custody"),
+        CodedDescription("SPNK", "Not Yet Known"),
         recallStatus = null,
         custody = listOf(
           CustodyDetails(

@@ -41,7 +41,8 @@ class DataProviderTest {
     Assertions.assertTrue(recallRequested.custody.isEmpty(), "an undecided request has no recall recorded")
     Assertions.assertFalse(recallRequested.isRecalled)
     val atLarge = provider.provideSupervisionPackageDetails("X000007")
-    Assertions.assertTrue(atLarge.isRecalled)
+    Assertions.assertNotEquals("SENT", atLarge.phase?.code, "unlawfully at large is not in custody")
+    Assertions.assertFalse(atLarge.isRecalled, "unlawfully at large does not count as recalled")
     Assertions.assertTrue(atLarge.isUnlawfullyAtLarge)
   }
 

@@ -220,7 +220,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `location UATLRG is unlawfully at large`() {
+  fun `location UATLRG is unlawfully at large, not recalled`() {
     upstream.stubFor(
       get(urlEqualTo(contextUrl)).willReturn(
         inCustody {
@@ -236,7 +236,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
 
     assertEquals(CodedDescription("UATLRG", "Unlawfully at Large"), details.custody.single().location)
     assertTrue(details.isUnlawfullyAtLarge)
-    assertTrue(details.isRecalled)
+    assertFalse(details.isRecalled, "status C, but at large rather than recalled")
   }
 
   @Test
