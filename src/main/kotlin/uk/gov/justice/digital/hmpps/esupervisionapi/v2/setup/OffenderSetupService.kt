@@ -25,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.util.Optional
@@ -126,7 +127,7 @@ class OffenderSetupService(
       offender = offender,
       practitionerId = offenderInfo.practitionerId,
       createdAt = now,
-      startedAt = offenderInfo.startedAt,
+      startedAt = validSetupStart(offenderInfo, now),
       eligibilityChoice = offenderInfo.eligibilityChoice,
       rationale = offenderInfo.rationale,
     )
@@ -144,6 +145,19 @@ class OffenderSetupService(
     )
 
     return saved.dto()
+  }
+
+  /**
+   * The UI records when the practitioner started the setup journey. Only keep it if it's plausible,
+   * so a skewed clock or a long-abandoned session can't distort setup-duration stats.
+   */
+  private fun validSetupStart(offenderInfo: OffenderInfo, now: Instant): Instant? {
+    val startedAt = offenderInfo.startedAt ?: return null
+    if (startedAt.isAfter(now) || startedAt.isBefore(now.minus(MAX_SETUP_DURATION))) {
+      LOGGER.debug("Ignoring implausible setup start for setup={}, startedAt={}, now={}", offenderInfo.setupUuid, startedAt, now)
+      return null
+    }
+    return startedAt
   }
 
   /**
@@ -246,6 +260,7 @@ class OffenderSetupService(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(OffenderSetupService::class.java)
+    internal val MAX_SETUP_DURATION: Duration = Duration.ofHours(24)
   }
 }
 

@@ -30,6 +30,8 @@ class DataProviderTest {
     Assertions.assertEquals("SENT", recalled.phase?.code)
     Assertions.assertNull(recalled.recallStatus, "a decided recall has no open request")
     Assertions.assertNotNull(recalled.custody.single().latestRecallDate)
+    Assertions.assertTrue(recalled.isRecalled)
+    Assertions.assertFalse(recalled.isUnlawfullyAtLarge)
     val noPackage = provider.provideSupervisionPackageDetails("X000004")
     Assertions.assertNull(noPackage.supervisionPackage)
     Assertions.assertNull(noPackage.phase)
@@ -37,6 +39,11 @@ class DataProviderTest {
     val recallRequested = provider.provideSupervisionPackageDetails("X000006")
     Assertions.assertEquals("REC01", recallRequested.recallStatus?.code)
     Assertions.assertTrue(recallRequested.custody.isEmpty(), "an undecided request has no recall recorded")
+    Assertions.assertFalse(recallRequested.isRecalled)
+    val atLarge = provider.provideSupervisionPackageDetails("X000007")
+    Assertions.assertNotEquals("SENT", atLarge.phase?.code, "unlawfully at large is not in custody")
+    Assertions.assertFalse(atLarge.isRecalled, "unlawfully at large does not count as recalled")
+    Assertions.assertTrue(atLarge.isUnlawfullyAtLarge)
   }
 
   @Test
@@ -45,5 +52,20 @@ class DataProviderTest {
     val scores = (0..9).map { provider.provideTierDetails("X00000$it", TierApiVersion.V3).tierScore }
 
     Assertions.assertEquals(listOf("A", "B", "C", "D", "E", "F", "G", "NOT_SUPERVISED", "MISSING", "D"), scores)
+  }
+
+  @Test
+  fun `v3 tier is provisional only for the CRN ending in 0`() {
+    val provider = GeneratingStubDataProvider()
+    val provisional = (0..9).map { provider.provideTierDetails("X00000$it", TierApiVersion.V3).provisional }
+
+    Assertions.assertEquals(listOf(true, false, false, false, false, false, false, false, false, false), provisional)
+  }
+
+  @Test
+  fun `v2 tier is never marked provisional`() {
+    val provider = GeneratingStubDataProvider()
+
+    Assertions.assertNull(provider.provideTierDetails("X000000", TierApiVersion.V2).provisional)
   }
 }

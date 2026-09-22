@@ -47,6 +47,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -73,6 +74,7 @@ class OffenderResourceTest {
   private val offenderService: OffenderService = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
+  private val supervisionPackageService: SupervisionPackageService = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -96,6 +98,7 @@ class OffenderResourceTest {
       offenderService,
       eligibilityEvaluationEngine,
       eligibilityChecker,
+      supervisionPackageService,
     )
   }
 
@@ -865,6 +868,7 @@ class OffenderResourceTest {
       crn = crn,
       dateOfBirth = LocalDate.of(1980, 1, 1),
       tierScore = "D2",
+      tierProvisional = null,
       tierDetailsLink = "https://tier.link/$crn",
       overallRisk = "VERY_HIGH",
     )
