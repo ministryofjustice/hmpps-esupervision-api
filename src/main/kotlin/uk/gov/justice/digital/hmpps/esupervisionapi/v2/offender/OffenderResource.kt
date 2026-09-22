@@ -533,13 +533,16 @@ is *today*.""",
       }
     }
 
+    val todaysCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null || request.contactPreference != null) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
-      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, LocalDate.now(clock))) {
-        LOGGER.debug("Creating check-in for offender {} as first check-in date is today", offenderAfter.uuid)
-        checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
+        if (todaysCheckin.isEmpty) {
+          checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+        }
+        LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       }
       return ResponseEntity.ok(offenderAfter)
     } else {
