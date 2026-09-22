@@ -44,7 +44,21 @@ data class SupervisionPackageDetails(
   val recallStatus: CodedDescription?,
   /** One entry per custodial sentence in the current supervision period; empty when there are none. */
   val custody: List<CustodyDetails> = emptyList(),
-)
+  /** The package recorded on each sentence in the current supervision period, where one is. */
+  val sentencePackages: List<CodedDescription> = emptyList(),
+) {
+  /**
+   * True when the person is on one of the supervision packages `SPA`-`SPG` on any sentence - the
+   * one the current phase belongs to or another. No package, `SPNA` not applicable, `SPNK` not yet
+   * known and `SPX` supervised on another sentence do not count on their own.
+   */
+  val isOnSupervisionPackage: Boolean
+    get() = (listOfNotNull(supervisionPackage) + sentencePackages).any { it.code in SUPERVISION_PACKAGE_CODES }
+
+  companion object {
+    val SUPERVISION_PACKAGE_CODES = setOf("SPA", "SPB", "SPC", "SPD", "SPE", "SPF", "SPG")
+  }
+}
 
 /**
  * Where a custodial sentence stands, from Delius's custody, release and recall records.
@@ -139,6 +153,7 @@ private data class FrontendContextResponse(
 
   data class Sentence(
     val eventNumber: String,
+    val supervisionPackage: CodedDescription?,
     val custody: Custody?,
   )
 
@@ -167,5 +182,6 @@ private data class FrontendContextResponse(
         )
       }
     },
+    sentencePackages = context?.sentences.orEmpty().mapNotNull { it.supervisionPackage },
   )
 }
