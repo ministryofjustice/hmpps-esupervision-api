@@ -171,10 +171,10 @@ class OffenderResource(
     summary = "Get whether a person is on a supervision package by CRN",
     description = """Asks the Supervision Packages API whether the person is on a supervision package -
       package `SPA` to `SPG`. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
-      on another sentence are all false, as is a CRN Supervision Packages does not know. Does not require
-      the person to already be registered for e-supervision.""",
+      on another sentence are all false. Does not require the person to already be registered for e-supervision.""",
   )
   @ApiResponse(responseCode = "200", description = "Supervision package status returned")
+  @ApiResponse(responseCode = "404", description = "CRN not known to Supervision Packages")
   @ApiResponse(responseCode = "503", description = "Supervision Packages could not be asked; the status is unknown, not false")
   @GetMapping("/crn/{crn}/supervision-package")
   fun getSupervisionPackageStatusByCrn(
@@ -182,6 +182,8 @@ class OffenderResource(
   ): ResponseEntity<SupervisionPackageStatus> {
     val normalisedCrn = crn.trim().uppercase()
     val onSupervisionPackage = supervisionPackageService.isOnSupervisionPackage(normalisedCrn)
+    // The client has already logged the unknown CRN.
+    if (onSupervisionPackage == null) return ResponseEntity.notFound().build()
 
     LOGGER.info("Retrieved supervision package status for crn={}, onSupervisionPackage={}", normalisedCrn, onSupervisionPackage)
     return ResponseEntity.ok(SupervisionPackageStatus(onSupervisionPackage))
