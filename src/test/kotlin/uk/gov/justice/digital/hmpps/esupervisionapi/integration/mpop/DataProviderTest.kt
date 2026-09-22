@@ -46,4 +46,19 @@ class DataProviderTest {
 
     Assertions.assertEquals(listOf("A", "B", "C", "D", "E", "F", "G", "NOT_SUPERVISED", "MISSING", "D"), scores)
   }
+
+  @Test
+  fun `v3 tier is provisional only for the CRN ending in 0`() {
+    val provider = GeneratingStubDataProvider()
+    val provisional = (0..9).map { provider.provideTierDetails("X00000$it", TierApiVersion.V3).provisional }
+
+    Assertions.assertEquals(listOf(true, false, false, false, false, false, false, false, false, false), provisional)
+  }
+
+  @Test
+  fun `v2 tier is never marked provisional`() {
+    val provider = GeneratingStubDataProvider()
+
+    Assertions.assertNull(provider.provideTierDetails("X000000", TierApiVersion.V2).provisional)
+  }
 }

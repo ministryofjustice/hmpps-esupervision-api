@@ -69,7 +69,7 @@ class TierApiV3IntegrationTest : IntegrationTestBase() {
     fetchHeader().expectStatus().isOk
       .expectBody()
       .jsonPath("$.tierScore").isEqualTo("E")
-      .jsonPath("$.tierScoreProvisional").isEqualTo(false)
+      .jsonPath("$.tierProvisional").isEqualTo(false)
       .jsonPath("$.tierDetailsLink").isEqualTo("https://tier-ui.test/v3/case/$crn")
       .jsonPath("$.errors[?(@.field == 'tierScore')]").doesNotExist()
   }
@@ -81,7 +81,7 @@ class TierApiV3IntegrationTest : IntegrationTestBase() {
     fetchHeader().expectStatus().isOk
       .expectBody()
       .jsonPath("$.tierScore").isEqualTo("E")
-      .jsonPath("$.tierScoreProvisional").isEqualTo(true)
+      .jsonPath("$.tierProvisional").isEqualTo(true)
   }
 
   @Test
@@ -91,7 +91,7 @@ class TierApiV3IntegrationTest : IntegrationTestBase() {
     fetchHeader().expectStatus().isOk
       .expectBody()
       .jsonPath("$.tierScore").doesNotExist()
-      .jsonPath("$.tierScoreProvisional").doesNotExist()
+      .jsonPath("$.tierProvisional").doesNotExist()
       .jsonPath("$.errors[?(@.field == 'tierScore')].code").isEqualTo("NOT_FOUND")
   }
 }

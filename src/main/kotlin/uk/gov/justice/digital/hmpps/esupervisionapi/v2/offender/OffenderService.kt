@@ -66,7 +66,7 @@ class OffenderService(
       crn = crn,
       dateOfBirth = contact.value?.dateOfBirth,
       tierScore = tier.value?.tierScore,
-      tierScoreProvisional = tier.value?.provisional,
+      tierProvisional = tier.value?.provisional,
       tierDetailsLink = tierUiBaseUri + tierVersion.uiCasePath.replace("{crn}", crn),
       overallRisk = risk.value,
       errors = listOfNotNull(contact.toErrorDetails(), tier.toErrorDetails(), risk.toErrorDetails()),

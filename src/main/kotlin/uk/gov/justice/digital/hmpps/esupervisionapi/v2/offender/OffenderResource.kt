@@ -669,8 +669,8 @@ data class OffenderHeaderDetails(
     example = "D",
   )
   val tierScore: String?,
-  @field:Schema(description = "From the Tier API. True if the tier is a provisional calculation. Null on v2 or if the lookup failed")
-  val tierScoreProvisional: Boolean?,
+  @field:Schema(description = "From the Tier API (v3 only). True if the tier is a provisional calculation. Omitted on v2, when the case has no tier, or if the lookup failed (see errors)")
+  val tierProvisional: Boolean?,
   val tierDetailsLink: String,
   @field:Schema(description = "From ARNS. Null if the lookup failed or no assessment exists (see errors)")
   val overallRisk: String?,

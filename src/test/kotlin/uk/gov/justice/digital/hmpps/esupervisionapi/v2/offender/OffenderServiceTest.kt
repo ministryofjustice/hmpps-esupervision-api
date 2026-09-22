@@ -97,7 +97,7 @@ class OffenderServiceTest {
     assertEquals(crn, response.crn)
     assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
     assertEquals(tierDetails.tierScore, response.tierScore)
-    assertNull(response.tierScoreProvisional)
+    assertNull(response.tierProvisional)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertEquals(riskWidget.overallRisk, response.overallRisk)
     assertTrue(response.errors.isEmpty())
@@ -108,7 +108,7 @@ class OffenderServiceTest {
     val response = serviceWithTier(v3From = "2026-10-01T10:00:00Z").getHeaderDetails(crn)
 
     assertEquals("D2", response.tierScore)
-    assertNull(response.tierScoreProvisional)
+    assertNull(response.tierProvisional)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     verify(tierApiClient, never()).getTierDetails(crn, TierApiVersion.V3)
   }
@@ -120,20 +120,20 @@ class OffenderServiceTest {
     val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
 
     assertEquals("D", response.tierScore)
-    assertEquals(false, response.tierScoreProvisional)
+    assertEquals(false, response.tierProvisional)
     assertEquals("$tierUiBaseUri/v3/case/$crn", response.tierDetailsLink)
     assertTrue(response.errors.isEmpty())
     verify(tierApiClient, never()).getTierDetails(crn, TierApiVersion.V2)
   }
 
   @Test
-  fun `getHeaderDetails - v3 tier is provisional - flags tierScoreProvisional true`() {
+  fun `getHeaderDetails - v3 tier is provisional - flags tierProvisional true`() {
     whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V3)).thenReturn(v3Details.copy(provisional = true))
 
     val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
 
     assertEquals("D", response.tierScore)
-    assertEquals(true, response.tierScoreProvisional)
+    assertEquals(true, response.tierProvisional)
   }
 
   @Test
@@ -144,7 +144,7 @@ class OffenderServiceTest {
       val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
 
       assertNull(response.tierScore, placeholder)
-      assertNull(response.tierScoreProvisional, placeholder)
+      assertNull(response.tierProvisional, placeholder)
       assertEquals(listOf(ErrorDetails("tierScore", HeaderErrorCode.NOT_FOUND)), response.errors, placeholder)
       assertEquals("$tierUiBaseUri/v3/case/$crn", response.tierDetailsLink)
     }
@@ -221,7 +221,7 @@ class OffenderServiceTest {
 
     assertEquals(contactDetails.dateOfBirth, response.dateOfBirth)
     assertNull(response.tierScore)
-    assertNull(response.tierScoreProvisional)
+    assertNull(response.tierProvisional)
     assertEquals("$tierUiBaseUri/case/$crn", response.tierDetailsLink)
     assertEquals(riskWidget.overallRisk, response.overallRisk)
     assertEquals(listOf(ErrorDetails("tierScore", HeaderErrorCode.NOT_FOUND)), response.errors)
@@ -234,7 +234,7 @@ class OffenderServiceTest {
     val response = service.getHeaderDetails(crn)
 
     assertNull(response.tierScore)
-    assertNull(response.tierScoreProvisional)
+    assertNull(response.tierProvisional)
     assertEquals(listOf(ErrorDetails("tierScore", HeaderErrorCode.NOT_FOUND)), response.errors)
   }
 
