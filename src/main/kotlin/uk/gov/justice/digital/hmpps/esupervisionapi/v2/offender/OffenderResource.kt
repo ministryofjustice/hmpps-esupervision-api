@@ -684,7 +684,11 @@ data class OffenderHeaderDetails(
   val crn: String,
   @field:Schema(description = "From NDelius. Null if the lookup failed (see errors)")
   val dateOfBirth: LocalDate?,
-  @field:Schema(description = "From the Tier API. Null if the lookup failed (see errors)")
+  @field:Schema(
+    description = "From the Tier API: 'D2' style on v2, a single letter A-G on v3 (from 1 October 2026 in production). " +
+      "Null if the lookup failed or the case has no tier (see errors)",
+    example = "D",
+  )
   val tierScore: String?,
   val tierDetailsLink: String,
   @field:Schema(description = "From ARNS. Null if the lookup failed or no assessment exists (see errors)")

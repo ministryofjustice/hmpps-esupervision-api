@@ -13,6 +13,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersionSwitch
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -23,6 +25,7 @@ class OffenderService(
   private val ndiliusApiClient: INdiliusApiClient,
   private val tierApiClient: ITierApiClient,
   private val arnsApiClient: IArnsApiClient,
+  private val tierApiVersionSwitch: TierApiVersionSwitch,
   @Value("\${api.base.url.tier-ui}") val tierUiBaseUri: String,
 ) {
 
@@ -43,10 +46,12 @@ class OffenderService(
     // max(tier, arns) rather than the sum. The per-call executor holds no pooled resources and
     // close() joins the task, which get() has already done.
     val requestAttributes = RequestContextHolder.getRequestAttributes()
+    // Resolved once so the score and the link always come from the same Tier version.
+    val tierVersion = tierApiVersionSwitch.current()
     val (tier, risk) = Executors.newVirtualThreadPerTaskExecutor().use { executor ->
       val tierLookup = executor.submit(
         Callable {
-          onBehalfOfRequest(requestAttributes) { fetchField("tierScore", "Tier API", crn) { tierApiClient.getTierDetails(crn)?.tierScore } }
+          onBehalfOfRequest(requestAttributes) { fetchField("tierScore", "Tier API", crn) { tierApiClient.getTierDetails(crn, tierVersion)?.tierScore?.takeUnless { it in NO_TIER_SCORES } } }
         },
       )
       val risk = fetchField("overallRisk", "ARNS API", crn) { arnsApiClient.getRiskWidget(crn)?.overallRisk }
@@ -57,7 +62,7 @@ class OffenderService(
       crn = crn,
       dateOfBirth = contact.value?.dateOfBirth,
       tierScore = tier.value,
-      tierDetailsLink = "$tierUiBaseUri/case/$crn",
+      tierDetailsLink = tierUiBaseUri + tierVersion.uiCasePath.replace("{crn}", crn),
       overallRisk = risk.value,
       errors = listOfNotNull(contact.toErrorDetails(), tier.toErrorDetails(), risk.toErrorDetails()),
     )
@@ -165,5 +170,11 @@ class OffenderService(
 
   companion object {
     private val LOGGER = logger<OffenderService>()
+
+    /**
+     * v3 placeholders that are not tiers. Reported as a NOT_FOUND tierScore so the UI never shows
+     * "Tier NOT_SUPERVISED" or bands a case on its first letter.
+     */
+    private val NO_TIER_SCORES = setOf(TierDetails.NOT_SUPERVISED, TierDetails.MISSING)
   }
 }
