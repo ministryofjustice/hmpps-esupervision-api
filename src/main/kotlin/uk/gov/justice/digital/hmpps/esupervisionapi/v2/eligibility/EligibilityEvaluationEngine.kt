@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -109,7 +110,10 @@ class EligibilityEvaluationEngine(
 
     return sourceFuture
       .exceptionallyCompose { throwable ->
-        CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, throwable))
+        when (throwable.cause) {
+          is ResourceNotFoundException -> CompletableFuture.failedFuture(throwable.cause)
+          else -> CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, throwable))
+        }
       }
       .thenCompose { sourceData ->
         if (!sourceData.containsKey(rule.dataPoint)) {

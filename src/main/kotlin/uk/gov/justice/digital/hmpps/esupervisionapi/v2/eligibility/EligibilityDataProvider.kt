@@ -15,6 +15,9 @@ interface EligibilityDataProvider {
   /**
    * Fetches all data points this source can supply for [crn]. Must not block the calling
    * thread - implementations wrap blocking client calls via a dedicated executor.
+   *
+   * Implementations should use [uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException] to
+   * signal that the source does not have data for given [crn].
    */
   fun fetch(crn: CRN): CompletableFuture<Map<String, Any?>>
 }

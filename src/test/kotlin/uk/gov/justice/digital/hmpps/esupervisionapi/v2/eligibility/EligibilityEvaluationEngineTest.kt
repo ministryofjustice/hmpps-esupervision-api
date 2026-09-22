@@ -2,21 +2,26 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertInstanceOf
 import org.junit.jupiter.api.assertThrows
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
+import java.util.concurrent.Executors
 
 class EligibilityEvaluationEngineTest {
 
@@ -222,5 +227,32 @@ class EligibilityEvaluationEngineTest {
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
     verify(provider, times(1)).fetch(org.mockito.kotlin.any())
+  }
+
+  @Test
+  fun `ResourceNotFoundException propagates from the provider to engine caller`() {
+    val sourceKey = "NDELIUS"
+    val first = rule("RECALLED", 1.0, sourceKey, "RECALL_STATUS", EligibilityRuleOperator.IS_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(any()))
+      .thenReturn(listOf(first))
+
+    val crn = "X000001"
+    val apiClient: INdiliusApiClient = mock()
+    whenever(apiClient.getContactDetailsStrict(any(), any())).thenReturn(null)
+    val provider: EligibilityDataProvider = NdeliusEligibilityDataProvider(
+      apiClient,
+      Executors.newSingleThreadExecutor(),
+    )
+
+    val engine = EligibilityEvaluationEngine(
+      ruleRepository = ruleRepository,
+      providerRegistry = EligibilityDataProviderRegistry(providers = listOf(provider)),
+      "ONE_RULE",
+      1000L,
+    )
+    val exception = assertThrows<CompletionException> {
+      engine.evaluate(crn, "ONE_RULE").join()
+    }
+    assertInstanceOf(ResourceNotFoundException::class.java, exception.cause)
   }
 }
