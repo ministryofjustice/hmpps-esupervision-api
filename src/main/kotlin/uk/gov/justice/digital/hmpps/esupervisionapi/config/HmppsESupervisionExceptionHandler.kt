@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus.FORBIDDEN
 import org.springframework.http.HttpStatus.GONE
 import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
 import org.springframework.http.HttpStatus.NOT_FOUND
+import org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE
 import org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackagesFetchException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException as V2BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ImageRetentionExpiredException as V2ImageRetentionExpiredException
@@ -174,6 +176,19 @@ class HmppsESupervisionExceptionHandler {
         developerMessage = e.message,
       ),
     ).also { log.debug("Forbidden (403) returned: {}", e.message) }
+
+  // The client has already logged the cause, sanitised. Unavailable rather than a 500 so callers can
+  // tell "could not check" apart from a wrong answer.
+  @ExceptionHandler(SupervisionPackagesFetchException::class)
+  fun handleSupervisionPackagesFetchException(e: SupervisionPackagesFetchException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(SERVICE_UNAVAILABLE)
+    .body(
+      ErrorResponse(
+        status = SERVICE_UNAVAILABLE,
+        userMessage = "Supervision Packages is unavailable",
+        developerMessage = "Could not fetch supervision package details",
+      ),
+    ).also { log.warn("Supervision Packages unavailable, returning 503") }
 
   @ExceptionHandler(Exception::class)
   fun handleException(e: Exception): ResponseEntity<ErrorResponse> = ResponseEntity

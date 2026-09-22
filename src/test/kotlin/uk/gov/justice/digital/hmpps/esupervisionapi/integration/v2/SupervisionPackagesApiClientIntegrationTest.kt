@@ -131,6 +131,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
         supervisionPackage = CodedDescription("SPA", "A"),
         phase = CodedDescription("INIT", "Early Engagement"),
         recallStatus = null,
+        sentencePackages = listOf(CodedDescription("SPA", "A")),
       ),
       details,
     )
@@ -150,6 +151,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
         phase = CodedDescription("SPNK", "Not Yet Known"),
         recallStatus = CodedDescription("REC01", "Recall Initiated"),
         custody = emptyList(),
+        sentencePackages = listOf(CodedDescription("SPNK", "Not Yet Known")),
       ),
       details,
     )
@@ -165,7 +167,15 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
 
     val details = offRequestThread { client.getSupervisionPackageDetails(crn) }
 
-    assertEquals(SupervisionPackageDetails(null, null, CodedDescription("REC01", "Recall Initiated")), details)
+    assertEquals(
+      SupervisionPackageDetails(
+        supervisionPackage = null,
+        phase = null,
+        recallStatus = CodedDescription("REC01", "Recall Initiated"),
+        sentencePackages = listOf(CodedDescription("SPNK", "Not Yet Known")),
+      ),
+      details,
+    )
   }
 
   @Test
