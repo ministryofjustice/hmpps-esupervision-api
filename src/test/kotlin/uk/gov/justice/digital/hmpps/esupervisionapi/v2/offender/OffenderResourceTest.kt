@@ -857,6 +857,7 @@ class OffenderResourceTest {
       crn = crn,
       dateOfBirth = LocalDate.of(1980, 1, 1),
       tierScore = "D2",
+      tierProvisional = null,
       tierDetailsLink = "https://tier.link/$crn",
       overallRisk = "VERY_HIGH",
     )

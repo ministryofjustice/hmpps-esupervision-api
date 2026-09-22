@@ -64,6 +64,7 @@ class DefaultStubDataProvider : StubDataProvider {
     calculationId = UUID.randomUUID(),
     calculationDate = LocalDate.of(2026, 1, 1),
     changeReason = "A registration was added",
+    provisional = if (version == TierApiVersion.V3) false else null,
   )
 
   override fun provideArnsWidget(crn: CRN): ArnsWidget = ArnsWidget(
@@ -99,7 +100,7 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> "11" will become part of the practitioner's local admin, probation delivery and provider code
  * - X001122 -> First & last character "X2" will become the v2 tier score
  * - X001122 -> Last character will decide the v3 tier score: "0"-"6" become "A"-"G", "7" NOT_SUPERVISED,
- *   "8" MISSING, "9" "D"
+ *   "8" MISSING, "9" "D". Last character "0" also makes that v3 tier provisional.
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
  * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
  *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
@@ -160,6 +161,7 @@ class GeneratingStubDataProvider : StubDataProvider {
     calculationId = UUID.randomUUID(),
     calculationDate = LocalDate.of(2026, 1, 1),
     changeReason = "A registration was added",
+    provisional = if (version == TierApiVersion.V3) crn.last() == '0' else null,
   )
 
   override fun provideArnsWidget(crn: CRN): ArnsWidget {
