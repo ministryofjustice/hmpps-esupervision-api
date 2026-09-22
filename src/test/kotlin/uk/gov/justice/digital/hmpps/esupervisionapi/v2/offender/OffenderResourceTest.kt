@@ -936,6 +936,10 @@ class OffenderResourceTest {
       email = "jane.smith@example.com",
       unallocated = false,
       username = "AUTH_USER",
+      probationDeliveryUnit = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit(
+        code = "N01PDU",
+        description = "London North PDU",
+      ),
     )
     val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       crn = "X123456",
@@ -953,6 +957,8 @@ class OffenderResourceTest {
     assertEquals("jane.smith@example.com", result.body?.email)
     assertEquals(false, result.body?.unallocated)
     assertEquals("AUTH_USER", result.body?.username)
+    assertEquals("N01PDU", result.body?.probationDeliveryUnit?.code)
+    assertEquals("London North PDU", result.body?.probationDeliveryUnit?.description)
     verify(offenderRepository, times(0)).findByCrn(any())
   }
 
