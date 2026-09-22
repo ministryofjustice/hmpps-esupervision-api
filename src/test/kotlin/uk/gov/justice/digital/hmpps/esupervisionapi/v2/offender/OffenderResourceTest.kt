@@ -43,6 +43,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -67,6 +68,7 @@ class OffenderResourceTest {
   private val appEventPublisher: ApplicationEventPublisher = mock()
   private val offenderPersistenceService: OffenderPersistenceService = mock()
   private val offenderService: OffenderService = mock()
+  private val supervisionPackageService: SupervisionPackageService = mock()
   private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderResource
@@ -89,6 +91,7 @@ class OffenderResourceTest {
       appEventPublisher,
       offenderPersistenceService,
       offenderService,
+      supervisionPackageService,
     )
   }
 
@@ -854,6 +857,7 @@ class OffenderResourceTest {
       crn = crn,
       dateOfBirth = LocalDate.of(1980, 1, 1),
       tierScore = "D2",
+      tierProvisional = null,
       tierDetailsLink = "https://tier.link/$crn",
       overallRisk = "VERY_HIGH",
     )

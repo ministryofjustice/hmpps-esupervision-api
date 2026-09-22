@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -141,6 +143,50 @@ class OffenderSetupServiceTest {
         this.uuid == expectedSetup.uuid && rationale == expectedSetup.rationale && eligibilityChoice == expectedSetup.eligibilityChoice
       },
     )
+  }
+
+  @Nested
+  inner class SetupStartedAt {
+    private fun startSetupWith(startedAt: Instant?): Instant? {
+      val offenderInfo = OffenderInfo(
+        setupUuid = UUID.randomUUID(),
+        practitionerId = "PRACT001",
+        crn = "X123456",
+        firstCheckin = LocalDate.now(clock).plusDays(7),
+        checkinInterval = CheckinInterval.WEEKLY,
+        contactPreference = ContactPreference.EMAIL,
+        startedAt = startedAt,
+      )
+      whenever(offenderRepository.findByCrn(offenderInfo.crn)).thenReturn(Optional.empty())
+      whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.arguments[0] }
+
+      service.startOffenderSetup(offenderInfo)
+
+      val captor = argumentCaptor<OffenderSetup>()
+      verify(offenderSetupRepository).save(captor.capture())
+      return captor.firstValue.startedAt
+    }
+
+    @Test
+    fun `keeps a start time from earlier in the setup journey`() {
+      val startedAt = clock.instant().minus(Duration.ofMinutes(12))
+      assertEquals(startedAt, startSetupWith(startedAt))
+    }
+
+    @Test
+    fun `stores no start time when none is sent`() {
+      assertNull(startSetupWith(null))
+    }
+
+    @Test
+    fun `ignores a start time in the future`() {
+      assertNull(startSetupWith(clock.instant().plusSeconds(1)))
+    }
+
+    @Test
+    fun `ignores a start time older than the maximum setup duration`() {
+      assertNull(startSetupWith(clock.instant().minus(OffenderSetupService.MAX_SETUP_DURATION).minusSeconds(1)))
+    }
   }
 
   @Test
