@@ -171,7 +171,10 @@ class OffenderResource(
     summary = "Get whether a person is on a supervision package by CRN",
     description = """Asks the Supervision Packages API whether the person is on a supervision package -
       package `SPA` to `SPG`. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
-      on another sentence are all false. Does not require the person to already be registered for e-supervision.""",
+      on another sentence are all false. Does not require the person to already be registered for e-supervision.
+
+      A CRN Supervision Packages does not know is a 404 rather than false, so callers can tell an
+      invalid CRN apart from a person who is not on a package.""",
   )
   @ApiResponse(responseCode = "200", description = "Supervision package status returned")
   @ApiResponse(responseCode = "404", description = "CRN not known to Supervision Packages")
