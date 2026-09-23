@@ -5,6 +5,8 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Table
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.persistence.V2BaseEntity
 import java.time.Instant
 
@@ -54,6 +56,7 @@ open class OffenderEligibilityRule(
   open var comparisonValue: String? = null,
 
   @Column(name = "outcome_on_match", nullable = false)
+  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
   @Enumerated(EnumType.STRING)
   open var outcomeOnMatch: EligibilityRuleOutcome,
 
