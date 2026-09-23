@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset roland.sadowski:74_offender_eligibility_rules-1 splitStatements:false
+--changeset roland.sadowski:75_offender_eligibility_rules-1 splitStatements:false
 
 create type eligibility_operator as enum ('IS_NULL', 'IS_NOT_NULL', 'EQUALS');
 
@@ -44,7 +44,7 @@ create index idx_offender_eligibility_rule_lookup
 --rollback drop type eligibility_rule_outcome;
 --rollback drop type eligibility_operator;
 
---changeset roland.sadowski:74_offender_eligibility_rules-2
+--changeset roland.sadowski:75_offender_eligibility_rules-2
 
 insert into offender_eligibility_rule
   (rule_order, code, question, source, data_point, operator, comparison_value,
