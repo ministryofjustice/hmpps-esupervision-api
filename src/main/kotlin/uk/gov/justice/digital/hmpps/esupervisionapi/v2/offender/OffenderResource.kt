@@ -38,6 +38,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
@@ -57,6 +58,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -79,6 +81,7 @@ class OffenderResource(
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderPersistenceService: OffenderPersistenceService,
   private val offenderService: OffenderService,
+  private val supervisionPackageService: SupervisionPackageService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -163,6 +166,29 @@ class OffenderResource(
     }
 
     return ResponseEntity.ok(practitioner.toSummary())
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Get whether a person is on a supervision package by CRN",
+    description = """Asks the Supervision Packages API whether the person is on a supervision package -
+      package `SPA` to `SPG`. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
+      on another sentence are all false. Does not require the person to already be registered for e-supervision.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Supervision package status returned")
+  @ApiResponse(responseCode = "404", description = "CRN not known to Supervision Packages")
+  @ApiResponse(responseCode = "503", description = "Supervision Packages could not be asked; the status is unknown, not false")
+  @GetMapping("/crn/{crn}/supervision-package")
+  fun getSupervisionPackageStatusByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): ResponseEntity<SupervisionPackageStatus> {
+    val normalisedCrn = crn.trim().uppercase()
+    val onSupervisionPackage = supervisionPackageService.isOnSupervisionPackage(normalisedCrn)
+    // The client has already logged the unknown CRN.
+    if (onSupervisionPackage == null) return ResponseEntity.notFound().build()
+
+    LOGGER.info("Retrieved supervision package status for crn={}, onSupervisionPackage={}", normalisedCrn, onSupervisionPackage)
+    return ResponseEntity.ok(SupervisionPackageStatus(onSupervisionPackage))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -605,6 +631,11 @@ data class PersonalDetailsSummary(
   val email: String? = null,
 ) : INamedPerson
 
+data class SupervisionPackageStatus(
+  @field:Schema(description = "Whether the person is on a supervision package, SPA to SPG")
+  val onSupervisionPackage: Boolean,
+)
+
 /**
  * Subset of [ContactDetails] that is returned in the summary DTO.
  */
@@ -627,6 +658,8 @@ data class PractitionerSummary(
   val email: String? = null,
   val unallocated: Boolean? = null,
   val username: String? = null,
+  @field:Schema(description = "Probation Delivery Unit", required = false)
+  val probationDeliveryUnit: OrganizationalUnit? = null,
 ) : INamedPerson
 
 private fun PractitionerDetails.toSummary() = PractitionerSummary(
@@ -635,6 +668,7 @@ private fun PractitionerDetails.toSummary() = PractitionerSummary(
   email = email,
   unallocated = unallocated,
   username = username,
+  probationDeliveryUnit = probationDeliveryUnit,
 )
 
 /** Simple DTO for offender lookup - no PII by default */
@@ -686,6 +720,8 @@ data class OffenderHeaderDetails(
     example = "D",
   )
   val tierScore: String?,
+  @field:Schema(description = "From the Tier API (v3 only). True if the tier is a provisional calculation. Omitted on v2, when the case has no tier, or if the lookup failed (see errors)")
+  val tierProvisional: Boolean?,
   val tierDetailsLink: String,
   @field:Schema(description = "From ARNS. Null if the lookup failed or no assessment exists (see errors)")
   val overallRisk: String?,

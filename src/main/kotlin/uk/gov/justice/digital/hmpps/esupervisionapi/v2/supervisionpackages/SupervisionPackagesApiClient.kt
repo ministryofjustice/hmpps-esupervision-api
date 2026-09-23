@@ -44,25 +44,71 @@ data class SupervisionPackageDetails(
   val recallStatus: CodedDescription?,
   /** One entry per custodial sentence in the current supervision period; empty when there are none. */
   val custody: List<CustodyDetails> = emptyList(),
-)
+  /** The package recorded on each sentence in the current supervision period, where one is. */
+  val sentencePackages: List<CodedDescription> = emptyList(),
+) {
+  /**
+   * Recalled on any sentence - custody status `C` - and not unlawfully at large on that sentence.
+   * Checks every sentence, not only the primary one, as Manage People on Probation does before
+   * showing "has been recalled. Their appointments are paused."
+   *
+   * Someone recalled but not returned to custody also has status `C`; they are reported by
+   * [isUnlawfullyAtLarge] instead, and do not count as recalled here.
+   */
+  val isRecalled: Boolean get() = custody.any { it.status.code == CustodyDetails.RECALLED && !it.isUnlawfullyAtLarge }
+
+  /**
+   * Unlawfully at large on any sentence - custody location `UATLRG`, as Manage People on Probation checks.
+   * Treated separately from recalled and in custody: they are not held.
+   */
+  val isUnlawfullyAtLarge: Boolean get() = custody.any { it.isUnlawfullyAtLarge }
+
+  /**
+   * True when the person is on one of the supervision packages `SPA`-`SPG` on any sentence - the
+   * one the current phase belongs to or another. No package, `SPNA` not applicable, `SPNK` not yet
+   * known and `SPX` supervised on another sentence do not count on their own.
+   */
+  val isOnSupervisionPackage: Boolean
+    get() = (listOfNotNull(supervisionPackage) + sentencePackages).any { it.code in SUPERVISION_PACKAGE_CODES }
+
+  companion object {
+    val SUPERVISION_PACKAGE_CODES = setOf("SPA", "SPB", "SPC", "SPD", "SPE", "SPF", "SPG")
+  }
+}
 
 /**
  * Where a custodial sentence stands, from Delius's custody, release and recall records.
  *
- * [latestRecallDate] is the recall recorded against the most recent release. It is set when the
- * person was recalled after that release and has not been released since - that is, they are
- * recalled now. A recall followed by a later release is not reported here; the phase shows that as
- * `RRL`.
+ * [status] `C` is the direct signal that the person is recalled, though an unlawfully at large
+ * person has it too (see [isUnlawfullyAtLarge]). [latestRecallDate] agrees with it
+ * and dates it: the recall recorded against the most recent release, so set only when they were
+ * recalled after that release and have not been released since. A recall followed by a later
+ * release is not reported here; the phase shows that as `RRL`.
  */
 data class CustodyDetails(
   val eventNumber: String,
-  /** Custody status - e.g. `A` "Sentenced - In Custody", `B` "Released - On Licence". */
+  /**
+   * Custody status, per Manage People on Probation:
+   * `A` Sentenced - In Custody, `D` In Custody, `I` In Custody - IRC, `R` In Custody - RoTL,
+   * `C` Recalled, `B` Released - On Licence, `P` Post Sentence Supervision, `AT` Auto Terminated,
+   * `T` Terminated.
+   */
   val status: CodedDescription,
+  /** Custody location - the prison holding them, or `UATLRG` when unlawfully at large and not held. */
+  val location: CodedDescription?,
   /** The most recent release from custody on this sentence; null if never released. */
   val latestReleaseDate: LocalDate?,
   /** The recall that ended the most recent release; null if that release has not been recalled. */
   val latestRecallDate: LocalDate?,
-)
+) {
+  /** Custody location `UATLRG`: recalled or escaped, and not held. */
+  val isUnlawfullyAtLarge: Boolean get() = location?.code == UNLAWFULLY_AT_LARGE
+
+  companion object {
+    const val RECALLED = "C"
+    const val UNLAWFULLY_AT_LARGE = "UATLRG"
+  }
+}
 
 interface ISupervisionPackagesApiClient {
   /**
@@ -139,11 +185,13 @@ private data class FrontendContextResponse(
 
   data class Sentence(
     val eventNumber: String,
+    val supervisionPackage: CodedDescription?,
     val custody: Custody?,
   )
 
   data class Custody(
     val status: CodedDescription,
+    val location: CodedDescription?,
     val releases: List<Release> = emptyList(),
   )
 
@@ -162,10 +210,12 @@ private data class FrontendContextResponse(
         CustodyDetails(
           eventNumber = sentence.eventNumber,
           status = custody.status,
+          location = custody.location,
           latestReleaseDate = latestRelease?.releaseDate,
           latestRecallDate = latestRelease?.recallDate,
         )
       }
     },
+    sentencePackages = context?.sentences.orEmpty().mapNotNull { it.supervisionPackage },
   )
 }

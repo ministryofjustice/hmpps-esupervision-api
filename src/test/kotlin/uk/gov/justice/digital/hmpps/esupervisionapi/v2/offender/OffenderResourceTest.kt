@@ -44,6 +44,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -68,6 +69,7 @@ class OffenderResourceTest {
   private val appEventPublisher: ApplicationEventPublisher = mock()
   private val offenderPersistenceService: OffenderPersistenceService = mock()
   private val offenderService: OffenderService = mock()
+  private val supervisionPackageService: SupervisionPackageService = mock()
   private val appConfig: AppConfig = mock()
 
   private lateinit var resource: OffenderResource
@@ -90,6 +92,7 @@ class OffenderResourceTest {
       appEventPublisher,
       offenderPersistenceService,
       offenderService,
+      supervisionPackageService,
     )
   }
 
@@ -879,6 +882,7 @@ class OffenderResourceTest {
       crn = crn,
       dateOfBirth = LocalDate.of(1980, 1, 1),
       tierScore = "D2",
+      tierProvisional = null,
       tierDetailsLink = "https://tier.link/$crn",
       overallRisk = "VERY_HIGH",
     )
@@ -961,6 +965,10 @@ class OffenderResourceTest {
       email = "jane.smith@example.com",
       unallocated = false,
       username = "AUTH_USER",
+      probationDeliveryUnit = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit(
+        code = "N01PDU",
+        description = "London North PDU",
+      ),
     )
     val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       crn = "X123456",
@@ -978,6 +986,8 @@ class OffenderResourceTest {
     assertEquals("jane.smith@example.com", result.body?.email)
     assertEquals(false, result.body?.unallocated)
     assertEquals("AUTH_USER", result.body?.username)
+    assertEquals("N01PDU", result.body?.probationDeliveryUnit?.code)
+    assertEquals("London North PDU", result.body?.probationDeliveryUnit?.description)
     verify(offenderRepository, times(0)).findByCrn(any())
   }
 
