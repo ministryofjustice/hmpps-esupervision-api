@@ -137,17 +137,28 @@ class OffenderServiceTest {
   }
 
   @Test
-  fun `getHeaderDetails - v3 has no tier for the case - tierScore NOT_FOUND rather than a placeholder`() {
-    for (placeholder in listOf(TierDetails.NOT_SUPERVISED, TierDetails.MISSING)) {
-      whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V3)).thenReturn(v3Details.copy(tierScore = placeholder))
+  fun `getHeaderDetails - v3 case is not supervised - reports NOT_SUPERVISED as the score`() {
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V3))
+      .thenReturn(v3Details.copy(tierScore = TierDetails.NOT_SUPERVISED))
 
-      val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
+    val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
 
-      assertNull(response.tierScore, placeholder)
-      assertNull(response.tierProvisional, placeholder)
-      assertEquals(listOf(ErrorDetails("tierScore", HeaderErrorCode.NOT_FOUND)), response.errors, placeholder)
-      assertEquals("$tierUiBaseUri/v3/case/$crn", response.tierDetailsLink)
-    }
+    assertEquals(TierDetails.NOT_SUPERVISED, response.tierScore)
+    assertTrue(response.errors.isEmpty())
+    assertEquals("$tierUiBaseUri/v3/case/$crn", response.tierDetailsLink)
+  }
+
+  @Test
+  fun `getHeaderDetails - v3 has no tier for the case - tierScore NOT_FOUND rather than the MISSING placeholder`() {
+    whenever(tierApiClient.getTierDetails(crn, TierApiVersion.V3))
+      .thenReturn(v3Details.copy(tierScore = TierDetails.MISSING))
+
+    val response = serviceWithTier(v3From = "2026-10-01T00:00:00+01:00").getHeaderDetails(crn)
+
+    assertNull(response.tierScore)
+    assertNull(response.tierProvisional)
+    assertEquals(listOf(ErrorDetails("tierScore", HeaderErrorCode.NOT_FOUND)), response.errors)
+    assertEquals("$tierUiBaseUri/v3/case/$crn", response.tierDetailsLink)
   }
 
   @Test
