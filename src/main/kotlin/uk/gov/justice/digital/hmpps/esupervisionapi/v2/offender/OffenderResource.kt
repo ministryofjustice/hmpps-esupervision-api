@@ -172,10 +172,13 @@ class OffenderResource(
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
-    summary = "Get whether a person is on a supervision package by CRN",
-    description = """Asks the Supervision Packages API whether the person is on a supervision package -
-      package `SPA` to `SPG`. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
-      on another sentence are all false. Does not require the person to already be registered for e-supervision.
+    summary = "Get some of a person's supervision package details by CRN",
+    description = """Returns details about the person's supervision package from the Supervision Packages API -
+      If package is `SPA` to `SPG` then 'onSupervisionPackage' is true. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
+      on another sentence are all false.
+      If phase code is 'FTHRD' then 'inFinalThird' is true.
+      If phase code is 'INIT' then 'inEarlyEngagement' is true.
+      Does not require the person to already be registered for e-supervision.
 
       A CRN Supervision Packages does not know is a 404 rather than false, so callers can tell an
       invalid CRN apart from a person who is not on a package.""",
