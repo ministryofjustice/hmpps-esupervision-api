@@ -198,7 +198,7 @@ class OffenderResource(
     // The client has already logged the unknown CRN.
     if (supervisionPackageStatus == null) return ResponseEntity.notFound().build()
 
-    LOGGER.info("Retrieved supervision package status for crn={}, onSupervisionPackage={}", normalisedCrn, supervisionPackageStatus)
+    LOGGER.info("Retrieved supervision package status for crn={}, supervisionPackageStatus={}", normalisedCrn, supervisionPackageStatus)
     return ResponseEntity.ok(supervisionPackageStatus)
   }
 
