@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:76_add_checkin_mode_to_offender-1 splitStatements:false
+--changeset hmpps:74_add_checkin_mode_to_offender-1 splitStatements:false
 CREATE TYPE checkin_mode AS ENUM ('SCHEDULED', 'AD_HOC');
 
 ALTER TABLE offender_v2
@@ -23,7 +23,7 @@ ALTER TABLE offender_v2
 --rollback ALTER TABLE offender_v2 DROP column checkin_mode;
 --rollback DROP TYPE checkin_mode;
 
---changeset hmpps:76_add_checkin_mode_to_offender-2 splitStatements:false
+--changeset hmpps:74_add_checkin_mode_to_offender-2 splitStatements:false
 
 create function get_upcoming_assignment_info_v2(p_offender_id bigint, p_today date, p_next_checkin_date date, p_checkin_window_days bigint)
     returns TABLE(question_list_id bigint, due_date date, explicit_assignment boolean)

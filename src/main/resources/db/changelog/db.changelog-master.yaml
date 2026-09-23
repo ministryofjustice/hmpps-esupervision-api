@@ -146,4 +146,4 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/73_add_checkin_image_retention.sql
   - include:
-      file: db/changelog/changesets/76_add_checkin_mode_to_offender.sql
+      file: db/changelog/changesets/74_add_checkin_mode_to_offender.sql
