@@ -30,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEven
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -149,10 +150,11 @@ class CheckinCreationJobTest {
       override val crn: CRN,
       override val practitionerId: ExternalUserId,
       override val contactPreference: ContactPreference,
+      override val checkinMode: CheckinMode,
       override val currentEvent: Long?,
     ) : OffenderRepository.IOffenderCheckinCreationInfo
     whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), anyOrNull()))
-      .thenReturn(offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.currentEvent) })
+      .thenReturn(offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.mode, it.currentEvent) })
     whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<Offender>())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any(), any())).thenReturn(detailsByCrn.values.toList())
     whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenAnswer { arg ->

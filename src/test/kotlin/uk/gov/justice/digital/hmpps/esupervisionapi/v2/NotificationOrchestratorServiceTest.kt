@@ -107,6 +107,7 @@ class NotificationOrchestratorServiceTest {
       practitionerId = offender.practitionerId,
       offenderContactPreference = offender.contactPreference,
       currentEvent = null,
+      checkinMode = offender.mode,
     )
     service.sendCheckinCreatedNotifications(event)
 

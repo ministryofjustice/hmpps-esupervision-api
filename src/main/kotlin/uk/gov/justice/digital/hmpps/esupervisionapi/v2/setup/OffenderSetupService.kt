@@ -19,6 +19,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
@@ -87,6 +88,7 @@ class OffenderSetupService(
   /** Start offender setup (registration) Creates OffenderV2 and OffenderSetupV2 records */
   @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
+    validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
     val now = clock.instant()
 
     val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)
@@ -98,7 +100,8 @@ class OffenderSetupService(
       }
       existing.practitionerId = offenderInfo.practitionerId
       existing.firstCheckin = offenderInfo.firstCheckin
-      existing.checkinInterval = offenderInfo.checkinInterval.duration
+      existing.mode = offenderInfo.mode
+      existing.checkinInterval = offenderInfo.checkinInterval?.duration
       existing.createdBy = offenderInfo.practitionerId
       existing.updatedAt = now
       existing.contactPreference = offenderInfo.contactPreference
@@ -110,7 +113,8 @@ class OffenderSetupService(
         practitionerId = offenderInfo.practitionerId,
         status = OffenderStatus.INITIAL,
         firstCheckin = offenderInfo.firstCheckin,
-        checkinInterval = offenderInfo.checkinInterval.duration,
+        mode = offenderInfo.mode,
+        checkinInterval = offenderInfo.checkinInterval?.duration,
         createdAt = now,
         createdBy = offenderInfo.practitionerId,
         updatedAt = now,

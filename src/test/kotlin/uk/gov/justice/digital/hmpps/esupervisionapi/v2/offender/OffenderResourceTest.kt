@@ -37,6 +37,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
@@ -822,6 +823,30 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - checkin mode switch`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    val scheduleUpdate = CheckinScheduleUpdateRequest(
+      mode = CheckinMode.AD_HOC,
+      requestedBy = "BOB",
+      checkinInterval = CheckinInterval.FOUR_WEEKS,
+      firstCheckin = clock.today().plusDays(1),
+    )
+    var ex = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+    }
+    assertTrue(ex.statusCode.is4xxClientError)
+
+    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate.copy(checkinInterval = null)))
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    assertEquals(HttpStatus.OK, result.statusCode)
+  }
+
+  @Test
   fun `updateDetails - successful contact preference update`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
@@ -951,6 +976,10 @@ class OffenderResourceTest {
       email = "jane.smith@example.com",
       unallocated = false,
       username = "AUTH_USER",
+      probationDeliveryUnit = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit(
+        code = "N01PDU",
+        description = "London North PDU",
+      ),
     )
     val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       crn = "X123456",
@@ -968,6 +997,8 @@ class OffenderResourceTest {
     assertEquals("jane.smith@example.com", result.body?.email)
     assertEquals(false, result.body?.unallocated)
     assertEquals("AUTH_USER", result.body?.username)
+    assertEquals("N01PDU", result.body?.probationDeliveryUnit?.code)
+    assertEquals("London North PDU", result.body?.probationDeliveryUnit?.description)
     verify(offenderRepository, times(0)).findByCrn(any())
   }
 
@@ -1118,13 +1149,14 @@ class OffenderResourceTest {
   // Helper Methods
   // ========================================
 
-  private fun createOffender(uuid: UUID, status: OffenderStatus) = Offender(
+  private fun createOffender(uuid: UUID, status: OffenderStatus, checkinMode: CheckinMode = CheckinMode.SCHEDULED) = Offender(
     uuid = uuid,
     crn = "X123456",
     practitionerId = "PRACT001",
     status = status,
     firstCheckin = LocalDate.now(clock),
-    checkinInterval = CheckinInterval.WEEKLY.duration,
+    checkinInterval = if (checkinMode == CheckinMode.SCHEDULED) CheckinInterval.WEEKLY.duration else null,
+    mode = checkinMode,
     createdAt = clock.instant(),
     createdBy = "PRACT001",
     updatedAt = clock.instant(),

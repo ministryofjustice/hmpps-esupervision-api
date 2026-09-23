@@ -38,6 +38,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
@@ -45,9 +46,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventT
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
@@ -190,10 +193,10 @@ class OffenderResource(
     summary = "Get whether a person is on a supervision package by CRN",
     description = """Asks the Supervision Packages API whether the person is on a supervision package -
       package `SPA` to `SPG`. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
-      on another sentence are all false, as is a CRN Supervision Packages does not know. Does not require
-      the person to already be registered for e-supervision.""",
+      on another sentence are all false. Does not require the person to already be registered for e-supervision.""",
   )
   @ApiResponse(responseCode = "200", description = "Supervision package status returned")
+  @ApiResponse(responseCode = "404", description = "CRN not known to Supervision Packages")
   @ApiResponse(responseCode = "503", description = "Supervision Packages could not be asked; the status is unknown, not false")
   @GetMapping("/crn/{crn}/supervision-package")
   fun getSupervisionPackageStatusByCrn(
@@ -201,6 +204,8 @@ class OffenderResource(
   ): ResponseEntity<SupervisionPackageStatus> {
     val normalisedCrn = crn.trim().uppercase()
     val onSupervisionPackage = supervisionPackageService.isOnSupervisionPackage(normalisedCrn)
+    // The client has already logged the unknown CRN.
+    if (onSupervisionPackage == null) return ResponseEntity.notFound().build()
 
     LOGGER.info("Retrieved supervision package status for crn={}, onSupervisionPackage={}", normalisedCrn, onSupervisionPackage)
     return ResponseEntity.ok(SupervisionPackageStatus(onSupervisionPackage))
@@ -381,16 +386,7 @@ class OffenderResource(
       )
     }
 
-    val contactDetails = try {
-      ndiliusApiClient.getContactDetails(offender.crn)
-        ?: throw Exception("NDelius returned null contact details")
-    } catch (e: Exception) {
-      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Could not verify contact details in NDelius for ${offender.crn}.",
-      )
-    }
+    val contactDetails = getContactDetails(offender)
 
     val saved = offenderDeactivationService.deactivateOffender(
       offender,
@@ -409,6 +405,20 @@ class OffenderResource(
     )
 
     return ResponseEntity.ok(saved.toSummaryDto(getOffenderPhotoUrl(saved)))
+  }
+
+  private fun getContactDetails(offender: Offender): ContactDetails {
+    val contactDetails = try {
+      ndiliusApiClient.getContactDetails(offender.crn)
+        ?: throw Exception("NDelius returned null contact details")
+    } catch (e: Exception) {
+      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Could not verify contact details in NDelius for ${offender.crn}.",
+      )
+    }
+    return contactDetails
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -440,16 +450,7 @@ class OffenderResource(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only INACTIVE offenders can be reactivated.")
     }
 
-    val contactDetails = try {
-      ndiliusApiClient.getContactDetails(offender.crn)
-        ?: throw Exception("NDelius returned null contact details")
-    } catch (e: Exception) {
-      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Could not verify contact details in NDelius for ${offender.crn}.",
-      )
-    }
+    val contactDetails = getContactDetails(offender)
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
@@ -471,9 +472,10 @@ class OffenderResource(
     }
 
     request.checkinSchedule?.let { schedule ->
-      validate(schedule)
+      validate(schedule, offender.mode)
+      offender.mode = schedule.mode ?: offender.mode
       offender.firstCheckin = schedule.firstCheckin
-      offender.checkinInterval = schedule.checkinInterval.duration
+      offender.checkinInterval = schedule.checkinInterval?.duration
     }
     request.contactPreference?.let { pref ->
       offender.contactPreference = pref.contactPreference
@@ -527,9 +529,12 @@ class OffenderResource(
     summary = "Update offender details",
     description = """Updates offender details. All fields need to be set to their desired value 
         (as in, no partial updates are allowed)
-        
-        Updating the check in schedule settings may trigger a notification if the new first check in date
-        is *today*.""",
+
+When updating the check-in schedule, the `mode` option determines whether the check-in interval is required. 
+E.g., SCHEDULED requires a check-in interval, while AD_HOC does not.
+
+Updating the check-in schedule settings may trigger a notification if the new first check in date
+is *today*.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender details updated")
   @ApiResponse(responseCode = "204", description = "No update required")
@@ -551,12 +556,13 @@ class OffenderResource(
     }
 
     val offenderBefore = offender.toSummaryDto()
-
     if (request.checkinSchedule != null) {
-      validate(request.checkinSchedule)
+      val mode = request.checkinSchedule.mode ?: offender.mode
+      validate(request.checkinSchedule, offender.mode)
       val scheduleUpdate = request.checkinSchedule
+      offender.mode = mode
       offender.firstCheckin = scheduleUpdate.firstCheckin
-      offender.checkinInterval = scheduleUpdate.checkinInterval.duration
+      offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
       offender.updatedAt = clock.instant()
     }
 
@@ -568,13 +574,16 @@ class OffenderResource(
       }
     }
 
+    val todaysCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null || request.contactPreference != null) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
-      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, LocalDate.now(clock))) {
-        LOGGER.debug("Creating check-in for offender {} as first check-in date is today", offenderAfter.uuid)
-        checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
+        if (todaysCheckin.isEmpty) {
+          checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+        }
+        LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       }
       return ResponseEntity.ok(offenderAfter)
     } else {
@@ -595,9 +604,18 @@ class OffenderResource(
     eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
-  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {
+  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) {
     if (scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
+    }
+    when (scheduleUpdate.mode) {
+      CheckinMode.AD_HOC -> if (scheduleUpdate.checkinInterval != null) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval cannot be specified for ad-hoc check-ins.")
+      }
+      CheckinMode.SCHEDULED -> if (scheduleUpdate.checkinInterval == null) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval is required for scheduled check-ins.")
+      }
+      null -> validateScheduleSettings(currentMode, scheduleUpdate.checkinInterval)
     }
   }
 
@@ -661,6 +679,8 @@ data class PractitionerSummary(
   val email: String? = null,
   val unallocated: Boolean? = null,
   val username: String? = null,
+  @field:Schema(description = "Probation Delivery Unit", required = false)
+  val probationDeliveryUnit: OrganizationalUnit? = null,
 ) : INamedPerson
 
 private fun PractitionerDetails.toSummary() = PractitionerSummary(
@@ -669,6 +689,7 @@ private fun PractitionerDetails.toSummary() = PractitionerSummary(
   email = email,
   unallocated = unallocated,
   username = username,
+  probationDeliveryUnit = probationDeliveryUnit,
 )
 
 /** Simple DTO for offender lookup - no PII by default */
@@ -677,7 +698,8 @@ data class OffenderSummaryDto(
   val crn: String,
   val status: OffenderStatus,
   val firstCheckin: LocalDate,
-  val checkinInterval: CheckinInterval,
+  val checkinInterval: CheckinInterval?,
+  val mode: CheckinMode,
   val contactPreference: ContactPreference,
   val photoUrl: String? = null,
   val details: OffenderSummaryDetails? = null,
@@ -688,7 +710,8 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   crn = crn,
   status = status,
   firstCheckin = firstCheckin,
-  checkinInterval = CheckinInterval.fromDuration(checkinInterval),
+  checkinInterval = checkinInterval?.let { CheckinInterval.fromDuration(it) },
+  mode = mode,
   contactPreference = contactPreference,
   photoUrl = photoUrl,
   details = contactDetails?.let {
@@ -778,7 +801,9 @@ data class CheckinScheduleUpdateRequest(
   @field:Schema(description = "Id of the user requesting the change", required = true)
   val requestedBy: ExternalUserId,
   @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
-  val checkinInterval: CheckinInterval,
+  val checkinInterval: CheckinInterval?,
+  @field:Schema(description = "Checkin mode, SCHEDULED or AD_HOC", required = false)
+  val mode: CheckinMode? = null,
 )
 
 /** Request to update offender contact details */
