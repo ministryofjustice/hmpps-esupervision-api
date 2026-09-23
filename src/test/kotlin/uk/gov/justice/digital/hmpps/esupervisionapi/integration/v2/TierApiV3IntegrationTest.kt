@@ -85,8 +85,18 @@ class TierApiV3IntegrationTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `a case v3 does not tier is reported as a missing tier, not as a score`() {
+  fun `an unsupervised case has NOT_SUPERVISED as its score`() {
     upstreams.stubFor(get(urlEqualTo("/v3/crn/$crn/tier")).willReturn(tierV3("NOT_SUPERVISED")))
+
+    fetchHeader().expectStatus().isOk
+      .expectBody()
+      .jsonPath("$.tierScore").isEqualTo("NOT_SUPERVISED")
+      .jsonPath("$.errors[?(@.field == 'tierScore')]").doesNotExist()
+  }
+
+  @Test
+  fun `a case v3 holds no calculation for is reported as a missing tier, not as a score`() {
+    upstreams.stubFor(get(urlEqualTo("/v3/crn/$crn/tier")).willReturn(tierV3("MISSING")))
 
     fetchHeader().expectStatus().isOk
       .expectBody()
