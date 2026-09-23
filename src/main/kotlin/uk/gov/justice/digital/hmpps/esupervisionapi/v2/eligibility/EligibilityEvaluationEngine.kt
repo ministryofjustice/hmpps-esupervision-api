@@ -110,9 +110,10 @@ class EligibilityEvaluationEngine(
 
     return sourceFuture
       .exceptionallyCompose { throwable ->
-        when (throwable.cause) {
-          is ResourceNotFoundException -> CompletableFuture.failedFuture(throwable.cause)
-          else -> CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, throwable))
+        val cause = throwable.cause ?: throwable
+        when (cause) {
+          is ResourceNotFoundException -> CompletableFuture.failedFuture(cause)
+          else -> CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, cause))
         }
       }
       .thenCompose { sourceData ->
