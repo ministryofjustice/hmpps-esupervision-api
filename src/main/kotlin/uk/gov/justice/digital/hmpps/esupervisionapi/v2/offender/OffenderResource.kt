@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -61,6 +62,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
+import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -193,11 +195,20 @@ class OffenderResource(
     summary = "Get whether a person is on a supervision package by CRN",
     description = """Asks the Supervision Packages API whether the person is on a supervision package -
       package `SPA` to `SPG`. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
-      on another sentence are all false. Does not require the person to already be registered for e-supervision.""",
+      on another sentence are all false. Does not require the person to already be registered for e-supervision.
+
+      A CRN Supervision Packages does not know is a 404 rather than false, so callers can tell an
+      invalid CRN apart from a person who is not on a package.""",
   )
   @ApiResponse(responseCode = "200", description = "Supervision package status returned")
-  @ApiResponse(responseCode = "404", description = "CRN not known to Supervision Packages")
-  @ApiResponse(responseCode = "503", description = "Supervision Packages could not be asked; the status is unknown, not false")
+  // Without an explicit content, springdoc gives every response the method's return schema, so the
+  // errors would advertise a SupervisionPackageStatus body they never return.
+  @ApiResponse(responseCode = "404", description = "CRN not known to Supervision Packages", content = [Content()])
+  @ApiResponse(
+    responseCode = "503",
+    description = "Supervision Packages could not be asked; the status is unknown, not false",
+    content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+  )
   @GetMapping("/crn/{crn}/supervision-package")
   fun getSupervisionPackageStatusByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
