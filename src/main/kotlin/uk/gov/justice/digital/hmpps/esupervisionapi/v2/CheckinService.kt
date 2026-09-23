@@ -959,6 +959,7 @@ class CheckinService(
         checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
         offenderContactPreference = checkin.offender.contactPreference,
         currentEvent = currentEvent,
+        checkinMode = offender.mode,
       )
       notificationService.sendCheckinCreatedNotifications(event)
     } else {
