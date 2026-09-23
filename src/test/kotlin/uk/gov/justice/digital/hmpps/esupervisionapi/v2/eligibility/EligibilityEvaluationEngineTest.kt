@@ -177,7 +177,7 @@ class EligibilityEvaluationEngineTest {
     val ex = assertThrows<RuntimeException> {
       engine.evaluate("X123456", DEFAULT_RULE_SET).join()
     }
-    assertTrue(ex.message!!.contains("Data point PULSE not fetched"))
+    assertTrue(ex.message!!.contains("BREATHING"))
 
     verify(provider, times(1)).fetch(org.mockito.kotlin.any())
   }
