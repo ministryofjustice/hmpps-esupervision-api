@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -44,6 +43,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -304,6 +304,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -350,6 +352,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -443,6 +447,8 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -468,6 +474,8 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -498,6 +506,8 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -542,6 +552,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
 
@@ -584,6 +596,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
 
@@ -622,6 +636,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -649,7 +665,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(eligibilityChecker.check(any(), any()))
-      .doThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "Contact suspended"))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Contant suspended", "SUSPENDED_CODE"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -678,7 +694,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(eligibilityChecker.check(any(), any()))
-      .thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "No active events"))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)

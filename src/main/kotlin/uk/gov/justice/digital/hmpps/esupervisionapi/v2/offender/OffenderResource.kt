@@ -454,7 +454,10 @@ class OffenderResource(
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
-    eligibilityChecker.check(offender, contactDetails)
+    val outcome = eligibilityChecker.check(offender, contactDetails)
+    if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reactivate: ${offender.crn} is ineligible for online check-ins.")
+    }
 
     val requestedPreference = request.contactPreference?.contactPreference ?: offender.contactPreference
 

@@ -22,7 +22,6 @@ import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.springframework.http.HttpStatus
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
@@ -42,7 +41,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
@@ -306,7 +307,8 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), contactSuspended = true, dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
@@ -331,7 +333,8 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList(), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).doThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
@@ -383,6 +386,8 @@ class OffenderSetupServiceTest {
     )
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any()))
       .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = service.completeOffenderSetup(setup.uuid)
 
@@ -406,12 +411,8 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).doThrow(
-      ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "offender ineligible",
-      ),
-    )
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)

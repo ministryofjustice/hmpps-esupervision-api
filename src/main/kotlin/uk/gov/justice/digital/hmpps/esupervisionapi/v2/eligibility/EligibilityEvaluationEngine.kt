@@ -20,7 +20,7 @@ data class EligibilityResult(
   val triggeredRuleCode: String?,
 )
 
-/** Thrown when a rule's source data can't be fetched - the engine throws rather than
+/** Thrown when a rule's source data can't be fetched or is missing - the engine throws rather than
  *  silently treating the offender as eligible/ineligible from a data gap. */
 class EligibilityDataUnavailableException(ruleCode: String, source: String, cause: Throwable) : RuntimeException("Could not evaluate eligibility rule '$ruleCode': source '$source' unavailable", cause)
 
@@ -118,7 +118,7 @@ class EligibilityEvaluationEngine(
       .thenCompose { sourceData ->
         if (!sourceData.containsKey(rule.dataPoint)) {
           // we could get here if our data providers and rules are not in sync
-          throw RuntimeException("Data point ${rule.dataPoint} not fetched for source=${rule.source}, rule=${rule.code}")
+          throw EligibilityDataUnavailableException(rule.code, rule.source, RuntimeException("Data point ${rule.dataPoint} missing for source=${rule.source}, rule=${rule.code}"))
         }
         val matched = EligibilityConditionEvaluator.evaluate(rule.operator, sourceData[rule.dataPoint], rule.comparisonValue)
         val outcome = if (matched) rule.outcomeOnMatch else rule.outcomeOnNoMatch
