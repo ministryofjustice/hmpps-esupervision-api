@@ -665,7 +665,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(eligibilityChecker.check(any(), any()))
-      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Contant suspended", "SUSPENDED_CODE"))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Contact suspended", "SUSPENDED_CODE"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
