@@ -64,6 +64,16 @@ data class SupervisionPackageDetails(
   val isUnlawfullyAtLarge: Boolean get() = custody.any { it.isUnlawfullyAtLarge }
 
   /**
+   * True when the phase code is `FTHRD` final third
+   */
+  val isInFinalThird: Boolean get() = phase?.code.equals("FTHRD", ignoreCase = true)
+
+  /**
+   * True when the phase code is `INIT` early engagement
+   */
+  val isInEarlyEngagement: Boolean get() = phase?.code.equals("INIT", ignoreCase = true)
+
+  /**
    * True when the person is on one of the supervision packages `SPA`-`SPG` on any sentence - the
    * one the current phase belongs to or another. No package, `SPNA` not applicable, `SPNK` not yet
    * known and `SPX` supervised on another sentence do not count on their own.
