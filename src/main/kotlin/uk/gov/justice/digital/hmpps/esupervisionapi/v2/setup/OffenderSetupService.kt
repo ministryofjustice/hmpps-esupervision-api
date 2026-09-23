@@ -206,8 +206,6 @@ class OffenderSetupService(
         LOGGER.info("Eligibility data unavailable for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
       } catch (e: ResourceNotFoundException) {
         LOGGER.info("Eligibility data not found for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
-} catch (e: ResponseStatusException) {
-        throw e
       }
     }
 
