@@ -194,12 +194,12 @@ class OffenderResource(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
   ): ResponseEntity<SupervisionPackageStatus> {
     val normalisedCrn = crn.trim().uppercase()
-    val onSupervisionPackage = supervisionPackageService.isOnSupervisionPackage(normalisedCrn)
+    val supervisionPackageStatus = supervisionPackageService.getSupervisionPackageDetails(normalisedCrn)
     // The client has already logged the unknown CRN.
-    if (onSupervisionPackage == null) return ResponseEntity.notFound().build()
+    if (supervisionPackageStatus == null) return ResponseEntity.notFound().build()
 
-    LOGGER.info("Retrieved supervision package status for crn={}, onSupervisionPackage={}", normalisedCrn, onSupervisionPackage)
-    return ResponseEntity.ok(SupervisionPackageStatus(onSupervisionPackage))
+    LOGGER.info("Retrieved supervision package status for crn={}, supervisionPackageStatus={}", normalisedCrn, supervisionPackageStatus)
+    return ResponseEntity.ok(supervisionPackageStatus)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -645,6 +645,10 @@ data class PersonalDetailsSummary(
 data class SupervisionPackageStatus(
   @field:Schema(description = "Whether the person is on a supervision package, SPA to SPG")
   val onSupervisionPackage: Boolean,
+  @field:Schema(description = "Whether the person is in the final third of their supervision package")
+  val inFinalThird: Boolean,
+  @field:Schema(description = "Whether the person is in early engagement")
+  val inEarlyEngagement: Boolean,
 )
 
 /**
