@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class EligibilityEvaluationEngineTest {
@@ -28,10 +29,12 @@ class EligibilityEvaluationEngineTest {
   private val ruleRepository: EligibilityRuleRepository = mock()
   private val providerRegistry: EligibilityDataProviderRegistry = mock()
   private val engine = EligibilityEvaluationEngine(ruleRepository, providerRegistry, "MOCKED", 2000L)
+  private var executor: ExecutorService? = null
 
   @AfterEach
   fun tearDown() {
     reset(ruleRepository, providerRegistry)
+    executor?.shutdown()
   }
 
   private fun rule(
@@ -73,7 +76,6 @@ class EligibilityEvaluationEngineTest {
     whenever(provider.sourceKey).thenReturn(sourceKey)
     whenever(provider.fetch(org.mockito.kotlin.any()))
       .thenReturn(CompletableFuture.failedFuture(RuntimeException("Something went wrong with source $sourceKey")))
-    // .thenThrow(RuntimeException())
     whenever(providerRegistry.get(sourceKey)).thenReturn(provider)
     return provider
   }
@@ -239,9 +241,10 @@ class EligibilityEvaluationEngineTest {
     val crn = "X000001"
     val apiClient: INdiliusApiClient = mock()
     whenever(apiClient.getContactDetailsStrict(any(), any())).thenReturn(null)
+    executor = Executors.newSingleThreadExecutor()
     val provider: EligibilityDataProvider = NdeliusEligibilityDataProvider(
       apiClient,
-      Executors.newSingleThreadExecutor(),
+      executor!!,
     )
 
     val engine = EligibilityEvaluationEngine(
