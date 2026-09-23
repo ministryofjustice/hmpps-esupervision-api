@@ -56,7 +56,11 @@ class EligibilityChecker(
       return result
     } else {
       val ineligibility = checkinIneligibilityReason(offender, contactDetails)
-      return EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, ineligibility?.description ?: "Ineligible", null)
+      return if (ineligibility == null) {
+        EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null)
+      } else {
+        EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, ineligibility.description, null)
+      }
     }
   }
 
