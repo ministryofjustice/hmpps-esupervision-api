@@ -1,4 +1,4 @@
--- changeset roland.sadowski:75_new_job_type-1 runInTransaction:false
+-- changeset roland.sadowski:76_new_job_type-1 runInTransaction:false
 ALTER TYPE job_type_v2 ADD VALUE 'V2_OFFENDER_ELIGIBILITY_SYNC';
 
 -- rollback:
