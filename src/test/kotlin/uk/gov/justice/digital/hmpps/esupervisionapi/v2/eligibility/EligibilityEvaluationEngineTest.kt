@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertInstanceOf
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
@@ -161,7 +160,7 @@ class EligibilityEvaluationEngineTest {
     val ex = assertThrows<CompletionException> {
       engine.evaluate("X123456", DEFAULT_RULE_SET).join()
     }
-    assertInstanceOf<EligibilityDataUnavailableException>(ex.cause)
+    assertInstanceOf(EligibilityDataUnavailableException::class.java, ex.cause)
     assertTrue(ex.message!!.contains("NOMIS"))
 
     verify(provider, times(1)).fetch(org.mockito.kotlin.any())
