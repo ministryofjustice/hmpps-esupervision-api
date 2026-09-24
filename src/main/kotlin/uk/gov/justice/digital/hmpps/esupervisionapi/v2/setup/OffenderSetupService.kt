@@ -4,9 +4,11 @@ import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
@@ -19,12 +21,16 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.util.Optional
@@ -86,6 +92,7 @@ class OffenderSetupService(
   /** Start offender setup (registration) Creates OffenderV2 and OffenderSetupV2 records */
   @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
+    validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
     val now = clock.instant()
 
     val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)
@@ -97,7 +104,8 @@ class OffenderSetupService(
       }
       existing.practitionerId = offenderInfo.practitionerId
       existing.firstCheckin = offenderInfo.firstCheckin
-      existing.checkinInterval = offenderInfo.checkinInterval.duration
+      existing.mode = offenderInfo.mode
+      existing.checkinInterval = offenderInfo.checkinInterval?.duration
       existing.createdBy = offenderInfo.practitionerId
       existing.updatedAt = now
       existing.contactPreference = offenderInfo.contactPreference
@@ -109,7 +117,8 @@ class OffenderSetupService(
         practitionerId = offenderInfo.practitionerId,
         status = OffenderStatus.INITIAL,
         firstCheckin = offenderInfo.firstCheckin,
-        checkinInterval = offenderInfo.checkinInterval.duration,
+        mode = offenderInfo.mode,
+        checkinInterval = offenderInfo.checkinInterval?.duration,
         createdAt = now,
         createdBy = offenderInfo.practitionerId,
         updatedAt = now,
@@ -126,7 +135,7 @@ class OffenderSetupService(
       offender = offender,
       practitionerId = offenderInfo.practitionerId,
       createdAt = now,
-      startedAt = offenderInfo.startedAt,
+      startedAt = validSetupStart(offenderInfo, now),
       eligibilityChoice = offenderInfo.eligibilityChoice,
       rationale = offenderInfo.rationale,
     )
@@ -144,6 +153,19 @@ class OffenderSetupService(
     )
 
     return saved.dto()
+  }
+
+  /**
+   * The UI records when the practitioner started the setup journey. Only keep it if it's plausible,
+   * so a skewed clock or a long-abandoned session can't distort setup-duration stats.
+   */
+  private fun validSetupStart(offenderInfo: OffenderInfo, now: Instant): Instant? {
+    val startedAt = offenderInfo.startedAt ?: return null
+    if (startedAt.isAfter(now) || startedAt.isBefore(now.minus(MAX_SETUP_DURATION))) {
+      LOGGER.debug("Ignoring implausible setup start for setup={}, startedAt={}, now={}", offenderInfo.setupUuid, startedAt, now)
+      return null
+    }
+    return startedAt
   }
 
   /**
@@ -173,9 +195,17 @@ class OffenderSetupService(
     // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
     if (contactDetails != null) {
       try {
-        eligibilityChecker.check(offender, contactDetails)
+        val outcome = eligibilityChecker.check(offender, contactDetails)
+        if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
+          throw ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Offender ${offender.crn} not eligible: ${outcome.message ?: "Eligibility rule ${outcome.triggeredRuleCode ?: "UNKNOWN"} failed"}",
+          )
+        }
       } catch (e: EligibilityDataUnavailableException) {
         LOGGER.info("Eligibility data unavailable for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
+      } catch (e: ResourceNotFoundException) {
+        LOGGER.info("Eligibility data not found for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
       }
     }
 
@@ -246,6 +276,7 @@ class OffenderSetupService(
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(OffenderSetupService::class.java)
+    internal val MAX_SETUP_DURATION: Duration = Duration.ofHours(24)
   }
 }
 

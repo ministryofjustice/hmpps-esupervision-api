@@ -3,3 +3,10 @@ local:
     - username: AUTH_USER
       name: Local Practitioner
       email: local.practitioner@example.com
+
+app:
+  jobs:
+    # Exposes POST /v2/jobs/{name}/run. This used to be automatic on the local profile; it is now an
+    # explicit flag so the same mechanism can be turned on in dev without being reachable in prod.
+    manual-trigger:
+      enabled: true

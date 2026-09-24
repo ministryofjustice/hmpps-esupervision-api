@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -37,16 +36,19 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -73,6 +75,7 @@ class OffenderResourceTest {
   private val offenderService: OffenderService = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
+  private val supervisionPackageService: SupervisionPackageService = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -96,6 +99,7 @@ class OffenderResourceTest {
       offenderService,
       eligibilityEvaluationEngine,
       eligibilityChecker,
+      supervisionPackageService,
     )
   }
 
@@ -300,6 +304,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -346,6 +352,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -439,6 +447,8 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -464,6 +474,8 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -494,6 +506,8 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -538,6 +552,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
 
@@ -580,6 +596,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
 
@@ -618,6 +636,8 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
 
@@ -645,7 +665,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(eligibilityChecker.check(any(), any()))
-      .doThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "Contact suspended"))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Contact suspended", "SUSPENDED_CODE"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -674,7 +694,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(eligibilityChecker.check(any(), any()))
-      .thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "No active events"))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
@@ -819,6 +839,30 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - checkin mode switch`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    val scheduleUpdate = CheckinScheduleUpdateRequest(
+      mode = CheckinMode.AD_HOC,
+      requestedBy = "BOB",
+      checkinInterval = CheckinInterval.FOUR_WEEKS,
+      firstCheckin = clock.today().plusDays(1),
+    )
+    var ex = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+    }
+    assertTrue(ex.statusCode.is4xxClientError)
+
+    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate.copy(checkinInterval = null)))
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    assertEquals(HttpStatus.OK, result.statusCode)
+  }
+
+  @Test
   fun `updateDetails - successful contact preference update`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
@@ -865,6 +909,7 @@ class OffenderResourceTest {
       crn = crn,
       dateOfBirth = LocalDate.of(1980, 1, 1),
       tierScore = "D2",
+      tierProvisional = null,
       tierDetailsLink = "https://tier.link/$crn",
       overallRisk = "VERY_HIGH",
     )
@@ -887,7 +932,7 @@ class OffenderResourceTest {
     whenever(offenderService.getHeaderDetails(crn)).thenAnswer {
       throw ResponseStatusException(
         HttpStatus.NOT_FOUND,
-        "Could not verify contact details in NDelius for $crn.",
+        "Could not find contact details in NDelius for $crn.",
       )
     }
 
@@ -896,7 +941,7 @@ class OffenderResourceTest {
     }
 
     assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
-    assertEquals("Could not verify contact details in NDelius for $crn.", exception.reason)
+    assertEquals("Could not find contact details in NDelius for $crn.", exception.reason)
   }
 
   // ========================================
@@ -947,6 +992,10 @@ class OffenderResourceTest {
       email = "jane.smith@example.com",
       unallocated = false,
       username = "AUTH_USER",
+      probationDeliveryUnit = uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit(
+        code = "N01PDU",
+        description = "London North PDU",
+      ),
     )
     val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       crn = "X123456",
@@ -964,6 +1013,8 @@ class OffenderResourceTest {
     assertEquals("jane.smith@example.com", result.body?.email)
     assertEquals(false, result.body?.unallocated)
     assertEquals("AUTH_USER", result.body?.username)
+    assertEquals("N01PDU", result.body?.probationDeliveryUnit?.code)
+    assertEquals("London North PDU", result.body?.probationDeliveryUnit?.description)
     verify(offenderRepository, times(0)).findByCrn(any())
   }
 
@@ -1114,13 +1165,14 @@ class OffenderResourceTest {
   // Helper Methods
   // ========================================
 
-  private fun createOffender(uuid: UUID, status: OffenderStatus) = Offender(
+  private fun createOffender(uuid: UUID, status: OffenderStatus, checkinMode: CheckinMode = CheckinMode.SCHEDULED) = Offender(
     uuid = uuid,
     crn = "X123456",
     practitionerId = "PRACT001",
     status = status,
     firstCheckin = LocalDate.now(clock),
-    checkinInterval = CheckinInterval.WEEKLY.duration,
+    checkinInterval = if (checkinMode == CheckinMode.SCHEDULED) CheckinInterval.WEEKLY.duration else null,
+    mode = checkinMode,
     createdAt = clock.instant(),
     createdBy = "PRACT001",
     updatedAt = clock.instant(),

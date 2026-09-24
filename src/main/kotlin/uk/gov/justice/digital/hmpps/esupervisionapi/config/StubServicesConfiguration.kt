@@ -11,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ApiUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
@@ -18,7 +19,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.ISupervisionPackagesApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.nio.file.Path
 
@@ -46,14 +50,21 @@ class StubServicesConfiguration {
     return StubArnsApiClient()
   }
 
+  @Bean
+  @Profile("local & stubsupervisionpackages")
+  fun supervisionPackagesApiClient(): ISupervisionPackagesApiClient {
+    LOG.info("Creating stubbed Supervision Packages API client")
+    return StubSupervisionPackagesApiClient()
+  }
+
   companion object {
     val LOG = LoggerFactory.getLogger(this::class.java)
   }
 }
 
 /**
- * This stub client takes CRNs from the file observed by StubDataWatcher and returns
- * generated data if given CRN is found in the file.
+ * This stub client takes CRNs and NDelius usernames from the file observed by StubDataWatcher
+ * and returns generated data if the given CRN/username is found in the file.
  *
  * The file can be edited at runtime and will be automatically reloaded.
  */
@@ -77,7 +88,7 @@ open class StubNdiliusApiClient(
   }
 
   @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details (STUB)")
-  override fun getContactDetails(crn: String): ContactDetails? {
+  override fun getContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideCase(crn)
@@ -86,7 +97,13 @@ open class StubNdiliusApiClient(
     return null
   }
 
-  override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
+  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = getContactDetails(crn, useCase)
+
+  override fun getContactDetailsStrictGeneral(crn: String): ContactDetails? = getContactDetailsStrict(crn, ApiUseCase.GENERAL)
+
+  override fun getContactDetailsStrictEligibility(crn: String): ContactDetails? = getContactDetailsStrict(crn, ApiUseCase.ELIGIBILITY_CHECK)
+
+  override fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase): List<ContactDetails> {
     LOG.debug("Fetching contact details for {} CRNs, starting with {}", crns.size, crns.take(4))
     val incomingCrns = HashSet<String>(crns)
     val allowedCrns = watcher.allowedCrns
@@ -110,6 +127,15 @@ open class StubNdiliusApiClient(
     )
   }
 
+  override fun getAlertCount(username: String): Int? {
+    LOG.debug("Fetching alert count for username: {}", username)
+    if (!watcher.allowedUsernames.contains(username)) {
+      LOG.debug("Username {} not found in allowed list", username)
+      return null
+    }
+    return username.hashCode().mod(5)
+  }
+
   companion object {
     val LOG = LoggerFactory.getLogger(this::class.java)
   }
@@ -129,10 +155,10 @@ open class StubTierApiClient(
     watcher.stopWatchingChanges()
   }
 
-  override fun getTierDetails(crn: String): TierDetails? {
-    LOG.debug("Fetching tier details for CRN: {}", crn)
+  override fun getTierDetails(crn: String, version: TierApiVersion): TierDetails? {
+    LOG.debug("Fetching {} tier details for CRN: {}", version, crn)
     if (watcher.allowedCrns.contains(crn)) {
-      return dataProvider.provideTierDetails(crn)
+      return dataProvider.provideTierDetails(crn, version)
     }
     LOG.debug("CRN {} not found in allowed list", crn)
     return null
@@ -161,6 +187,34 @@ open class StubArnsApiClient(
     LOG.debug("Fetching tier details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideArnsWidget(crn)
+    }
+    LOG.debug("CRN {} not found in allowed list", crn)
+    return null
+  }
+
+  companion object {
+    val LOG = LoggerFactory.getLogger(this::class.java)
+  }
+}
+
+open class StubSupervisionPackagesApiClient(
+  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/supervision-packages-api-responses/default.json")),
+  val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
+) : ISupervisionPackagesApiClient,
+  DisposableBean {
+
+  init {
+    watcher.startWatchingChanges()
+  }
+
+  override fun destroy() {
+    watcher.stopWatchingChanges()
+  }
+
+  override fun getSupervisionPackageDetails(crn: String): SupervisionPackageDetails? {
+    LOG.debug("Fetching supervision package details for CRN: {}", crn)
+    if (watcher.allowedCrns.contains(crn)) {
+      return dataProvider.provideSupervisionPackageDetails(crn)
     }
     LOG.debug("CRN {} not found in allowed list", crn)
     return null

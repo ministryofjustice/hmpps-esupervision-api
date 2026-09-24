@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -19,7 +20,7 @@ data class EligibilityResult(
   val triggeredRuleCode: String?,
 )
 
-/** Thrown when a rule's source data can't be fetched - the engine throws rather than
+/** Thrown when a rule's source data can't be fetched or is missing - the engine throws rather than
  *  silently treating the offender as eligible/ineligible from a data gap. */
 class EligibilityDataUnavailableException(ruleCode: String, source: String, cause: Throwable) : RuntimeException("Could not evaluate eligibility rule '$ruleCode': source '$source' unavailable", cause)
 
@@ -64,6 +65,7 @@ class EligibilityEvaluationEngine(
   }
 
   fun evaluate(crn: CRN, ruleSet: String): CompletableFuture<EligibilityResult> = evaluateFrom(
+    ruleSet,
     ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
     0,
     crn,
@@ -79,6 +81,7 @@ class EligibilityEvaluationEngine(
     ruleSet: String,
     prePopulatedCache: Map<DataSource, CompletableFuture<Map<String, Any?>>>,
   ): CompletableFuture<EligibilityResult> = evaluateFrom(
+    ruleSet,
     ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
     0,
     crn,
@@ -86,34 +89,46 @@ class EligibilityEvaluationEngine(
   )
 
   private fun evaluateFrom(
+    ruleSet: String,
     rules: List<OffenderEligibilityRule>,
     index: Int,
     crn: String,
     fetchCache: FetchCache,
   ): CompletableFuture<EligibilityResult> {
+    require(rules.isNotEmpty()) { "No rules found for ruleSet $ruleSet" }
     if (index >= rules.size) {
       return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null))
     }
     val rule = rules[index]
     val sourceFuture = try {
-      fetchCache.getOrFetch(rule.source, crn).orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
+      // NOTE: the WebClient executing the actual request should have
+      // appropriate timeouts configured
+      fetchCache.getOrFetch(rule.source, crn).thenApply { it }.orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
     } catch (e: Exception) {
       return CompletableFuture.failedFuture(e)
     }
 
     return sourceFuture
+      .exceptionallyCompose { throwable ->
+        val cause = throwable.cause ?: throwable
+        when (cause) {
+          is ResourceNotFoundException -> CompletableFuture.failedFuture(cause)
+          else -> CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, cause))
+        }
+      }
       .thenCompose { sourceData ->
+        if (!sourceData.containsKey(rule.dataPoint)) {
+          // we could get here if our data providers and rules are not in sync
+          throw EligibilityDataUnavailableException(rule.code, rule.source, RuntimeException("Data point ${rule.dataPoint} missing for source=${rule.source}, rule=${rule.code}"))
+        }
         val matched = EligibilityConditionEvaluator.evaluate(rule.operator, sourceData[rule.dataPoint], rule.comparisonValue)
         val outcome = if (matched) rule.outcomeOnMatch else rule.outcomeOnNoMatch
         val message = if (matched) rule.messageOnMatch else rule.messageOnNoMatch
         when (outcome) {
-          EligibilityRuleOutcome.CONTINUE -> evaluateFrom(rules, index + 1, crn, fetchCache)
+          EligibilityRuleOutcome.CONTINUE -> evaluateFrom(ruleSet, rules, index + 1, crn, fetchCache)
           EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code))
           EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code))
         }
-      }
-      .exceptionallyCompose { throwable ->
-        CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, throwable))
       }
   }
 

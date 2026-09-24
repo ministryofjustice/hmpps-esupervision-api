@@ -9,6 +9,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
+import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
 
 /**
@@ -23,9 +25,9 @@ class EligibilityChecker(
   /**
    * @throws ResponseStatusException if the offender is ineligible or evaluation fails
    * @throws EligibilityDataUnavailableException if any data provider is unavailable
+   * @throws ResourceNotFoundException when a data provider fails with a 404 error
    */
-  fun check(offender: Offender, contactDetails: ContactDetails) {
-    var ineligibilityMessage: String? = null
+  fun check(offender: Offender, contactDetails: ContactDetails): EligibilityResult {
     if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
       val result = try {
         eligibilityEvaluationEngine
@@ -36,28 +38,29 @@ class EligibilityChecker(
               "NDELIUS" to java.util.concurrent.CompletableFuture.completedFuture(contactDetails.eligibilityData()),
             ),
           ).get() // we rely on the engine already having timeouts for each data provider
-      } catch (_: InterruptedException) {
+      } catch (_: CancellationException) {
+        LOGGER.warn("Eligibility evaluation for {} cancelled", offender.crn)
+        throw ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Eligibility evaluation cancelled")
+      } catch (e: InterruptedException) {
+        LOGGER.warn("Eligibility evaluation for {} interrupted", offender.crn)
         Thread.currentThread().interrupt()
-        throw ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Eligibility evaluation interrupted")
+        throw ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Eligibility evaluation interrupted", e)
       } catch (e: ExecutionException) {
-        throw (e.cause as? EligibilityDataUnavailableException)
-          ?: ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Eligibility evaluation failed: ${e.message}", e.cause)
+        when (e.cause) {
+          is EligibilityDataUnavailableException -> throw e.cause!!
+          is ResourceNotFoundException -> throw e.cause!!
+          else -> throw ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Eligibility evaluation failed: ${e.message}", e.cause)
+        }
       }
       LOGGER.info("Eligibility evaluation for {} result: {}", offender.crn, result)
-      if (result.outcome == EligibilityCheckOutcome.INELIGIBLE) {
-        ineligibilityMessage = result.message ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"} failed"
-      }
+      return result
     } else {
       val ineligibility = checkinIneligibilityReason(offender, contactDetails)
-      if (ineligibility != null) {
-        ineligibilityMessage = ineligibility.description
+      return if (ineligibility == null) {
+        EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null)
+      } else {
+        EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, ineligibility.description, null)
       }
-    }
-    if (ineligibilityMessage != null) {
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Offender ${offender.crn} not eligible: $ineligibilityMessage",
-      )
     }
   }
 

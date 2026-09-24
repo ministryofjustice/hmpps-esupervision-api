@@ -2,29 +2,38 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class EligibilityEvaluationEngineTest {
 
   private val ruleRepository: EligibilityRuleRepository = mock()
   private val providerRegistry: EligibilityDataProviderRegistry = mock()
   private val engine = EligibilityEvaluationEngine(ruleRepository, providerRegistry, "MOCKED", 2000L)
+  private var executor: ExecutorService? = null
 
   @AfterEach
   fun tearDown() {
     reset(ruleRepository, providerRegistry)
+    executor?.shutdown()
   }
 
   private fun rule(
@@ -57,6 +66,15 @@ class EligibilityEvaluationEngineTest {
     val provider: EligibilityDataProvider = mock()
     whenever(provider.sourceKey).thenReturn(sourceKey)
     whenever(provider.fetch(org.mockito.kotlin.any())).thenReturn(CompletableFuture.completedFuture(data))
+    whenever(providerRegistry.get(sourceKey)).thenReturn(provider)
+    return provider
+  }
+
+  private fun failingMockProvider(sourceKey: String, data: Map<String, Any?>): EligibilityDataProvider {
+    val provider: EligibilityDataProvider = mock()
+    whenever(provider.sourceKey).thenReturn(sourceKey)
+    whenever(provider.fetch(org.mockito.kotlin.any()))
+      .thenReturn(CompletableFuture.failedFuture(RuntimeException("Something went wrong with source $sourceKey")))
     whenever(providerRegistry.get(sourceKey)).thenReturn(provider)
     return provider
   }
@@ -130,6 +148,42 @@ class EligibilityEvaluationEngineTest {
   }
 
   @Test
+  fun `failure on second rule surfaces the right exception`() {
+    val first = rule("ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
+    val second = rule("NOMIS_THING", 2.0, "NOMIS", "ACTIVE_EVENT", EligibilityRuleOperator.IS_NOT_NULL)
+    val third = rule("BREATHING", 3.0, "NDELIUS", "PULSE", EligibilityRuleOperator.IS_NOT_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(first, second, third))
+    val provider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null, "ACTIVE_EVENT" to "ACTIVE", "PULSE" to "YES"))
+    val providerFail = failingMockProvider("NOMIS", mapOf("ACTIVE_EVENT" to "ACTIVE"))
+
+    val ex = assertThrows<CompletionException> {
+      engine.evaluate("X123456", DEFAULT_RULE_SET).join()
+    }
+    assertInstanceOf(EligibilityDataUnavailableException::class.java, ex.cause)
+    assertTrue(ex.message!!.contains("NOMIS"))
+
+    verify(provider, times(1)).fetch(org.mockito.kotlin.any())
+    verify(providerFail, times(1)).fetch(org.mockito.kotlin.any())
+  }
+
+  @Test
+  fun `force failure on out-of sync rules & data providers`() {
+    val first = rule("ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
+    val second = rule("BREATHING", 3.0, "NDELIUS", "PULSE", EligibilityRuleOperator.IS_NOT_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(first, second))
+    val provider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null))
+
+    val ex = assertThrows<RuntimeException> {
+      engine.evaluate("X123456", DEFAULT_RULE_SET).join()
+    }
+    assertTrue(ex.message!!.contains("BREATHING"))
+
+    verify(provider, times(1)).fetch(org.mockito.kotlin.any())
+  }
+
+  @Test
   fun `source fetch failure surfaces as EligibilityDataUnavailableException`() {
     val rule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
@@ -174,5 +228,33 @@ class EligibilityEvaluationEngineTest {
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
     verify(provider, times(1)).fetch(org.mockito.kotlin.any())
+  }
+
+  @Test
+  fun `ResourceNotFoundException propagates from the provider to engine caller`() {
+    val sourceKey = "NDELIUS"
+    val first = rule("RECALLED", 1.0, sourceKey, "RECALL_STATUS", EligibilityRuleOperator.IS_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(any()))
+      .thenReturn(listOf(first))
+
+    val crn = "X000001"
+    val apiClient: INdiliusApiClient = mock()
+    whenever(apiClient.getContactDetailsStrict(any(), any())).thenReturn(null)
+    executor = Executors.newSingleThreadExecutor()
+    val provider: EligibilityDataProvider = NdeliusEligibilityDataProvider(
+      apiClient,
+      executor!!,
+    )
+
+    val engine = EligibilityEvaluationEngine(
+      ruleRepository = ruleRepository,
+      providerRegistry = EligibilityDataProviderRegistry(providers = listOf(provider)),
+      "ONE_RULE",
+      1000L,
+    )
+    val exception = assertThrows<CompletionException> {
+      engine.evaluate(crn, "ONE_RULE").join()
+    }
+    assertInstanceOf(ResourceNotFoundException::class.java, exception.cause)
   }
 }

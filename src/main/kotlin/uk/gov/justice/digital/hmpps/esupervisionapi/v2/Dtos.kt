@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
@@ -252,8 +253,10 @@ data class OffenderDto(
   @field:Schema(description = "Date of first checkin", required = true)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
   val firstCheckin: LocalDate,
-  @field:Schema(description = "Interval between checkins", required = true)
-  val checkinInterval: CheckinInterval,
+  @field:Schema(description = "Interval between checkins", required = false)
+  val checkinInterval: CheckinInterval?,
+  @field:Schema(description = "Check-in mode", required = true)
+  val mode: CheckinMode = CheckinMode.SCHEDULED,
   @field:Schema(description = "Created timestamp", required = true) val createdAt: Instant,
   @field:Schema(description = "Created by practitioner ID", required = true) val createdBy: String,
   @field:Schema(description = "Last updated timestamp", required = true) val updatedAt: Instant,
@@ -280,8 +283,10 @@ data class OffenderInfo(
   @field:Schema(description = "Date of first checkin", required = true)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
   val firstCheckin: LocalDate,
-  @field:Schema(description = "Interval between checkins", required = true)
-  val checkinInterval: CheckinInterval,
+  @field:Schema(description = "Interval between checkins", required = false)
+  val checkinInterval: CheckinInterval?,
+  @field:Schema(description = "Check-in mode", required = true)
+  val mode: CheckinMode = CheckinMode.SCHEDULED,
   @field:Schema(description = "POP contact preference", required = true)
   val contactPreference: ContactPreference,
   @field:Schema(description = "Setup start timestamp (optional)", required = false)
@@ -829,7 +834,7 @@ data class OffenderQuestionList(
 )
 
 data class UpcomingQuestionAssignmentInfo(
-  val expectedCheckinDate: LocalDate,
+  val expectedCheckinDate: LocalDate?,
   val questionList: Long?,
 )
 
@@ -838,7 +843,7 @@ data class UpcomingQuestionAssignmentResponse(
 )
 
 data class UpcomingQuestionListItems(
-  val expectedCheckinDate: LocalDate,
+  val expectedCheckinDate: LocalDate?,
   val items: List<QuestionListItemDto>,
 )
 
@@ -856,8 +861,11 @@ data class UpcomingQuestionItemsResponse(
   val upcoming: UpcomingQuestionListItems,
 )
 
+/**
+ * Used by the manage check-ins page.
+ */
 data class UpcomingOffenderQuestions(
-  val expectedCheckinDate: LocalDate,
+  val expectedCheckinDate: LocalDate?,
   val questions: List<OffenderQuestion>,
 )
 

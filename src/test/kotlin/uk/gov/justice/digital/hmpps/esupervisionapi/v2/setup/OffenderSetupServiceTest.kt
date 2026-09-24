@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.assertDoesNotThrow
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
@@ -20,7 +22,6 @@ import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.springframework.http.HttpStatus
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
@@ -40,7 +41,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
@@ -150,6 +153,50 @@ class OffenderSetupServiceTest {
     )
   }
 
+  @Nested
+  inner class SetupStartedAt {
+    private fun startSetupWith(startedAt: Instant?): Instant? {
+      val offenderInfo = OffenderInfo(
+        setupUuid = UUID.randomUUID(),
+        practitionerId = "PRACT001",
+        crn = "X123456",
+        firstCheckin = LocalDate.now(clock).plusDays(7),
+        checkinInterval = CheckinInterval.WEEKLY,
+        contactPreference = ContactPreference.EMAIL,
+        startedAt = startedAt,
+      )
+      whenever(offenderRepository.findByCrn(offenderInfo.crn)).thenReturn(Optional.empty())
+      whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.arguments[0] }
+
+      service.startOffenderSetup(offenderInfo)
+
+      val captor = argumentCaptor<OffenderSetup>()
+      verify(offenderSetupRepository).save(captor.capture())
+      return captor.firstValue.startedAt
+    }
+
+    @Test
+    fun `keeps a start time from earlier in the setup journey`() {
+      val startedAt = clock.instant().minus(Duration.ofMinutes(12))
+      assertEquals(startedAt, startSetupWith(startedAt))
+    }
+
+    @Test
+    fun `stores no start time when none is sent`() {
+      assertNull(startSetupWith(null))
+    }
+
+    @Test
+    fun `ignores a start time in the future`() {
+      assertNull(startSetupWith(clock.instant().plusSeconds(1)))
+    }
+
+    @Test
+    fun `ignores a start time older than the maximum setup duration`() {
+      assertNull(startSetupWith(clock.instant().minus(OffenderSetupService.MAX_SETUP_DURATION).minusSeconds(1)))
+    }
+  }
+
   @Test
   fun `completeOffenderSetup - happy path with photo uploaded - completes setup`() {
     // Given
@@ -176,7 +223,7 @@ class OffenderSetupServiceTest {
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<Offender, Any?>>(any())).thenAnswer {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Pair<Offender, Any?>>>(0)
       callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())
@@ -235,7 +282,7 @@ class OffenderSetupServiceTest {
 
     whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(false)
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenReturn(null)
 
     // When / Then
     assertThrows(InvalidOffenderSetupState::class.java) {
@@ -260,7 +307,8 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), contactSuspended = true, dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).thenThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
@@ -285,7 +333,8 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList(), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).doThrow(ResponseStatusException(HttpStatus.BAD_REQUEST, "offender ineligible"))
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
@@ -337,6 +386,8 @@ class OffenderSetupServiceTest {
     )
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any()))
       .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = service.completeOffenderSetup(setup.uuid)
 
@@ -360,12 +411,8 @@ class OffenderSetupServiceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
     )
-    whenever(eligibilityChecker.check(any(), any())).doThrow(
-      ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "offender ineligible",
-      ),
-    )
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
@@ -430,7 +477,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.of(setup))
-    whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenReturn(null)
     whenever(transactionTemplate.execute<Offender>(any())).thenAnswer {
       val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Offender>>(0)
       callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())

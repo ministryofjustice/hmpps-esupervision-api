@@ -9,6 +9,6 @@ object EligibilityConditionEvaluator {
   fun evaluate(operator: EligibilityRuleOperator, value: Any?, comparisonValue: String?): Boolean = when (operator) {
     EligibilityRuleOperator.IS_NULL -> value == null
     EligibilityRuleOperator.IS_NOT_NULL -> value != null
-    EligibilityRuleOperator.EQUALS -> value?.toString() == comparisonValue
+    EligibilityRuleOperator.EQUALS -> value != null && value.toString() == comparisonValue
   }
 }

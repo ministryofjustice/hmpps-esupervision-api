@@ -115,6 +115,7 @@ class CheckinCreationService(
       checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
       offenderContactPreference = checkin.offender.contactPreference,
       currentEvent = checkin.offender.currentEvent,
+      checkinMode = offender.mode,
     )
 
     checkinPersistenceService.checkinCreation(checkin, event)

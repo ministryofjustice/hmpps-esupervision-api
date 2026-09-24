@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset roland.sadowski:74_offender_eligibility_rules-1 splitStatements:false
+--changeset roland.sadowski:75_offender_eligibility_rules-1 splitStatements:false
 
 create type eligibility_operator as enum ('IS_NULL', 'IS_NOT_NULL', 'EQUALS');
 
@@ -30,7 +30,9 @@ create table offender_eligibility_rule(
     constraint offender_eligibility_rule_match_message_check
         check ((outcome_on_match = 'CONTINUE') = (message_on_match is null)),
     constraint offender_eligibility_rule_no_match_message_check
-        check ((outcome_on_no_match = 'CONTINUE') = (message_on_no_match is null))
+        check ((outcome_on_no_match = 'CONTINUE') = (message_on_no_match is null)),
+    constraint offender_eligibility_rule_equals_null_check
+         check ((operator = 'EQUALS') = (comparison_value is not null))
 );
 
 create index idx_offender_eligibility_rule_lookup
@@ -42,7 +44,7 @@ create index idx_offender_eligibility_rule_lookup
 --rollback drop type eligibility_rule_outcome;
 --rollback drop type eligibility_operator;
 
---changeset roland.sadowski:74_offender_eligibility_rules-2
+--changeset roland.sadowski:75_offender_eligibility_rules-2
 
 insert into offender_eligibility_rule
   (rule_order, code, question, source, data_point, operator, comparison_value,
