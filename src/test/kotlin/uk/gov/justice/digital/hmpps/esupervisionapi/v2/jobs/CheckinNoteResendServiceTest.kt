@@ -101,6 +101,9 @@ class CheckinNoteResendServiceTest {
     assertThat(logEntry.practitioner).isEqualTo("SYSTEM")
     assertThat(logEntry.sensitive).isTrue()
     assertThat(logEntry.checkin).isEqualTo(checkin.id)
+    // Dated to the original submission (not the resend/clock time) so NDelius sorts it into the past
+    assertThat(logEntry.createdAt).isEqualTo(checkin.submittedAt)
+    assertThat(logEntry.createdAt).isNotEqualTo(clock.instant())
     assertThat(logEntry.comment).contains("This comment was added due to a system issue.")
     assertThat(logEntry.comment).contains("answers for the check in submitted on 12 May 2026 at 3:30pm")
     assertThat(logEntry.comment).contains("Check in answers:")

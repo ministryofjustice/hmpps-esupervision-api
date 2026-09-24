@@ -103,6 +103,9 @@ class CheckinNoteResendJobIT : IntegrationTestBase() {
     assertThat(detail.notes).contains("Check in answers:")
     assertThat(detail.notes).contains("How they have been feeling: Feeling Great")
     assertThat(detail.crn).isEqualTo(checkin.offender.crn)
+    // the note is dated to the original submission, not the resend time, so NDelius does not
+    // surface it as the "latest update" for the check-in
+    assertThat(detail.timestamp).isEqualTo(checkin.submittedAt)
 
     // other tests in this class also write CHECKIN_NOTE_RESEND job logs, so assert on the latest
     val jobLog = jobLogRepository.findAll().filter { it.jobType == "CHECKIN_NOTE_RESEND" }.maxBy { it.id }
