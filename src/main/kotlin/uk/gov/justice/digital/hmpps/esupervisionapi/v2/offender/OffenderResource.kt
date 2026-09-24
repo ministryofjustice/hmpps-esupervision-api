@@ -192,10 +192,13 @@ class OffenderResource(
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
-    summary = "Get whether a person is on a supervision package by CRN",
-    description = """Asks the Supervision Packages API whether the person is on a supervision package -
-      package `SPA` to `SPG`. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
-      on another sentence are all false. Does not require the person to already be registered for e-supervision.
+    summary = "Get some of a person's supervision package details by CRN",
+    description = """Returns details about the person's supervision package from the Supervision Packages API -
+      If package is `SPA` to `SPG` then 'onSupervisionPackage' is true. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
+      on another sentence are all false.
+      If phase code is 'FTHRD' then 'inFinalThird' is true.
+      If phase code is 'INIT' then 'inEarlyEngagement' is true.
+      Does not require the person to already be registered for e-supervision.
 
       A CRN Supervision Packages does not know is a 404 rather than false, so callers can tell an
       invalid CRN apart from a person who is not on a package.""",
@@ -214,12 +217,12 @@ class OffenderResource(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
   ): ResponseEntity<SupervisionPackageStatus> {
     val normalisedCrn = crn.trim().uppercase()
-    val onSupervisionPackage = supervisionPackageService.isOnSupervisionPackage(normalisedCrn)
+    val supervisionPackageStatus = supervisionPackageService.getSupervisionPackageDetails(normalisedCrn)
     // The client has already logged the unknown CRN.
-    if (onSupervisionPackage == null) return ResponseEntity.notFound().build()
+    if (supervisionPackageStatus == null) return ResponseEntity.notFound().build()
 
-    LOGGER.info("Retrieved supervision package status for crn={}, onSupervisionPackage={}", normalisedCrn, onSupervisionPackage)
-    return ResponseEntity.ok(SupervisionPackageStatus(onSupervisionPackage))
+    LOGGER.info("Retrieved supervision package status for crn={}, supervisionPackageStatus={}", normalisedCrn, supervisionPackageStatus)
+    return ResponseEntity.ok(supervisionPackageStatus)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -666,6 +669,10 @@ data class PersonalDetailsSummary(
 data class SupervisionPackageStatus(
   @field:Schema(description = "Whether the person is on a supervision package, SPA to SPG")
   val onSupervisionPackage: Boolean,
+  @field:Schema(description = "Whether the person is in the final third of their supervision package")
+  val inFinalThird: Boolean,
+  @field:Schema(description = "Whether the person is in early engagement")
+  val inEarlyEngagement: Boolean,
 )
 
 /** Result of evaluating the offender eligibility rule set for a CRN. */
@@ -753,8 +760,8 @@ data class OffenderHeaderDetails(
   @field:Schema(description = "From NDelius. Null if the lookup failed (see errors)")
   val dateOfBirth: LocalDate?,
   @field:Schema(
-    description = "From the Tier API: 'D2' style on v2, a single letter A-G on v3 (from 1 October 2026 in production). " +
-      "Null if the lookup failed or the case has no tier (see errors)",
+    description = "From the Tier API: 'D2' style on v2, a single letter A-G or 'NOT_SUPERVISED' on v3 " +
+      "(from 1 October 2026 in production). Null if the lookup failed or the case has no tier (see errors)",
     example = "D",
   )
   val tierScore: String?,

@@ -53,7 +53,7 @@ class OffenderService(
         Callable {
           onBehalfOfRequest(requestAttributes) {
             fetchField("tierScore", "Tier API", crn) {
-              tierApiClient.getTierDetails(crn, tierVersion)?.takeUnless { it.tierScore in NO_TIER_SCORES }
+              tierApiClient.getTierDetails(crn, tierVersion)?.takeUnless { it.tierScore == TierDetails.MISSING }
             }
           }
         },
@@ -175,11 +175,5 @@ class OffenderService(
 
   companion object {
     private val LOGGER = logger<OffenderService>()
-
-    /**
-     * v3 placeholders that are not tiers. Reported as a NOT_FOUND tierScore so the UI never shows
-     * "Tier NOT_SUPERVISED" or bands a case on its first letter.
-     */
-    private val NO_TIER_SCORES = setOf(TierDetails.NOT_SUPERVISED, TierDetails.MISSING)
   }
 }

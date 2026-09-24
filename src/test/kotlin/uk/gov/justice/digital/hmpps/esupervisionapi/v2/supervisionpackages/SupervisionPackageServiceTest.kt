@@ -17,6 +17,8 @@ class SupervisionPackageServiceTest {
 
   private val crn = "X000001"
   private val standard = CodedDescription("STD", "Standard supervision")
+  private val finalThird = CodedDescription("FTHRD", "Final third")
+  private val earlyEngagement = CodedDescription("INIT", "Early engagement")
 
   private fun onPackage(code: String) = SupervisionPackageDetails(CodedDescription(code, code), standard, recallStatus = null)
 
@@ -25,7 +27,11 @@ class SupervisionPackageServiceTest {
   fun `packages A to G are on a supervision package`(code: String) {
     whenever(client.getSupervisionPackageDetails(crn)).thenReturn(onPackage(code))
 
-    assertEquals(true, service.isOnSupervisionPackage(crn))
+    val status = service.getSupervisionPackageDetails(crn)
+
+    assertEquals(true, status!!.onSupervisionPackage)
+    assertEquals(false, status.inFinalThird)
+    assertEquals(false, status.inEarlyEngagement)
   }
 
   @ParameterizedTest
@@ -33,14 +39,56 @@ class SupervisionPackageServiceTest {
   fun `not applicable, not yet known and supervised on another sentence are not`(code: String) {
     whenever(client.getSupervisionPackageDetails(crn)).thenReturn(onPackage(code))
 
-    assertEquals(false, service.isOnSupervisionPackage(crn))
+    val status = service.getSupervisionPackageDetails(crn)
+
+    assertEquals(false, status!!.onSupervisionPackage)
+    assertEquals(false, status.inFinalThird)
+    assertEquals(false, status.inEarlyEngagement)
+  }
+
+  @Test
+  fun `phase is in final third`() {
+    whenever(client.getSupervisionPackageDetails(crn)).thenReturn(
+      SupervisionPackageDetails(
+        supervisionPackage = CodedDescription("SPX", "Supervised on another sentence"),
+        phase = finalThird,
+        recallStatus = null,
+        sentencePackages = listOf(CodedDescription("SPX", "Supervised on another sentence"), CodedDescription("SPX", "X")),
+      ),
+    )
+
+    val status = service.getSupervisionPackageDetails(crn)
+
+    assertEquals(false, status!!.onSupervisionPackage)
+    assertEquals(true, status.inFinalThird)
+    assertEquals(false, status.inEarlyEngagement)
+  }
+
+  @Test
+  fun `phase is in early engagement`() {
+    whenever(client.getSupervisionPackageDetails(crn)).thenReturn(
+      SupervisionPackageDetails(
+        supervisionPackage = CodedDescription("SPX", "Supervised on another sentence"),
+        phase = earlyEngagement,
+        recallStatus = null,
+        sentencePackages = listOf(CodedDescription("SPX", "Supervised on another sentence"), CodedDescription("SPB", "B")),
+      ),
+    )
+
+    val status = service.getSupervisionPackageDetails(crn)
+
+    assertEquals(true, status!!.onSupervisionPackage)
+    assertEquals(false, status.inFinalThird)
+    assertEquals(true, status.inEarlyEngagement)
   }
 
   @Test
   fun `no current package is not on a supervision package`() {
     whenever(client.getSupervisionPackageDetails(crn)).thenReturn(SupervisionPackageDetails(null, null, recallStatus = null))
 
-    assertEquals(false, service.isOnSupervisionPackage(crn))
+    val status = service.getSupervisionPackageDetails(crn)
+
+    assertEquals(false, status!!.onSupervisionPackage)
   }
 
   @Test
@@ -54,7 +102,9 @@ class SupervisionPackageServiceTest {
       ),
     )
 
-    assertEquals(true, service.isOnSupervisionPackage(crn))
+    val status = service.getSupervisionPackageDetails(crn)
+
+    assertEquals(true, status!!.onSupervisionPackage)
   }
 
   @Test
@@ -63,14 +113,16 @@ class SupervisionPackageServiceTest {
       SupervisionPackageDetails(null, null, recallStatus = null, sentencePackages = listOf(CodedDescription("SPD", "D"))),
     )
 
-    assertEquals(true, service.isOnSupervisionPackage(crn))
+    val status = service.getSupervisionPackageDetails(crn)
+
+    assertEquals(true, status!!.onSupervisionPackage)
   }
 
   @Test
   fun `a CRN Supervision Packages does not know is null, not false`() {
     whenever(client.getSupervisionPackageDetails(crn)).thenReturn(null)
 
-    assertNull(service.isOnSupervisionPackage(crn))
+    assertNull(service.getSupervisionPackageDetails(crn))
   }
 
   @Test
@@ -78,6 +130,6 @@ class SupervisionPackageServiceTest {
     val outage = SupervisionPackagesFetchException(crn, "down", RuntimeException("503"))
     whenever(client.getSupervisionPackageDetails(crn)).thenThrow(outage)
 
-    assertEquals(outage, assertThrows<SupervisionPackagesFetchException> { service.isOnSupervisionPackage(crn) })
+    assertEquals(outage, assertThrows<SupervisionPackagesFetchException> { service.getSupervisionPackageDetails(crn) })
   }
 }
