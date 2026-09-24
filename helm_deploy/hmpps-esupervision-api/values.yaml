@@ -66,5 +66,15 @@ generic-service:
     groups:
       - internal
 
+  # Batch jobs run as one-shot K8s CronJob pods (BATCH_ENABLED=true, BATCH_TYPE=<type>)
+  # instead of @Scheduled in the web pods — see docs/HELM-AND-K8s-CRON-JOBS.
+  # "batch" avoids the 52-char CronJob-name truncation collision the default prefix would hit.
+  cronPrefixName: "batch"
+  batchjobs:
+    - name: eligibility-sync
+      type: OFFENDER_ELIGIBILITY_SYNC
+      schedule: "0 3 * * *"
+      suspend: true # flip to false once real sync logic lands (job body is currently a TODO)
+
 generic-prometheus-alerts:
   targetApplication: hmpps-esupervision-api
