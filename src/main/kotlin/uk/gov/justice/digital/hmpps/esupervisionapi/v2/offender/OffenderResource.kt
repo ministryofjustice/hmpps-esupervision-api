@@ -46,13 +46,15 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
@@ -65,6 +67,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 @RestController
 @RequestMapping("/v2/offenders", produces = ["application/json"])
@@ -83,6 +86,8 @@ class OffenderResource(
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderPersistenceService: OffenderPersistenceService,
   private val offenderService: OffenderService,
+  private val eligibilityEvaluationEngine: EligibilityEvaluationEngine,
+  private val eligibilityChecker: EligibilityChecker,
   private val supervisionPackageService: SupervisionPackageService,
 ) {
 
@@ -147,6 +152,21 @@ class OffenderResource(
       ),
     )
   }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Check eligibility by CRN",
+    description = """Evaluates the offender eligibility rule set against NDelius/Nomis for the given CRN,
+      without requiring the person to already be registered for e-supervision. Used to pre-check
+      eligibility before starting setup.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Eligibility evaluated")
+  @ApiResponse(responseCode = "503", description = "A required data source could not be fetched")
+  @GetMapping("/crn/{crn}/eligibility")
+  fun getEligibilityByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> = eligibilityEvaluationEngine.evaluate(crn.trim().uppercase(), eligibilityEvaluationEngine.activeRuleSet)
+    .thenApply { result -> ResponseEntity.ok(EligibilityCheckResponse(result.outcome, result.message)) }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
@@ -448,10 +468,11 @@ class OffenderResource(
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
-    checkinIneligibilityReason(offender, contactDetails)?.let { reason ->
+    val outcome = eligibilityChecker.check(offender, contactDetails)
+    if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
-        "Cannot reactivate ${offender.crn}: ${reason.description}",
+        "Cannot reactivate ${offender.crn}: ${outcome.message ?: "ineligible for online check-ins."}",
       )
     }
 
@@ -652,6 +673,12 @@ data class SupervisionPackageStatus(
   val inFinalThird: Boolean,
   @field:Schema(description = "Whether the person is in early engagement")
   val inEarlyEngagement: Boolean,
+)
+
+/** Result of evaluating the offender eligibility rule set for a CRN. */
+data class EligibilityCheckResponse(
+  val outcome: EligibilityCheckOutcome,
+  val message: String? = null,
 )
 
 /**

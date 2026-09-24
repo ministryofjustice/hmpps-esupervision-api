@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.web.reactive.function.client.WebClient
 import java.lang.reflect.InvocationTargetException
+import kotlin.jvm.java
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker as CircuitBreakerAnnotation
 
 /**
  * Resilience4j only invokes a @CircuitBreaker's fallbackMethod through the AOP proxy when the
@@ -17,7 +19,21 @@ import java.lang.reflect.InvocationTargetException
  */
 class NdiliusApiClientTest {
 
-  private val client = NdiliusApiClient(WebClient.builder().build())
+  private val client = NdiliusApiClient(WebClient.builder().build(), WebClient.builder().build())
+
+  @Test
+  fun `strict calls use separate circuit breakers for general and eligibility traffic`() {
+    assertEquals(
+      "ndiliusApi",
+      NdiliusApiClient::class.java.getDeclaredMethod("getContactDetailsStrictGeneral", String::class.java)
+        .getAnnotation(CircuitBreakerAnnotation::class.java).name,
+    )
+    assertEquals(
+      "ndiliusEligibilityApi",
+      NdiliusApiClient::class.java.getDeclaredMethod("getContactDetailsStrictEligibility", String::class.java)
+        .getAnnotation(CircuitBreakerAnnotation::class.java).name,
+    )
+  }
 
   @Test
   fun `getAlertCountFallback fails open, returning null`() {
@@ -28,7 +44,7 @@ class NdiliusApiClientTest {
 
   @Test
   fun `getContactDetailsFallback fails open, returning null`() {
-    val result = invokeFallback("getContactDetailsFallback", "X000001")
+    val result = invokeFallback("getContactDetailsFallback", "X000001", ApiUseCase.GENERAL)
 
     assertNull(result)
   }
@@ -45,11 +61,12 @@ class NdiliusApiClientTest {
     val method = NdiliusApiClient::class.java.getDeclaredMethod(
       "getContactDetailsForMultipleFallback",
       List::class.java,
+      ApiUseCase::class.java,
       CallNotPermittedException::class.java,
     )
     method.isAccessible = true
 
-    val thrown = assertThrows<InvocationTargetException> { method.invoke(client, crns, openCircuit()) }
+    val thrown = assertThrows<InvocationTargetException> { method.invoke(client, crns, ApiUseCase.GENERAL, openCircuit()) }
 
     val cause = thrown.targetException
     assertEquals(NdiliusBatchFetchException::class.java, cause.javaClass)
@@ -62,9 +79,22 @@ class NdiliusApiClientTest {
     return CallNotPermittedException.createCallNotPermittedException(breaker)
   }
 
-  private fun invokeFallback(methodName: String, id: String): Any? {
-    val method = NdiliusApiClient::class.java.getDeclaredMethod(methodName, String::class.java, Exception::class.java)
+  private fun invokeFallback(methodName: String, id: String, useCase: ApiUseCase? = null): Any? {
+    val method = if (useCase == null) {
+      NdiliusApiClient::class.java.getDeclaredMethod(methodName, String::class.java, Exception::class.java)
+    } else {
+      NdiliusApiClient::class.java.getDeclaredMethod(
+        methodName,
+        String::class.java,
+        ApiUseCase::class.java,
+        Exception::class.java,
+      )
+    }
     method.isAccessible = true
-    return method.invoke(client, id, RuntimeException("simulated circuit-open failure"))
+    return if (useCase == null) {
+      method.invoke(client, id, RuntimeException("simulated circuit-open failure"))
+    } else {
+      method.invoke(client, id, useCase, RuntimeException("simulated circuit-open failure"))
+    }
   }
 }

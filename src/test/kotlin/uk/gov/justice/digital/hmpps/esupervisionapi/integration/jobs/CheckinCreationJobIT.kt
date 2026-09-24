@@ -82,7 +82,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
       .toEntity().let { offenderRepository.save(it) }
 
     val practitionerDetails = PractitionerDetails(name = Name("John", "Smith"), email = "foo@example.com")
-    whenever(ndeliusApiClient.getContactDetailsForMultiple(any()))
+    whenever(ndeliusApiClient.getContactDetailsForMultiple(any(), any()))
       .thenAnswer { invocation ->
         val crns = invocation.getArgument<List<String>>(0)
         listOf(

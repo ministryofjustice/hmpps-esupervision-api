@@ -4,9 +4,11 @@ import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
@@ -18,10 +20,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
 import java.time.Duration
@@ -77,6 +82,7 @@ class OffenderSetupService(
   private val transactionTemplate: TransactionTemplate,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService,
+  private val eligibilityChecker: EligibilityChecker,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -188,8 +194,18 @@ class OffenderSetupService(
     // reset). We only block when NDelius details are available - a transient fetch failure must not
     // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
     if (contactDetails != null) {
-      checkinIneligibilityReason(offender, contactDetails)?.let { reason ->
-        throw BadArgumentException("Cannot complete setup for CRN ${offender.crn}: ${reason.description}")
+      try {
+        val outcome = eligibilityChecker.check(offender, contactDetails)
+        if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
+          throw ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Offender ${offender.crn} not eligible: ${outcome.message ?: "Eligibility rule ${outcome.triggeredRuleCode ?: "UNKNOWN"} failed"}",
+          )
+        }
+      } catch (e: EligibilityDataUnavailableException) {
+        LOGGER.info("Eligibility data unavailable for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
+      } catch (e: ResourceNotFoundException) {
+        LOGGER.info("Eligibility data not found for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
       }
     }
 
