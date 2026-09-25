@@ -20,6 +20,10 @@
 --                 holds (computed by the fetch script, once the current
 --                 practitioner for each CRN is known)
 --
+-- Every CRN in the cohort reaches the export, including the ones NDelius holds
+-- no email for: those rows carry a blank address, to be filled in by hand from
+-- practitioners_unmatched.csv, which names the username behind each.
+--
 -- We store no practitioner email or name, only the NDelius username
 -- (offender_v2.practitioner_id, e.g. BARRY.WHITE), and the only lookup we have
 -- is BY CRN, not by username -- hence the two-step shape of this job.

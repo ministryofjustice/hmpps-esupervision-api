@@ -25,11 +25,11 @@
 #            after the fetch so it follows the practitioner NDelius reports
 #            today. Historic and deactivated CRNs count: they are part of the
 #            cohort that was asked for.
-#   Email    from the endpoint, lower-cased, and the key the rows are grouped
-#            on. A mailing list cannot use a row with no address, so CRNs whose
-#            practitioner has no email, is an unallocated placeholder, or never
-#            answered are left out of the file -- counted in the run summary,
-#            and named in practitioners_unmatched.csv.
+#   Email    from the endpoint, lower-cased. Blank where NDelius holds no
+#            address, where the case is unallocated, or where the lookup never
+#            succeeded. Those rows are kept, sorted to the bottom of the file,
+#            to be filled in by hand: practitioners_unmatched.csv is the
+#            worksheet for that, naming the username behind each one.
 #
 # READ ONLY: GETs only. The endpoint performs no writes.
 #
@@ -159,26 +159,42 @@ ROWS='
           pduSource: (if ($r.livePdu // "") != "" then "live"
                       elif ($g.pdu // "") != "" then "snapshot" else "none" end),
           region: ($g.region // ""),
+          # The best-known practitioner for the case: whoever NDelius says
+          # holds it now, falling back to the username we hold from setup when
+          # the lookup failed or returned an unallocated-staff placeholder.
+          # Every CRN therefore lands on a named username, which is what makes
+          # a blank email fillable by hand.
+          username: (if ($r.username // "") != "" and $r.unallocated != true
+                     then ($r.username | ascii_upcase)
+                     else ($g.storedUsername // "") end),
           # NDelius unallocated-staff placeholders are not people to write to.
           email:  (if $r.unallocated == true then "" else ($r.email // "" | ascii_downcase) end) } ]'
 
 # One row per practitioner: their CRNs collapse into one cell, and their PDU
 # and region likewise -- a practitioner whose cases sit in more than one PDU
 # gets both, semicolon-separated, rather than an arbitrary one of them.
+#
+# Grouped on the username rather than the email address, so that the
+# practitioners we have no address for stay one row each instead of collapsing
+# into a single blank-email row. Those rows are kept in the file to be filled
+# in by hand; practitioners_unmatched.csv names them, since the export itself
+# has no column for a username.
 COLLAPSE='
-  map(select(.email != ""))
-  | group_by(.email)
-  | map({ email:  .[0].email,
+  group_by(.username)
+  | map({ username: .[0].username,
+          email:  (map(select(.email != "") | .email) | unique | join("; ")),
           pdu:    (map(select(.pdu    != "") | .pdu)    | unique | join("; ")),
           region: (map(select(.region != "") | .region) | unique | join("; ")),
           crn:    (map(.crn) | unique | join("; ")),
           pop:    (map(.crn) | unique | length) })'
 
+# Rows needing a manual address go to the bottom, together, rather than being
+# scattered through the regions.
 {
   echo "PDU,Region,CRN,POP count,Email address"
   jq -rn --slurpfile geo "$IN" --slurpfile res "$OUT" \
     "$ROWS | $COLLAPSE
-     | sort_by([(.region == \"\"), .region, .pdu, .email]) | .[]
+     | sort_by([(.email == \"\"), (.region == \"\"), .region, .pdu, .email]) | .[]
      | [.pdu, .region, .crn, .pop, .email] | @csv"
 } > "$CSV_OUT"
 
@@ -187,25 +203,47 @@ COLLAPSE='
 # ---------------------------------------------------------------------------
 # NDelius answers with whoever holds the CRN *today*. Where a case has been
 # reallocated since setup we get the new owner, and the practitioner we have on
-# record is missed -- unless they still hold some other CRN in the list. These
-# are the usernames with no email anywhere in the results; they need a lookup
-# we do not have (esupervision-and-delius, or HMPPS Manage Users).
-stored_list=$(mktemp); found_list=$(mktemp)
-trap 'rm -f "$stored_list" "$found_list"' EXIT
-
-if [[ -n "${USERNAMES:-}" ]]; then
-  awk -F, 'NR > 1 && $1 != "" {print toupper($1)}' "$USERNAMES" | tr -d '"' | sort -u > "$stored_list"
-else
-  jq -r 'select((.storedUsername // "") != "") | .storedUsername | ascii_upcase' "$IN" | sort -u > "$stored_list"
-fi
-
-jq -r 'select(.http == 200 and (.email // "") != "" and .unallocated != true
-              and (.username // "") != "")
-       | .username | ascii_upcase' "$OUT" | sort -u > "$found_list"
+# record is missed -- unless they still hold some other CRN in the list. Those
+# usernames, plus the ones NDelius returned with no email, are the rows that
+# need an address from elsewhere (an internal lookup, esupervision-and-delius,
+# or HMPPS Manage Users).
+#
+# This is the worksheet for filling those in: the username the export cannot
+# show, with the same geography and CRNs beside it. It covers both the blank
+# rows in the export and the practitioners who are not in it at all -- a case
+# reallocated since setup is attributed to its new owner there, so the person
+# who set it up appears only here, against the CRNs they set up. Usernames with
+# no CRN in the cohort (reviewer-only, when USERNAMES= is given) come out with
+# empty cells.
+extra_usernames="${USERNAMES:-/dev/null}"
 
 {
-  echo "username"
-  comm -23 "$stored_list" "$found_list"
+  echo "username,PDU,Region,CRN,POP count"
+  jq -rn --slurpfile geo "$IN" --slurpfile res "$OUT" --rawfile extra "$extra_usernames" \
+    "$ROWS | $COLLAPSE
+     | . as \$list
+     | (\$list | map(select(.email != \"\") | .username)) as \$reachable
+     | (\$extra | split(\"\n\")
+        | map(split(\",\")[0] // \"\" | gsub(\"\\\"\"; \"\") | ascii_upcase)
+        | map(select(. != \"\" and . != \"USERNAME\"))) as \$wider
+     | ((\$list | map(.username))
+        + (\$geo | map((.storedUsername // \"\") | ascii_upcase))
+        + \$wider | unique)
+     | map(select(. as \$u | \$u != \"\" and ((\$reachable | index(\$u)) | not)))
+     | map(. as \$u
+           | (\$geo | map(select(((.storedUsername // \"\") | ascii_upcase) == \$u))) as \$own
+           | (\$list | map(select(.username == \$u)) | .[0])
+             // (if (\$own | length) > 0 then
+                   { username: \$u,
+                     pdu:    (\$own | map(select((.pdu    // \"\") != \"\") | .pdu)    | unique | join(\"; \")),
+                     region: (\$own | map(select((.region // \"\") != \"\") | .region) | unique | join(\"; \")),
+                     crn:    (\$own | map(.crn) | unique | join(\"; \")),
+                     pop:    (\$own | map(.crn) | unique | length) }
+                 else
+                   { username: \$u, pdu: \"\", region: \"\", crn: \"\", pop: 0 }
+                 end))
+     | sort_by([.region, .pdu, .username]) | .[]
+     | [.username, .pdu, .region, .crn, .pop] | @csv"
 } > "$UNMATCHED_OUT"
 
 # ---------------------------------------------------------------------------
@@ -215,7 +253,9 @@ jq -rn --slurpfile geo "$IN" --slurpfile res "$OUT" \
   "$ROWS | . as \$rows | (\$rows | $COLLAPSE) as \$list | \$rows | {
      practitioners:   (\$list | length),
      crns:            length,
-     crns_in_list:    (map(select(.email != \"\")) | length),
+     practitioners_no_email:
+                      (\$list | map(select(.email == \"\")) | length),
+     crns_mailable:   (map(select(.email != \"\")) | length),
      crns_no_email:   (map(select(.email == \"\")) | length),
      pdu_live:        (map(select(.pduSource == \"live\")) | length),
      pdu_snapshot:    (map(select(.pduSource == \"snapshot\")) | length),
@@ -247,8 +287,9 @@ echo "wrote $CSV_OUT, $UNMATCHED_OUT (and $OUT)" >&2
 #   # counts summed (should match crns_in_list in the run summary). Uses a real
 #   # CSV reader because PDU names contain commas.
 #   python3 -c "import csv; r=list(csv.DictReader(open('practitioner_export.csv'))); \
-#     print('rows', len(r), 'addresses', len({x['Email address'] for x in r}), \
-#           'pops', sum(int(x['POP count']) for x in r))"
+#     a=[x['Email address'] for x in r if x['Email address']]; \
+#     print('rows', len(r), 'addresses', len(a), 'distinct', len(set(a)), \
+#           'blank', len(r)-len(a), 'pops', sum(int(x['POP count']) for x in r))"
 #
 #   # practitioners with no region, or whose cases straddle PDUs (a "; " cell)
 #   awk -F'","' 'NR > 1 && ($2 == "" || $1 ~ /; /)' practitioner_export.csv
