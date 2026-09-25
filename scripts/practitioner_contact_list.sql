@@ -1,8 +1,11 @@
 -- ============================================================================
 -- Practitioner contact list -- CRN, geography and username extract
 -- ============================================================================
--- We have been asked for a row per CRN that has, or has ever had, an online
--- check-in, carrying: PDU, region, CRN, POP count, email address.
+-- We have been asked for a mailing list of practitioners: one row each,
+-- carrying PDU, region, CRN, POP count, email address. The cohort is every CRN
+-- that has, or has ever had, an online check-in; this script exports those
+-- CRNs and scripts/fetch_practitioner_details.sh collapses them onto the
+-- practitioner who holds them.
 --
 -- Where each column comes from:
 --   CRN           offender_v2 (this script)
@@ -13,8 +16,8 @@
 --   email address NDelius, by CRN, via
 --                 GET /v2/offenders/crn/{crn}/practitioner-details
 --                 (scripts/fetch_practitioner_details.sh)
---   POP count     derived: how many CRNs in the export belong to the same
---                 practitioner (computed by the fetch script, once the current
+--   POP count     derived: how many of the export's CRNs the practitioner
+--                 holds (computed by the fetch script, once the current
 --                 practitioner for each CRN is known)
 --
 -- We store no practitioner email or name, only the NDelius username

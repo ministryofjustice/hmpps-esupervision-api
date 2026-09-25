@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
 # Build the practitioner contact export: PDU, region, CRN, POP count, email
-# address -- one row per CRN that has, or has ever had, an online check-in.
+# address -- ONE ROW PER PRACTITIONER, because the file is used as a mailing
+# list. The cohort is every CRN that has, or has ever had, an online check-in;
+# those CRNs are collapsed onto the practitioner who holds them.
 #
 # Reads practitioner_crns.jsonl (produced by scripts/practitioner_contact_list.sql,
 # which carries the CRN, the username we hold, and the PDU/region snapshot from
@@ -17,14 +19,17 @@
 #            the practitioner-details endpoint does not return it (PractitionerSummary
 #            carries probationDeliveryUnit but not provider), so there is no live
 #            source for this column without an API change.
-#   CRN      from the SQL step.
-#   POP count how many CRNs in this export belong to the same practitioner,
-#            counted after the fetch so it follows the practitioner NDelius
-#            reports today. Historic and deactivated CRNs count: they are part
-#            of the cohort that was asked for.
-#   Email    from the endpoint. Blank where NDelius holds none, where the case
-#            is unallocated, or where the lookup never succeeded -- the row is
-#            still exported, because the CRN itself was asked for.
+#   CRN      from the SQL step. One practitioner holds several, so the cell
+#            carries all of theirs, semicolon-separated and sorted.
+#   POP count how many CRNs in this export the practitioner holds, counted
+#            after the fetch so it follows the practitioner NDelius reports
+#            today. Historic and deactivated CRNs count: they are part of the
+#            cohort that was asked for.
+#   Email    from the endpoint, lower-cased, and the key the rows are grouped
+#            on. A mailing list cannot use a row with no address, so CRNs whose
+#            practitioner has no email, is an unallocated placeholder, or never
+#            answered are left out of the file -- counted in the run summary,
+#            and named in practitioners_unmatched.csv.
 #
 # READ ONLY: GETs only. The endpoint performs no writes.
 #
@@ -154,22 +159,27 @@ ROWS='
           pduSource: (if ($r.livePdu // "") != "" then "live"
                       elif ($g.pdu // "") != "" then "snapshot" else "none" end),
           region: ($g.region // ""),
-          # The practitioner as NDelius reports them now, falling back to the
-          # username we hold so that rows without a successful lookup still
-          # group into a POP count.
-          identity: (if ($r.username // "") != "" then ($r.username | ascii_upcase)
-                     else ($g.storedUsername // "") end),
           # NDelius unallocated-staff placeholders are not people to write to.
           email:  (if $r.unallocated == true then "" else ($r.email // "" | ascii_downcase) end) } ]'
 
-POP='(. | group_by(.identity) | map({key: .[0].identity, value: length}) | from_entries)'
+# One row per practitioner: their CRNs collapse into one cell, and their PDU
+# and region likewise -- a practitioner whose cases sit in more than one PDU
+# gets both, semicolon-separated, rather than an arbitrary one of them.
+COLLAPSE='
+  map(select(.email != ""))
+  | group_by(.email)
+  | map({ email:  .[0].email,
+          pdu:    (map(select(.pdu    != "") | .pdu)    | unique | join("; ")),
+          region: (map(select(.region != "") | .region) | unique | join("; ")),
+          crn:    (map(.crn) | unique | join("; ")),
+          pop:    (map(.crn) | unique | length) })'
 
 {
   echo "PDU,Region,CRN,POP count,Email address"
   jq -rn --slurpfile geo "$IN" --slurpfile res "$OUT" \
-    "$ROWS | . as \$rows | ($POP) as \$pop
-     | \$rows | sort_by([(.region == \"\"), .region, .pdu, .crn]) | .[]
-     | [.pdu, .region, .crn, (\$pop[.identity] // 1), .email] | @csv"
+    "$ROWS | $COLLAPSE
+     | sort_by([(.region == \"\"), .region, .pdu, .email]) | .[]
+     | [.pdu, .region, .crn, .pop, .email] | @csv"
 } > "$CSV_OUT"
 
 # ---------------------------------------------------------------------------
@@ -202,11 +212,11 @@ jq -r 'select(.http == 200 and (.email // "") != "" and .unallocated != true
 # Summary
 # ---------------------------------------------------------------------------
 jq -rn --slurpfile geo "$IN" --slurpfile res "$OUT" \
-  "$ROWS | {
+  "$ROWS | . as \$rows | (\$rows | $COLLAPSE) as \$list | \$rows | {
+     practitioners:   (\$list | length),
      crns:            length,
-     with_email:      (map(select(.email != \"\")) | length),
-     without_email:   (map(select(.email == \"\")) | length),
-     distinct_emails: (map(select(.email != \"\") | .email | ascii_downcase) | unique | length),
+     crns_in_list:    (map(select(.email != \"\")) | length),
+     crns_no_email:   (map(select(.email == \"\")) | length),
      pdu_live:        (map(select(.pduSource == \"live\")) | length),
      pdu_snapshot:    (map(select(.pduSource == \"snapshot\")) | length),
      pdu_missing:     (map(select(.pduSource == \"none\")) | length),
@@ -233,8 +243,15 @@ echo "wrote $CSV_OUT, $UNMATCHED_OUT (and $OUT)" >&2
 #   # any failures left? re-run the script first -- 404s are retried
 #   jq -c 'select(.error)' practitioners.jsonl
 #
-#   # rows the requester will query: no region, or no email
-#   awk -F'","' 'NR > 1 && $2 == ""' practitioner_export.csv
+#   # mailing-list sanity: rows, distinct addresses (should match), and the POP
+#   # counts summed (should match crns_in_list in the run summary). Uses a real
+#   # CSV reader because PDU names contain commas.
+#   python3 -c "import csv; r=list(csv.DictReader(open('practitioner_export.csv'))); \
+#     print('rows', len(r), 'addresses', len({x['Email address'] for x in r}), \
+#           'pops', sum(int(x['POP count']) for x in r))"
+#
+#   # practitioners with no region, or whose cases straddle PDUs (a "; " cell)
+#   awk -F'","' 'NR > 1 && ($2 == "" || $1 ~ /; /)' practitioner_export.csv
 #
 #   # who was reallocated between setup and now
 #   jq -r 'select(.http == 200 and .username != null
@@ -249,6 +266,7 @@ echo "wrote $CSV_OUT, $UNMATCHED_OUT (and $OUT)" >&2
 #                        and $l[.crn].livePdu != .pdu)
 #      | [.crn, .pdu, $l[.crn].livePdu] | @tsv'
 #
-#   # sanity: one row per CRN, and POP counts that sum to the row count
-#   wc -l practitioner_export.csv
+#   # the CRNs that did not make the list, and why
+#   jq -r 'select(.http != 200 or (.email // "") == "" or .unallocated == true)
+#          | [.crn, (.error // "no email"), (.username // .storedUsername)] | @tsv' practitioners.jsonl
 # ---------------------------------------------------------------------------
