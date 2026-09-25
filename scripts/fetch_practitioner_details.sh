@@ -68,8 +68,10 @@
 # remaining ones are genuinely unallocated.
 #
 # NOTE: the output ties named staff and their work email addresses to the CRNs
-# they supervise -- personal data on both sides. Keep the files outside the git
-# repo and delete working copies when done.
+# they supervise -- personal data on both sides. Run this from a working
+# directory outside the repo, as the SQL step says to; outputs are written
+# beside the input file (OUT_DIR overrides), and the repo's .gitignore carries
+# their names as a second line of defence. Delete working copies when done.
 
 set -euo pipefail
 
@@ -77,8 +79,13 @@ API_BASE="${API_BASE:-https://esupervision-api.hmpps.service.justice.gov.uk}"
 IN="${1:-practitioner_crns.jsonl}"
 OUT="${2:-practitioners.jsonl}"
 RATE_SLEEP="${RATE_SLEEP:-0.5}"
-CSV_OUT="practitioner_export.csv"
-UNMATCHED_OUT="practitioners_unmatched.csv"
+# Outputs land beside the input file, which is wherever psql was run and wrote
+# practitioner_crns.jsonl -- deliberately not the current directory, so that
+# running this from a repo checkout does not drop named staff, their work
+# emails and the CRNs they supervise into the working tree. OUT_DIR overrides.
+OUT_DIR="${OUT_DIR:-$(dirname -- "$IN")}"
+CSV_OUT="$OUT_DIR/practitioner_export.csv"
+UNMATCHED_OUT="$OUT_DIR/practitioners_unmatched.csv"
 
 [[ -n "${TOKEN:-}" ]] || { echo "ERROR: TOKEN is not set" >&2; exit 1; }
 [[ -r "$IN" ]]        || { echo "ERROR: cannot read input file: $IN" >&2; exit 1; }
@@ -106,10 +113,16 @@ while IFS=$'\t' read -r crn stored_username; do
   fi
 
   body=$(mktemp)
+  # The token goes in on stdin, not the command line: this is documented to run
+  # on shared hosts and a bastion, where argv is readable by `ps`.
+  # `|| true` rather than `|| echo 000` because curl writes %{http_code} (000 on
+  # a transport failure) whether or not it exits non-zero -- appending to it
+  # produced "000000" in the failure record.
   code=$(curl -s -o "$body" -w '%{http_code}' \
-    -H "Authorization: Bearer $TOKEN" \
-    -H 'Accept: application/json' \
-    "$API_BASE/v2/offenders/crn/$crn/practitioner-details" || echo 000)
+    -H @- -H 'Accept: application/json' \
+    "$API_BASE/v2/offenders/crn/$crn/practitioner-details" \
+    <<<"Authorization: Bearer $TOKEN") || true
+  code="${code:-000}"
 
   if [[ "$code" == "200" ]]; then
     jq -c --arg crn "$crn" --arg stored "$stored_username" \
@@ -126,9 +139,14 @@ while IFS=$'\t' read -r crn stored_username; do
         error: ("HTTP " + $c), body: $b}' >> "$OUT"
     failed=$((failed + 1))
     echo "FAIL crn=$crn HTTP $code" >&2
-    # A 401 means the token expired: stop rather than burn through the rest.
-    if [[ "$code" == "401" ]]; then
-      echo "ERROR: 401 -- token expired or invalid. Refresh TOKEN and re-run (progress is kept)." >&2
+    # An auth failure will not fix itself, so stop rather than burn through the
+    # rest of the cohort and emit an export with every address blank. 403 is the
+    # likelier of the two: a valid token whose holder lacks
+    # ROLE_ESUPERVISION__ESUPERVISION_UI is rejected by @PreAuthorize with 403,
+    # not 401.
+    if [[ "$code" == "401" || "$code" == "403" ]]; then
+      echo "ERROR: $code -- token expired, invalid, or missing ROLE_ESUPERVISION__ESUPERVISION_UI." >&2
+      echo "       Refresh TOKEN and re-run (progress is kept)." >&2
       rm -f "$body"
       exit 1
     fi
@@ -270,7 +288,7 @@ jq -rn --slurpfile res "$OUT" \
      http_other:(map(select(.http != 200 and .http != 404)) | length),
      unallocated: (map(select(.unallocated == true)) | length),
      reallocated_since_setup:
-       (map(select(.http == 200 and (.username // "") != ""
+       (map(select(.http == 200 and .unallocated != true and (.username // "") != ""
             and (.username | ascii_upcase) != (.storedUsername | ascii_upcase))) | length)
    } | to_entries | map("\(.key)=\(.value)") | join(" ")' >&2
 
@@ -284,7 +302,7 @@ echo "wrote $CSV_OUT, $UNMATCHED_OUT (and $OUT)" >&2
 #   jq -c 'select(.error)' practitioners.jsonl
 #
 #   # mailing-list sanity: rows, distinct addresses (should match), and the POP
-#   # counts summed (should match crns_in_list in the run summary). Uses a real
+#   # counts summed (should match `crns` in the run summary). Uses a real
 #   # CSV reader because PDU names contain commas.
 #   python3 -c "import csv; r=list(csv.DictReader(open('practitioner_export.csv'))); \
 #     a=[x['Email address'] for x in r if x['Email address']]; \
@@ -295,7 +313,7 @@ echo "wrote $CSV_OUT, $UNMATCHED_OUT (and $OUT)" >&2
 #   awk -F'","' 'NR > 1 && ($2 == "" || $1 ~ /; /)' practitioner_export.csv
 #
 #   # who was reallocated between setup and now
-#   jq -r 'select(.http == 200 and .username != null
+#   jq -r 'select(.http == 200 and .unallocated != true and .username != null
 #          and (.username | ascii_upcase) != (.storedUsername | ascii_upcase))
 #          | [.crn, .storedUsername, .username] | @tsv' practitioners.jsonl
 #

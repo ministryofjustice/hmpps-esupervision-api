@@ -46,12 +46,15 @@
 -- READ ONLY: this script creates temp tables only. It does not write to any
 -- application table.
 --
--- Usage:
---   psql -h 127.0.0.1 -p 5432 -f scripts/practitioner_contact_list.sql
+-- Usage -- run it from a working directory OUTSIDE the repo, because the files
+-- it writes are personal data and psql writes them wherever it was started:
+--   mkdir -p ~/esup-practitioner-export && cd ~/esup-practitioner-export
+--   psql -h 127.0.0.1 -p 5432 -f ~/dev/hmpps-esupervision-api/scripts/practitioner_contact_list.sql
 -- (against a Cloud Platform port-forward pod; credentials from the
--- hmpps-esupervision-rds-settings secret)
+-- hmpps-esupervision-rds-settings secret). The repo's .gitignore also carries
+-- these filenames, in case someone runs it from the checkout anyway.
 --
--- Outputs (written to psql's working directory, NOT the repo):
+-- Outputs (written to psql's working directory):
 --   practitioner_crns.jsonl    - one object per CRN: the CRN, the username we
 --                                hold, and the PDU/region snapshot. Feeds
 --                                scripts/fetch_practitioner_details.sh.
@@ -86,22 +89,36 @@ BEGIN;
 -- The most recent audit row that carries a geography. Rows written when the
 -- NDelius lookup failed have all three levels null (see
 -- EventAuditService.buildAudit), so they are skipped rather than taken as the
--- latest word. PDU and provider are written from the same practitioner record
--- in the same statement, so a row gives a consistent pair.
+-- latest word.
+--
+-- PDU and provider are resolved independently rather than from one "latest row
+-- with either". OrganizationalUnit.description is nullable while its code is
+-- not (Dtos.kt), so NDelius can return a PDU with no description; taking that
+-- row wholesale would blank a PDU we already knew from an older row. Each
+-- column keeps the newest value it actually has.
 
 DROP TABLE IF EXISTS pg_temp.crn_geography;
 CREATE TEMP TABLE crn_geography AS
-SELECT DISTINCT ON (crn)
-       crn,
-       pdu_code,
-       pdu_description,
-       provider_code,
-       provider_description,
-       occurred_at AS snapshot_at
-FROM event_audit_log_v2
-WHERE pdu_description IS NOT NULL
-   OR provider_description IS NOT NULL
-ORDER BY crn, occurred_at DESC;
+WITH pdu AS (
+  SELECT DISTINCT ON (crn) crn, pdu_code, pdu_description, occurred_at AS pdu_at
+  FROM event_audit_log_v2
+  WHERE pdu_description IS NOT NULL
+  ORDER BY crn, occurred_at DESC
+), provider AS (
+  SELECT DISTINCT ON (crn) crn, provider_code, provider_description, occurred_at AS provider_at
+  FROM event_audit_log_v2
+  WHERE provider_description IS NOT NULL
+  ORDER BY crn, occurred_at DESC
+)
+SELECT coalesce(p.crn, v.crn)           AS crn,
+       p.pdu_code,
+       p.pdu_description,
+       v.provider_code,
+       v.provider_description,
+       -- GREATEST ignores nulls, so this is the newer of whichever sides exist.
+       greatest(p.pdu_at, v.provider_at) AS snapshot_at
+FROM pdu p
+FULL JOIN provider v ON v.crn = p.crn;
 
 -- ============================================================================
 -- STEP 2: The CRN list

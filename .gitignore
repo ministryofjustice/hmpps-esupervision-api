@@ -91,3 +91,12 @@ src/main/resources/application-local.yml
 
 # Local volume/cache
 volume/
+
+# Personal-data outputs of scripts/practitioner_contact_list.sql and
+# scripts/fetch_practitioner_details.sh. They are meant to be produced outside
+# the checkout; this is the second line of defence if they are not.
+practitioner_crns.jsonl
+practitioner_usernames.csv
+practitioners.jsonl
+practitioner_export.csv
+practitioners_unmatched.csv
