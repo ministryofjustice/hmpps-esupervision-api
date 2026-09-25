@@ -1,29 +1,40 @@
 -- ============================================================================
--- Practitioner contact list -- CRN and username extract
+-- Practitioner contact list -- CRN, geography and username extract
 -- ============================================================================
--- We have been asked for a list of every practitioner who has, or has ever
--- had, a CRN set up for online check-ins: email address and first name.
+-- We have been asked for a row per CRN that has, or has ever had, an online
+-- check-in, carrying: PDU, region, CRN, POP count, email address.
 --
--- We do not store either. What we store is the NDelius username
--- (offender_v2.practitioner_id, e.g. BARRY.WHITE). Email and forename come
--- from NDelius, and the only lookup we have is BY CRN, not by username:
--- GET /v2/offenders/crn/{crn}/practitioner-details (OffenderResource.kt),
--- which proxies NDelius GET /case/{crn} and returns the practitioner's
--- forename, surname, email, staff code and username.
+-- Where each column comes from:
+--   CRN           offender_v2 (this script)
+--   PDU, region   NDelius, via the snapshot in event_audit_log_v2 (this
+--                 script). "Region" is NDelius's provider -- the probation
+--                 region -- which EventAuditService records as
+--                 provider_code/provider_description alongside the PDU.
+--   email address NDelius, by CRN, via
+--                 GET /v2/offenders/crn/{crn}/practitioner-details
+--                 (scripts/fetch_practitioner_details.sh)
+--   POP count     derived: how many CRNs in the export belong to the same
+--                 practitioner (computed by the fetch script, once the current
+--                 practitioner for each CRN is known)
 --
--- So this script produces the CRN list, and scripts/fetch_practitioner_details.sh
--- turns it into the CSV.
+-- We store no practitioner email or name, only the NDelius username
+-- (offender_v2.practitioner_id, e.g. BARRY.WHITE), and the only lookup we have
+-- is BY CRN, not by username -- hence the two-step shape of this job.
 --
--- IMPORTANT -- what that lookup can and cannot tell us. NDelius returns the
--- practitioner allocated to the CRN *today*. We never sync reallocations back
--- into offender_v2, so practitioner_id is whoever set the check-in up. Where a
--- case has since moved, the fetch returns the new owner and the original
--- practitioner is missed. That is why step 2 exports the usernames we hold:
--- the fetch script diffs them against the usernames NDelius returns and writes
--- practitioners_unmatched.csv, the practitioners we cannot reach this way.
--- Getting emails for those needs a username lookup we do not have (our NDelius
--- client exposes only GET /user/{username}/alerts) -- either from the
--- esupervision-and-delius team or from HMPPS Manage Users.
+-- WHY THE SNAPSHOT FOR PDU AND REGION. The practitioner-details endpoint
+-- returns the PDU but not the provider, so the region cannot come from it at
+-- all. event_audit_log_v2 has both: EventAuditService stamps every setup and
+-- check-in event with the practitioner's LAU, PDU and provider as they were at
+-- the time. The fetch script prefers the endpoint's live PDU where it has one
+-- and falls back to the snapshot below, which is also the only source for
+-- region; it records which source each row used.
+--
+-- IMPORTANT -- who the email belongs to. NDelius returns the practitioner
+-- allocated to the CRN *today*. We never sync reallocations back into
+-- offender_v2, so practitioner_id is whoever set the check-in up. Where a case
+-- has since moved, the export carries the new owner. Step 2 exports the
+-- usernames we hold so the fetch script can report which practitioners that
+-- leaves unreachable.
 --
 -- READ ONLY: this script creates temp tables only. It does not write to any
 -- application table.
@@ -34,8 +45,11 @@
 -- hmpps-esupervision-rds-settings secret)
 --
 -- Outputs (written to psql's working directory, NOT the repo):
---   practitioner_crns.csv      - crn + the username we hold. Feeds
+--   practitioner_crns.jsonl    - one object per CRN: the CRN, the username we
+--                                hold, and the PDU/region snapshot. Feeds
 --                                scripts/fetch_practitioner_details.sh.
+--                                JSONL rather than CSV because PDU and region
+--                                descriptions contain commas.
 --   practitioner_usernames.csv - every distinct username we have ever recorded
 --                                against a check-in, with the tables it came
 --                                from. Only needed for the wider reconciliation
@@ -53,14 +67,37 @@
 -- Belt and braces, as in scripts/delius_note_correction.sql: every CREATE
 -- below is a TEMP table, the application tables appear only in FROM, and the
 -- transaction always ends in ROLLBACK, so nothing this session does can
--- persist. The output files are written by the psql CLIENT (\copy), not the
--- server, so they survive the rollback -- which is what we want.
+-- persist. The output files are written by the psql CLIENT (\copy and \o), not
+-- the server, so they survive the rollback -- which is what we want.
 --
 -- Not "SET TRANSACTION READ ONLY": that would block CREATE TEMP TABLE.
 BEGIN;
 
 -- ============================================================================
--- STEP 1: The CRN list
+-- STEP 1: PDU and region per CRN
+-- ============================================================================
+-- The most recent audit row that carries a geography. Rows written when the
+-- NDelius lookup failed have all three levels null (see
+-- EventAuditService.buildAudit), so they are skipped rather than taken as the
+-- latest word. PDU and provider are written from the same practitioner record
+-- in the same statement, so a row gives a consistent pair.
+
+DROP TABLE IF EXISTS pg_temp.crn_geography;
+CREATE TEMP TABLE crn_geography AS
+SELECT DISTINCT ON (crn)
+       crn,
+       pdu_code,
+       pdu_description,
+       provider_code,
+       provider_description,
+       occurred_at AS snapshot_at
+FROM event_audit_log_v2
+WHERE pdu_description IS NOT NULL
+   OR provider_description IS NOT NULL
+ORDER BY crn, occurred_at DESC;
+
+-- ============================================================================
+-- STEP 2: The CRN list
 -- ============================================================================
 -- Every CRN ever set up for check-ins, whatever its state now. The brief is
 -- "active now or in the past", so there is deliberately no status filter:
@@ -69,20 +106,64 @@ BEGIN;
 --
 -- offender_setup_v2 needs no separate pass: it has a FK to offender_v2, so a
 -- setup can never exist without an offender row. Its practitioner_id can still
--- differ from the offender's, which is why step 2 reads it.
+-- differ from the offender's, which is why step 3 reads it.
+--
+-- JSONL, not CSV: PDU and region descriptions can contain commas, and the
+-- fetch script should not have to parse quoted CSV in bash. \o rather than
+-- \copy for the same reason \copy is wrong for JSON -- csv format would quote
+-- the whole line and text format would backslash-escape it.
 
-\copy (SELECT o.crn, upper(o.practitioner_id) AS stored_username, o.status, to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS registered_on FROM offender_v2 o ORDER BY o.crn) to 'practitioner_crns.csv' with (format csv, header true)
+\pset format unaligned
+\pset tuples_only on
+\o practitioner_crns.jsonl
 
--- How big is the job, and how much of it is historic?
-SELECT status, count(*) AS crns, count(DISTINCT upper(practitioner_id)) AS distinct_usernames
-FROM offender_v2
-GROUP BY ROLLUP (status)
-ORDER BY status NULLS LAST;
+SELECT json_build_object(
+         'crn',            o.crn,
+         'storedUsername', upper(o.practitioner_id),
+         'status',         o.status,
+         'registeredOn',   to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+         'pdu',            g.pdu_description,
+         'pduCode',        g.pdu_code,
+         'region',         g.provider_description,
+         'regionCode',     g.provider_code,
+         'snapshotAt',     to_char(g.snapshot_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+       )::text
+FROM offender_v2 o
+LEFT JOIN crn_geography g ON g.crn = o.crn
+ORDER BY o.crn;
+
+\o
+\pset tuples_only off
+\pset format aligned
+
+-- How big is the job, how much of it is historic, and how much of it has a
+-- geography? CRNs with no snapshot come out with a blank region: the fetch can
+-- fill their PDU from the live endpoint but has nowhere to get the region.
+SELECT o.status,
+       count(*)                                                    AS crns,
+       count(DISTINCT upper(o.practitioner_id))                    AS distinct_usernames,
+       count(g.crn)                                                AS with_geography,
+       count(*) FILTER (WHERE g.provider_description IS NULL)      AS no_region
+FROM offender_v2 o
+LEFT JOIN crn_geography g ON g.crn = o.crn
+GROUP BY ROLLUP (o.status)
+ORDER BY o.status NULLS LAST;
+
+-- The regions and PDUs the export will report, and how many CRNs sit in each.
+-- Eyeball this before handing anything over: a region that looks far too small
+-- usually means stale snapshots rather than a real distribution.
+SELECT coalesce(g.provider_description, '(none)') AS region,
+       coalesce(g.pdu_description, '(none)')      AS pdu,
+       count(*)                                   AS crns
+FROM offender_v2 o
+LEFT JOIN crn_geography g ON g.crn = o.crn
+GROUP BY 1, 2
+ORDER BY 1, 3 DESC;
 
 -- ============================================================================
--- STEP 2: Every username we have ever recorded against a check-in
+-- STEP 3: Every username we have ever recorded against a check-in
 -- ============================================================================
--- Wider than step 1 on purpose. A practitioner who only ever reviewed someone
+-- Wider than step 2 on purpose. A practitioner who only ever reviewed someone
 -- else's check-in, or who set a case up that has since been reallocated, owns
 -- no row in offender_v2.practitioner_id but is still "a practitioner who had a
 -- CRN on online check-ins" under a generous reading of the request.
@@ -121,7 +202,7 @@ GROUP BY username;
 
 \copy (SELECT username, mentions, sources FROM practitioner_usernames ORDER BY username) to 'practitioner_usernames.csv' with (format csv, header true)
 
--- How much wider than step 1 is it?
+-- How much wider than step 2 is it?
 SELECT count(*) AS usernames_total,
        count(*) FILTER (WHERE sources LIKE '%offender_v2%')       AS own_a_case_now,
        count(*) FILTER (WHERE sources NOT LIKE '%offender_v2%')   AS seen_but_own_no_case
