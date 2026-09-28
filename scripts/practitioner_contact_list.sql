@@ -60,6 +60,7 @@
 --
 -- Usage -- run it from a working directory OUTSIDE the repo, because the files
 -- it writes are personal data and psql writes them wherever it was started:
+--   umask 077   # the outputs are personal data: keep them private to you
 --   mkdir -p ~/esup-practitioner-export && cd ~/esup-practitioner-export
 --   PGOPTIONS='-c default_transaction_read_only=on' \
 --     psql -h 127.0.0.1 -p 5432 -f ~/dev/hmpps-esupervision-api/scripts/practitioner_contact_list.sql
@@ -110,7 +111,9 @@ BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 -- one "latest row with either": OrganizationalUnit.description is nullable
 -- while its code is not (Dtos.kt), so NDelius can return a PDU with no
 -- description, and taking that row wholesale would blank a PDU we already knew
--- from an older row. Each column keeps the newest value it actually has.
+-- from an older row. Each column keeps the newest value it actually has. Rows
+-- with the same timestamp are broken by id, the later insert winning, so the
+-- same data always gives the same answer.
 --
 -- JSONL, not CSV: PDU and region descriptions can contain commas, and the
 -- fetch script should not have to parse quoted CSV in bash.
@@ -123,12 +126,12 @@ WITH pdu AS (
   SELECT DISTINCT ON (crn) crn, pdu_code, pdu_description, occurred_at AS pdu_at
   FROM event_audit_log_v2
   WHERE pdu_description IS NOT NULL
-  ORDER BY crn, occurred_at DESC
+  ORDER BY crn, occurred_at DESC, id DESC
 ), provider AS (
   SELECT DISTINCT ON (crn) crn, provider_code, provider_description, occurred_at AS provider_at
   FROM event_audit_log_v2
   WHERE provider_description IS NOT NULL
-  ORDER BY crn, occurred_at DESC
+  ORDER BY crn, occurred_at DESC, id DESC
 ), geography AS (
   SELECT coalesce(p.crn, v.crn)           AS crn,
          p.pdu_code,

@@ -90,6 +90,18 @@ class PractitionerContactListSqlTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `breaks a timestamp tie by taking the later audit row`() {
+    offender("Z900001", "BARRY.WHITE")
+    audit("Z900001", "2026-01-01T00:00:00Z", pdu = "Bolton PDU", region = "North West")
+    audit("Z900001", "2026-01-01T00:00:00Z", pdu = "Salford PDU", region = "Greater Manchester")
+
+    val row = runScript().crns().getValue("Z900001")
+
+    assertThat(row.text("pdu")).isEqualTo("Salford PDU")
+    assertThat(row.text("region")).isEqualTo("Greater Manchester")
+  }
+
+  @Test
   fun `leaves PDU and region null for a CRN with no audit geography`() {
     offender("Z900001", "BARRY.WHITE")
 

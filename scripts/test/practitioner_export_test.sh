@@ -66,8 +66,8 @@ run_test() {
 # The API and HMPPS Auth. Binds a free port and writes it to a file, so parallel
 # runs and CI agents never collide.
 cat > "$T/stub.py" <<'EOF'
-import base64, json, re, sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import base64, json, re, sys, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CASES = {
   # two cases for one practitioner, in different PDUs, emails in mixed case
@@ -98,11 +98,14 @@ GOOD_BASIC = "Basic " + base64.b64encode(b"ui-client:s3cr3t").decode()
 class Handler(BaseHTTPRequestHandler):
   def reply(self, status, body):
     data = json.dumps(body).encode()
-    self.send_response(status)
-    self.send_header("Content-Type", "application/json")
-    self.send_header("Content-Length", str(len(data)))
-    self.end_headers()
-    self.wfile.write(data)
+    try:
+      self.send_response(status)
+      self.send_header("Content-Type", "application/json")
+      self.send_header("Content-Length", str(len(data)))
+      self.end_headers()
+      self.wfile.write(data)
+    except (BrokenPipeError, ConnectionResetError):
+      pass  # the client gave up first, as the timeout test intends
 
   def do_POST(self):
     if self.path.startswith("/auth/oauth/token") and self.headers.get("Authorization") == GOOD_BASIC:
@@ -116,6 +119,9 @@ class Handler(BaseHTTPRequestHandler):
     crn = m.group(1) if m else None
     if crn == "FORBID1":
       return self.reply(403, {})
+    if crn == "SLOW1":
+      time.sleep(3)  # a stalled connection
+      return self.reply(200, CASES["X000001"])
     if crn in CASES:
       return self.reply(200, CASES[crn])
     self.reply(404, {})
@@ -123,7 +129,7 @@ class Handler(BaseHTTPRequestHandler):
   def log_message(self, *args):
     pass
 
-server = HTTPServer(("127.0.0.1", 0), Handler)
+server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
 open(sys.argv[1], "w").write(str(server.server_address[1]))
 server.serve_forever()
 EOF
@@ -283,6 +289,23 @@ test_progress_bar_stays_out_of_captured_output() {
   [[ "$out" != *$'\033[K'* ]] || fail "escape codes in captured output"
 }
 
+test_gives_up_on_a_stalled_request_and_carries_on() {
+  mkdir -p "$T/t1"
+  printf '%s\n' '{"crn":"SLOW1","storedUsername":"A.B"}' '{"crn":"X000001","storedUsername":"BARRY.WHITE"}' > "$T/t1/crns.jsonl"
+  local out; out="$(fetch "$T/t1" REQUEST_TIMEOUT=1)"
+  assert_contains "$out" "FAIL crn=SLOW1 HTTP 000" "stalled request recorded"
+  assert_contains "$out" "rows=2 fetched=1 failed=1" "the next CRN still fetched"
+}
+
+test_output_files_are_private_whatever_the_callers_umask() {
+  mkdir -p "$T/u1"; cp "$T/crns.jsonl" "$T/u1/crns.jsonl"
+  (umask 022; cd "$T" && TOKEN=tok API_BASE="$STUB" RATE_SLEEP=0 "$FETCH" "$T/u1/crns.jsonl" "$T/u1/results.jsonl" >/dev/null 2>&1)
+  local f
+  for f in results.jsonl practitioner_export.csv practitioners_unmatched.csv; do
+    assert_eq "-rw-------" "$(ls -l "$T/u1/$f" | cut -c1-10)" "$f permissions"
+  done
+}
+
 test_stops_on_a_403_rather_than_fetching_the_rest() {
   mkdir -p "$T/f6"
   printf '%s\n' '{"crn":"FORBID1","storedUsername":"A.B"}' '{"crn":"X000001","storedUsername":"BARRY.WHITE"}' > "$T/f6/crns.jsonl"
@@ -404,6 +427,15 @@ test_wrapper_default_folder_is_per_day_and_environment() {
   wrapper "" HOME="$T/home" ENV=dev >/dev/null
   local dir; dir="$T/home/esup-practitioner-export/$(date +%Y-%m-%d)-dev"
   [[ -f "$dir/practitioner_export.csv" ]] || fail "export not in $dir"
+}
+
+test_wrapper_work_dir_and_files_are_private_whatever_the_callers_umask() {
+  (umask 022; wrapper "$T/u2" >/dev/null)
+  assert_eq "drwx------" "$(ls -ld "$T/u2" | cut -c1-10)" "work dir permissions"
+  local f
+  for f in practitioner_export.csv practitioners_unmatched.csv extract_report.txt practitioners.jsonl; do
+    assert_eq "-rw-------" "$(ls -l "$T/u2/$f" | cut -c1-10)" "$f permissions"
+  done
 }
 
 test_wrapper_refuses_a_work_dir_inside_the_repo() {

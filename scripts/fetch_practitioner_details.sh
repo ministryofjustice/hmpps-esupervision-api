@@ -59,6 +59,8 @@
 #   RATE_SLEEP  seconds between requests, default 0.5 (~2/s; ingress caps at
 #               50 rps / 800 rpm, so this is comfortably under). ~700 CRNs is
 #               about six minutes.
+#   REQUEST_TIMEOUT  seconds before giving up on one request, default 60; the
+#               CRN is recorded as HTTP 000 and retried on the next pass
 #   PROGRESS    progress bar with ETA while fetching: auto (default -- shown
 #               when stderr is a terminal), 1 to force it, 0 to hide it
 #   USERNAMES   optional practitioner_usernames.csv from step 3 of the SQL. By
@@ -86,10 +88,18 @@
 
 set -euo pipefail
 
+# Everything this creates is personal data: files 0600, directories 0700, so
+# other users on a shared host cannot read them whatever their default umask.
+umask 077
+
 API_BASE="${API_BASE:-https://esupervision-api.hmpps.service.justice.gov.uk}"
 IN="${1:-practitioner_crns.jsonl}"
 OUT="${2:-practitioners.jsonl}"
 RATE_SLEEP="${RATE_SLEEP:-0.5}"
+# Per-request cap. Without one, a single stalled connection would hang the whole
+# export silently -- the progress bar only moves when a request finishes. A
+# timed-out CRN is recorded as HTTP 000 and retried on the next pass.
+REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-60}"
 # Outputs land beside the input file, which is wherever psql was run and wrote
 # practitioner_crns.jsonl -- deliberately not the current directory, so that
 # running this from a repo checkout does not drop named staff, their work
@@ -172,6 +182,7 @@ while IFS=$'\t' read -r crn stored_username; do
   # a transport failure) whether or not it exits non-zero -- appending to it
   # produced "000000" in the failure record.
   code=$(curl -s -o "$body" -w '%{http_code}' \
+    --connect-timeout 10 --max-time "$REQUEST_TIMEOUT" \
     -H @- -H 'Accept: application/json' \
     "$API_BASE/v2/offenders/crn/$crn/practitioner-details" \
     <<<"Authorization: Bearer $TOKEN") || true

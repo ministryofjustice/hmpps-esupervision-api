@@ -64,6 +64,10 @@
 
 set -euo pipefail
 
+# Everything this creates is personal data: files 0600, directories 0700, so
+# other users on a shared host cannot read them whatever their default umask.
+umask 077
+
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV="${ENV:-prod}"
 LOCAL_PG_PORT="${LOCAL_PG_PORT:-5433}"
@@ -311,7 +315,7 @@ const missing = ["HMPPS_AUTH_URL", "CLIENT_CREDS_CLIENT_ID", "CLIENT_CREDS_CLIEN
 if (missing.length) { console.error("pod env lacks " + missing.join(", ")); process.exit(2); }
 const basic = Buffer.from(env.CLIENT_CREDS_CLIENT_ID + ":" + env.CLIENT_CREDS_CLIENT_SECRET).toString("base64");
 fetch(env.HMPPS_AUTH_URL + "/oauth/token?grant_type=client_credentials",
-      { method: "POST", headers: { Authorization: "Basic " + basic } })
+      { method: "POST", headers: { Authorization: "Basic " + basic }, signal: AbortSignal.timeout(30000) })
   .then(async r => {
     const text = await r.text();
     if (!r.ok) { console.error("HTTP " + r.status + " from " + env.HMPPS_AUTH_URL + ": " + text.slice(0, 300)); process.exit(1); }
@@ -331,7 +335,7 @@ token_from_laptop() {
   body=$(mktemp)
   # Credentials go in on stdin (as a curl config) rather than argv.
   status=$(printf 'user = "%s:%s"\n' "$CLIENT_ID" "$CLIENT_SECRET" \
-    | curl -s -o "$body" -w '%{http_code}' -K - -X POST \
+    | curl -s -o "$body" -w '%{http_code}' --connect-timeout 10 --max-time 30 -K - -X POST \
         "$AUTH_URL/oauth/token?grant_type=client_credentials") || true
   if [[ "$status" == 200 ]] && TOKEN=$(jq -er .access_token "$body" 2>/dev/null); then
     rm -f "$body"; return 0
