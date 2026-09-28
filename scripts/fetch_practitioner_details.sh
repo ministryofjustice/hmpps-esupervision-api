@@ -59,6 +59,8 @@
 #   RATE_SLEEP  seconds between requests, default 0.5 (~2/s; ingress caps at
 #               50 rps / 800 rpm, so this is comfortably under). ~700 CRNs is
 #               about six minutes.
+#   PROGRESS    progress bar with ETA while fetching: auto (default -- shown
+#               when stderr is a terminal), 1 to force it, 0 to hide it
 #   USERNAMES   optional practitioner_usernames.csv from step 3 of the SQL. By
 #               default the unmatched report is measured against the usernames
 #               in the CRN file; point this at the wider list to include people
@@ -110,6 +112,47 @@ already=$(jq -r 'select(.http == 200) | .crn' "$OUT" 2>/dev/null | sort -u || tr
 
 total=0; ok=0; failed=0; skipped=0
 
+# ---------------------------------------------------------------------------
+# Progress bar, redrawn in place on stderr. Only when stderr is a terminal, so
+# logs, pipes and the tests get the plain line-per-event output. PROGRESS=1
+# forces it on, PROGRESS=0 off.
+# ---------------------------------------------------------------------------
+case "${PROGRESS:-auto}" in
+  1) show_progress=1 ;;
+  0) show_progress=0 ;;
+  *) if [[ -t 2 ]]; then show_progress=1; else show_progress=0; fi ;;
+esac
+rows_expected=$(jq -s 'length' "$IN")
+started=$SECONDS
+
+draw_progress() {
+  (( show_progress && rows_expected > 0 )) || return 0
+  local width=30 done=$((ok + failed + skipped)) requests=$((ok + failed)) eta=""
+  local filled=$(( done * width / rows_expected ))
+  # Estimate from requests actually made, not rows: on a resume, skipped rows
+  # take no time and would make the remainder look instant. Held back for the
+  # first few seconds: SECONDS is whole seconds, so an early estimate is noise
+  # (it reads "0m00s left" before the first second has even ticked).
+  local elapsed=$(( SECONDS - started ))
+  if (( requests > 0 && elapsed >= 3 && done < rows_expected )); then
+    local secs=$(( elapsed * (rows_expected - done) / requests ))
+    eta=$(printf '  ~%dm%02ds left' $((secs / 60)) $((secs % 60)))
+  fi
+  printf '\r\033[K[%s%s] %d/%d %3d%%  ok=%d failed=%d%s' \
+    "$(printf '%*s' "$filled" '' | tr ' ' '#')" \
+    "$(printf '%*s' $((width - filled)) '' | tr ' ' '-')" \
+    "$done" "$rows_expected" $(( done * 100 / rows_expected )) "$ok" "$failed" "$eta" >&2
+}
+
+# Wipes the bar so a message can be printed on a clean line; the next draw
+# puts it back underneath.
+clear_progress() {
+  (( show_progress )) && printf '\r\033[K' >&2
+  return 0
+}
+
+draw_progress
+
 # Tab-separated so nothing here has to parse quoted CSV: PDU and region
 # descriptions contain commas.
 while IFS=$'\t' read -r crn stored_username; do
@@ -118,6 +161,7 @@ while IFS=$'\t' read -r crn stored_username; do
 
   if [[ -n "$already" ]] && grep -qxF "$crn" <<<"$already"; then
     skipped=$((skipped + 1))
+    draw_progress
     continue
   fi
 
@@ -147,6 +191,7 @@ while IFS=$'\t' read -r crn stored_username; do
       '{crn: $crn, storedUsername: $stored, http: ($c | tonumber),
         error: ("HTTP " + $c), body: $b}' >> "$OUT"
     failed=$((failed + 1))
+    clear_progress
     echo "FAIL crn=$crn HTTP $code" >&2
     # An auth failure will not fix itself, so stop rather than burn through the
     # rest of the cohort and emit an export with every address blank. 403 is the
@@ -161,9 +206,11 @@ while IFS=$'\t' read -r crn stored_username; do
     fi
   fi
   rm -f "$body"
+  draw_progress
   sleep "$RATE_SLEEP"
 done < <(jq -r '[.crn, (.storedUsername // "")] | @tsv' "$IN")
 
+clear_progress
 echo "rows=$total fetched=$ok failed=$failed already_present=$skipped" >&2
 
 # ---------------------------------------------------------------------------

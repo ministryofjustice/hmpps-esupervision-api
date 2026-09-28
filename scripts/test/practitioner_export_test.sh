@@ -249,6 +249,26 @@ test_rerun_skips_fetched_crns_and_retries_404s() {
   assert_file_eq "$EXPECTED_EXPORT" "$T/f5/practitioner_export.csv" "export unchanged by a re-run"
 }
 
+test_progress_bar_counts_every_row_and_leaves_the_export_unchanged() {
+  local out; out="$(fetch "$T/p1" PROGRESS=1)"
+  assert_contains "$out" "7/7 100%  ok=6 failed=1" "final bar"
+  # a failure is printed on a line of its own, with the bar wiped first
+  assert_contains "$out" $'\r\033[KFAIL crn=X000005 HTTP 404' "failure line"
+  assert_file_eq "$EXPECTED_EXPORT" "$T/p1/practitioner_export.csv" "export content"
+}
+
+test_progress_bar_counts_skipped_rows_on_a_resume() {
+  fetch "$T/p2" >/dev/null
+  local out; out="$(fetch "$T/p2" PROGRESS=1)"
+  assert_contains "$out" "7/7 100%" "final bar"
+}
+
+test_progress_bar_stays_out_of_captured_output() {
+  # stderr is a pipe here, as in a log or CI: no bar, no escape codes
+  local out; out="$(fetch "$T/p3")"
+  [[ "$out" != *$'\033[K'* ]] || fail "escape codes in captured output"
+}
+
 test_stops_on_a_403_rather_than_fetching_the_rest() {
   mkdir -p "$T/f6"
   printf '%s\n' '{"crn":"FORBID1","storedUsername":"A.B"}' '{"crn":"X000001","storedUsername":"BARRY.WHITE"}' > "$T/f6/crns.jsonl"
