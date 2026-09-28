@@ -155,7 +155,7 @@ Uses existing `shedlock` table shared with V1 jobs.
 ## Batch-mode Jobs (K8s CronJob)
 
 Newer jobs run as one-shot K8s CronJob pods instead of `@Scheduled`/ShedLock in the
-long-running web pods — see `docs/HELM-AND-K8s-CRON-JOBS` for the full rationale.
+long-running web pods — see `docs/HELM-AND-K8s-CRON-JOBS.md` for the full rationale.
 `OffenderEligibilitySyncJob` (`v2/jobs/OffenderEligibilitySyncJob.kt`) is the first job
 on this path; its body is currently a `TODO` and its CronJob is deployed `suspend: true`.
 
