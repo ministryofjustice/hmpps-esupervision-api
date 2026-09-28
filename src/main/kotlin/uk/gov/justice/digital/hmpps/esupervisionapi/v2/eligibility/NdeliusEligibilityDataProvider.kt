@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ApiUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -22,14 +23,11 @@ class NdeliusEligibilityDataProvider(
 ) : EligibilityDataProvider {
   override val sourceKey: String = "NDELIUS"
 
-  override fun fetch(crn: String): CompletableFuture<Map<String, Any?>> = CompletableFuture.supplyAsync(
+  override fun fetch(crn: CRN): CompletableFuture<Map<String, Any?>> = CompletableFuture.supplyAsync(
     {
-      val contactDetails = ndiliusApiClient.getContactDetailsStrict(crn, ApiUseCase.ELIGIBILITY_CHECK)
-      if (contactDetails == null) {
-        throw ResourceNotFoundException("Could not fetch eligibility details from NDelius for CRN: $crn")
-      } else {
-        contactDetails.eligibilityData()
-      }
+      fetchData(sourceKey, crn)
+        { crn -> ndiliusApiClient.getContactDetailsStrict(crn, ApiUseCase.ELIGIBILITY_CHECK) }
+        .eligibilityData()
     },
     eligibilityDataFetchExecutor,
   )
@@ -38,4 +36,5 @@ class NdeliusEligibilityDataProvider(
 fun ContactDetails.eligibilityData(): Map<String, Any?> = mapOf(
   "ACTIVE_EVENT" to this.events.firstOrNull(),
   "CONTACT_SUSPENDED" to this.contactSuspended,
+  "PRACTITIONER_ASSIGNED" to (this.practitioner != null),
 )

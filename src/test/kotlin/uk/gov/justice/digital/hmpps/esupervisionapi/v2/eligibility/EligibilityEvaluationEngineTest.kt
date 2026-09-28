@@ -120,6 +120,36 @@ class EligibilityEvaluationEngineTest {
   }
 
   @Test
+  fun `itemize evaluates every rule in order including rules after a terminal outcome`() {
+    val firstRule = rule(
+      "FIRST",
+      1.0,
+      "NDELIUS",
+      "DECEASED_DATE",
+      EligibilityRuleOperator.IS_NULL,
+      outcomeOnMatch = EligibilityRuleOutcome.ELIGIBLE,
+    )
+    val secondRule = rule(
+      "SECOND",
+      2.0,
+      "NOMIS",
+      "RECALL_STATUS",
+      EligibilityRuleOperator.IS_NULL,
+      outcomeOnMatch = EligibilityRuleOutcome.NOT_ELIGIBLE,
+    )
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(firstRule, secondRule))
+    val ndeliusProvider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null))
+    val nomisProvider = mockProvider("NOMIS", mapOf("RECALL_STATUS" to null))
+
+    val result = engine.itemize("X123456", DEFAULT_RULE_SET, emptyMap()).join()
+
+    assertEquals(listOf(firstRule to EligibilityRuleOutcome.ELIGIBLE, secondRule to EligibilityRuleOutcome.NOT_ELIGIBLE), result)
+    verify(ndeliusProvider).fetch("X123456")
+    verify(nomisProvider).fetch("X123456")
+  }
+
+  @Test
   fun `terminal NOT_ELIGIBLE outcome stops evaluation with message`() {
     val rule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))

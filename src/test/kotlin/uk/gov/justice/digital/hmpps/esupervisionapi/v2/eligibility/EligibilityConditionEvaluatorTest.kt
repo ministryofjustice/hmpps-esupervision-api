@@ -24,4 +24,11 @@ class EligibilityConditionEvaluatorTest {
     assertFalse(EligibilityConditionEvaluator.evaluate(EligibilityRuleOperator.EQUALS, "RECALLED", "OTHER"))
     assertFalse(EligibilityConditionEvaluator.evaluate(EligibilityRuleOperator.EQUALS, null, "RECALLED"))
   }
+
+  @Test
+  fun `IN_SET operator`() {
+    assertTrue(EligibilityConditionEvaluator.evaluate(EligibilityRuleOperator.IN_SET, "ACTIVE", "ACTIVE, INACTIVE"))
+    assertFalse(EligibilityConditionEvaluator.evaluate(EligibilityRuleOperator.IN_SET, "ACTIVE", "INACTIVE"))
+    assertFalse(EligibilityConditionEvaluator.evaluate(EligibilityRuleOperator.IN_SET, "X", ""))
+  }
 }
