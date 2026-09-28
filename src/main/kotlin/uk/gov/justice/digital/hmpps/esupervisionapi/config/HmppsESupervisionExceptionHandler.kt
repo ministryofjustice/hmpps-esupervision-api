@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackagesFetchException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException as V2BadArgumentException
@@ -154,6 +155,17 @@ class HmppsESupervisionExceptionHandler {
         developerMessage = e.message,
       ),
     ).also { log.info("V2 Invalid offender setup state: {}", e.message) }
+
+  @ExceptionHandler(EligibilityDataUnavailableException::class)
+  fun handleEligibilityDataUnavailableException(e: EligibilityDataUnavailableException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(SERVICE_UNAVAILABLE)
+    .body(
+      ErrorResponse(
+        status = SERVICE_UNAVAILABLE,
+        userMessage = e.message,
+        developerMessage = e.message,
+      ),
+    ).also { log.warn("Eligibility data unavailable: {}", e.message) }
 
   @ExceptionHandler(NoResourceFoundException::class)
   fun handleNoResourceFoundException(e: NoResourceFoundException): ResponseEntity<ErrorResponse> = ResponseEntity

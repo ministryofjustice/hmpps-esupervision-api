@@ -28,6 +28,7 @@ class WebClientConfiguration(
   @Value("\${hmpps-auth.url}") val hmppsAuthBaseUri: String,
   @Value("\${api.health-timeout:2s}") val healthTimeout: Duration,
   @Value("\${api.timeout:20s}") val timeout: Duration,
+  @Value($$"${app.offender-eligibility.source-timeout-ms:2000}") val eligibilitySourceTimeoutMs: Long,
 ) {
   /**
    * The token store behind [authorizedClientManager], exposed as a bean so that
@@ -81,6 +82,24 @@ class WebClientConfiguration(
       it.add(BackgroundClientCredentialsFilter(NDILIUS_API_REGISTRATION_ID, authorizedClientManager))
     }
     .authorisedWebClient(authorizedClientManager, registrationId = NDILIUS_API_REGISTRATION_ID, url = ndiliusApiBaseUri, timeout = timeout)
+
+  @Bean
+  fun ndeliusEligibilityWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
+    .filters {
+      it.add(
+        ExchangeFilterFunction.ofRequestProcessor { req ->
+          log.info("Requesting nDelius eligibility URL: {}", req.url())
+          Mono.just(req)
+        },
+      )
+      it.add(BackgroundClientCredentialsFilter(NDILIUS_API_REGISTRATION_ID, authorizedClientManager))
+    }
+    .authorisedWebClient(
+      authorizedClientManager,
+      registrationId = NDILIUS_API_REGISTRATION_ID,
+      url = ndiliusApiBaseUri,
+      timeout = Duration.ofMillis(eligibilitySourceTimeoutMs),
+    )
 
   /**
    * Tier is the one upstream called off the request thread (see `OffenderService.getHeaderDetails`)
