@@ -34,12 +34,18 @@
 # READ ONLY: GETs only. The endpoint performs no writes.
 #
 # Auth: needs ROLE_ESUPERVISION__ESUPERVISION_UI (see v2/offender/OffenderResource.kt).
-# Easiest source is a bearer token from a logged-in prod practitioner UI
-# session: DevTools -> Network -> any /v2/ request -> copy the Authorization
-# header value (without "Bearer ").
+# That role belongs to the UI's SYSTEM client, not to practitioners (see
+# docs/local-development.md), and the UI calls this API server-side -- so a
+# browser session never holds a usable token. Get one with a client-credentials
+# grant against HMPPS Auth, using the UI system client's id and secret from its
+# Kubernetes secret:
+#   export TOKEN=$(curl -s -X POST \
+#     "https://sign-in.hmpps.service.justice.gov.uk/auth/oauth/token?grant_type=client_credentials" \
+#     -u "$UI_SYSTEM_CLIENT_ID:$UI_SYSTEM_CLIENT_SECRET" | jq -r .access_token)
+# A 401 mid-run stops cleanly, so if the token expires, refresh it and re-run.
 #
-# Prod ingress is allowlisted to `internal`, so be on the MoJ network, or
-# port-forward the service and set API_BASE=http://localhost:8080.
+# Prod ingress is allowlisted, so be on the MoJ network, or port-forward the
+# service and set API_BASE=http://localhost:8080.
 #
 # Usage:
 #   export TOKEN='eyJ...'
