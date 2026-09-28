@@ -39,12 +39,21 @@
 -- IMPORTANT -- who the email belongs to. NDelius returns the practitioner
 -- allocated to the CRN *today*. We never sync reallocations back into
 -- offender_v2, so practitioner_id is whoever set the check-in up. Where a case
--- has since moved, the export carries the new owner. Step 2 exports the
+-- has since moved, the export carries the new owner. Query 2 exports the
 -- usernames we hold so the fetch script can report which practitioners that
 -- leaves unreachable.
 --
--- READ ONLY: this script creates temp tables only. It does not write to any
--- application table.
+-- READ ONLY, and enforced rather than promised: the script is two SELECTs and
+-- creates nothing, not even a temporary table, and it runs inside a READ ONLY
+-- transaction, so Postgres itself refuses any write -- CREATE TEMP TABLE
+-- included -- should an edit ever introduce one. run_practitioner_export.sh
+-- also opens the whole session with default_transaction_read_only=on and checks
+-- the server honoured it before running this. The output files are written by
+-- the psql CLIENT (\o), not the server.
+--
+-- The summary reports (CRNs by status, by region and PDU, usernames that own
+-- no case, usernames that look like service accounts) are worked out locally
+-- from the two output files by run_practitioner_export.sh, not queried here.
 --
 -- Normally run via scripts/run_practitioner_export.sh, which does every step
 -- including the port-forward. To run it by hand:
@@ -52,7 +61,8 @@
 -- Usage -- run it from a working directory OUTSIDE the repo, because the files
 -- it writes are personal data and psql writes them wherever it was started:
 --   mkdir -p ~/esup-practitioner-export && cd ~/esup-practitioner-export
---   psql -h 127.0.0.1 -p 5432 -f ~/dev/hmpps-esupervision-api/scripts/practitioner_contact_list.sql
+--   PGOPTIONS='-c default_transaction_read_only=on' \
+--     psql -h 127.0.0.1 -p 5432 -f ~/dev/hmpps-esupervision-api/scripts/practitioner_contact_list.sql
 -- (against a Cloud Platform port-forward pod; credentials from the
 -- hmpps-esupervision-rds-settings secret). The repo's .gitignore also carries
 -- these filenames, in case someone runs it from the checkout anyway.
@@ -65,9 +75,9 @@
 --                                descriptions contain commas.
 --   practitioner_usernames.csv - every distinct username we have ever recorded
 --                                against a check-in, with the tables it came
---                                from. Only needed for the wider reconciliation
---                                (see USERNAMES= in the fetch script).
---   plus the exception reports printed to the terminal.
+--                                from. Feeds the local reports, and the wider
+--                                reconciliation (see USERNAMES= in the fetch
+--                                script).
 --
 -- NOTE: the end product is a list of named staff and their work emails --
 -- personal data. Keep every file produced here outside the repo and delete
@@ -75,33 +85,40 @@
 -- ============================================================================
 
 \set ON_ERROR_STOP on
-\timing on
 
--- Belt and braces, as in scripts/delius_note_correction.sql: every CREATE
--- below is a TEMP table, the application tables appear only in FROM, and the
--- transaction always ends in ROLLBACK, so nothing this session does can
--- persist. The output files are written by the psql CLIENT (\copy and \o), not
--- the server, so they survive the rollback -- which is what we want.
+-- One transaction for both queries: READ ONLY so the server rejects any write,
+-- REPEATABLE READ so both files come from the same snapshot and agree with
+-- each other even while check-ins are being written.
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+
+-- ============================================================================
+-- QUERY 1: The CRN list, with PDU and region
+-- ============================================================================
+-- Every CRN ever set up for check-ins, whatever its state now. The brief is
+-- "active now or in the past", so there is deliberately no status filter:
+-- INITIAL (set up, not yet verified), VERIFIED (live) and INACTIVE
+-- (deactivated) all count.
 --
--- Not "SET TRANSACTION READ ONLY": that would block CREATE TEMP TABLE.
-BEGIN;
-
--- ============================================================================
--- STEP 1: PDU and region per CRN
--- ============================================================================
--- The most recent audit row that carries a geography. Rows written when the
--- NDelius lookup failed have all three levels null (see
+-- offender_setup_v2 needs no separate pass: it has a FK to offender_v2, so a
+-- setup can never exist without an offender row. Its practitioner_id can still
+-- differ from the offender's, which is why query 2 reads it.
+--
+-- PDU and region: the most recent audit row that carries each. Rows written
+-- when the NDelius lookup failed have all three levels null (see
 -- EventAuditService.buildAudit), so they are skipped rather than taken as the
--- latest word.
+-- latest word. PDU and provider are resolved independently rather than from
+-- one "latest row with either": OrganizationalUnit.description is nullable
+-- while its code is not (Dtos.kt), so NDelius can return a PDU with no
+-- description, and taking that row wholesale would blank a PDU we already knew
+-- from an older row. Each column keeps the newest value it actually has.
 --
--- PDU and provider are resolved independently rather than from one "latest row
--- with either". OrganizationalUnit.description is nullable while its code is
--- not (Dtos.kt), so NDelius can return a PDU with no description; taking that
--- row wholesale would blank a PDU we already knew from an older row. Each
--- column keeps the newest value it actually has.
+-- JSONL, not CSV: PDU and region descriptions can contain commas, and the
+-- fetch script should not have to parse quoted CSV in bash.
 
-DROP TABLE IF EXISTS pg_temp.crn_geography;
-CREATE TEMP TABLE crn_geography AS
+\pset format unaligned
+\pset tuples_only on
+\o practitioner_crns.jsonl
+
 WITH pdu AS (
   SELECT DISTINCT ON (crn) crn, pdu_code, pdu_description, occurred_at AS pdu_at
   FROM event_audit_log_v2
@@ -112,38 +129,17 @@ WITH pdu AS (
   FROM event_audit_log_v2
   WHERE provider_description IS NOT NULL
   ORDER BY crn, occurred_at DESC
+), geography AS (
+  SELECT coalesce(p.crn, v.crn)           AS crn,
+         p.pdu_code,
+         p.pdu_description,
+         v.provider_code,
+         v.provider_description,
+         -- GREATEST ignores nulls, so this is the newer of whichever sides exist.
+         greatest(p.pdu_at, v.provider_at) AS snapshot_at
+  FROM pdu p
+  FULL JOIN provider v ON v.crn = p.crn
 )
-SELECT coalesce(p.crn, v.crn)           AS crn,
-       p.pdu_code,
-       p.pdu_description,
-       v.provider_code,
-       v.provider_description,
-       -- GREATEST ignores nulls, so this is the newer of whichever sides exist.
-       greatest(p.pdu_at, v.provider_at) AS snapshot_at
-FROM pdu p
-FULL JOIN provider v ON v.crn = p.crn;
-
--- ============================================================================
--- STEP 2: The CRN list
--- ============================================================================
--- Every CRN ever set up for check-ins, whatever its state now. The brief is
--- "active now or in the past", so there is deliberately no status filter:
--- INITIAL (set up, not yet verified), VERIFIED (live) and INACTIVE
--- (deactivated) all count.
---
--- offender_setup_v2 needs no separate pass: it has a FK to offender_v2, so a
--- setup can never exist without an offender row. Its practitioner_id can still
--- differ from the offender's, which is why step 3 reads it.
---
--- JSONL, not CSV: PDU and region descriptions can contain commas, and the
--- fetch script should not have to parse quoted CSV in bash. \o rather than
--- \copy for the same reason \copy is wrong for JSON -- csv format would quote
--- the whole line and text format would backslash-escape it.
-
-\pset format unaligned
-\pset tuples_only on
-\o practitioner_crns.jsonl
-
 SELECT json_build_object(
          'crn',            o.crn,
          'storedUsername', upper(o.practitioner_id),
@@ -156,41 +152,15 @@ SELECT json_build_object(
          'snapshotAt',     to_char(g.snapshot_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
        )::text
 FROM offender_v2 o
-LEFT JOIN crn_geography g ON g.crn = o.crn
+LEFT JOIN geography g ON g.crn = o.crn
 ORDER BY o.crn;
 
 \o
-\pset tuples_only off
-\pset format aligned
-
--- How big is the job, how much of it is historic, and how much of it has a
--- geography? CRNs with no snapshot come out with a blank region: the fetch can
--- fill their PDU from the live endpoint but has nowhere to get the region.
-SELECT o.status,
-       count(*)                                                    AS crns,
-       count(DISTINCT upper(o.practitioner_id))                    AS distinct_usernames,
-       count(g.crn)                                                AS with_geography,
-       count(*) FILTER (WHERE g.provider_description IS NULL)      AS no_region
-FROM offender_v2 o
-LEFT JOIN crn_geography g ON g.crn = o.crn
-GROUP BY ROLLUP (o.status)
-ORDER BY o.status NULLS LAST;
-
--- The regions and PDUs the export will report, and how many CRNs sit in each.
--- Eyeball this before handing anything over: a region that looks far too small
--- usually means stale snapshots rather than a real distribution.
-SELECT coalesce(g.provider_description, '(none)') AS region,
-       coalesce(g.pdu_description, '(none)')      AS pdu,
-       count(*)                                   AS crns
-FROM offender_v2 o
-LEFT JOIN crn_geography g ON g.crn = o.crn
-GROUP BY 1, 2
-ORDER BY 1, 3 DESC;
 
 -- ============================================================================
--- STEP 3: Every username we have ever recorded against a check-in
+-- QUERY 2: Every username we have ever recorded against a check-in
 -- ============================================================================
--- Wider than step 2 on purpose. A practitioner who only ever reviewed someone
+-- Wider than query 1 on purpose. A practitioner who only ever reviewed someone
 -- else's check-in, or who set a case up that has since been reallocated, owns
 -- no row in offender_v2.practitioner_id but is still "a practitioner who had a
 -- CRN on online check-ins" under a generous reading of the request.
@@ -198,9 +168,14 @@ ORDER BY 1, 3 DESC;
 -- Usernames are compared case-insensitively throughout: they arrive from the
 -- UI's logged-in session and the casing is not guaranteed consistent between
 -- tables.
+--
+-- psql's csv output format writes the header and quotes as needed, and unlike
+-- \copy it takes a multi-line query.
 
-DROP TABLE IF EXISTS pg_temp.practitioner_usernames;
-CREATE TEMP TABLE practitioner_usernames AS
+\pset format csv
+\pset tuples_only off
+\o practitioner_usernames.csv
+
 WITH sources AS (
   SELECT upper(practitioner_id) AS username, 'offender_v2'           AS source FROM offender_v2
   UNION ALL
@@ -225,33 +200,11 @@ WHERE username IS NOT NULL
   -- Not people: the scheduled jobs write SYSTEM, and a client-credentials
   -- token authenticates as its client id rather than a user.
   AND username NOT IN ('SYSTEM', 'AUTH_USER', 'ESUPERVISION_API')
-GROUP BY username;
-
-\copy (SELECT username, mentions, sources FROM practitioner_usernames ORDER BY username) to 'practitioner_usernames.csv' with (format csv, header true)
-
--- How much wider than step 2 is it?
-SELECT count(*) AS usernames_total,
-       count(*) FILTER (WHERE sources LIKE '%offender_v2%')       AS own_a_case_now,
-       count(*) FILTER (WHERE sources NOT LIKE '%offender_v2%')   AS seen_but_own_no_case
-FROM practitioner_usernames;
-
--- The ones that own no current case: these are exactly the practitioners the
--- CRN-based fetch cannot reach, unless they happen to still hold some other
--- CRN in the list. Expect reallocations and reviewers here.
-SELECT username, mentions, sources
-FROM practitioner_usernames
-WHERE sources NOT LIKE '%offender_v2%'
-ORDER BY mentions DESC, username;
-
--- Anything that does not look like an NDelius FIRST.LAST username is probably
--- a service account or test data that slipped through the filter above. Check
--- before mailing anyone.
-SELECT username, mentions, sources
-FROM practitioner_usernames
-WHERE username !~ '^[A-Z0-9''-]+\.[A-Z0-9''.-]+$'
+GROUP BY username
 ORDER BY username;
 
--- ============================================================================
--- Discard everything. See the note at the top of the file.
--- ============================================================================
+\o
+\pset format aligned
+
+-- Nothing was written, so there is nothing to commit.
 ROLLBACK;

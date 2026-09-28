@@ -5,7 +5,9 @@
 #
 #   1. reads the RDS credentials from the namespace secret (held in memory only)
 #   2. starts a Cloud Platform port-forward pod and a local port-forward to it
-#   3. runs scripts/practitioner_contact_list.sql            (read-only, rolls back)
+#   3. runs scripts/practitioner_contact_list.sql -- two SELECTs in a session
+#      that Postgres itself holds read-only (checked before anything runs), then
+#      builds the summary reports locally from the two files it downloads
 #   4. gets a token with the UI's system client credentials  (they carry
 #      ROLE_ESUPERVISION__ESUPERVISION_UI; practitioners do not). By default the
 #      request is made from inside a running UI pod, via kubectl exec: HMPPS Auth
@@ -55,7 +57,9 @@
 #   practitioner_export.csv      the deliverable: PDU, Region, CRN, POP count,
 #                                Email address -- one row per practitioner
 #   practitioners_unmatched.csv  worksheet for the rows with no email
-#   sql_report.txt               the SQL step's coverage reports
+#   extract_report.txt           summary of what was extracted: CRNs by status
+#                                and by region/PDU, usernames that own no case,
+#                                usernames that look like service accounts
 #   plus the intermediate JSONL, kept so a re-run resumes rather than refetches
 
 set -euo pipefail
@@ -168,6 +172,9 @@ PGUSER=$(secret_value "$NS" hmpps-esupervision-rds-settings database_username)
 PGDATABASE=$(secret_value "$NS" hmpps-esupervision-rds-settings database_name)
 PGPASSWORD=$(secret_value "$NS" hmpps-esupervision-rds-settings database_password)
 export PGUSER PGDATABASE PGPASSWORD PGHOST=127.0.0.1 PGPORT="$LOCAL_PG_PORT"
+# Every connection this script makes is read-only at the server: Postgres
+# rejects any write in it, whatever SQL is sent. Checked below before use.
+export PGOPTIONS="-c default_transaction_read_only=on"
 
 if [[ "$TOKEN_SOURCE" == laptop ]]; then
   step "Reading the UI system client credentials"
@@ -207,19 +214,88 @@ for _ in $(seq 1 30); do
 done
 psql -qtAc 'select 1' >/dev/null || die "database not reachable on 127.0.0.1:$LOCAL_PG_PORT"
 
+# Don't take the read-only session on trust: ask the server. Anything that
+# stripped PGOPTIONS on the way (a pooler, a proxy) would show up here, and the
+# script stops before sending a single query against the data.
+[[ "$(psql -qtAc 'show default_transaction_read_only')" == "on" ]] \
+  || die "the database session is not read-only (default_transaction_read_only is not on) -- refusing to continue"
+echo "Database session confirmed read-only" >&2
+
 # ---------------------------------------------------------------------------
-# SQL: CRNs, geography, usernames
+# SQL: two read-only SELECTs, written to files on this machine
 # ---------------------------------------------------------------------------
-step "Extracting CRNs (read-only)"
-(cd "$WORK_DIR" && psql -X -v ON_ERROR_STOP=1 -f "$REPO_ROOT/scripts/practitioner_contact_list.sql") \
-  > "$WORK_DIR/sql_report.txt" 2>&1 \
-  || { cat "$WORK_DIR/sql_report.txt" >&2; die "SQL step failed"; }
-echo "$(wc -l < "$WORK_DIR/practitioner_crns.jsonl" | tr -d ' ') CRNs extracted (reports in sql_report.txt)" >&2
+step "Extracting CRNs and usernames (read-only)"
+psql_log=$(mktemp)
+(cd "$WORK_DIR" && psql -X -q -v ON_ERROR_STOP=1 -f "$REPO_ROOT/scripts/practitioner_contact_list.sql") \
+  > "$psql_log" 2>&1 \
+  || { cat "$psql_log" >&2; rm -f "$psql_log"; die "SQL step failed"; }
+rm -f "$psql_log"
 
 # The database is no longer needed; stop the port-forward now rather than
 # holding it open through the API step.
 kill "$PF_PID" 2>/dev/null || true; PF_PID=""
 kubectl -n "$NS" delete pod "$POD" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+
+# ---------------------------------------------------------------------------
+# Summary reports, worked out here from the two downloaded files -- no further
+# queries against the database.
+# ---------------------------------------------------------------------------
+table() { if command -v column >/dev/null; then column -t -s $'\t'; else cat; fi; }
+
+# The usernames CSV, as JSON. Usernames and the |-joined sources hold no
+# commas, so a plain split is exact.
+usernames_json() {
+  tail -n +2 "$WORK_DIR/practitioner_usernames.csv" \
+    | jq -R -s 'split("\n") | map(select(length > 0) | split(",")
+                | {username: .[0], mentions: (.[1] | tonumber), sources: (.[2] | split("|"))})'
+}
+
+summarise_extract() {
+  local crns="$WORK_DIR/practitioner_crns.jsonl" users
+  users="$(usernames_json)"
+
+  echo "CRNs by status. CRNs with no region can still get a live PDU from the"
+  echo "fetch, but there is nowhere else to get their region from."
+  { printf 'status\tcrns\tusernames\twith_geography\tno_region\n'
+    jq -rs '(group_by(.status) | map({s: .[0].status, rows: .})) + [{s: "TOTAL", rows: .}]
+            | .[] | [.s, (.rows | length),
+                     (.rows | map(.storedUsername) | unique | length),
+                     (.rows | map(select(.pdu != null or .region != null)) | length),
+                     (.rows | map(select(.region == null)) | length)] | @tsv' "$crns"
+  } | table
+
+  echo
+  echo "CRNs by region and PDU. A region that looks far too small usually means"
+  echo "stale snapshots rather than a real distribution."
+  { printf 'region\tpdu\tcrns\n'
+    jq -rs 'group_by([.region, .pdu])
+            | map([(.[0].region // "(none)"), (.[0].pdu // "(none)"), length])
+            | sort_by(.[0], -.[2]) | .[] | @tsv' "$crns"
+  } | table
+
+  echo
+  jq -r '"Usernames ever recorded against a check-in: \(length) -- \(map(select(.sources | index("offender_v2"))) | length) own a case now, \(map(select(.sources | index("offender_v2") | not)) | length) do not"' <<<"$users"
+
+  echo
+  echo "Usernames that own no current case: the CRN-based fetch cannot reach these"
+  echo "unless they still hold some other CRN. Expect reallocations and reviewers."
+  { printf 'username\tmentions\tsources\n'
+    jq -r 'map(select(.sources | index("offender_v2") | not))
+           | sort_by(-.mentions, .username) | .[] | [.username, .mentions, (.sources | join("|"))] | @tsv' <<<"$users"
+  } | table
+
+  echo
+  echo "Usernames that don't look like an NDelius FIRST.LAST: probably a service"
+  echo "account or test data. Check before mailing anyone."
+  { printf 'username\tmentions\tsources\n'
+    jq -r --arg re "^[A-Z0-9'-]+\\.[A-Z0-9'.-]+$" \
+      'map(select(.username | test($re) | not))
+       | sort_by(.username) | .[] | [.username, .mentions, (.sources | join("|"))] | @tsv' <<<"$users"
+  } | table
+}
+
+summarise_extract > "$WORK_DIR/extract_report.txt"
+echo "$(wc -l < "$WORK_DIR/practitioner_crns.jsonl" | tr -d ' ') CRNs extracted (summary in extract_report.txt)" >&2
 
 # ---------------------------------------------------------------------------
 # Fetch: a fresh token for every pass, one retry on an auth failure
@@ -293,7 +369,7 @@ step "Done"
 cat >&2 <<EOF
   Mailing list: $WORK_DIR/practitioner_export.csv
   Worksheet:    $WORK_DIR/practitioners_unmatched.csv  (usernames for the blank rows)
-  SQL reports:  $WORK_DIR/sql_report.txt
+  Summary:      $WORK_DIR/extract_report.txt
 
   These files are personal data. Delete $WORK_DIR once the export is handed over.
 EOF

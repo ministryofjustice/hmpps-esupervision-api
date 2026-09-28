@@ -5,6 +5,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
+import org.testcontainers.containers.Container
 import org.testcontainers.utility.MountableFile
 import tools.jackson.databind.JsonNode
 import tools.jackson.module.kotlin.jacksonObjectMapper
@@ -33,8 +34,12 @@ import java.util.UUID
  * renamed or dropped a column it reads -- the recurring export would just fail on the day. This
  * pins the columns it depends on and the behaviour the export relies on.
  *
+ * Every run uses the session run_practitioner_export.sh opens against prod, with
+ * default_transaction_read_only=on, so Postgres refuses any write. A script that tried one --
+ * even a temporary table -- would fail every test here, not just the one that asks.
+ *
  * psql runs inside the container rather than on the host because the script uses psql
- * meta-commands (\copy, \o, \pset) that JDBC cannot execute, and the postgres image ships psql.
+ * meta-commands (\o, \pset) that JDBC cannot execute, and the postgres image ships psql.
  */
 class PractitionerContactListSqlTest : IntegrationTestBase() {
 
@@ -118,6 +123,29 @@ class PractitionerContactListSqlTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `writes the usernames as CSV with a header, one row per username`() {
+    val barry = offender("Z900001", "BARRY.WHITE")
+    offenderSetupRepository.save(
+      OffenderSetup(uuid = UUID.randomUUID(), offender = barry, practitionerId = "setup.colleague", createdAt = Instant.now()),
+    )
+
+    val lines = runScript().usernamesCsv.lines()
+
+    assertThat(lines.first()).isEqualTo("username,mentions,sources")
+    assertThat(lines).contains("SETUP.COLLEAGUE,1,offender_setup_v2")
+  }
+
+  @Test
+  fun `the session the script runs in really does refuse writes`() {
+    // Guards the premise of every other test here, and of the export itself: were the read-only
+    // option not taking effect, a script that wrote would pass them all unnoticed.
+    val result = psql("-c", "CREATE TEMP TABLE should_not_exist (id int)")
+
+    assertThat(result.exitCode).isNotZero()
+    assertThat(result.stderr).contains("read-only transaction")
+  }
+
+  @Test
   fun `does not change the database`() {
     offender("Z900001", "BARRY.WHITE")
     audit("Z900001", "2026-01-01T00:00:00Z", pdu = "Bolton PDU", region = "North West")
@@ -138,16 +166,23 @@ class PractitionerContactListSqlTest : IntegrationTestBase() {
     val workDir = "/tmp/practitioner-export-${UUID.randomUUID()}"
     postgres.copyFileToContainer(MountableFile.forHostPath(SCRIPT.absolutePath), "$workDir/script.sql")
 
-    val result = postgres.execInContainer(
-      "sh",
-      "-c",
-      "cd $workDir && PGPASSWORD='${postgres.password}' psql -X -q -v ON_ERROR_STOP=1 " +
-        "-U '${postgres.username}' -d '${postgres.databaseName}' -f script.sql",
-    )
+    val result = psql("-f", "script.sql", workDir = workDir)
     assertThat(result.exitCode).withFailMessage { "psql failed:\n${result.stdout}\n${result.stderr}" }.isZero()
 
     fun read(name: String) = postgres.copyFileFromContainer("$workDir/$name") { it.readAllBytes().decodeToString() }
     return ScriptOutput(read("practitioner_crns.jsonl"), read("practitioner_usernames.csv"))
+  }
+
+  /** psql in the container, in the same read-only session run_practitioner_export.sh opens against prod. */
+  private fun psql(vararg args: String, workDir: String = "/tmp"): Container.ExecResult {
+    val postgres = TestContainersSessionListener.postgres
+    return postgres.execInContainer(
+      "sh",
+      "-c",
+      "cd $workDir && PGPASSWORD='${postgres.password}' PGOPTIONS='-c default_transaction_read_only=on' " +
+        "psql -X -q -v ON_ERROR_STOP=1 -U '${postgres.username}' -d '${postgres.databaseName}' " +
+        args.joinToString(" ") { "'${it.replace("'", "'\\''")}'" },
+    )
   }
 
   /** The CRN rows, keyed by CRN. Rows other test classes left behind are ignored. */

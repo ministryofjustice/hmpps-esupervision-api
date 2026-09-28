@@ -28,7 +28,8 @@ T="$(mktemp -d)"
 STUB_PID=""
 cleanup() {
   if [[ -n "$STUB_PID" ]]; then kill "$STUB_PID" 2>/dev/null; wait "$STUB_PID" 2>/dev/null; fi
-  rm -rf "$T"
+  # KEEP_TMP=1 keeps every test's working files, to inspect a failure
+  if [[ -n "${KEEP_TMP:-}" ]]; then echo "kept test files in $T"; else rm -rf "$T"; fi
 }
 trap cleanup EXIT
 
@@ -158,13 +159,18 @@ esac
 EOF
 cat > "$T/bin/psql" <<'EOF'
 #!/usr/bin/env bash
-echo "psql cwd=$PWD PGHOST=$PGHOST PGPORT=$PGPORT PGUSER=$PGUSER" >> "$FAKE_LOG"
+echo "psql cwd=$PWD PGHOST=$PGHOST PGPORT=$PGPORT PGUSER=$PGUSER PGOPTIONS=${PGOPTIONS:-} args=$*" >> "$FAKE_LOG"
 case "$*" in
   *"select 1"*) echo 1 ;;
+  *"show default_transaction_read_only"*)
+    # Like the server: on only if the client asked for it -- unless the test is
+    # playing a proxy that stripped the option on the way.
+    if [[ "${PGOPTIONS:-}" == *"default_transaction_read_only=on"* && "${FAKE_READ_ONLY:-}" != off ]]
+    then echo on; else echo off; fi ;;
   *"-f "*)
     [[ -n "${FAKE_PSQL_FAIL:-}" ]] && { echo "ERROR: relation does not exist"; exit 3; }
     cp "$FAKE_CRNS" practitioner_crns.jsonl   # what the SQL's \o writes
-    printf 'username,mentions,sources\n' > practitioner_usernames.csv ;;
+    cp "$FAKE_USERNAMES" practitioner_usernames.csv ;;
 esac
 EOF
 chmod +x "$T/bin/kubectl" "$T/bin/psql"
@@ -179,6 +185,14 @@ cat > "$T/crns.jsonl" <<'EOF'
 {"crn":"X000005","storedUsername":"GONE.AWAY","status":"INITIAL","pdu":null,"region":null}
 {"crn":"X000006","storedUsername":"SETUP.PERSON","status":"INITIAL","pdu":"Wigan PDU","region":"North West"}
 {"crn":"X000007","storedUsername":"SAM.PATEL","status":"VERIFIED","pdu":"Lambeth PDU","region":"London"}
+EOF
+
+# The usernames file the SQL step would produce, in psql's csv format.
+cat > "$T/usernames.csv" <<'EOF'
+username,mentions,sources
+BARRY.WHITE,5,event_audit_log_v2|offender_v2
+REVIEWER.ONLY,3,checkin_reviewed_by|checkin_review_started_by
+SVC-CLIENT,1,event_audit_log_v2
 EOF
 
 EXPECTED_EXPORT='PDU,Region,CRN,POP count,Email address
@@ -208,7 +222,7 @@ fetch() {  # dir [extra env...]
 wrapper() {  # workdir [extra env...]
   local dir="$1"; shift
   : > "$T/fake.log"
-  env PATH="$T/bin:$PATH" FAKE_LOG="$T/fake.log" FAKE_CRNS="$T/crns.jsonl" FAKE_AUTH="$STUB/auth" \
+  env PATH="$T/bin:$PATH" FAKE_LOG="$T/fake.log" FAKE_CRNS="$T/crns.jsonl" FAKE_USERNAMES="$T/usernames.csv" FAKE_AUTH="$STUB/auth" \
       EXPORT_API_BASE="$STUB" EXPORT_AUTH_URL="$STUB/auth" RATE_SLEEP=0 PASSES=1 "$@" \
       "$WRAPPER" "$dir" 2>&1
 }
@@ -297,7 +311,7 @@ test_records_a_transport_failure_as_http_000() {
 test_wrapper_runs_end_to_end_and_deletes_the_pod() {
   local out; out="$(wrapper "$T/w1")"
   assert_file_eq "$EXPECTED_EXPORT" "$T/w1/practitioner_export.csv" "export content"
-  [[ -f "$T/w1/sql_report.txt" ]] || fail "no sql_report.txt"
+  [[ -f "$T/w1/extract_report.txt" ]] || fail "no extract_report.txt"
   assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
   assert_contains "$(cat "$T/fake.log")" "psql cwd=$(cd "$T/w1" && pwd -P)" "SQL run from the work dir"
   assert_contains "$(cat "$T/fake.log")" "PGHOST=127.0.0.1 PGPORT=5433 PGUSER=dbuser" "psql connection env"
@@ -307,6 +321,37 @@ test_wrapper_gets_the_token_in_the_pod_without_reading_the_ui_secret() {
   wrapper "$T/w2" >/dev/null
   assert_contains "$(cat "$T/fake.log")" "exec deploy/hmpps-esupervision-ui" "token from the pod"
   [[ "$(cat "$T/fake.log")" != *"ui-client-creds"* ]] || fail "pod mode read the UI client secret"
+}
+
+test_wrapper_opens_every_database_connection_read_only() {
+  wrapper "$T/ro1" >/dev/null
+  local psql_calls read_only_calls
+  psql_calls=$(grep -c '^psql ' "$T/fake.log")
+  read_only_calls=$(grep -c '^psql .*PGOPTIONS=-c default_transaction_read_only=on ' "$T/fake.log")
+  [[ $psql_calls -gt 0 ]] || fail "no psql calls logged"
+  assert_eq "$psql_calls" "$read_only_calls" "psql calls opened read-only"
+}
+
+test_wrapper_refuses_to_query_if_the_server_session_is_not_read_only() {
+  # e.g. a proxy between here and the database dropped the option
+  local out rc; out="$(wrapper "$T/ro2" FAKE_READ_ONLY=off)"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "is not read-only" "message"
+  [[ "$(cat "$T/fake.log")" != *" -f "* ]] || fail "ran the SQL anyway"
+  assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
+}
+
+test_wrapper_builds_the_summary_report_locally() {
+  wrapper "$T/ro3" >/dev/null
+  local report; report="$(cat "$T/ro3/extract_report.txt")"
+  assert_contains "$report" "TOTAL" "status table has a total row"
+  [[ "$report" =~ TOTAL[[:space:]]+7[[:space:]] ]] || fail "status TOTAL is not 7 CRNs"
+  assert_contains "$report" "Usernames ever recorded against a check-in: 3 -- 1 own a case now, 2 do not" "username counts"
+  assert_contains "$report" "REVIEWER.ONLY" "reviewer listed as owning no case"
+  # SVC-CLIENT has no FIRST.LAST dot, so it must be flagged; BARRY.WHITE must not be
+  local flagged; flagged="$(sed -n '/look like an NDelius FIRST.LAST/,$p' "$T/ro3/extract_report.txt")"
+  assert_contains "$flagged" "SVC-CLIENT" "service account flagged"
+  [[ "$flagged" != *"BARRY.WHITE"* ]] || fail "a real username was flagged"
 }
 
 test_wrapper_refetches_everything_after_a_completed_run() {
