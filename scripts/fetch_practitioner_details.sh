@@ -31,6 +31,9 @@
 #            to be filled in by hand: practitioners_unmatched.csv is the
 #            worksheet for that, naming the username behind each one.
 #
+# Normally run via scripts/run_practitioner_export.sh, which gets the token and
+# runs the SQL step first. The notes below are for running it by hand.
+#
 # READ ONLY: GETs only. The endpoint performs no writes.
 #
 # Auth: needs ROLE_ESUPERVISION__ESUPERVISION_UI (see v2/offender/OffenderResource.kt).

@@ -46,6 +46,9 @@
 -- READ ONLY: this script creates temp tables only. It does not write to any
 -- application table.
 --
+-- Normally run via scripts/run_practitioner_export.sh, which does every step
+-- including the port-forward. To run it by hand:
+--
 -- Usage -- run it from a working directory OUTSIDE the repo, because the files
 -- it writes are personal data and psql writes them wherever it was started:
 --   mkdir -p ~/esup-practitioner-export && cd ~/esup-practitioner-export
