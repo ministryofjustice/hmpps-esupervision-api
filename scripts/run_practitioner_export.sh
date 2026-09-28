@@ -58,7 +58,7 @@
 #                                Email address -- one row per practitioner
 #   practitioners_unmatched.csv  worksheet for the rows with no email
 #   extract_report.txt           summary of what was extracted: CRNs by status
-#                                and by region/PDU, usernames that own no case,
+#                                and by region/PDU, usernames not on record for any CRN,
 #                                usernames that look like service accounts
 #   plus the intermediate JSONL, kept so a re-run resumes rather than refetches
 
@@ -291,12 +291,18 @@ summarise_extract() {
             | sort_by(.[0], -.[2]) | .[] | @tsv' "$crns"
   } | table
 
+  # "On record" is offender_v2.practitioner_id: who set each check-in up. It is
+  # never updated when NDelius reallocates a case, so it is not who holds the
+  # case now -- that is only known after the fetch, and practitioners_unmatched.csv
+  # is the report built on it. Word this one accordingly.
   echo
-  jq -r '"Usernames ever recorded against a check-in: \(length) -- \(map(select(.sources | index("offender_v2"))) | length) own a case now, \(map(select(.sources | index("offender_v2") | not)) | length) do not"' <<<"$users"
+  jq -r '"Usernames ever recorded against a check-in: \(length) -- \(map(select(.sources | index("offender_v2"))) | length) on record as the practitioner for a CRN (as at setup; reallocations are not recorded), \(map(select(.sources | index("offender_v2") | not)) | length) not"' <<<"$users"
 
   echo
-  echo "Usernames that own no current case: the CRN-based fetch cannot reach these"
-  echo "unless they still hold some other CRN. Expect reallocations and reviewers."
+  echo "Usernames not on record as the practitioner for any CRN: reviewers,"
+  echo "colleagues who ran a setup for someone else, and the like. The fetch reaches"
+  echo "them only if NDelius lists them as the current practitioner for some CRN;"
+  echo "practitioners_unmatched.csv, written after the fetch, says who it could not."
   { printf 'username\tmentions\tsources\n'
     jq -r 'map(select(.sources | index("offender_v2") | not))
            | sort_by(-.mentions, .username) | .[] | [.username, .mentions, (.sources | join("|"))] | @tsv' <<<"$users"

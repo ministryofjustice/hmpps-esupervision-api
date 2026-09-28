@@ -382,8 +382,8 @@ test_wrapper_builds_the_summary_report_locally() {
   local report; report="$(cat "$T/ro3/extract_report.txt")"
   assert_contains "$report" "TOTAL" "status table has a total row"
   [[ "$report" =~ TOTAL[[:space:]]+7[[:space:]] ]] || fail "status TOTAL is not 7 CRNs"
-  assert_contains "$report" "Usernames ever recorded against a check-in: 3 -- 1 own a case now, 2 do not" "username counts"
-  assert_contains "$report" "REVIEWER.ONLY" "reviewer listed as owning no case"
+  assert_contains "$report" "Usernames ever recorded against a check-in: 3 -- 1 on record as the practitioner for a CRN (as at setup; reallocations are not recorded), 2 not" "username counts"
+  assert_contains "$report" "REVIEWER.ONLY" "reviewer listed as not on record for any CRN"
   # SVC-CLIENT has no FIRST.LAST dot, so it must be flagged; BARRY.WHITE must not be
   local flagged; flagged="$(sed -n '/look like an NDelius FIRST.LAST/,$p' "$T/ro3/extract_report.txt")"
   assert_contains "$flagged" "SVC-CLIENT" "service account flagged"

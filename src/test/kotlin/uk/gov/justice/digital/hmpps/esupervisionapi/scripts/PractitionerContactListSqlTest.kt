@@ -151,10 +151,19 @@ class PractitionerContactListSqlTest : IntegrationTestBase() {
   fun `the session the script runs in really does refuse writes`() {
     // Guards the premise of every other test here, and of the export itself: were the read-only
     // option not taking effect, a script that wrote would pass them all unnoticed.
-    val result = psql("-c", "CREATE TEMP TABLE should_not_exist (id int)")
-
-    assertThat(result.exitCode).isNotZero()
-    assertThat(result.stderr).contains("read-only transaction")
+    //
+    // Both kinds of table: a read-only transaction refuses every CREATE, temporary included --
+    // which is what stops the script from making a temporary table to write into -- and it
+    // refuses any write to a real table.
+    listOf(
+      "CREATE TEMP TABLE should_not_exist (id int)",
+      "CREATE TABLE should_not_exist (id int)",
+      "UPDATE offender_v2 SET status = status",
+    ).forEach { statement ->
+      val result = psql("-c", statement)
+      assertThat(result.exitCode).withFailMessage { "'$statement' was allowed" }.isNotZero()
+      assertThat(result.stderr).contains("read-only transaction")
+    }
   }
 
   @Test
