@@ -309,6 +309,58 @@ test_wrapper_gets_the_token_in_the_pod_without_reading_the_ui_secret() {
   [[ "$(cat "$T/fake.log")" != *"ui-client-creds"* ]] || fail "pod mode read the UI client secret"
 }
 
+test_wrapper_refetches_everything_after_a_completed_run() {
+  wrapper "$T/r1" >/dev/null
+  [[ -f "$T/r1/.export-complete" ]] || fail "no completion marker after a successful run"
+  local out; out="$(wrapper "$T/r1")"
+  assert_contains "$out" "fresh -- the last run in this folder finished" "mode"
+  assert_contains "$out" "fetched=6 failed=1 already_present=0" "every CRN requested again"
+  [[ -f "$T/r1/practitioners.previous.jsonl" ]] || fail "previous results not kept"
+}
+
+test_wrapper_resumes_an_interrupted_run() {
+  wrapper "$T/r2" >/dev/null
+  rm "$T/r2/.export-complete"   # as if the run had died after fetching
+  local out; out="$(wrapper "$T/r2")"
+  assert_contains "$out" "resuming -- the last run in this folder was interrupted" "mode"
+  assert_contains "$out" "fetched=0 failed=1 already_present=6" "only the 404 requested again"
+}
+
+test_wrapper_resumes_after_a_run_dies_part_way_through_fetching() {
+  # A real interruption: the third CRN is refused with 403, so the run fetches
+  # two, stops, retries once with a fresh token, and gives up.
+  { head -2 "$T/crns.jsonl"; echo '{"crn":"FORBID1","storedUsername":"A.B"}'; tail -n +3 "$T/crns.jsonl"; } > "$T/crns_forbid.jsonl"
+  local rc; wrapper "$T/r3" FAKE_CRNS="$T/crns_forbid.jsonl" >/dev/null; rc=$?
+  assert_eq 1 "$rc" "interrupted run exit code"
+  [[ ! -f "$T/r3/.export-complete" ]] || fail "interrupted run marked itself complete"
+
+  local out; out="$(wrapper "$T/r3")"
+  assert_contains "$out" "resuming -- the last run in this folder was interrupted" "mode"
+  assert_contains "$out" "already_present=2" "the two fetched CRNs kept"
+}
+
+test_wrapper_failed_run_clears_an_earlier_completion_marker() {
+  wrapper "$T/r5" >/dev/null
+  # Otherwise the earlier run's "complete" would stand over whatever this one
+  # half-did, and the next run would discard it.
+  wrapper "$T/r5" FAKE_PSQL_FAIL=1 >/dev/null
+  [[ ! -f "$T/r5/.export-complete" ]] || fail "completion marker survived a failed run"
+}
+
+test_wrapper_starts_afresh_when_the_environment_changes() {
+  wrapper "$T/r4" ENV=dev >/dev/null
+  rm "$T/r4/.export-complete"   # an interrupted dev run...
+  local out; out="$(wrapper "$T/r4" ENV=prod)"   # ...must not feed a prod run
+  assert_contains "$out" "fresh -- the last run in this folder was against dev, not prod" "mode"
+  assert_contains "$out" "already_present=0" "nothing reused"
+}
+
+test_wrapper_default_folder_is_per_day_and_environment() {
+  wrapper "" HOME="$T/home" ENV=dev >/dev/null
+  local dir; dir="$T/home/esup-practitioner-export/$(date +%Y-%m-%d)-dev"
+  [[ -f "$dir/practitioner_export.csv" ]] || fail "export not in $dir"
+}
+
 test_wrapper_refuses_a_work_dir_inside_the_repo() {
   local out rc; out="$(wrapper "$REPO_ROOT/build/export-test")"; rc=$?
   rmdir "$REPO_ROOT/build/export-test" 2>/dev/null

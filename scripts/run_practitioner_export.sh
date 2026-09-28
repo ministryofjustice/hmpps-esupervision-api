@@ -22,9 +22,18 @@
 # Usage:
 #   ./scripts/run_practitioner_export.sh [work_dir]
 #
-#   work_dir defaults to ~/esup-practitioner-export/<today>, so each run keeps
-#   its own dated folder. It must be outside this repo: the outputs are staff
+#   work_dir defaults to ~/esup-practitioner-export/<today>-<env>, so each run
+#   keeps its own folder. It must be outside this repo: the outputs are staff
 #   names and emails tied to the CRNs they supervise.
+#
+# Fresh versus resumed: every CRN's practitioner details are fetched afresh on
+# each run, EXCEPT when the previous run in the same folder was interrupted
+# (expired token, network drop, Ctrl-C) -- then the CRNs it already fetched are
+# kept and only the rest are requested. A run that finishes leaves a
+# .export-complete marker, and a folder remembers its environment in
+# .export-env, so neither a finished export nor another environment's results
+# are ever silently reused. Previous results are kept as
+# practitioners.previous.jsonl when a run starts afresh.
 #
 # Env:
 #   ENV            dev | test | preprod | prod (default prod). Try dev first.
@@ -59,7 +68,7 @@ NS="hmpps-esupervision-$ENV"
 UI_NAMESPACE="${UI_NAMESPACE:-$NS}"
 UI_DEPLOYMENT="${UI_DEPLOYMENT:-hmpps-esupervision-ui}"
 TOKEN_SOURCE="${TOKEN_SOURCE:-pod}"
-WORK_DIR="${1:-$HOME/esup-practitioner-export/$(date +%Y-%m-%d)}"
+WORK_DIR="${1:-$HOME/esup-practitioner-export/$(date +%Y-%m-%d)-$ENV}"
 
 # Hosts from helm_deploy/values-<env>.yaml.
 case "$ENV" in
@@ -115,6 +124,35 @@ echo "Environment: $ENV (namespace $NS)" >&2
 echo "API:         $API_BASE" >&2
 echo "Token:       $token_desc" >&2
 echo "Output:      $WORK_DIR" >&2
+
+# ---------------------------------------------------------------------------
+# Fresh or resumed? Decided before anything runs, and the completion marker is
+# removed now, so a run that dies at any later step is resumable next time.
+# ---------------------------------------------------------------------------
+RESULTS="$WORK_DIR/practitioners.jsonl"
+COMPLETE_MARKER="$WORK_DIR/.export-complete"
+ENV_MARKER="$WORK_DIR/.export-env"
+
+if [[ -f "$RESULTS" ]]; then
+  previous_env="$(cat "$ENV_MARKER" 2>/dev/null || true)"
+  fresh_reason=""
+  if [[ -f "$COMPLETE_MARKER" ]]; then
+    fresh_reason="the last run in this folder finished"
+  elif [[ "$previous_env" != "$ENV" ]]; then
+    fresh_reason="the last run in this folder was against ${previous_env:-an unrecorded environment}, not $ENV"
+  fi
+
+  if [[ -n "$fresh_reason" ]]; then
+    mv -f "$RESULTS" "$WORK_DIR/practitioners.previous.jsonl"
+    echo "Mode:        fresh -- $fresh_reason (its results kept as practitioners.previous.jsonl)" >&2
+  else
+    echo "Mode:        resuming -- the last run in this folder was interrupted; CRNs it fetched are kept" >&2
+  fi
+else
+  echo "Mode:        fresh" >&2
+fi
+rm -f "$COMPLETE_MARKER"
+printf '%s\n' "$ENV" > "$ENV_MARKER"
 
 # ---------------------------------------------------------------------------
 # Secrets, held in shell variables only -- never written to disk
@@ -239,14 +277,17 @@ for pass in $(seq 1 "$PASSES"); do
   step "Fetching practitioner details, pass $pass of $PASSES"
   new_token
   if ! "$REPO_ROOT/scripts/fetch_practitioner_details.sh" \
-         "$WORK_DIR/practitioner_crns.jsonl" "$WORK_DIR/practitioners.jsonl"; then
+         "$WORK_DIR/practitioner_crns.jsonl" "$RESULTS"; then
     echo "Pass $pass stopped early -- refreshing the token and resuming once" >&2
     new_token
     "$REPO_ROOT/scripts/fetch_practitioner_details.sh" \
-      "$WORK_DIR/practitioner_crns.jsonl" "$WORK_DIR/practitioners.jsonl" \
-      || die "fetch failed twice; see the errors above. Re-running this script resumes."
+      "$WORK_DIR/practitioner_crns.jsonl" "$RESULTS" \
+      || die "fetch failed twice; see the errors above. Re-running this script with the same folder resumes."
   fi
 done
+
+# Only now is the export complete. The next run in this folder starts afresh.
+date -u +%Y-%m-%dT%H:%M:%SZ > "$COMPLETE_MARKER"
 
 step "Done"
 cat >&2 <<EOF
