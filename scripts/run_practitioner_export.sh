@@ -7,7 +7,10 @@
 #   2. starts a Cloud Platform port-forward pod and a local port-forward to it
 #   3. runs scripts/practitioner_contact_list.sql            (read-only, rolls back)
 #   4. gets a token with the UI's system client credentials  (they carry
-#      ROLE_ESUPERVISION__ESUPERVISION_UI; practitioners do not)
+#      ROLE_ESUPERVISION__ESUPERVISION_UI; practitioners do not). By default the
+#      request is made from inside a running UI pod, via kubectl exec: HMPPS Auth
+#      can restrict a client to its cluster's IPs, which a laptop is not, and
+#      this way the client secret never leaves the cluster -- only the token does
 #   5. runs scripts/fetch_practitioner_details.sh, twice by default: the second
 #      pass retries 404s, which can be NDelius blips rather than missing CRNs
 #   6. deletes the port-forward pod, whatever happened above
@@ -28,10 +31,15 @@
 #   LOCAL_PG_PORT  local end of the database port-forward, default 5433 (5432 is
 #                  usually taken by the docker-compose postgres)
 #   PASSES         fetch passes, default 2
-#   UI_NAMESPACE   namespace holding hmpps-esupervision-ui-client-creds, default
-#                  the API's own namespace
+#   TOKEN_SOURCE   pod (default) -- request the token from inside the UI pod;
+#                  laptop -- read the UI client secret and request it from here,
+#                  which only works where HMPPS Auth does not IP-restrict the client
+#   UI_NAMESPACE   namespace of the UI deployment and its client-creds secret,
+#                  default the API's own namespace
+#   UI_DEPLOYMENT  default hmpps-esupervision-ui
 #   EXPORT_API_BASE, EXPORT_AUTH_URL
-#                  override the per-environment API and HMPPS Auth URLs
+#                  override the per-environment API and HMPPS Auth URLs (the
+#                  auth URL is used in laptop mode only; the pod uses its own)
 #   RATE_SLEEP, USERNAMES   passed through to fetch_practitioner_details.sh
 #
 # Outputs, in work_dir:
@@ -49,6 +57,8 @@ LOCAL_PG_PORT="${LOCAL_PG_PORT:-5433}"
 PASSES="${PASSES:-2}"
 NS="hmpps-esupervision-$ENV"
 UI_NAMESPACE="${UI_NAMESPACE:-$NS}"
+UI_DEPLOYMENT="${UI_DEPLOYMENT:-hmpps-esupervision-ui}"
+TOKEN_SOURCE="${TOKEN_SOURCE:-pod}"
 WORK_DIR="${1:-$HOME/esup-practitioner-export/$(date +%Y-%m-%d)}"
 
 # Hosts from helm_deploy/values-<env>.yaml.
@@ -89,9 +99,21 @@ esac
 kubectl -n "$NS" auth can-i create pods >/dev/null 2>&1 \
   || die "kubectl cannot create pods in $NS -- check your Cloud Platform login and context"
 
+case "$TOKEN_SOURCE" in
+  pod)
+    kubectl -n "$UI_NAMESPACE" auth can-i create pods/exec >/dev/null 2>&1 \
+      || die "kubectl cannot exec into pods in $UI_NAMESPACE (needed for TOKEN_SOURCE=pod)"
+    kubectl -n "$UI_NAMESPACE" get "deploy/$UI_DEPLOYMENT" >/dev/null 2>&1 \
+      || die "no deployment $UI_DEPLOYMENT in $UI_NAMESPACE -- set UI_NAMESPACE / UI_DEPLOYMENT (kubectl -n <ns> get deploy)"
+    token_desc="from a $UI_DEPLOYMENT pod in $UI_NAMESPACE" ;;
+  laptop)
+    token_desc="from this machine, via $AUTH_URL" ;;
+  *) die "TOKEN_SOURCE must be pod or laptop (got '$TOKEN_SOURCE')" ;;
+esac
+
 echo "Environment: $ENV (namespace $NS)" >&2
 echo "API:         $API_BASE" >&2
-echo "Auth:        $AUTH_URL" >&2
+echo "Token:       $token_desc" >&2
 echo "Output:      $WORK_DIR" >&2
 
 # ---------------------------------------------------------------------------
@@ -109,10 +131,12 @@ PGDATABASE=$(secret_value "$NS" hmpps-esupervision-rds-settings database_name)
 PGPASSWORD=$(secret_value "$NS" hmpps-esupervision-rds-settings database_password)
 export PGUSER PGDATABASE PGPASSWORD PGHOST=127.0.0.1 PGPORT="$LOCAL_PG_PORT"
 
-step "Reading the UI system client credentials"
-CLIENT_ID=$(secret_value "$UI_NAMESPACE" hmpps-esupervision-ui-client-creds CLIENT_CREDS_CLIENT_ID) \
-  || die "could not read hmpps-esupervision-ui-client-creds in $UI_NAMESPACE (set UI_NAMESPACE if the UI lives elsewhere)"
-CLIENT_SECRET=$(secret_value "$UI_NAMESPACE" hmpps-esupervision-ui-client-creds CLIENT_CREDS_CLIENT_SECRET)
+if [[ "$TOKEN_SOURCE" == laptop ]]; then
+  step "Reading the UI system client credentials"
+  CLIENT_ID=$(secret_value "$UI_NAMESPACE" hmpps-esupervision-ui-client-creds CLIENT_CREDS_CLIENT_ID) \
+    || die "could not read hmpps-esupervision-ui-client-creds in $UI_NAMESPACE (set UI_NAMESPACE if the UI lives elsewhere)"
+  CLIENT_SECRET=$(secret_value "$UI_NAMESPACE" hmpps-esupervision-ui-client-creds CLIENT_CREDS_CLIENT_SECRET)
+fi
 
 # ---------------------------------------------------------------------------
 # Port-forward, torn down on any exit
@@ -162,11 +186,52 @@ kubectl -n "$NS" delete pod "$POD" --ignore-not-found --wait=false >/dev/null 2>
 # ---------------------------------------------------------------------------
 # Fetch: a fresh token for every pass, one retry on an auth failure
 # ---------------------------------------------------------------------------
-new_token() {
+# Runs inside the UI pod (Node 24, so fetch is built in), using the env the
+# deployment already has: HMPPS_AUTH_URL and the CLIENT_CREDS_* pair mapped from
+# hmpps-esupervision-ui-client-creds. Prints only the token; on failure, prints
+# HMPPS Auth's status and error to stderr. The secret never leaves the pod.
+# shellcheck disable=SC2016
+POD_TOKEN_JS='
+const env = process.env;
+const missing = ["HMPPS_AUTH_URL", "CLIENT_CREDS_CLIENT_ID", "CLIENT_CREDS_CLIENT_SECRET"].filter(k => !env[k]);
+if (missing.length) { console.error("pod env lacks " + missing.join(", ")); process.exit(2); }
+const basic = Buffer.from(env.CLIENT_CREDS_CLIENT_ID + ":" + env.CLIENT_CREDS_CLIENT_SECRET).toString("base64");
+fetch(env.HMPPS_AUTH_URL + "/oauth/token?grant_type=client_credentials",
+      { method: "POST", headers: { Authorization: "Basic " + basic } })
+  .then(async r => {
+    const text = await r.text();
+    if (!r.ok) { console.error("HTTP " + r.status + " from " + env.HMPPS_AUTH_URL + ": " + text.slice(0, 300)); process.exit(1); }
+    process.stdout.write(JSON.parse(text).access_token);
+  })
+  .catch(e => { console.error("request to " + env.HMPPS_AUTH_URL + " failed: " + e.message); process.exit(1); });
+'
+
+token_from_pod() {
+  TOKEN=$(kubectl -n "$UI_NAMESPACE" exec "deploy/$UI_DEPLOYMENT" -- node -e "$POD_TOKEN_JS") \
+    && [[ -n "$TOKEN" ]] \
+    || die "could not get a token from inside $UI_DEPLOYMENT (see the error above)"
+}
+
+token_from_laptop() {
+  local body status detail
+  body=$(mktemp)
   # Credentials go in on stdin (as a curl config) rather than argv.
-  TOKEN=$(printf 'user = "%s:%s"\n' "$CLIENT_ID" "$CLIENT_SECRET" \
-    | curl -sf -K - -X POST "$AUTH_URL/oauth/token?grant_type=client_credentials" \
-    | jq -er .access_token) || die "could not get a token from $AUTH_URL"
+  status=$(printf 'user = "%s:%s"\n' "$CLIENT_ID" "$CLIENT_SECRET" \
+    | curl -s -o "$body" -w '%{http_code}' -K - -X POST \
+        "$AUTH_URL/oauth/token?grant_type=client_credentials") || true
+  if [[ "$status" == 200 ]] && TOKEN=$(jq -er .access_token "$body" 2>/dev/null); then
+    rm -f "$body"; return 0
+  fi
+  # HMPPS Auth answers errors as {"error": ..., "error_description": ...}.
+  detail=$(jq -r '[.error, .error_description] | map(select(.)) | join(": ")' "$body" 2>/dev/null \
+           || head -c 300 "$body")
+  rm -f "$body"
+  die "HMPPS Auth refused the token request: HTTP ${status:-000}${detail:+ -- $detail}
+       If the client is IP-restricted in this environment, use TOKEN_SOURCE=pod (the default)."
+}
+
+new_token() {
+  if [[ "$TOKEN_SOURCE" == pod ]]; then token_from_pod; else token_from_laptop; fi
   export TOKEN
 }
 
