@@ -1,0 +1,65 @@
+{
+  "currentPhase": {
+    "supervisionPackage": {
+      "code": "SPA",
+      "description": "A"
+    },
+    "phase": {
+      "code": "INIT",
+      "description": "Early Engagement"
+    },
+    "eventNumber": "1",
+    "startDate": "2026-09-08T17:07:58+01:00",
+    "endDate": "2026-11-30T00:00:00Z"
+  },
+  "earlyEngagement": {
+    "startDate": "2026-09-08T17:07:58+01:00",
+    "endDate": "2026-11-30T00:00:00Z",
+    "weeks": 12,
+    "completed": 0
+  },
+  "currentYear": {
+    "startDate": "2026-09-07",
+    "endDate": "2027-03-06",
+    "proRataFromDate": "2026-09-08",
+    "isFirstYear": true,
+    "appointments": {
+      "allowance": 23,
+      "scheduled": 0,
+      "completed": 0
+    }
+  },
+  "createdAt": "2026-09-08T17:07:58+01:00",
+  "updatedAt": "2026-09-08T17:07:58+01:00",
+  "context": {
+    "name": {
+      "forename": "Test",
+      "surname": "Person"
+    },
+    "gender": "Male",
+    "sentences": [
+      {
+        "eventNumber": "1",
+        "startDate": "2026-09-07",
+        "endDate": "2027-03-06",
+        "supervisionPackage": {
+          "code": "SPA",
+          "description": "A"
+        },
+        "type": {
+          "code": "340",
+          "description": "SA2020 Community Order",
+          "isCustodial": false
+        },
+        "inBreach": false
+      }
+    ],
+    "integratedOffenderManagementRedRated": false,
+    "offenderPersonalDisorderPathway": false,
+    "intensiveSupervisionCourt": false,
+    "nationalSecurityDivision": false,
+    "finalThirdEligibility": {
+      "eligible": false
+    }
+  }
+}

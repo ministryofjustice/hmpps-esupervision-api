@@ -42,6 +42,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
 import java.util.UUID
 
+private const val PAST_DUE_DATE_NOTE =
+  "A past due date is only accepted where manual job triggers are enabled (dev and local); " +
+    "to be picked up by the expiry job it must be at least the expiry grace period ago. " +
+    "Notifications are sent as for any new checkin."
+
 /** V2 Checkin REST Controller */
 @RestController
 @RequestMapping("/v2/offender_checkins")
@@ -345,9 +350,11 @@ class CheckinResource(
   @Operation(
     summary = "DEBUG: Manual checkin creation",
     description =
-    "DEBUG ONLY - Manually create a checkin outside the automated job schedule. Use for testing purposes.",
+    "DEBUG ONLY - Manually create a checkin outside the automated job schedule. Use for testing purposes. " +
+      PAST_DUE_DATE_NOTE,
   )
   @ApiResponse(responseCode = "200", description = "Checkin created")
+  @ApiResponse(responseCode = "400", description = "Offender not verified, no active event, or due date in the past")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   fun createCheckin(
     @RequestBody @Valid request: CreateCheckinRequest,
@@ -361,9 +368,11 @@ class CheckinResource(
   @Operation(
     summary = "DEBUG: Manual checkin creation by crn",
     description =
-    "DEBUG ONLY - Manually create a checkin outside the automated job schedule. Use for testing purposes.",
+    "DEBUG ONLY - Manually create a checkin outside the automated job schedule. Use for testing purposes. " +
+      PAST_DUE_DATE_NOTE,
   )
   @ApiResponse(responseCode = "200", description = "Checkin created")
+  @ApiResponse(responseCode = "400", description = "Offender not verified, no active event, or due date in the past")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   fun createCheckinByCrn(
     @RequestBody @Valid request: CreateCheckinByCrnRequest,

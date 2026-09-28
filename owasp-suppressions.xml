@@ -24,4 +24,25 @@
     <packageUrl regex="true">^pkg:maven/org\.springframework\.boot/spring-boot-devtools@.*$</packageUrl>
     <cve>CVE-2014-4200</cve>
   </suppress>
+  <suppress>
+    <notes><![CDATA[
+    False positive. CVE-2022-31691 is a deserialisation RCE in Spring Tools 4 for Eclipse and the
+    VSCode/Theia Spring Boot extensions (the IDE tooling), CPE-mismatched to spring-boot-devtools.
+    Unrelated artifact, and devtools is developmentOnly so it is absent from the production runtime.
+    file name: spring-boot-devtools-*.jar
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework\.boot/spring-boot-devtools@.*$</packageUrl>
+    <cve>CVE-2022-31691</cve>
+  </suppress>
+  <suppress>
+    <notes><![CDATA[
+    False positive. CVE-2026-54285 (unbounded memory allocation in W3C Baggage propagation) is an
+    advisory against the npm package @opentelemetry/core, CPE-matched onto the unrelated Java
+    artifacts io.opentelemetry:opentelemetry-{api,common,context}. Different ecosystem, different
+    codebase; the Java SDK is not affected.
+    file name: opentelemetry-*.jar
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/io\.opentelemetry/opentelemetry-.*@.*$</packageUrl>
+    <cve>CVE-2026-54285</cve>
+  </suppress>
 </suppressions>

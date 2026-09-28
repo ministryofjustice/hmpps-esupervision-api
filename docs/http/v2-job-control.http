@@ -1,5 +1,8 @@
-### Trigger checkin creation job
-POST {{HOST}}/v2/jobs/checkin-creation
+### List the jobs that can be triggered in this environment
+GET {{HOST}}/v2/jobs
 Authorization: Bearer {{hmpps_auth.token}}
-Content-Type: application/json
 
+### Start a job now. 202 means it was handed to a background thread, nothing more -
+### read the outcome from the job's own logging and its job_log row.
+POST {{HOST}}/v2/jobs/checkin-creation/run
+Authorization: Bearer {{hmpps_auth.token}}

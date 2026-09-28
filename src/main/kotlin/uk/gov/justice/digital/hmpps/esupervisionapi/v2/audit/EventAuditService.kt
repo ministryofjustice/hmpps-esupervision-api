@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -243,7 +244,7 @@ class EventAuditService(
         practitionerId = this.practitionerId,
         contactDetails = checkinDto.personalDetails,
         checkin = checkin,
-        notes = "Created by scheduled job",
+        notes = "mode=${(this as CheckinCreatedEvent).checkinMode}",
       )
 
       CheckinAuditEventType.CHECKIN_SUBMITTED -> buildAudit(

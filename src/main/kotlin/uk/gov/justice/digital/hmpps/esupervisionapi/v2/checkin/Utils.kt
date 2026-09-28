@@ -69,36 +69,43 @@ fun checkinIneligibilityReason(offender: ActiveEvent, details: ContactDetails): 
 }
 
 /**
- * Check if the date is a checkin day for the given offender
+ * Check if the date is a scheduled check-in day for the given offender.
+ *
+ * Note: the check relies on the constraint that an offender with a null check-in interval
+ * is on ad-hoc check-ins (e.g. offender.firstCheckin is their closest check-in date).
  */
 fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
+  val intervalDuration = offender.checkinInterval ?: return date == offender.firstCheckin
+  // require(intervalDuration != null) { "Check-in interval is required for scheduled check-ins" }
   val firstCheckin = offender.firstCheckin
-  if (offender.checkinInterval.toDays() > 0) {
+  if (intervalDuration.toDays() > 0) {
     if (date < firstCheckin) {
       return false
     }
 
     val delta = firstCheckin.until(date, ChronoUnit.DAYS)
-    val interval = offender.checkinInterval.toDays()
+    val interval = intervalDuration.toDays()
     return delta % interval == 0L
   }
   return false
 }
 
 /**
- * Returns the next checkin day (excluding today - assuming checkin already created. See [isCheckinDay]).
+ * Returns the next scheduled check-in day (excluding today - assuming check-in already created).
  *
- * Note: if "next checki day" is today, it can be confusing because it depends on what time the checkin is created.
- * If we ask before it happens, *today* is the "next checkin day", if we ask *after* it happens, it's the *next* day.
- * But I'd like this function to not require an extra DB call (to see if the checkin already exists). So we will
- * assume that today is excluded from the possible "next checkin day."
+ * Note: if "next check-in day" is today, it can be confusing because it depends on what time the check-in is created.
+ * If we ask before it happens, *today* is the "next check-in day", if we ask *after* it happens, it's the *next* day.
+ * But I'd like this function to not require an extra DB call (to see if the check-in already exists). So we will
+ * assume that today is excluded from the possible "next check-in day."
  */
 fun nextCheckinDay(schedule: CheckinSchedule, today: LocalDate): LocalDate {
+  val intervalDuration = schedule.checkinInterval
+  require(intervalDuration != null) { "Check-in interval is required for scheduled check-ins" }
   if (today < schedule.firstCheckin) return schedule.firstCheckin
 
   val days = schedule.firstCheckin.until(today, ChronoUnit.DAYS)
-  val rem = days % schedule.checkinInterval.toDays()
-  return today.plusDays(schedule.checkinInterval.toDays() - rem)
+  val rem = days % intervalDuration.toDays()
+  return today.plusDays(intervalDuration.toDays() - rem)
 }
 
 enum class CheckinScheduleLowerBound {

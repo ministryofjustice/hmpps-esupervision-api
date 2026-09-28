@@ -35,6 +35,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
@@ -99,33 +101,36 @@ class CheckinServiceTest {
   @BeforeEach
   fun setUp() {
     reset(s3UploadService)
-    service = CheckinService(
-      clock,
-      checkinRepository,
-      offenderRepository,
-      genericNotificationRepository,
-      offenderEventLogRepository,
-      ndiliusApiClient,
-      notificationService,
-      checkinCreationService,
-      s3UploadService,
-      compareFacesService,
-      livenessSessionService,
-      livenessCredentialsProvider,
-      checkinPersistenceService,
-      uploadTtlMinutes,
-      faceSimilarityThreshold,
-      livenessConfidenceThreshold,
-      30,
-      objectMapper,
-      3,
-      appConfig,
-      transactionTemplate,
-    )
+    service = buildService(allowPastDueDate = false)
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())
     whenever(s3UploadService.getCheckinVideo(any())).thenReturn(URI.create("https://video/1").toURL())
   }
+
+  private fun buildService(allowPastDueDate: Boolean) = CheckinService(
+    clock,
+    checkinRepository,
+    offenderRepository,
+    genericNotificationRepository,
+    offenderEventLogRepository,
+    ndiliusApiClient,
+    notificationService,
+    checkinCreationService,
+    s3UploadService,
+    compareFacesService,
+    livenessSessionService,
+    livenessCredentialsProvider,
+    checkinPersistenceService,
+    uploadTtlMinutes,
+    faceSimilarityThreshold,
+    livenessConfidenceThreshold,
+    30,
+    objectMapper,
+    3,
+    appConfig,
+    transactionTemplate,
+    allowPastDueDate,
+  )
 
   @Test
   fun `getCheckin - returns EXPIRED checkin when past due date`() {
@@ -1305,6 +1310,67 @@ class CheckinServiceTest {
     }
     return builder.build()
   }
+
+  @Test
+  fun `createCheckin - rejects past due date when not enabled`() {
+    val offender = createOffender()
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, LocalDate.now(clock).minusDays(4)))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, ex.statusCode)
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
+  }
+
+  @Test
+  fun `createCheckin - accepts past due date when enabled`() {
+    service = buildService(allowPastDueDate = true)
+    val dueDate = LocalDate.now(clock).minusDays(4)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001"))
+      .thenReturn(createdCheckin(offender, dueDate))
+
+    val result = service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, dueDate))
+
+    assertEquals(dueDate, result.dueDate)
+    verify(checkinCreationService).createCheckin(offender.uuid, dueDate, "PRACT001")
+  }
+
+  @Test
+  fun `createCheckinByCrn - accepts today's due date when past dates not enabled`() {
+    val dueDate = LocalDate.now(clock)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001"))
+      .thenReturn(createdCheckin(offender, dueDate))
+
+    service.createCheckinByCrn(CreateCheckinByCrnRequest("PRACT001", offender.crn, dueDate))
+
+    verify(checkinCreationService).createCheckin(offender.uuid, dueDate, "PRACT001")
+  }
+
+  private fun contactDetails(offender: Offender) = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+    crn = offender.crn,
+    name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+    email = "john@example.com",
+    dateOfBirth = LocalDate.of(1980, 1, 1),
+  )
+
+  private fun createdCheckin(offender: Offender, dueDate: LocalDate) = OffenderCheckin(
+    uuid = UUID.randomUUID(),
+    offender = offender,
+    status = CheckinStatus.CREATED,
+    dueDate = dueDate,
+    createdAt = clock.instant(),
+    createdBy = "PRACT001",
+  )
 
   private fun createOffender() = Offender(
     uuid = UUID.randomUUID(),

@@ -1,0 +1,63 @@
+{
+  "currentPhase": {
+    "supervisionPackage": {
+      "code": "SPNK",
+      "description": "Not Yet Known"
+    },
+    "phase": {
+      "code": "SPNK",
+      "description": "Not Yet Known"
+    },
+    "eventNumber": "1",
+    "startDate": "2026-09-17T16:20:54+01:00",
+    "endDate": "2027-09-17T00:00:00+01:00"
+  },
+  "currentYear": {
+    "startDate": "2026-09-17",
+    "endDate": "2027-09-16",
+    "proRataFromDate": "2026-09-17",
+    "isFirstYear": true,
+    "appointments": {
+      "allowance": 0,
+      "scheduled": 0,
+      "completed": 0
+    }
+  },
+  "createdAt": "2026-09-17T16:20:54+01:00",
+  "updatedAt": "2026-09-17T16:20:54+01:00",
+  "context": {
+    "name": {
+      "forename": "Test",
+      "surname": "Person"
+    },
+    "gender": "Male",
+    "sentences": [
+      {
+        "eventNumber": "1",
+        "startDate": "2026-09-17",
+        "endDate": "2027-09-16",
+        "supervisionPackage": {
+          "code": "SPNK",
+          "description": "Not Yet Known"
+        },
+        "type": {
+          "code": "201",
+          "description": "CJA - Community Order",
+          "isCustodial": false
+        },
+        "inBreach": false
+      }
+    ],
+    "integratedOffenderManagementRedRated": false,
+    "offenderPersonalDisorderPathway": false,
+    "intensiveSupervisionCourt": false,
+    "nationalSecurityDivision": false,
+    "finalThirdEligibility": {
+      "eligible": false
+    },
+    "recallStatus": {
+      "code": "REC01",
+      "description": "Recall Initiated"
+    }
+  }
+}

@@ -18,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.time.Clock
 import java.time.Duration
@@ -37,7 +38,8 @@ private data class OffenderInfo(
   val uuid: UUID,
   val practitioner: ExternalUserId,
   override val firstCheckin: LocalDate,
-  override val checkinInterval: Duration,
+  override val checkinInterval: Duration?,
+  val mode: CheckinMode,
 ) : CheckinSchedule
 
 /**
@@ -91,7 +93,7 @@ class CustomQuestionsReminderJob(
           stream.asSequence()
             .chunked(INdiliusApiClient.MAX_BATCH_SIZE)
             .map { batch ->
-              val infosBatch = batch.map { OffenderInfo(it.crn, it.uuid, it.practitionerId, it.firstCheckin, it.checkinInterval) }
+              val infosBatch = batch.map { OffenderInfo(it.crn, it.uuid, it.practitionerId, it.firstCheckin, it.checkinInterval, it.mode) }
               entityManager.flush()
               entityManager.clear()
               infosBatch
@@ -112,7 +114,11 @@ class CustomQuestionsReminderJob(
         }
         for (info in batch) {
           val added = crnToDetails[info.crn]?.let {
-            sendable.add(QuestionsReminderInfo(info.uuid, it, info.practitioner, nextCheckinDay(info, today)))
+            val expectedCheckinDate = when (info.mode) {
+              CheckinMode.SCHEDULED -> nextCheckinDay(info, today)
+              CheckinMode.AD_HOC -> info.firstCheckin
+            }
+            sendable.add(QuestionsReminderInfo(info.uuid, it, info.practitioner, expectedCheckinDate))
           }
           if (added == null) {
             unsendable.add(info.crn)

@@ -10,6 +10,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
@@ -19,6 +20,9 @@ import java.time.Duration
 import java.time.Period
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+
+// TODO: finalise the offender template
+private const val AD_HOC_FREQUENCY_TEXT = "time the practitioner schedules it."
 
 /**
  * We don't want the cause here because we 1) log it here, 2) need to sanitize any PII
@@ -71,7 +75,7 @@ class NotificationOrchestratorService(
           mapOf(
             "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
             "date" to offender.firstCheckin.format(DATE_FORMATTER),
-            "frequency" to formatCheckinFrequency(CheckinInterval.fromDuration(offender.checkinInterval)),
+            "frequency" to frequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }),
           )
 
         val notificationsWithRecipients =
@@ -123,7 +127,7 @@ class NotificationOrchestratorService(
           mapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
             "date" to offender.firstCheckin.format(DATE_FORMATTER),
-            "frequency" to formatCheckinFrequency(offender.checkinInterval),
+            "frequency" to frequencyText(offender.mode, offender.checkinInterval),
           )
 
         val notificationsWithRecipients =
@@ -502,6 +506,14 @@ class NotificationOrchestratorService(
       CheckinInterval.TWO_WEEKS -> "two weeks"
       CheckinInterval.FOUR_WEEKS -> "four weeks"
       CheckinInterval.EIGHT_WEEKS -> "eight weeks"
+    }
+
+    private fun frequencyText(mode: CheckinMode, interval: CheckinInterval?): String = when (mode) {
+      CheckinMode.SCHEDULED -> {
+        requireNotNull(interval) { "interval must be present for scheduled checkins" }
+        formatCheckinFrequency(interval)
+      }
+      CheckinMode.AD_HOC -> AD_HOC_FREQUENCY_TEXT
     }
   }
 }

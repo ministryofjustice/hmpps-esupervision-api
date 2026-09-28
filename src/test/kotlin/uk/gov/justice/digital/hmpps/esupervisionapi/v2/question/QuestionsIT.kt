@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -47,6 +48,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinScheduleLowerBound
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
@@ -99,7 +101,7 @@ class QuestionsIT(
 
     reset(s3UploadService, ndiliusApiClient)
     whenever(s3UploadService.isCheckinVideoUploaded(any())).thenReturn(true)
-    whenever(ndiliusApiClient.getContactDetails(any())).thenAnswer { invocation ->
+    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenAnswer { invocation ->
       GeneratingStubDataProvider().provideCase(invocation.getArgument<String>(0))
     }
 
@@ -251,17 +253,65 @@ class QuestionsIT(
     offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
 
     val upcomingAfterSubmission = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
-    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), upcomingAfterSubmission.expectedCheckinDate)
+    assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), upcomingAfterSubmission.expectedCheckinDate)
 
-    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
     // assertNull(info.dueDate)
-    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), info.dueDate)
+    assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), info.dueDate)
 
     clock.advanceBy(Duration.ofDays(1))
 
     // Day = due date + 1 day
     val upcomingDayAfterDueDate = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
-    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), upcomingDayAfterDueDate.expectedCheckinDate)
+    assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), upcomingDayAfterDueDate.expectedCheckinDate)
+  }
+
+  @Test
+  fun `QuestionService - assigning and fetching questions for ad-hoc check-ins`() {
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val dueDate = clock.today().plusDays(-1)
+    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate).toEntity()
+    offenderRepository.save(offender)
+
+    val assignment = questionService.upcomingAssignment(offender)
+    assertNull(assignment.expectedCheckinDate, "No check-in scheduled, there should be no expected checkin date")
+
+    // no check-in scheduled => can't assign questions
+    val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    }
+
+    offender.firstCheckin = clock.today().plusDays(4)
+    offenderRepository.save(offender)
+
+    // there's an upcoming check-in => can assign questions
+    questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    val assignmentAfter = questionService.upcomingAssignment(offender)
+    assertEquals(offender.firstCheckin, assignmentAfter.expectedCheckinDate)
+  }
+
+  @Test
+  fun `QuestionService - upcoming questions for ad-hoc check-ins`() {
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val dueDate = clock.today()
+    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate).toEntity()
+    offenderRepository.save(offender)
+
+    val assignment1 = questionService.upcomingAssignment(offender)
+    assertEquals(dueDate, assignment1.expectedCheckinDate)
+
+    val checkin1 = offenderCheckinService.debugCreateCheckin(offender, clock)
+    offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
+
+    val assignment2 = questionService.upcomingAssignment(offender)
+    assertNull(assignment2.expectedCheckinDate)
+
+    offender.firstCheckin = clock.today().plusDays(4)
+    offenderRepository.save(offender)
+
+    val assignment3 = questionService.upcomingAssignment(offender)
+    assertEquals(offender.firstCheckin, assignment3.expectedCheckinDate)
   }
 
   @Test
@@ -298,7 +348,7 @@ class QuestionsIT(
     offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
 
     val upcomingAfterSubmission = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
-    assertEquals(dueDate.plusDays(offender.checkinInterval.toDays()), upcomingAfterSubmission.expectedCheckinDate)
+    assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), upcomingAfterSubmission.expectedCheckinDate)
   }
 
   @Test
@@ -316,11 +366,11 @@ class QuestionsIT(
     val addQuestionsRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
     questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
 
-    clock.advanceBy(offender.checkinInterval)
+    clock.advanceBy(offender.checkinInterval!!)
 
     // Day = 2nd due date
     val nextDueDate = nextCheckinDay(offender, clock.today(), CheckinScheduleLowerBound.INCLUDE_TODAY)
-    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, nextDueDate, checkinWindow.toDays())
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextDueDate, checkinWindow.toDays())
     assertEquals(nextDueDate, info.dueDate)
 
     val assignment = questionService.upcomingAssignment(offender)
@@ -348,32 +398,35 @@ class QuestionsIT(
     offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
 
     val assignment1 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), clock.today(), checkinWindow.toDays())
     assertNotNull(upcoming1)
     assertEquals(assignment1.listId, upcoming1.questionListId)
+    assertEquals(dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming1.dueDate)
 
     // ----- DAY 2
     clock.advanceBy(Duration.ofDays(1))
     val checkin2 = offenderCheckinService.debugCreateCheckin(offender, clock)
     // the assignment should have the checkin set
-    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
     assertEquals(assignment1.listId, upcoming2.questionListId)
     assertNotEquals(defaultListId, upcoming2.questionListId)
+    assertEquals(checkin2.dueDate, upcoming2.dueDate)
 
     assertThrows(BadArgumentException::class.java, {
       questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
     }, "We can't assign questions until check-in is submitted/expired")
 
-    // Verify out assignment hasn't changed
+    // Verify our assignment hasn't changed
     val upcoming3 = questionService.upcomingAssignment(offender)
     assertEquals(upcoming2.questionListId, upcoming3.questionList)
 
     val submission2 = offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
-    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
     assertEquals(defaultListId, upcoming4.questionListId)
+    assertEquals(checkin1.dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming4.dueDate)
 
     val assignment2 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, dueDate, checkinWindow.toDays())
+    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
     assertNotEquals(defaultListId, upcoming5.questionListId)
     assertEquals(assignment2.listId, upcoming5.questionListId)
   }

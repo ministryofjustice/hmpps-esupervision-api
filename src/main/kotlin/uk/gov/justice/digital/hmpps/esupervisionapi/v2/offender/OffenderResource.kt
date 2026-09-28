@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -38,27 +39,35 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
+import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 @RestController
 @RequestMapping("/v2/offenders", produces = ["application/json"])
@@ -77,6 +86,9 @@ class OffenderResource(
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderPersistenceService: OffenderPersistenceService,
   private val offenderService: OffenderService,
+  private val eligibilityEvaluationEngine: EligibilityEvaluationEngine,
+  private val eligibilityChecker: EligibilityChecker,
+  private val supervisionPackageService: SupervisionPackageService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -143,6 +155,21 @@ class OffenderResource(
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
+    summary = "Check eligibility by CRN",
+    description = """Evaluates the offender eligibility rule set against NDelius/Nomis for the given CRN,
+      without requiring the person to already be registered for e-supervision. Used to pre-check
+      eligibility before starting setup.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Eligibility evaluated")
+  @ApiResponse(responseCode = "503", description = "A required data source could not be fetched")
+  @GetMapping("/crn/{crn}/eligibility")
+  fun getEligibilityByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> = eligibilityEvaluationEngine.evaluate(crn.trim().uppercase(), eligibilityEvaluationEngine.activeRuleSet)
+    .thenApply { result -> ResponseEntity.ok(EligibilityCheckResponse(result.outcome, result.message)) }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
     summary = "Get probation practitioner by CRN",
     description = """Returns the allocated probation practitioner straight from NDelius, without requiring
       the person to already be registered for e-supervision. Used to look up details before starting setup.""",
@@ -161,6 +188,41 @@ class OffenderResource(
     }
 
     return ResponseEntity.ok(practitioner.toSummary())
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Get some of a person's supervision package details by CRN",
+    description = """Returns details about the person's supervision package from the Supervision Packages API -
+      If package is `SPA` to `SPG` then 'onSupervisionPackage' is true. No package, `SPNA` not applicable, `SPNK` not yet known and `SPX` supervised
+      on another sentence are all false.
+      If phase code is 'FTHRD' then 'inFinalThird' is true.
+      If phase code is 'INIT' then 'inEarlyEngagement' is true.
+      Does not require the person to already be registered for e-supervision.
+
+      A CRN Supervision Packages does not know is a 404 rather than false, so callers can tell an
+      invalid CRN apart from a person who is not on a package.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Supervision package status returned")
+  // Without an explicit content, springdoc gives every response the method's return schema, so the
+  // errors would advertise a SupervisionPackageStatus body they never return.
+  @ApiResponse(responseCode = "404", description = "CRN not known to Supervision Packages", content = [Content()])
+  @ApiResponse(
+    responseCode = "503",
+    description = "Supervision Packages could not be asked; the status is unknown, not false",
+    content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+  )
+  @GetMapping("/crn/{crn}/supervision-package")
+  fun getSupervisionPackageStatusByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+  ): ResponseEntity<SupervisionPackageStatus> {
+    val normalisedCrn = crn.trim().uppercase()
+    val supervisionPackageStatus = supervisionPackageService.getSupervisionPackageDetails(normalisedCrn)
+    // The client has already logged the unknown CRN.
+    if (supervisionPackageStatus == null) return ResponseEntity.notFound().build()
+
+    LOGGER.info("Retrieved supervision package status for crn={}, supervisionPackageStatus={}", normalisedCrn, supervisionPackageStatus)
+    return ResponseEntity.ok(supervisionPackageStatus)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -199,17 +261,24 @@ class OffenderResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Get offender header by CRN",
-    description = "Returns offender header details straight from NDelius. Returns 404 if not found.",
+    description = "Returns offender header details aggregated from NDelius, the Tier API and ARNS. " +
+      "Returns 404 only when the CRN is unknown to NDelius. Any other lookup failure degrades the " +
+      "response rather than failing it: the affected field is null and `errors` lists the field and why.",
   )
-  @ApiResponse(responseCode = "200", description = "Offender found")
-  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @ApiResponse(responseCode = "200", description = "Header returned; NDelius did not report the CRN as unknown. Check `errors` for fields that could not be populated")
+  @ApiResponse(responseCode = "404", description = "Offender not found in NDelius")
   @GetMapping("/header/{crn}")
   fun getOffenderHeaderByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
   ): ResponseEntity<OffenderHeaderDetails> {
-    val headerDetails = offenderService.getHeaderDetails(crn.trim().uppercase())
+    val normalisedCrn = crn.trim().uppercase()
+    val headerDetails = offenderService.getHeaderDetails(normalisedCrn)
 
-    LOGGER.info("Retrieved header details for offender by CRN: crn={}", crn)
+    if (headerDetails.errors.isEmpty()) {
+      LOGGER.info("Retrieved header details for offender by CRN: crn={}", normalisedCrn)
+    } else {
+      LOGGER.warn("Retrieved partial header details for offender by CRN: crn={} missing={}", normalisedCrn, headerDetails.errors)
+    }
     return ResponseEntity.ok(headerDetails)
   }
 
@@ -331,16 +400,7 @@ class OffenderResource(
       )
     }
 
-    val contactDetails = try {
-      ndiliusApiClient.getContactDetails(offender.crn)
-        ?: throw Exception("NDelius returned null contact details")
-    } catch (e: Exception) {
-      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Could not verify contact details in NDelius for ${offender.crn}.",
-      )
-    }
+    val contactDetails = getContactDetails(offender)
 
     val saved = offenderDeactivationService.deactivateOffender(
       offender,
@@ -359,6 +419,20 @@ class OffenderResource(
     )
 
     return ResponseEntity.ok(saved.toSummaryDto(getOffenderPhotoUrl(saved)))
+  }
+
+  private fun getContactDetails(offender: Offender): ContactDetails {
+    val contactDetails = try {
+      ndiliusApiClient.getContactDetails(offender.crn)
+        ?: throw Exception("NDelius returned null contact details")
+    } catch (e: Exception) {
+      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Could not verify contact details in NDelius for ${offender.crn}.",
+      )
+    }
+    return contactDetails
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -390,23 +464,15 @@ class OffenderResource(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only INACTIVE offenders can be reactivated.")
     }
 
-    val contactDetails = try {
-      ndiliusApiClient.getContactDetails(offender.crn)
-        ?: throw Exception("NDelius returned null contact details")
-    } catch (e: Exception) {
-      LOGGER.error("Failed to fetch contact details from NDelius for CRN: ${offender.crn}", e)
-      throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Could not verify contact details in NDelius for ${offender.crn}.",
-      )
-    }
+    val contactDetails = getContactDetails(offender)
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
-    checkinIneligibilityReason(offender, contactDetails)?.let { reason ->
+    val outcome = eligibilityChecker.check(offender, contactDetails)
+    if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
-        "Cannot reactivate ${offender.crn}: ${reason.description}",
+        "Cannot reactivate ${offender.crn}: ${outcome.message ?: "ineligible for online check-ins."}",
       )
     }
 
@@ -426,9 +492,10 @@ class OffenderResource(
     }
 
     request.checkinSchedule?.let { schedule ->
-      validate(schedule)
+      validate(schedule, offender.mode)
+      offender.mode = schedule.mode ?: offender.mode
       offender.firstCheckin = schedule.firstCheckin
-      offender.checkinInterval = schedule.checkinInterval.duration
+      offender.checkinInterval = schedule.checkinInterval?.duration
     }
     request.contactPreference?.let { pref ->
       offender.contactPreference = pref.contactPreference
@@ -482,9 +549,12 @@ class OffenderResource(
     summary = "Update offender details",
     description = """Updates offender details. All fields need to be set to their desired value 
         (as in, no partial updates are allowed)
-        
-        Updating the check in schedule settings may trigger a notification if the new first check in date
-        is *today*.""",
+
+When updating the check-in schedule, the `mode` option determines whether the check-in interval is required. 
+E.g., SCHEDULED requires a check-in interval, while AD_HOC does not.
+
+Updating the check-in schedule settings may trigger a notification if the new first check in date
+is *today*.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender details updated")
   @ApiResponse(responseCode = "204", description = "No update required")
@@ -506,12 +576,13 @@ class OffenderResource(
     }
 
     val offenderBefore = offender.toSummaryDto()
-
     if (request.checkinSchedule != null) {
-      validate(request.checkinSchedule)
+      val mode = request.checkinSchedule.mode ?: offender.mode
+      validate(request.checkinSchedule, offender.mode)
       val scheduleUpdate = request.checkinSchedule
+      offender.mode = mode
       offender.firstCheckin = scheduleUpdate.firstCheckin
-      offender.checkinInterval = scheduleUpdate.checkinInterval.duration
+      offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
       offender.updatedAt = clock.instant()
     }
 
@@ -523,13 +594,16 @@ class OffenderResource(
       }
     }
 
+    val todaysCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null || request.contactPreference != null) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
-      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, LocalDate.now(clock))) {
-        LOGGER.debug("Creating check-in for offender {} as first check-in date is today", offenderAfter.uuid)
-        checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
+        if (todaysCheckin.isEmpty) {
+          checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+        }
+        LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       }
       return ResponseEntity.ok(offenderAfter)
     } else {
@@ -550,9 +624,18 @@ class OffenderResource(
     eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
-  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest) {
+  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) {
     if (scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
+    }
+    when (scheduleUpdate.mode) {
+      CheckinMode.AD_HOC -> if (scheduleUpdate.checkinInterval != null) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval cannot be specified for ad-hoc check-ins.")
+      }
+      CheckinMode.SCHEDULED -> if (scheduleUpdate.checkinInterval == null) {
+        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval is required for scheduled check-ins.")
+      }
+      null -> validateScheduleSettings(currentMode, scheduleUpdate.checkinInterval)
     }
   }
 
@@ -583,6 +666,21 @@ data class PersonalDetailsSummary(
   val email: String? = null,
 ) : INamedPerson
 
+data class SupervisionPackageStatus(
+  @field:Schema(description = "Whether the person is on a supervision package, SPA to SPG")
+  val onSupervisionPackage: Boolean,
+  @field:Schema(description = "Whether the person is in the final third of their supervision package")
+  val inFinalThird: Boolean,
+  @field:Schema(description = "Whether the person is in early engagement")
+  val inEarlyEngagement: Boolean,
+)
+
+/** Result of evaluating the offender eligibility rule set for a CRN. */
+data class EligibilityCheckResponse(
+  val outcome: EligibilityCheckOutcome,
+  val message: String? = null,
+)
+
 /**
  * Subset of [ContactDetails] that is returned in the summary DTO.
  */
@@ -605,6 +703,8 @@ data class PractitionerSummary(
   val email: String? = null,
   val unallocated: Boolean? = null,
   val username: String? = null,
+  @field:Schema(description = "Probation Delivery Unit", required = false)
+  val probationDeliveryUnit: OrganizationalUnit? = null,
 ) : INamedPerson
 
 private fun PractitionerDetails.toSummary() = PractitionerSummary(
@@ -613,6 +713,7 @@ private fun PractitionerDetails.toSummary() = PractitionerSummary(
   email = email,
   unallocated = unallocated,
   username = username,
+  probationDeliveryUnit = probationDeliveryUnit,
 )
 
 /** Simple DTO for offender lookup - no PII by default */
@@ -621,7 +722,8 @@ data class OffenderSummaryDto(
   val crn: String,
   val status: OffenderStatus,
   val firstCheckin: LocalDate,
-  val checkinInterval: CheckinInterval,
+  val checkinInterval: CheckinInterval?,
+  val mode: CheckinMode,
   val contactPreference: ContactPreference,
   val photoUrl: String? = null,
   val details: OffenderSummaryDetails? = null,
@@ -632,7 +734,8 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   crn = crn,
   status = status,
   firstCheckin = firstCheckin,
-  checkinInterval = CheckinInterval.fromDuration(checkinInterval),
+  checkinInterval = checkinInterval?.let { CheckinInterval.fromDuration(it) },
+  mode = mode,
   contactPreference = contactPreference,
   photoUrl = photoUrl,
   details = contactDetails?.let {
@@ -648,13 +751,45 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   },
 )
 
+/**
+ * Case header aggregated from several upstreams. NDelius must answer; the other fields are
+ * best-effort and null when their lookup failed, with the reason recorded in [errors].
+ */
 data class OffenderHeaderDetails(
   val crn: String,
-  val dateOfBirth: LocalDate,
-  val tierScore: String,
+  @field:Schema(description = "From NDelius. Null if the lookup failed (see errors)")
+  val dateOfBirth: LocalDate?,
+  @field:Schema(
+    description = "From the Tier API: 'D2' style on v2, a single letter A-G or 'NOT_SUPERVISED' on v3 " +
+      "(from 1 October 2026 in production). Null if the lookup failed or the case has no tier (see errors)",
+    example = "D",
+  )
+  val tierScore: String?,
+  @field:Schema(description = "From the Tier API (v3 only). True if the tier is a provisional calculation. Omitted on v2, when the case has no tier, or if the lookup failed (see errors)")
+  val tierProvisional: Boolean?,
   val tierDetailsLink: String,
-  val overallRisk: String,
+  @field:Schema(description = "From ARNS. Null if the lookup failed or no assessment exists (see errors)")
+  val overallRisk: String?,
+  @field:Schema(description = "One entry per field that could not be populated. Empty on full success")
+  val errors: List<ErrorDetails> = emptyList(),
 )
+
+data class ErrorDetails(
+  @field:Schema(description = "Name of the OffenderHeaderDetails field that is missing", example = "tierScore")
+  val field: String,
+  val code: HeaderErrorCode,
+)
+
+enum class HeaderErrorCode {
+  /** The upstream has no record for this CRN. */
+  NOT_FOUND,
+
+  /** The upstream failed, timed out, or its circuit breaker is open. Expected to be transient. */
+  SERVICE_UNAVAILABLE,
+
+  /** The upstream rejected our request (4xx other than 404), e.g. missing role. Not transient. */
+  REQUEST_REJECTED,
+}
 
 /** Request to deactivate an offender */
 data class DeactivateOffenderRequest(
@@ -690,7 +825,9 @@ data class CheckinScheduleUpdateRequest(
   @field:Schema(description = "Id of the user requesting the change", required = true)
   val requestedBy: ExternalUserId,
   @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
-  val checkinInterval: CheckinInterval,
+  val checkinInterval: CheckinInterval?,
+  @field:Schema(description = "Checkin mode, SCHEDULED or AD_HOC", required = false)
+  val mode: CheckinMode? = null,
 )
 
 /** Request to update offender contact details */

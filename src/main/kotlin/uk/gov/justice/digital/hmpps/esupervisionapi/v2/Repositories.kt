@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional
 import tools.jackson.core.type.TypeReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
@@ -46,11 +47,16 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         o.id as id, 
         o.crn as crn, 
         o.practitioner_id as practitionerId, 
-        o.contact_preference as contactPreference, 
+        o.contact_preference as contactPreference,
+        o.checkin_mode as checkinMode,
         o.current_event as currentEvent FROM offender_v2 o
     WHERE o.status = 'VERIFIED'
-      AND o.first_checkin <= :lowerBoundInclusive
-      AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0
+      AND (
+        (o.checkin_mode = 'SCHEDULED'
+          AND o.first_checkin <= :lowerBoundInclusive
+          AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
+        OR (o.checkin_mode = 'AD_HOC' AND o.first_checkin = :lowerBoundInclusive)
+      )
       AND NOT EXISTS (
         SELECT 1 FROM offender_checkin_v2 c
         WHERE c.offender_id = o.id
@@ -76,6 +82,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     val crn: CRN
     val practitionerId: ExternalUserId
     val contactPreference: ContactPreference
+    val checkinMode: CheckinMode
     override val currentEvent: Long?
   }
 
@@ -98,8 +105,12 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
                      and gn.event_type = :notificationType
                      and gn.created_at >= :reminderWindowStart
           where o.status = 'VERIFIED'
-          and o.first_checkin != :today
-          and (MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
+          and (
+            (o.checkin_mode = 'SCHEDULED'
+              and o.first_checkin != :today
+              and MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
+            or (o.checkin_mode = 'AD_HOC' and o.first_checkin = (cast(:today as date) + '4 day'::interval)::date)
+          )
       )
       select * from the_offenders
       where question_list_assignment_id is null and generic_notification_id is null;
@@ -793,7 +804,7 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
 
   interface AssignmentInfo {
     val questionListId: Long
-    val dueDate: LocalDate
+    val dueDate: LocalDate?
     val explicitAssignment: Boolean
   }
 
@@ -815,10 +826,10 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
    * In case of no explicit assignment, question list id will be set to the default list id.
    */
   @Query(
-    """select * from get_upcoming_assignment_info(:offenderId, cast(:nextCheckinDate as date), :checkinWindowDays)""",
+    """select * from get_upcoming_assignment_info_v2(:offenderId, cast(:today as date), cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignmentAndDueDate(offenderId: Long, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
+  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.
