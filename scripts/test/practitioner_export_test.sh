@@ -306,6 +306,19 @@ test_output_files_are_private_whatever_the_callers_umask() {
   done
 }
 
+test_existing_output_files_are_made_private_on_a_rerun() {
+  # e.g. files from before the scripts set a umask: > and >> keep a file's mode
+  mkdir -p "$T/u3"; cp "$T/crns.jsonl" "$T/u3/crns.jsonl"
+  local f
+  for f in results.jsonl practitioner_export.csv practitioners_unmatched.csv; do
+    : > "$T/u3/$f"; chmod 644 "$T/u3/$f"
+  done
+  (cd "$T" && TOKEN=tok API_BASE="$STUB" RATE_SLEEP=0 "$FETCH" "$T/u3/crns.jsonl" "$T/u3/results.jsonl" >/dev/null 2>&1)
+  for f in results.jsonl practitioner_export.csv practitioners_unmatched.csv; do
+    assert_eq "-rw-------" "$(ls -l "$T/u3/$f" | cut -c1-10)" "$f permissions"
+  done
+}
+
 test_stops_on_a_403_rather_than_fetching_the_rest() {
   mkdir -p "$T/f6"
   printf '%s\n' '{"crn":"FORBID1","storedUsername":"A.B"}' '{"crn":"X000001","storedUsername":"BARRY.WHITE"}' > "$T/f6/crns.jsonl"
@@ -435,6 +448,32 @@ test_wrapper_work_dir_and_files_are_private_whatever_the_callers_umask() {
   local f
   for f in practitioner_export.csv practitioners_unmatched.csv extract_report.txt practitioners.jsonl; do
     assert_eq "-rw-------" "$(ls -l "$T/u2/$f" | cut -c1-10)" "$f permissions"
+  done
+}
+
+test_wrapper_makes_an_existing_readable_work_dir_private() {
+  mkdir -p "$T/u4"; chmod 755 "$T/u4"
+  printf 'old\n' > "$T/u4/practitioner_export.csv"; chmod 644 "$T/u4/practitioner_export.csv"
+  printf 'old\n' > "$T/u4/stray.txt"; chmod 644 "$T/u4/stray.txt"
+  local out; out="$(wrapper "$T/u4")"
+  assert_contains "$out" "Made $(cd "$T/u4" && pwd -P) private" "message"
+  assert_eq "drwx------" "$(ls -ld "$T/u4" | cut -c1-10)" "work dir permissions"
+  assert_eq "-rw-------" "$(ls -l "$T/u4/practitioner_export.csv" | cut -c1-10)" "overwritten file permissions"
+  assert_eq "-rw-------" "$(ls -l "$T/u4/stray.txt" | cut -c1-10)" "untouched file permissions"
+}
+
+test_wrapper_rejects_a_passes_value_that_would_fetch_nothing() {
+  local v out rc
+  for v in 0 abc -1 ""; do
+    out="$(wrapper "$T/p-$v" PASSES="$v")"; rc=$?
+    if [[ -z "$v" ]]; then
+      # empty means "use the default", which is fine
+      assert_eq 0 "$rc" "PASSES='' exit code"
+      continue
+    fi
+    assert_eq 1 "$rc" "PASSES=$v exit code"
+    assert_contains "$out" "PASSES must be a positive whole number" "PASSES=$v message"
+    [[ ! -f "$T/p-$v/.export-complete" ]] || fail "PASSES=$v marked the export complete"
   done
 }
 

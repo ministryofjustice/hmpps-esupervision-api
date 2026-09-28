@@ -96,6 +96,10 @@ esac
 export API_BASE="${EXPORT_API_BASE:-$default_api}"
 AUTH_URL="${EXPORT_AUTH_URL:-$default_auth}"
 
+# Zero or junk would run no fetch at all, yet still mark the export complete.
+[[ "$PASSES" =~ ^[1-9][0-9]*$ ]] \
+  || { echo "ERROR: PASSES must be a positive whole number (got '$PASSES')" >&2; exit 1; }
+
 step() { printf '\n==> %s\n' "$*" >&2; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 
@@ -112,6 +116,16 @@ case "$WORK_DIR/" in
   "$(cd -- "$REPO_ROOT" && pwd -P)/"*)
     die "work_dir $WORK_DIR is inside the repo. The outputs are personal data -- pick a directory outside it." ;;
 esac
+
+# umask made the folder private if this run created it, but mkdir -p leaves an
+# existing one alone -- one from before this script set a umask, or one passed
+# in. Make it private, and anything already inside it: psql's \o and mv keep an
+# existing file's mode, so an old 0644 file would stay readable.
+if [[ "$(ls -ld "$WORK_DIR" | cut -c1-10)" != "drwx------" ]]; then
+  chmod 700 "$WORK_DIR"
+  echo "Made $WORK_DIR private (it was readable by other users)" >&2
+fi
+find "$WORK_DIR" -maxdepth 1 -type f ! -perm 600 -exec chmod 600 {} +
 
 kubectl -n "$NS" auth can-i create pods >/dev/null 2>&1 \
   || die "kubectl cannot create pods in $NS -- check your Cloud Platform login and context"

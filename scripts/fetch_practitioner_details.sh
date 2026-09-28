@@ -115,7 +115,15 @@ if [[ -n "${USERNAMES:-}" ]]; then
   [[ -r "$USERNAMES" ]] || { echo "ERROR: cannot read USERNAMES file: $USERNAMES" >&2; exit 1; }
 fi
 
+# umask covers files created from here on, but truncating or appending to a file
+# that already exists keeps its old mode -- as a resume, or a folder from before
+# this script set a umask, would. So force any that already exist private up
+# front. (Not creating the CSVs here: a run stopped early would leave an empty
+# practitioner_export.csv looking like a result.)
 touch "$OUT"
+for f in "$OUT" "$CSV_OUT" "$UNMATCHED_OUT"; do
+  if [[ -e "$f" ]]; then chmod 600 "$f"; fi
+done
 
 # Resume support: only a 200 counts as done, so 404s and 5xx are retried.
 already=$(jq -r 'select(.http == 200) | .crn' "$OUT" 2>/dev/null | sort -u || true)
