@@ -79,6 +79,7 @@ app:
     esup-1239: true
     # remove the checkin snapshot if the manual id check confirms it is a match without concern
     esup-1763: ${APP_FEATURES_ESUP_1763:false}
+    esup-2082: ${APP_FEATURES_ESUP_2082:false}
     # ESUP-2186: from this ISO-8601 date-time (with offset) read Tier API v3 instead of v2. Blank = v2.
     esup-2186-tier-v3-from: ${APP_FEATURES_ESUP_2186_TIER_V3_FROM:}
   offender-survey:
@@ -104,6 +105,10 @@ app:
       otherSupport: "What they want us to know about (something else)"
       callback: "If they need us to contact them before their next appointment"
       callbackDetails: "What they want to talk about"
+  offender-eligibility:
+    rule-set: ${APP_OFFENDER_ELIGIBILITY_RULE_SET:PILOT_2026_08}
+    # How long we wait before timing out the source request
+    source-timeout-ms: ${APP_OFFENDER_ELIGIBILITY_SOURCE_TIMEOUT_MS:2000}
 
 spring:
   application:
@@ -299,6 +304,29 @@ resilience4j:
         failure-rate-threshold: 50
         slow-call-rate-threshold: 80
         slow-call-duration-threshold: 3s
+        record-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadGateway
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout
+        ignore-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest
+          - org.springframework.web.reactive.function.client.WebClientResponseException.NotFound
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Unauthorized
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Forbidden
+
+      ndiliusEligibilityApi:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 60s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
         record-exceptions:
           - org.springframework.web.reactive.function.client.WebClientRequestException
           - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError

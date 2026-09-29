@@ -1,0 +1,33 @@
+<li class="rule{{statusClass}}">
+  <div class="rule-header">
+    <span class="rule-code">{{code}}</span>
+    <span>
+      <span class="rule-order">order: {{ruleOrder}}</span>
+      <span class="badge {{badgeClass}}">{{badgeText}}</span>
+    </span>
+  </div>
+  <p class="question">{{question}}</p>
+  <table class="condition">
+    <tr><td class="label">Source</td><td>{{source}}</td></tr>
+    <tr><td class="label">Data point</td><td>{{dataPoint}}</td></tr>
+    <tr><td class="label">Operator</td><td>{{operator}}</td></tr>
+    <tr><td class="label">Comparison value</td><td>{{comparisonValue}}</td></tr>
+  </table>
+  <table class="outcomes">
+    <tr>
+      <th>If match</th>
+      <td>
+        <span class="outcome-tag {{outcomeOnMatchClass}}">{{outcomeOnMatch}}</span>
+        {{messageOnMatch}}
+      </td>
+    </tr>
+    <tr>
+      <th>If no match</th>
+      <td>
+        <span class="outcome-tag {{outcomeOnNoMatchClass}}">{{outcomeOnNoMatch}}</span>
+        {{messageOnNoMatch}}
+      </td>
+    </tr>
+  </table>
+  {{comment}}
+</li>
