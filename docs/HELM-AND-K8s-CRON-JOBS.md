@@ -1,6 +1,6 @@
 # HELM/K8s CRON JOBS
 
-Key finding: batch-cronjob.yaml (from generic-service ≥3.17) runs a custom command. It starts the same container image as your Deployment, with the same env/envFrom/secrets/security context, but adds BATCH_ENABLED=true and
+Key finding: batch-cronjob.yaml (from generic-service ≥3.17) runs a custom command. It starts the same container image as your Deployment, with the same env/envFrom/secrets/security context, but adds BATCH_ENABLED=true and BATCH_TYPE=<job type>.
 
   This means it's not a Helm-only change — it requires a small, well-defined amount of app code (a "batch mode" entrypoint), even though you don't want that written yet.
 
