@@ -1,7 +1,6 @@
 # HELM/K8s CRON JOBS
 
-Key finding: batch-cronjob.yaml (from generic-service ≥3.17, not yet vendored — you're on 3.11.4) doesn't run a custom command. It starts the same container image as your Deployment, with the same env/envFrom/secrets/security context, but adds BATCH_ENABLED=true and
-  BATCH_TYPE=<name>. Your app has to detect those env vars, run just that one job, and self-terminate. restartPolicy: Never, concurrencyPolicy: Forbid, fixed Europe/London tz, 600s starting-deadline, 4-day pod TTL — none of that is configurable per-job.
+Key finding: batch-cronjob.yaml (from generic-service ≥3.17) runs a custom command. It starts the same container image as your Deployment, with the same env/envFrom/secrets/security context, but adds BATCH_ENABLED=true and
 
   This means it's not a Helm-only change — it requires a small, well-defined amount of app code (a "batch mode" entrypoint), even though you don't want that written yet.
 
