@@ -32,12 +32,11 @@ class SchedulingConfigTest {
     }
   }
 
-  private fun contextWithBatchEnabled(enabled: Boolean): AnnotationConfigApplicationContext =
-    AnnotationConfigApplicationContext().also { context ->
-      context.environment.propertySources.addFirst(
-        MapPropertySource("test", mapOf("app.batch.enabled" to enabled)),
-      )
-      context.register(SchedulingConfig::class.java)
-      context.refresh()
-    }
+  private fun contextWithBatchEnabled(enabled: Boolean): AnnotationConfigApplicationContext = AnnotationConfigApplicationContext().also { context ->
+    context.environment.propertySources.addFirst(
+      MapPropertySource("test", mapOf("app.batch.enabled" to enabled)),
+    )
+    context.register(SchedulingConfig::class.java)
+    context.refresh()
+  }
 }
