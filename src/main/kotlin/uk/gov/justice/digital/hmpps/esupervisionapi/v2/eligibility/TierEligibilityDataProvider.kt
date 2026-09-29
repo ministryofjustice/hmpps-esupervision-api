@@ -3,7 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.util.concurrent.CompletableFuture
@@ -11,9 +11,9 @@ import java.util.concurrent.Executor
 
 @Service
 class TierEligibilityDataProvider(
-  private val tierApiClient: TierApiClient,
+  @Qualifier("tierEligibilityApiClient") private val tierApiClient: ITierApiClient,
   @Qualifier("eligibilityDataFetchExecutor") private val eligibilityDataFetchExecutor: Executor,
-): EligibilityDataProvider {
+) : EligibilityDataProvider {
   override val sourceKey: String
     get() = "TIER"
 
@@ -25,7 +25,8 @@ class TierEligibilityDataProvider(
       }
       details.eligibilityData()
     },
-    eligibilityDataFetchExecutor)
+    eligibilityDataFetchExecutor,
+  )
 }
 
 fun TierDetails.eligibilityData(): Map<String, Any?> = mapOf(

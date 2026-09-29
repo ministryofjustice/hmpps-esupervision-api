@@ -3,10 +3,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ApiUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 
@@ -18,15 +16,14 @@ import java.util.concurrent.Executor
  */
 @Service
 class NdeliusEligibilityDataProvider(
-  private val ndiliusApiClient: INdiliusApiClient,
+  @Qualifier("ndeliusEligibilityApiClient") private val ndiliusApiClient: INdiliusApiClient,
   @Qualifier("eligibilityDataFetchExecutor") private val eligibilityDataFetchExecutor: Executor,
 ) : EligibilityDataProvider {
   override val sourceKey: String = "NDELIUS"
 
   override fun fetch(crn: CRN): CompletableFuture<Map<String, Any?>> = CompletableFuture.supplyAsync(
     {
-      fetchData(sourceKey, crn)
-        { crn -> ndiliusApiClient.getContactDetailsStrict(crn, ApiUseCase.ELIGIBILITY_CHECK) }
+      fetchData(sourceKey, crn) { crn -> ndiliusApiClient.getContactDetailsStrict(crn) }
         .eligibilityData()
     },
     eligibilityDataFetchExecutor,

@@ -56,32 +56,48 @@ class MockNdiliusClientConfiguration {
   webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
   properties = ["spring.main.allow-bean-definition-overriding=true"],
 )
-@Import(TestClockConfiguration::class, MockNotificationServiceConfiguration::class, MockNdiliusClientConfiguration::class)
+@Import(
+  TestClockConfiguration::class,
+  MockNotificationServiceConfiguration::class,
+  MockNdiliusClientConfiguration::class,
+)
 class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
-  @Autowired lateinit var clock: Clock
+  @Autowired
+  lateinit var clock: Clock
 
-  @Autowired lateinit var job: CustomQuestionsReminderJob
+  @Autowired
+  lateinit var job: CustomQuestionsReminderJob
 
-  @Autowired lateinit var ndiliusApiClient: INdiliusApiClient
+  @Autowired
+  lateinit var ndiliusApiClient: INdiliusApiClient
 
-  @Autowired lateinit var notificationService: NotificationService
+  @Autowired
+  lateinit var notificationService: NotificationService
 
-  @Autowired lateinit var offenderRepository: OffenderRepository
+  @Autowired
+  lateinit var offenderRepository: OffenderRepository
 
-  @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
+  @Autowired
+  lateinit var offenderCheckinRepository: OffenderCheckinRepository
 
-  @Autowired lateinit var offenderEventLogRepository: OffenderEventLogRepository
+  @Autowired
+  lateinit var offenderEventLogRepository: OffenderEventLogRepository
 
-  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+  @Autowired
+  lateinit var genericNotificationRepository: GenericNotificationRepository
 
-  @Autowired lateinit var outboxItemRepository: OutboxItemRepository
+  @Autowired
+  lateinit var outboxItemRepository: OutboxItemRepository
 
-  @Autowired lateinit var questionListItemRepository: DebugQuestionsRepository
+  @Autowired
+  lateinit var questionListItemRepository: DebugQuestionsRepository
 
-  @Autowired lateinit var questionListAssignmentRepository: QuestionListAssignmentRepository
+  @Autowired
+  lateinit var questionListAssignmentRepository: QuestionListAssignmentRepository
 
-  @Autowired lateinit var questionDefinitionRepository: QuestionDefinitionRepository
+  @Autowired
+  lateinit var questionDefinitionRepository: QuestionDefinitionRepository
 
   val dataProvider = GeneratingStubDataProvider()
 
@@ -89,9 +105,14 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
   fun setup() {
     (clock as MutableTestClock).advanceTo(Instant.now())
 
-    val offender1 = offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
-    val offender2 = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID()).toEntity()
-    val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
+    val offender1 =
+      offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
+    val offender2 =
+      offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID())
+        .toEntity()
+    val offender3 =
+      offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID())
+        .toEntity()
     offenderRepository.saveAll(listOf(offender1, offender2, offender3))
   }
 
@@ -113,7 +134,7 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
   @Test
   fun `execute the job`() {
-    whenever(ndiliusApiClient.getContactDetailsForMultiple(any(), any())).thenReturn(
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(
       listOf("A000002", "A000003").map { dataProvider.provideCase(it) },
     )
 

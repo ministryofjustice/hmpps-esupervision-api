@@ -144,7 +144,13 @@ class EligibilityEvaluationEngineTest {
 
     val result = engine.itemize("X123456", DEFAULT_RULE_SET, emptyMap()).join()
 
-    assertEquals(listOf(firstRule to EligibilityRuleOutcome.ELIGIBLE, secondRule to EligibilityRuleOutcome.NOT_ELIGIBLE), result)
+    assertEquals(
+      listOf(
+        firstRule to EligibilityRuleOutcome.ELIGIBLE,
+        secondRule to EligibilityRuleOutcome.NOT_ELIGIBLE,
+      ),
+      result,
+    )
     verify(ndeliusProvider).fetch("X123456")
     verify(nomisProvider).fetch("X123456")
   }
@@ -238,7 +244,8 @@ class EligibilityEvaluationEngineTest {
     val ndeliusRule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
       .thenReturn(listOf(ndeliusRule))
-    val prePopulatedCache = mapOf("NDELIUS" to CompletableFuture.completedFuture(mapOf<String, Any?>("DECEASED_DATE" to null)))
+    val prePopulatedCache =
+      mapOf("NDELIUS" to CompletableFuture.completedFuture(mapOf<String, Any?>("DECEASED_DATE" to null)))
 
     val result = engine.evaluate("X123456", prePopulatedCache = prePopulatedCache, ruleSet = DEFAULT_RULE_SET).join()
 
@@ -269,7 +276,7 @@ class EligibilityEvaluationEngineTest {
 
     val crn = "X000001"
     val apiClient: INdiliusApiClient = mock()
-    whenever(apiClient.getContactDetailsStrict(any(), any())).thenReturn(null)
+    whenever(apiClient.getContactDetailsStrict(any())).thenReturn(null)
     executor = Executors.newSingleThreadExecutor()
     val provider: EligibilityDataProvider = NdeliusEligibilityDataProvider(
       apiClient,

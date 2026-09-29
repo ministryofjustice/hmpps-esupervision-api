@@ -14,7 +14,7 @@ import kotlin.jvm.optionals.getOrElse
 class EsupervisionEligibilityDataProvider(
   private val offenderRepository: OffenderRepository,
   @Qualifier("eligibilityDataFetchExecutor") private val eligibilityDataFetchExecutor: Executor,
-): EligibilityDataProvider {
+) : EligibilityDataProvider {
   override val sourceKey: String
     get() = "ESUP"
 
@@ -24,9 +24,10 @@ class EsupervisionEligibilityDataProvider(
         throw ResourceNotFoundException("Could not fetch eligibility details from $sourceKey for CRN: $crn")
       }.eligibilityData()
     },
-    eligibilityDataFetchExecutor)
+    eligibilityDataFetchExecutor,
+  )
 }
 
 fun Offender.eligibilityData(): Map<String, Any?> = mapOf(
-  "PILOT_USER" to this.inPilot
+  "PILOT_USER" to this.inPilot,
 )

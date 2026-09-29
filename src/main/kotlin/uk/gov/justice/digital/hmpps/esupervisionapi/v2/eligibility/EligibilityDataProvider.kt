@@ -23,13 +23,12 @@ interface EligibilityDataProvider {
   fun fetch(crn: CRN): CompletableFuture<Map<String, Any?>>
 }
 
-
 /**
  * Utility function for fetching data and surfacing null response as a 404
  *
  * @throws ResourceNotFoundException if [fetcher] returns null
  */
-fun <T>fetchData(sourceKey: String, crn: CRN, fetcher: (crn: CRN) -> T? ): T {
+fun <T> fetchData(sourceKey: String, crn: CRN, fetcher: (crn: CRN) -> T?): T {
   val data = fetcher(crn)
   if (data == null) {
     throw ResourceNotFoundException("Could not fetch eligibility details from $sourceKey for CRN: $crn")
