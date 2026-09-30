@@ -31,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -45,34 +46,34 @@ import java.util.concurrent.TimeoutException
 /** V2 Checkin Service Handles all checkin business logic for V2 */
 @Service
 class CheckinService(
-  private val clock: Clock,
-  private val checkinRepository: OffenderCheckinRepository,
-  private val offenderRepository: OffenderRepository,
-  private val genericNotificationRepository: GenericNotificationRepository,
-  private val offenderEventLogRepository: OffenderEventLogRepository,
-  private val ndiliusApiClient: INdiliusApiClient,
-  private val notificationService: NotificationService,
-  private val checkinCreationService: CheckinCreationService,
-  private val s3UploadService: S3UploadService,
-  private val compareFacesService: OffenderIdVerifier,
-  private val livenessSessionService: LivenessSessionService,
-  private val livenessCredentialsService: LivenessCredentialsProvider,
-  private val checkinPersistenceService: CheckinPersistenceService,
-  @param:Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
-  @param:Value("\${rekognition.face-similarity.threshold:90.0}")
+    private val clock: Clock,
+    private val checkinRepository: OffenderCheckinRepository,
+    private val offenderRepository: OffenderRepository,
+    private val genericNotificationRepository: GenericNotificationRepository,
+    private val offenderEventLogRepository: OffenderEventLogRepository,
+    private val ndiliusApiClient: INdiliusApiClient,
+    private val notificationService: NotificationService,
+    private val checkinCreationService: CheckinCreationService,
+    private val s3UploadService: S3UploadService,
+    private val compareFacesService: OffenderIdVerifier,
+    private val livenessSessionService: LivenessSessionService,
+    private val livenessCredentialsService: LivenessCredentialsProvider,
+    private val checkinPersistenceService: CheckinPersistenceService,
+    @param:Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
+    @param:Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
-  @param:Value("\${rekognition.liveness.confidence-threshold:90.0}")
+    @param:Value("\${rekognition.liveness.confidence-threshold:90.0}")
   private val livenessConfidenceThreshold: Float,
-  @param:Value("\${rekognition.call-timeout-seconds:30}")
+    @param:Value("\${rekognition.call-timeout-seconds:30}")
   private val rekognitionCallTimeoutSeconds: Long,
-  private val objectMapper: ObjectMapper,
-  @param:Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
+    private val objectMapper: ObjectMapper,
+    @param:Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
-  private val appConfig: AppConfig,
-  private val transactionTemplate: TransactionTemplate,
+    private val appConfig: AppConfig,
+    private val transactionTemplate: TransactionTemplate,
   // Non-production only: lets the DEBUG checkin creation endpoints accept a past due date, so the
   // expiry journeys can be tested without waiting. Shares the manual job trigger switch.
-  @param:Value("\${app.jobs.manual-trigger.enabled:false}")
+    @param:Value("\${app.jobs.manual-trigger.enabled:false}")
   private val allowPastDueDate: Boolean,
 ) {
 

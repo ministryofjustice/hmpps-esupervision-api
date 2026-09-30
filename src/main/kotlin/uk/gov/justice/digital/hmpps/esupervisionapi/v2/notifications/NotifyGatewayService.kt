@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications
 
 import com.google.common.util.concurrent.RateLimiter
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker

@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -6,6 +6,21 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -38,23 +53,23 @@ class NotificationFailureException(message: String) : RuntimeException(message)
  */
 @Service
 class NotificationOrchestratorService(
-  private val notificationPersistence: NotificationPersistenceService,
-  private val notifyGateway: NotifyGatewayService,
-  private val domainEventService: DomainEventService,
-  private val eventAuditService: EventAuditService,
-  private val eventDetailService: EventDetailService,
-  private val ndiliusApiClient: INdiliusApiClient,
-  private val appConfig: AppConfig,
-  private val clock: Clock,
-  @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+    private val notificationPersistence: NotificationPersistenceService,
+    private val notifyGateway: NotifyGatewayService,
+    private val domainEventService: DomainEventService,
+    private val eventAuditService: EventAuditService,
+    private val eventDetailService: EventDetailService,
+    private val ndiliusApiClient: INdiliusApiClient,
+    private val appConfig: AppConfig,
+    private val clock: Clock,
+    @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) {
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
 
   /** Send notifications for setup completed event */
   fun sendSetupCompletedNotifications(
-    offender: Offender,
-    contactDetails: ContactDetails? = null,
-    setup: OffenderSetupDto,
+      offender: Offender,
+      contactDetails: ContactDetails? = null,
+      setup: OffenderSetupDto,
   ) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
@@ -106,7 +121,7 @@ class NotificationOrchestratorService(
 
   /** Send notifications for reactivation completed event */
   fun sendReactivationCompletedNotifications(
-    event: OffenderReactivatedEvent,
+      event: OffenderReactivatedEvent,
   ) {
     val offender = event.offender
     domainEventService.publishDomainEvent(
@@ -158,7 +173,7 @@ class NotificationOrchestratorService(
 
   /** Send notifications for deactivation completed event */
   fun sendDeactivationCompletedNotifications(
-    event: OffenderDeactivatedEvent,
+      event: OffenderDeactivatedEvent,
   ) {
     val offender = event.offender
     val details = event.offender.personalDetails
@@ -264,8 +279,8 @@ class NotificationOrchestratorService(
 
   /** Send reminder notifications for checkin */
   fun sendReminderCheckinNotifications(
-    checkin: OffenderCheckin,
-    contactDetails: ContactDetails,
+      checkin: OffenderCheckin,
+      contactDetails: ContactDetails,
   ) {
     try {
       val personalisation =
@@ -350,10 +365,10 @@ class NotificationOrchestratorService(
   }
 
   fun checkinSubmittedPersonalisationDetails(
-    details: ContactDetails,
-    checkin: CheckinDto,
-    totalFlags: Int,
-    contactRequestFlag: String,
+      details: ContactDetails,
+      checkin: CheckinDto,
+      totalFlags: Int,
+      contactRequestFlag: String,
   ): Map<String, String> {
     require(contactRequestFlag == "yes" || contactRequestFlag == "no")
 
@@ -374,8 +389,8 @@ class NotificationOrchestratorService(
 
   /** Send notifications for checkin expired event */
   fun sendCheckinExpiredNotifications(
-    checkin: OffenderCheckin,
-    details: ContactDetails,
+      checkin: OffenderCheckin,
+      details: ContactDetails,
   ) {
     val personalisation = checkinExpiredPersonalisationDetails(details, checkin)
 
@@ -400,8 +415,8 @@ class NotificationOrchestratorService(
   }
 
   private fun checkinExpiredPersonalisationDetails(
-    details: ContactDetails,
-    checkin: OffenderCheckin,
+      details: ContactDetails,
+      checkin: OffenderCheckin,
   ): Map<String, String> = mapOf(
     "practitionerName" to (details.practitioner?.name?.forename ?: checkin.offender.practitionerId),
     "name" to "${details.name.forename} ${details.name.surname}",
@@ -439,8 +454,8 @@ class NotificationOrchestratorService(
   fun getEventDetail(detailUrl: String): EventDetailResponse? = eventDetailService.getEventDetail(detailUrl)
 
   private fun processAndSendNotifications(
-    notificationsWithRecipients: List<NotificationWithRecipient>,
-    personalisation: Map<String, String>,
+      notificationsWithRecipients: List<NotificationWithRecipient>,
+      personalisation: Map<String, String>,
   ) {
     if (notificationsWithRecipients.isEmpty()) return
 

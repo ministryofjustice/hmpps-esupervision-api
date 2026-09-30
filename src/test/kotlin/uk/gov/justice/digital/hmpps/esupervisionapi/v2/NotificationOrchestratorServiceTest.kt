@@ -20,6 +20,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.AssociatedOffenderInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationPersistenceService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationWithRecipient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -48,15 +53,15 @@ class NotificationOrchestratorServiceTest {
     whenever(appConfig.feedbackUrl()).thenReturn(URI("https://example.com/feedback"))
 
     service = NotificationOrchestratorService(
-      notificationPersistence,
-      notifyGateway,
-      domainEventService,
-      eventAuditService,
-      eventDetailService,
-      ndiliusApiClient,
-      appConfig,
-      clock,
-      Duration.ofHours(72),
+        notificationPersistence,
+        notifyGateway,
+        domainEventService,
+        eventAuditService,
+        eventDetailService,
+        ndiliusApiClient,
+        appConfig,
+        clock,
+        Duration.ofHours(72),
     )
   }
 
@@ -211,7 +216,13 @@ class NotificationOrchestratorServiceTest {
     )
 
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
-      .thenReturn(notifications.map { NotificationWithRecipient(it, "07700900123", AssociatedOffenderInfo.create(offender.crn)) })
+      .thenReturn(notifications.map {
+        NotificationWithRecipient(
+          it,
+          "07700900123",
+          AssociatedOffenderInfo.create(offender.crn)
+        )
+      })
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(notifications)
     whenever(notifyGateway.send(any(), any(), any(), any(), any()))
       .thenThrow(RuntimeException("GOV.UK Notify error"))

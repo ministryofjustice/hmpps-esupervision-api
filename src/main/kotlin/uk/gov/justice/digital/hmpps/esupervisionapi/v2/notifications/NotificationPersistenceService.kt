@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -12,9 +12,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMe
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotification
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContext
 import java.time.Clock
 import java.util.UUID
 
@@ -24,19 +28,19 @@ import java.util.UUID
  */
 @Service
 class NotificationPersistenceService(
-  private val templateConfig: MessageTemplateConfig,
-  private val genericNotificationRepository: GenericNotificationRepository,
-  private val transactionTemplate: TransactionTemplate,
-  private val clock: Clock,
-  @param:Value("\${app.env}") private val env: String,
+    private val templateConfig: MessageTemplateConfig,
+    private val genericNotificationRepository: GenericNotificationRepository,
+    private val transactionTemplate: TransactionTemplate,
+    private val clock: Clock,
+    @param:Value("\${app.env}") private val env: String,
 ) {
   /** Build notification records for offender (SMS and/or Email) */
   fun buildOffenderNotifications(
-    offenderId: Long,
-    crn: CRN,
-    contactPreference: ContactPreference,
-    contactDetails: ContactDetails,
-    notificationType: NotificationType,
+      offenderId: Long,
+      crn: CRN,
+      contactPreference: ContactPreference,
+      contactDetails: ContactDetails,
+      notificationType: NotificationType,
   ): List<NotificationWithRecipient> {
     val notifications = mutableListOf<NotificationWithRecipient>()
     val channels = templateConfig.channels
@@ -48,24 +52,24 @@ class NotificationPersistenceService(
     fun createNotificationRecord(details: ContactDetails): Pair<GenericNotification, NotificationMethod>? {
       val templates = templateConfig.templatesFor(contactPreference, details)
       val notification = if (templates != null) {
-        GenericNotification(
-          notificationId = UUID.randomUUID(),
-          eventType = notificationType.name,
-          recipientType = "OFFENDER",
-          channel = when (contactPreference) {
-            ContactPreference.PHONE -> "SMS"
-            ContactPreference.EMAIL -> "EMAIL"
-          },
-          offenderId = offenderId,
-          practitionerId = null,
-          status = "created",
-          reference = NotificationContext.generateReference(notificationType, clock, env),
-          createdAt = clock.instant(),
-          errorMessage = null,
-          templateId = templates.first.getTemplate(notificationType),
-          sentAt = null,
-          updatedAt = null,
-        )
+          GenericNotification(
+              notificationId = UUID.randomUUID(),
+              eventType = notificationType.name,
+              recipientType = "OFFENDER",
+              channel = when (contactPreference) {
+                  ContactPreference.PHONE -> "SMS"
+                  ContactPreference.EMAIL -> "EMAIL"
+              },
+              offenderId = offenderId,
+              practitionerId = null,
+              status = "created",
+              reference = NotificationContext.generateReference(notificationType, clock, env),
+              createdAt = clock.instant(),
+              errorMessage = null,
+              templateId = templates.first.getTemplate(notificationType),
+              sentAt = null,
+              updatedAt = null,
+          )
       } else {
         LOGGER.warn("NOTIFICATION_UNDELIVERABLE: Unsupported contact preference [type={}, crn={}, preference={}]", notificationType, crn, contactPreference)
         return null
@@ -93,12 +97,12 @@ class NotificationPersistenceService(
 
   /** Build notification records for practitioner (Email only) */
   fun buildPractitionerNotifications(
-    offenderId: Long?,
-    crn: CRN?,
-    contactDetails: PractitionerDetails?,
-    checkin: CheckinDto?,
-    notificationType: NotificationType,
-    practitionerId: ExternalUserId,
+      offenderId: Long?,
+      crn: CRN?,
+      contactDetails: PractitionerDetails?,
+      checkin: CheckinDto?,
+      notificationType: NotificationType,
+      practitionerId: ExternalUserId,
   ): List<NotificationWithRecipient> {
     val notifications = mutableListOf<NotificationWithRecipient>()
     val channels = templateConfig.channels
@@ -110,19 +114,19 @@ class NotificationPersistenceService(
         val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)
         val reference = NotificationContext.generateReference(notificationType, clock, env)
         val notification = GenericNotification(
-          notificationId = UUID.randomUUID(),
-          eventType = notificationType.name,
-          recipientType = "PRACTITIONER",
-          channel = "EMAIL",
-          offenderId = offenderId,
-          practitionerId = practitionerId,
-          status = "created",
-          reference = reference,
-          createdAt = clock.instant(),
-          errorMessage = null,
-          templateId = emailTemplateId,
-          sentAt = null,
-          updatedAt = null,
+            notificationId = UUID.randomUUID(),
+            eventType = notificationType.name,
+            recipientType = "PRACTITIONER",
+            channel = "EMAIL",
+            offenderId = offenderId,
+            practitionerId = practitionerId,
+            status = "created",
+            reference = reference,
+            createdAt = clock.instant(),
+            errorMessage = null,
+            templateId = emailTemplateId,
+            sentAt = null,
+            updatedAt = null,
         )
         notifications.add(NotificationWithRecipient(notification, contactDetails.email, AssociatedOffenderInfo.create(crn)))
       }
@@ -142,10 +146,10 @@ class NotificationPersistenceService(
 
   /** Update single notification status immediately after sending (in own transaction) */
   fun updateSingleNotificationStatus(
-    notification: GenericNotification,
-    success: Boolean,
-    notifyId: UUID,
-    error: String? = null,
+      notification: GenericNotification,
+      success: Boolean,
+      notifyId: UUID,
+      error: String? = null,
   ) {
     transactionTemplate.execute {
       notification.notificationId = notifyId
@@ -169,18 +173,18 @@ data class AssociatedOffenderInfo(val crn: CRN) {
 }
 
 data class NotificationWithRecipient(
-  val notification: GenericNotification,
-  /** Phone number or email address */
+    val notification: GenericNotification,
+    /** Phone number or email address */
   val recipient: String,
-  /** Offender associated with the notification (which may be different than the recipient) */
+    /** Offender associated with the notification (which may be different than the recipient) */
   val offender: AssociatedOffenderInfo?,
 )
 
 data class SendResult(
-  val notification: GenericNotification,
-  val notificationId: UUID,
-  val success: Boolean,
-  val error: String? = null,
+    val notification: GenericNotification,
+    val notificationId: UUID,
+    val success: Boolean,
+    val error: String? = null,
 )
 
 private fun NotificationChannelsConfig.enabledFor(preference: ContactPreference): Boolean {
