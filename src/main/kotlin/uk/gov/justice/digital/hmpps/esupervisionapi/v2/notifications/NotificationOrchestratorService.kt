@@ -87,11 +87,16 @@ class NotificationOrchestratorService(
     if (contactDetails != null) {
       try {
         val personalisation =
-          mapOf(
-            "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
-            "date" to offender.firstCheckin.format(DATE_FORMATTER),
-            "frequency" to frequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }),
-          )
+          if (offender.mode == CheckinMode.SCHEDULED)
+            mapOf(
+              "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
+              "date" to offender.firstCheckin.format(DATE_FORMATTER),
+              "frequency" to frequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }),
+            )
+          else
+            mapOf(
+              "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
+            )
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
@@ -99,7 +104,7 @@ class NotificationOrchestratorService(
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = contactDetails,
-            notificationType = NotificationType.RegistrationConfirmation,
+            notificationType = if (offender.mode == CheckinMode.SCHEDULED) NotificationType.RegistrationConfirmation else NotificationType.RegistrationConfirmationAdHoc,
           )
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)
