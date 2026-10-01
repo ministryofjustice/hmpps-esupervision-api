@@ -5,6 +5,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.isUnsetAdHocFirstCheckin
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -75,8 +77,10 @@ fun checkinIneligibilityReason(offender: ActiveEvent, details: ContactDetails): 
  * is on ad-hoc check-ins (e.g. offender.firstCheckin is their closest check-in date).
  */
 fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
-  val intervalDuration = offender.checkinInterval ?: return date == offender.firstCheckin
-  // require(intervalDuration != null) { "Check-in interval is required for scheduled check-ins" }
+  val intervalDuration = offender.checkinInterval
+  if (intervalDuration == null) {
+    return !isUnsetAdHocFirstCheckin(CheckinMode.AD_HOC, offender.firstCheckin, date) && date == offender.firstCheckin
+  }
   val firstCheckin = offender.firstCheckin
   if (intervalDuration.toDays() > 0) {
     if (date < firstCheckin) {

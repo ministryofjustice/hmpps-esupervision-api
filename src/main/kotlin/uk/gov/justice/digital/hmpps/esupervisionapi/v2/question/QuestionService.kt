@@ -30,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.isUnsetAdHocFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
@@ -88,7 +89,7 @@ class QuestionService(
     val today = clock.today()
     val next = when (offender.mode) {
       CheckinMode.SCHEDULED -> nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY)
-      CheckinMode.AD_HOC -> offender.firstCheckin
+      CheckinMode.AD_HOC -> if (isUnsetAdHocFirstCheckin(offender.mode, offender.firstCheckin, today)) null else offender.firstCheckin
     }
     val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, today, next, checkinWindow.toDays())
 
@@ -117,7 +118,7 @@ class QuestionService(
     }
     val today = clock.today()
     when (offender.mode) {
-      CheckinMode.AD_HOC -> if (offender.firstCheckin <= today) {
+      CheckinMode.AD_HOC -> if (!isUnsetAdHocFirstCheckin(offender.mode, offender.firstCheckin, today) && offender.firstCheckin <= today) {
         throw BadArgumentException("offender does not have an upcoming check-in")
       }
       CheckinMode.SCHEDULED -> null
@@ -126,7 +127,7 @@ class QuestionService(
     val checkin = checkinRepository.findByOffenderAndDueDate(offender, today).getOrNull()
     val isDueToday = when (offender.mode) {
       CheckinMode.SCHEDULED -> isCheckinDay(offender, today)
-      CheckinMode.AD_HOC -> offender.firstCheckin == today
+      CheckinMode.AD_HOC -> !isUnsetAdHocFirstCheckin(offender.mode, offender.firstCheckin, today) && offender.firstCheckin == today
     }
     if ((checkin == null && isDueToday) || (checkin != null && checkin.status == CheckinStatus.CREATED)) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
@@ -153,7 +154,7 @@ class QuestionService(
 
     val nextCheckin = when (offender.mode) {
       CheckinMode.SCHEDULED -> nextCheckinDay(offender, today)
-      CheckinMode.AD_HOC -> offender.firstCheckin
+      CheckinMode.AD_HOC -> if (isUnsetAdHocFirstCheckin(offender.mode, offender.firstCheckin, today)) null else offender.firstCheckin
     }
     return AssignCustomQuestionsResponse(nextCheckin, listId)
   }
