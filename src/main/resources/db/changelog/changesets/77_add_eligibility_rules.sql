@@ -27,38 +27,53 @@ insert into offender_eligibility_rule
  outcome_on_match, message_on_match, outcome_on_no_match, message_on_no_match, comment)
 values
 
+    -- NOTE: no match message is never shown
     (2, 'IS_RECALLED', 'Are they recalled on any sentence?',
      'SUP-PACK', 'RECALLED',
      'EQUALS','false',
      'CONTINUE', null,
-     'NOT_ELIGIBLE', 'They''ve been recalled.',
+     'NOT_ELIGIBLE', '{{offender}} has been recalled to prison.',
+     null),
+
+    (7, 'IS_TIER_PROVISIONAL', 'Is their tier provisional?',
+     'TIER', 'PROVISIONAL',
+     'EQUALS','false',
+     'CONTINUE', null,
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in a provisional',
      null),
 
     (8, 'IN_FINAL_THIRD', 'Are they in their final third?',
      'SUP-PACK', 'FINAL_THIRD',
      'EQUALS','false',
      'CONTINUE', null,
-     'NOT_ELIGIBLE', 'They''re in their final third.',
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in their final third of their sentence.',
+     null),
+
+    (9, 'IS_PRACTITIONER_ASSIGNED', 'Are they in their final third?',
+     'NDELIUS', 'PRACTITIONER_ASSIGNED',
+     'EQUALS','true',
+     'CONTINUE', null,
+     'NOT_ELIGIBLE', '{{offender}} must have probation practitioner assigned to them before they can be set up to use online check ins',
      null),
 
     (11, 'IS_TIER_D_TO_G', 'Are they in D-G?',
      'TIER', 'TIER',
      'IN_SET','D E F G',
-     'ELIGIBLE', 'They are in tiers D-G.',
+     'ELIGIBLE', '{{offender}} are in Tiers D-G.',
      'CONTINUE', null,
      null),
 
     (13, 'IS_TIER_C', 'Are they in Tier C?',
      'TIER', 'TIER',
      'EQUALS','C',
-     'NOT_ELIGIBLE', 'They are in Tier C.',
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in Tier C.',
      'CONTINUE', null,
      null),
 
     (16, 'IN_EARLY_ENGAGEMENT', 'Are they in early engagement?',
      'SUP-PACK', 'EARLY_ENGAGEMENT',
      'EQUALS','false',
-     'ELIGIBLE', 'They are eligible for early engagement.',
-     'NOT_ELIGIBLE', 'They are in early engagement.',
+     'ELIGIBLE', 'They are eligible for online check ins.',
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in Tier A or B, on an accredited programme, but are in early engagement.',
      null)
 ;

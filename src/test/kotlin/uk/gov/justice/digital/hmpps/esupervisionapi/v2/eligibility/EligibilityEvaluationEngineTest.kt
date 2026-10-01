@@ -142,7 +142,7 @@ class EligibilityEvaluationEngineTest {
     val ndeliusProvider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null))
     val nomisProvider = mockProvider("NOMIS", mapOf("RECALL_STATUS" to null))
 
-    val result = engine.itemize("X123456", DEFAULT_RULE_SET, emptyMap()).join()
+    val result = engine.itemise("X123456", DEFAULT_RULE_SET, emptyMap()).join()
 
     assertEquals(
       listOf(
@@ -265,6 +265,28 @@ class EligibilityEvaluationEngineTest {
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
     verify(provider, times(1)).fetch(org.mockito.kotlin.any())
+  }
+
+  @Test
+  fun `evaluate and itemize share source fetches when using one cache`() {
+    val first = rule(
+      "SHORTCUT",
+      1.0,
+      "NDELIUS",
+      "DECEASED_DATE",
+      EligibilityRuleOperator.IS_NULL,
+      outcomeOnMatch = EligibilityRuleOutcome.ELIGIBLE,
+    )
+    val second = rule("SECOND", 2.0, "NDELIUS", "ACTIVE_EVENT", EligibilityRuleOperator.IS_NOT_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(first, second))
+    val provider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null, "ACTIVE_EVENT" to "ACTIVE"))
+    val fetchCache = engine.newFetchCache()
+
+    engine.evaluate("X123456", DEFAULT_RULE_SET, fetchCache).join()
+    engine.itemise("X123456", DEFAULT_RULE_SET, fetchCache).join()
+
+    verify(provider, times(1)).fetch("X123456")
   }
 
   @Test

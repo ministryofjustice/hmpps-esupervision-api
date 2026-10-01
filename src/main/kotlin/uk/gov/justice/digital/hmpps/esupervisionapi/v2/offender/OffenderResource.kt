@@ -55,6 +55,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
@@ -165,8 +168,50 @@ class OffenderResource(
   @GetMapping("/crn/{crn}/eligibility")
   fun getEligibilityByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
-  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> = eligibilityEvaluationEngine.evaluate(crn.trim().uppercase(), eligibilityEvaluationEngine.activeRuleSet)
-    .thenApply { result -> ResponseEntity.ok(EligibilityCheckResponse(result.outcome, result.message)) }
+    @Parameter(description = "Should the response contain outcomes for all rules") itemise: Boolean = false,
+  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> {
+    val normalisedCrn = crn.trim().uppercase()
+    val ruleSet = eligibilityEvaluationEngine.activeRuleSet
+
+    val contactDetails = ndiliusApiClient.getContactDetailsStrict(normalisedCrn)
+      ?: return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.NOT_FOUND).build())
+
+    val cache = mapOf(
+      "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+    )
+
+    if (!itemise) {
+      return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
+        .thenApply { result -> ResponseEntity.ok(EligibilityCheckResponse(result.outcome, result.message)) }
+    }
+
+    val fetchCache = eligibilityEvaluationEngine.newFetchCache()
+    return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, fetchCache)
+      .thenCompose { result ->
+        eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, fetchCache)
+          .thenApply { report ->
+            ResponseEntity.ok(
+              EligibilityCheckResponse(
+                outcome = result.outcome,
+                message = result.message,
+                allRules = report.map { (rule, outcome) ->
+                  EligibilityCheckResponse.RuleResult(
+                    source = rule.source,
+                    code = rule.code,
+                    dataPoint = rule.dataPoint,
+                    outcome = outcome,
+                    message = when (outcome) {
+                      EligibilityRuleOutcome.CONTINUE -> null
+                      EligibilityRuleOutcome.ELIGIBLE -> rule.messageOnMatch?.let { applyTemplate(it, contactDetails.name) }
+                      EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
+                    },
+                  )
+                },
+              ),
+            )
+          }
+      }
+  }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
@@ -679,7 +724,16 @@ data class SupervisionPackageStatus(
 data class EligibilityCheckResponse(
   val outcome: EligibilityCheckOutcome,
   val message: String? = null,
-)
+  val allRules: List<RuleResult>? = null,
+) {
+  data class RuleResult(
+    val source: String,
+    val code: String,
+    val dataPoint: String,
+    val outcome: EligibilityRuleOutcome,
+    val message: String? = null,
+  )
+}
 
 /**
  * Subset of [ContactDetails] that is returned in the summary DTO.

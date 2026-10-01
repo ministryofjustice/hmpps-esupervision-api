@@ -40,7 +40,7 @@ class EligibilityEvaluationEngine(
   typealias Cache = Map<DataSource, CompletableFuture<Map<String, Any?>>>
 
   /** We use get-or-fetch to hide whether sources are resolved lazily or supplied up front. */
-  private sealed interface FetchCache {
+  sealed interface FetchCache {
     fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>>
   }
 
@@ -65,12 +65,24 @@ class EligibilityEvaluationEngine(
     override fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>> = supplied[source] ?: fallback.computeIfAbsent(source) { providerRegistry.get(source).fetch(crn) }
   }
 
-  fun evaluate(crn: CRN, ruleSet: String): CompletableFuture<EligibilityResult> = evaluateFrom(
+  fun newFetchCache(): FetchCache = LazyFetchCache(providerRegistry)
+
+  fun evaluate(crn: CRN, ruleSet: String): CompletableFuture<EligibilityResult> = evaluate(
+    crn,
+    ruleSet,
+    newFetchCache(),
+  )
+
+  fun evaluate(
+    crn: CRN,
+    ruleSet: String,
+    fetchCache: FetchCache,
+  ): CompletableFuture<EligibilityResult> = evaluateFrom(
     ruleSet,
     ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
     0,
     crn,
-    LazyFetchCache(providerRegistry),
+    fetchCache,
   )
 
   /**
@@ -81,11 +93,9 @@ class EligibilityEvaluationEngine(
     crn: CRN,
     ruleSet: String,
     prePopulatedCache: Cache,
-  ): CompletableFuture<EligibilityResult> = evaluateFrom(
-    ruleSet,
-    ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
-    0,
+  ): CompletableFuture<EligibilityResult> = evaluate(
     crn,
+    ruleSet,
     PrePopulatedFetchCache(prePopulatedCache, providerRegistry),
   )
 
@@ -144,15 +154,24 @@ class EligibilityEvaluationEngine(
   /**
    * Returns a list of rules and their outcomes for the given CRN and rule set.
    */
-  fun itemize(
+  fun itemise(
     crn: CRN,
     ruleSet: String,
     cache: Cache,
+  ): CompletableFuture<List<Pair<OffenderEligibilityRule, EligibilityRuleOutcome>>> = itemise(
+    crn,
+    ruleSet,
+    PrePopulatedFetchCache(cache, providerRegistry),
+  )
+
+  fun itemise(
+    crn: CRN,
+    ruleSet: String,
+    fetchCache: FetchCache,
   ): CompletableFuture<List<Pair<OffenderEligibilityRule, EligibilityRuleOutcome>>> {
     val rules = ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet)
     require(rules.isNotEmpty()) { "Empty rule set: $ruleSet" }
 
-    val fetchCache = PrePopulatedFetchCache(cache, providerRegistry)
     return rules.fold(CompletableFuture.completedFuture(emptyList())) { resultsFuture, rule ->
       resultsFuture.thenCompose { results ->
         evaluateRule(rule, crn, fetchCache).thenApply { (outcome, _) ->
