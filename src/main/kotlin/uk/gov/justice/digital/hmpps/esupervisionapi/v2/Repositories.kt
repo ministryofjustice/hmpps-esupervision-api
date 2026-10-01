@@ -55,7 +55,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         (o.checkin_mode = 'SCHEDULED'
           AND o.first_checkin <= :lowerBoundInclusive
           AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
-        OR (o.checkin_mode = 'AD_HOC' AND o.first_checkin = :lowerBoundInclusive)
+        OR (o.checkin_mode = 'AD_HOC' AND o.first_checkin = :lowerBoundInclusive AND o.first_checkin > :lowerBoundInclusive - 365)
       )
       AND NOT EXISTS (
         SELECT 1 FROM offender_checkin_v2 c
