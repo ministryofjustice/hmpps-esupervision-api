@@ -149,3 +149,5 @@ databaseChangeLog:
       file: db/changelog/changesets/74_add_checkin_mode_to_offender.sql
   - include:
       file: db/changelog/changesets/75_offender_eligibility_rules.sql
+  - include:
+      file: db/changelog/changesets/76_new_job_type.sql
