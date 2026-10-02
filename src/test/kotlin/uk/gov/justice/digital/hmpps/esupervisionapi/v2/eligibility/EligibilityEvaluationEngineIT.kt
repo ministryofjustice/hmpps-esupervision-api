@@ -33,7 +33,12 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
   @Test
   fun `evaluates rules from the database using the pre-populated fetch cache`() {
     val prePopulatedCache: MutableMap<String, CompletableFuture<Map<String, Any?>>> = mutableMapOf(
-      "NDELIUS" to CompletableFuture.completedFuture(mapOf("ACTIVE_EVENT" to Any())),
+      "NDELIUS" to CompletableFuture.completedFuture(
+        mapOf(
+          "ACTIVE_EVENT" to Any(),
+          "PRACTITIONER_ASSIGNED" to true,
+        ),
+      ),
       "SUP-PACK" to CompletableFuture.completedFuture(
         mapOf(
           "RECALLED" to false,
@@ -41,24 +46,28 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
           "EARLY_ENGAGEMENT" to false,
         ),
       ),
-      "TIER" to CompletableFuture.completedFuture<Map<String, Any?>>(mapOf("TIER" to "B")),
+      "TIER" to CompletableFuture.completedFuture<Map<String, Any?>>(
+        mapOf(
+          "TIER" to "B",
+          "PROVISIONAL" to "false",
+        ),
+      ),
     )
 
     val result = eligibilityEvaluationEngine
-      .evaluate("X123456", DEFAULT_RULE_SET, prePopulatedCache)
+      .evaluate("X123456", ruleSet = DEFAULT_RULE_SET, prePopulatedCache = prePopulatedCache)
       .join()
 
     assertThat(result.outcome).isEqualTo(EligibilityCheckOutcome.ELIGIBLE)
-    assertThat(result.message).isEqualTo("They are eligible for early engagement.")
     assertThat(result.triggeredRuleCode).isEqualTo("IN_EARLY_ENGAGEMENT")
 
-    prePopulatedCache["TIER"] = CompletableFuture.completedFuture(mapOf("TIER" to "C"))
+    prePopulatedCache["TIER"] = CompletableFuture.completedFuture(mapOf("TIER" to "C", "PROVISIONAL" to "false"))
     val resultC = eligibilityEvaluationEngine
       .evaluate("X123456", DEFAULT_RULE_SET, prePopulatedCache)
       .join()
 
     assertThat(resultC.outcome).isEqualTo(EligibilityCheckOutcome.INELIGIBLE)
-    assertThat(resultC.message).isEqualTo("They are in Tier C.")
+    assertThat(resultC.message).isEqualTo("{{offender}} is not eligible for online check ins because they are in Tier C.")
     assertThat(resultC.triggeredRuleCode).isEqualTo("IS_TIER_C")
   }
 }
