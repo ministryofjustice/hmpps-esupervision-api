@@ -102,3 +102,9 @@ practitioner_export.csv
 practitioners_unmatched.csv
 extract_report.txt
 practitioners.previous.jsonl
+
+# Outputs of scripts/run_tier_counts.sh (CRNs tied to tiers), same reasoning.
+active_crns.txt
+tiers.jsonl
+tier_counts.csv
+unresolved.txt
