@@ -40,7 +40,7 @@ class EligibilityEvaluationEngine(
   typealias Cache = Map<DataSource, CompletableFuture<Map<String, Any?>>>
 
   /** We use get-or-fetch to hide whether sources are resolved lazily or supplied up front. */
-  sealed interface FetchCache {
+  interface FetchCache {
     fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>>
   }
 
