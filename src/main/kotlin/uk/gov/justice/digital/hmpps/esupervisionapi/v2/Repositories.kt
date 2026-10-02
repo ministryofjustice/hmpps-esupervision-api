@@ -829,7 +829,7 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
     """select * from get_upcoming_assignment_info_v2(:offenderId, cast(:today as date), cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
+  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate?, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.

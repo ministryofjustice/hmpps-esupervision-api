@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain
 
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import java.time.Clock
 import java.time.LocalDate
@@ -21,4 +22,5 @@ fun resolveFirstCheckinForPersistence(mode: CheckinMode, firstCheckin: LocalDate
   else -> firstCheckin ?: throw BadArgumentException("First check-in date is required.")
 }
 
-fun isUnsetAdHocFirstCheckin(mode: CheckinMode, firstCheckin: LocalDate, today: LocalDate): Boolean = mode == CheckinMode.AD_HOC && firstCheckin <= today.minusDays(1)
+fun isUnsetAdHocFirstCheckin(mode: CheckinMode, firstCheckin: LocalDate?, today: LocalDate): Boolean =
+  mode == CheckinMode.AD_HOC && firstCheckin != null && firstCheckin <= today.minusDays(1)
