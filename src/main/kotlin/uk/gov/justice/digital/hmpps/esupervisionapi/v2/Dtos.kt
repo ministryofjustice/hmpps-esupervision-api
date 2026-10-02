@@ -280,9 +280,9 @@ data class OffenderInfo(
   @field:NotBlank
   @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
   val crn: String,
-  @field:Schema(description = "Date of first checkin", required = true)
+  @field:Schema(description = "Date of first checkin. Optional for AD_HOC check-ins; scheduled check-ins require a date.", required = false)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
+  val firstCheckin: LocalDate?,
   @field:Schema(description = "Interval between checkins", required = false)
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Check-in mode", required = true)
@@ -798,7 +798,7 @@ data class AssignCustomQuestionsRequest(
 )
 
 data class AssignCustomQuestionsResponse(
-  val expectedCheckinDate: LocalDate,
+  val expectedCheckinDate: LocalDate?,
   @field:Schema(description = "List ID", required = true, exclusiveMinimumValue = 0)
   val listId: Long,
 )

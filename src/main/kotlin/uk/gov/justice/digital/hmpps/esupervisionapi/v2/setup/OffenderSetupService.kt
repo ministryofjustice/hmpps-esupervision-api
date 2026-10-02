@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.resolveFirstCheckinForPersistence
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
@@ -103,7 +104,7 @@ class OffenderSetupService(
         throw BadArgumentException("Offender already exists.")
       }
       existing.practitionerId = offenderInfo.practitionerId
-      existing.firstCheckin = offenderInfo.firstCheckin
+      existing.firstCheckin = resolveFirstCheckinForPersistence(offenderInfo.mode, offenderInfo.firstCheckin, clock)
       existing.mode = offenderInfo.mode
       existing.checkinInterval = offenderInfo.checkinInterval?.duration
       existing.createdBy = offenderInfo.practitionerId
@@ -116,7 +117,7 @@ class OffenderSetupService(
         crn = offenderInfo.crn.trim().uppercase(),
         practitionerId = offenderInfo.practitionerId,
         status = OffenderStatus.INITIAL,
-        firstCheckin = offenderInfo.firstCheckin,
+        firstCheckin = resolveFirstCheckinForPersistence(offenderInfo.mode, offenderInfo.firstCheckin, clock),
         mode = offenderInfo.mode,
         checkinInterval = offenderInfo.checkinInterval?.duration,
         createdAt = now,

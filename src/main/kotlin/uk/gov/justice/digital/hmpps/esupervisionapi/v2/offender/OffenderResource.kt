@@ -51,7 +51,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.resolveFirstCheckinForPersistence
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
@@ -494,7 +494,7 @@ class OffenderResource(
     request.checkinSchedule?.let { schedule ->
       validate(schedule, offender.mode)
       offender.mode = schedule.mode ?: offender.mode
-      offender.firstCheckin = schedule.firstCheckin
+      offender.firstCheckin = resolveFirstCheckinForPersistence(offender.mode, schedule.firstCheckin, clock)
       offender.checkinInterval = schedule.checkinInterval?.duration
     }
     request.contactPreference?.let { pref ->
@@ -581,7 +581,7 @@ is *today*.""",
       validate(request.checkinSchedule, offender.mode)
       val scheduleUpdate = request.checkinSchedule
       offender.mode = mode
-      offender.firstCheckin = scheduleUpdate.firstCheckin
+      offender.firstCheckin = resolveFirstCheckinForPersistence(mode, scheduleUpdate.firstCheckin, clock)
       offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
       offender.updatedAt = clock.instant()
     }
@@ -625,17 +625,20 @@ is *today*.""",
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) {
-    if (scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
+    val mode = scheduleUpdate.mode ?: currentMode
+    if (scheduleUpdate.firstCheckin != null && scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
     }
-    when (scheduleUpdate.mode) {
+    when (mode) {
       CheckinMode.AD_HOC -> if (scheduleUpdate.checkinInterval != null) {
         throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval cannot be specified for ad-hoc check-ins.")
       }
       CheckinMode.SCHEDULED -> if (scheduleUpdate.checkinInterval == null) {
         throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval is required for scheduled check-ins.")
       }
-      null -> validateScheduleSettings(currentMode, scheduleUpdate.checkinInterval)
+    }
+    if (scheduleUpdate.firstCheckin == null && mode == CheckinMode.SCHEDULED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date is required for scheduled check-ins.")
     }
   }
 
@@ -824,7 +827,8 @@ data class ReactivateOffenderRequest(
 data class CheckinScheduleUpdateRequest(
   @field:Schema(description = "Id of the user requesting the change", required = true)
   val requestedBy: ExternalUserId,
-  @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
+  @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class)
+  val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Checkin mode, SCHEDULED or AD_HOC", required = false)
   val mode: CheckinMode? = null,
