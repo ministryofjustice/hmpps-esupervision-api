@@ -183,15 +183,18 @@ class OffenderResource(
     if (!itemise) {
       return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
         .thenApply { result ->
-          ResponseEntity.ok(EligibilityCheckResponse(
-            outcome = result.outcome,
-            message = result.message?.let { applyTemplate(it, contactDetails.name) })) }
+          ResponseEntity.ok(
+            EligibilityCheckResponse(
+              outcome = result.outcome,
+              message = result.message?.let { applyTemplate(it, contactDetails.name) },
+            ),
+          )
+        }
     }
 
-    val fetchCache = eligibilityEvaluationEngine.newFetchCache()
-    return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, fetchCache)
+    return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
       .thenCompose { result ->
-        eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, fetchCache)
+        eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, cache)
           .thenApply { report ->
             ResponseEntity.ok(
               EligibilityCheckResponse(

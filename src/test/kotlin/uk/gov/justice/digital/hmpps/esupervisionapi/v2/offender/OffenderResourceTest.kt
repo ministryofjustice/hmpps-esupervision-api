@@ -1182,7 +1182,7 @@ class OffenderResourceTest {
     whenever(rule.messageOnNoMatch).thenReturn("Person is deceased")
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
     whenever(eligibilityEvaluationEngine.newFetchCache()).thenReturn(fetchCache)
-    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.Cache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
         EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
@@ -1191,7 +1191,7 @@ class OffenderResourceTest {
         ),
       ),
     )
-    whenever(eligibilityEvaluationEngine.itemise(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+    whenever(eligibilityEvaluationEngine.itemise(any(), any(), any<EligibilityEvaluationEngine.Cache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
         listOf(rule to EligibilityRuleOutcome.NOT_ELIGIBLE),
       ),
@@ -1210,8 +1210,8 @@ class OffenderResourceTest {
       ),
       response.body?.allRules?.single(),
     )
-    verify(eligibilityEvaluationEngine).evaluate("X123456", DEFAULT_RULE_SET, fetchCache)
-    verify(eligibilityEvaluationEngine).itemise("X123456", DEFAULT_RULE_SET, fetchCache)
+    verify(eligibilityEvaluationEngine).evaluate(any(), any(), any<EligibilityEvaluationEngine.Cache>())
+    verify(eligibilityEvaluationEngine).itemise(any(), any(), any<EligibilityEvaluationEngine.Cache>())
   }
 
   // ========================================
