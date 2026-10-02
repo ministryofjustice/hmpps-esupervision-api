@@ -182,7 +182,10 @@ class OffenderResource(
 
     if (!itemise) {
       return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
-        .thenApply { result -> ResponseEntity.ok(EligibilityCheckResponse(result.outcome, result.message)) }
+        .thenApply { result ->
+          ResponseEntity.ok(EligibilityCheckResponse(
+            outcome = result.outcome,
+            message = result.message?.let { applyTemplate(it, contactDetails.name) })) }
     }
 
     val fetchCache = eligibilityEvaluationEngine.newFetchCache()
@@ -193,7 +196,7 @@ class OffenderResource(
             ResponseEntity.ok(
               EligibilityCheckResponse(
                 outcome = result.outcome,
-                message = result.message,
+                message = result.message?.let { applyTemplate(it, contactDetails.name) },
                 allRules = report.map { (rule, outcome) ->
                   EligibilityCheckResponse.RuleResult(
                     source = rule.source,
@@ -202,7 +205,7 @@ class OffenderResource(
                     outcome = outcome,
                     message = when (outcome) {
                       EligibilityRuleOutcome.CONTINUE -> null
-                      EligibilityRuleOutcome.ELIGIBLE -> rule.messageOnMatch?.let { applyTemplate(it, contactDetails.name) }
+                      EligibilityRuleOutcome.ELIGIBLE -> null // we don't care about the message here
                       EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
                     },
                   )
