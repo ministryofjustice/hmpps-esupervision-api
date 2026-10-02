@@ -2,7 +2,7 @@
 
 --changeset hmpps:77_add_eligibility_rules-1 splitStatements:false
 
-ALTER TABLE offender_v2 ADD COLUMN in_pilot bool default false;
+ALTER TABLE offender_v2 ADD COLUMN in_pilot bool not null default false;
 
 UPDATE offender_v2 SET in_pilot = TRUE
 WHERE created_at <= '2026-10-01';
@@ -49,7 +49,7 @@ values
      'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in their final third of their sentence.',
      null),
 
-    (9, 'IS_PRACTITIONER_ASSIGNED', 'Are they in their final third?',
+    (9, 'IS_PRACTITIONER_ASSIGNED', 'Do they have a practitioner assigned to them?',
      'NDELIUS', 'PRACTITIONER_ASSIGNED',
      'EQUALS','true',
      'CONTINUE', null,
