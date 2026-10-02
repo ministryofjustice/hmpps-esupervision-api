@@ -201,13 +201,13 @@ REVIEWER.ONLY,3,checkin_reviewed_by|checkin_review_started_by
 SVC-CLIENT,1,event_audit_log_v2
 EOF
 
-EXPECTED_EXPORT='PDU,Region,CRN,POP count,Email address
-"Lambeth PDU","London","X000007",1,"sam.patel@justice.gov.uk"
-"Cumbria, and Lancashire PDU; Salford PDU","North West","X000001; X000002",2,"barry.white@justice.gov.uk"
-"Salford PDU","North West","X000003",1,"anne.obrien@justice.gov.uk"
-"Cumbria, and Lancashire PDU","North West","X000004",1,""
-"Wigan PDU","North West","X000006",1,""
-"","","X000005",1,""'
+EXPECTED_EXPORT='PDU,Region,CRN,POP count,First name,Email address
+"Lambeth PDU","London","X000007",1,"Sam","sam.patel@justice.gov.uk"
+"Cumbria, and Lancashire PDU; Salford PDU","North West","X000001; X000002",2,"Barry","barry.white@justice.gov.uk"
+"Salford PDU","North West","X000003",1,"Anne","anne.obrien@justice.gov.uk"
+"Cumbria, and Lancashire PDU","North West","X000004",1,"Jo",""
+"Wigan PDU","North West","X000006",1,"",""
+"","","X000005",1,"",""'
 
 EXPECTED_WORKSHEET='username,PDU,Region,CRN,POP count
 "GONE.AWAY","","","X000005",1
@@ -239,7 +239,9 @@ wrapper() {  # workdir [extra env...]
 test_export_has_one_row_per_practitioner_with_the_requested_columns() {
   fetch "$T/f1" >/dev/null
   # Covers, in one file: the exact header; a practitioner's CRNs and PDUs
-  # collapsed into one row with POP count 2; emails lower-cased; live PDU
+  # collapsed into one row with POP count 2; emails lower-cased; forenames
+  # deduplicated case-insensitively (BARRY/Barry), none for the unallocated
+  # placeholder or a failed lookup; live PDU
   # preferred, snapshot used when the live one is missing (X000007); commas in
   # a PDU name surviving CSV quoting; blank-email rows kept and sorted last.
   assert_file_eq "$EXPECTED_EXPORT" "$T/f1/practitioner_export.csv" "export content"

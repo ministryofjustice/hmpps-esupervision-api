@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build the practitioner contact export: PDU, region, CRN, POP count, email
-# address -- ONE ROW PER PRACTITIONER, because the file is used as a mailing
+# Build the practitioner contact export: PDU, region, CRN, POP count, first
+# name, email address -- ONE ROW PER PRACTITIONER, because the file is used as a mailing
 # list. The cohort is every CRN that has, or has ever had, an online check-in;
 # those CRNs are collapsed onto the practitioner who holds them.
 #
@@ -25,6 +25,9 @@
 #            after the fetch so it follows the practitioner NDelius reports
 #            today. Historic and deactivated CRNs count: they are part of the
 #            cohort that was asked for.
+#   First name from the endpoint (the allocated practitioner's forename), as
+#            NDelius holds it. Blank where the email is blank for want of a
+#            live, allocated answer.
 #   Email    from the endpoint, lower-cased. Blank where NDelius holds no
 #            address, where the case is unallocated, or where the lookup never
 #            succeeded. Those rows are kept, sorted to the bottom of the file,
@@ -260,6 +263,10 @@ ROWS='
           username: (if ($r.username // "") != "" and $r.unallocated != true
                      then ($r.username | ascii_upcase)
                      else ($g.storedUsername // "") end),
+          # Only from a live, allocated answer: a fallback to the stored
+          # username has no name to go with it.
+          forename: (if ($r.username // "") != "" and $r.unallocated != true
+                     then ($r.forename // "" | gsub("^\\s+|\\s+$"; "")) else "" end),
           # NDelius unallocated-staff placeholders are not people to write to.
           email:  (if $r.unallocated == true then "" else ($r.email // "" | ascii_downcase) end) } ]'
 
@@ -272,9 +279,17 @@ ROWS='
 # into a single blank-email row. Those rows are kept in the file to be filled
 # in by hand; practitioners_unmatched.csv names them, since the export itself
 # has no column for a username.
+#
+# NDelius holds the same forename in different cases on different records
+# ("BARRY", "Barry"), so forenames are deduplicated case-insensitively, keeping
+# a mixed-case spelling over an all-capitals one where there is a choice.
 COLLAPSE='
   group_by(.username)
   | map({ username: .[0].username,
+          forename: (map(select(.forename != "") | .forename)
+                     | group_by(ascii_downcase)
+                     | map(sort_by(. == ascii_upcase) | .[0])
+                     | join("; ")),
           email:  (map(select(.email != "") | .email) | unique | join("; ")),
           pdu:    (map(select(.pdu    != "") | .pdu)    | unique | join("; ")),
           region: (map(select(.region != "") | .region) | unique | join("; ")),
@@ -284,11 +299,11 @@ COLLAPSE='
 # Rows needing a manual address go to the bottom, together, rather than being
 # scattered through the regions.
 {
-  echo "PDU,Region,CRN,POP count,Email address"
+  echo "PDU,Region,CRN,POP count,First name,Email address"
   jq -rn --slurpfile geo "$IN" --slurpfile res "$OUT" \
     "$ROWS | $COLLAPSE
      | sort_by([(.email == \"\"), (.region == \"\"), .region, .pdu, .email]) | .[]
-     | [.pdu, .region, .crn, .pop, .email] | @csv"
+     | [.pdu, .region, .crn, .pop, .forename, .email] | @csv"
 } > "$CSV_OUT"
 
 # ---------------------------------------------------------------------------
