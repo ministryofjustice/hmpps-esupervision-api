@@ -16,6 +16,8 @@ import java.util.concurrent.ExecutionException
 /**
  * A shim around the [EligibilityEvaluationEngine] meant to hide the differences between the
  * pilot eligibility code paths and the rule-based eligibility code paths in HTTP resources.
+ *
+ *  The message template in returned value will be already evaluated.
  */
 @Service
 class EligibilityChecker(
@@ -53,7 +55,7 @@ class EligibilityChecker(
         }
       }
       LOGGER.info("Eligibility evaluation for {} result: {}", offender.crn, result)
-      return result
+      return result.copy(message = result.message?.let { applyTemplate(it, contactDetails.name) })
     } else {
       val ineligibility = checkinIneligibilityReason(offender, contactDetails)
       return if (ineligibility == null) {

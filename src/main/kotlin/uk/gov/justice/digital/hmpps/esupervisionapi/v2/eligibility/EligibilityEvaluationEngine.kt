@@ -37,9 +37,10 @@ class EligibilityEvaluationEngine(
   @Value($$"${app.offender-eligibility.source-timeout-ms:2000}") val sourceTimeoutMs: Long,
 ) {
   typealias DataSource = String // e.g. "NDELIUS", "NOMIS" etc
+  typealias Cache = Map<DataSource, CompletableFuture<Map<String, Any?>>>
 
   /** We use get-or-fetch to hide whether sources are resolved lazily or supplied up front. */
-  private sealed interface FetchCache {
+  interface FetchCache {
     fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>>
   }
 
@@ -56,7 +57,7 @@ class EligibilityEvaluationEngine(
    * memoized per evaluation run so rules sharing a missing source still only fetch once.
    */
   private class PrePopulatedFetchCache(
-    private val supplied: Map<DataSource, CompletableFuture<Map<String, Any?>>>,
+    private val supplied: Cache,
     private val providerRegistry: EligibilityDataProviderRegistry,
   ) : FetchCache {
     private val fallback = ConcurrentHashMap<DataSource, CompletableFuture<Map<String, Any?>>>()
@@ -64,12 +65,24 @@ class EligibilityEvaluationEngine(
     override fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>> = supplied[source] ?: fallback.computeIfAbsent(source) { providerRegistry.get(source).fetch(crn) }
   }
 
-  fun evaluate(crn: CRN, ruleSet: String): CompletableFuture<EligibilityResult> = evaluateFrom(
+  fun newFetchCache(): FetchCache = LazyFetchCache(providerRegistry)
+
+  fun evaluate(crn: CRN, ruleSet: String): CompletableFuture<EligibilityResult> = evaluate(
+    crn,
+    ruleSet,
+    newFetchCache(),
+  )
+
+  fun evaluate(
+    crn: CRN,
+    ruleSet: String,
+    fetchCache: FetchCache,
+  ): CompletableFuture<EligibilityResult> = evaluateFrom(
     ruleSet,
     ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
     0,
     crn,
-    LazyFetchCache(providerRegistry),
+    fetchCache,
   )
 
   /**
@@ -79,12 +92,10 @@ class EligibilityEvaluationEngine(
   fun evaluate(
     crn: CRN,
     ruleSet: String,
-    prePopulatedCache: Map<DataSource, CompletableFuture<Map<String, Any?>>>,
-  ): CompletableFuture<EligibilityResult> = evaluateFrom(
-    ruleSet,
-    ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet),
-    0,
+    prePopulatedCache: Cache,
+  ): CompletableFuture<EligibilityResult> = evaluate(
     crn,
+    ruleSet,
     PrePopulatedFetchCache(prePopulatedCache, providerRegistry),
   )
 
@@ -100,6 +111,20 @@ class EligibilityEvaluationEngine(
       return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null))
     }
     val rule = rules[index]
+    return evaluateRule(rule, crn, fetchCache).thenCompose { (outcome, message) ->
+      when (outcome) {
+        EligibilityRuleOutcome.CONTINUE -> evaluateFrom(ruleSet, rules, index + 1, crn, fetchCache)
+        EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code))
+        EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code))
+      }
+    }
+  }
+
+  private fun evaluateRule(
+    rule: OffenderEligibilityRule,
+    crn: CRN,
+    fetchCache: FetchCache,
+  ): CompletableFuture<Pair<EligibilityRuleOutcome, String?>> {
     val sourceFuture = try {
       // NOTE: the WebClient executing the actual request should have
       // appropriate timeouts configured
@@ -116,20 +141,44 @@ class EligibilityEvaluationEngine(
           else -> CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, cause))
         }
       }
-      .thenCompose { sourceData ->
+      .thenApply { sourceData ->
         if (!sourceData.containsKey(rule.dataPoint)) {
           // we could get here if our data providers and rules are not in sync
           throw EligibilityDataUnavailableException(rule.code, rule.source, RuntimeException("Data point ${rule.dataPoint} missing for source=${rule.source}, rule=${rule.code}"))
         }
         val matched = EligibilityConditionEvaluator.evaluate(rule.operator, sourceData[rule.dataPoint], rule.comparisonValue)
-        val outcome = if (matched) rule.outcomeOnMatch else rule.outcomeOnNoMatch
-        val message = if (matched) rule.messageOnMatch else rule.messageOnNoMatch
-        when (outcome) {
-          EligibilityRuleOutcome.CONTINUE -> evaluateFrom(ruleSet, rules, index + 1, crn, fetchCache)
-          EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code))
-          EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code))
+        if (matched) rule.outcomeOnMatch to rule.messageOnMatch else rule.outcomeOnNoMatch to rule.messageOnNoMatch
+      }
+  }
+
+  /**
+   * Returns a list of rules and their outcomes for the given CRN and rule set.
+   */
+  fun itemise(
+    crn: CRN,
+    ruleSet: String,
+    cache: Cache,
+  ): CompletableFuture<List<Pair<OffenderEligibilityRule, EligibilityRuleOutcome>>> = itemise(
+    crn,
+    ruleSet,
+    PrePopulatedFetchCache(cache, providerRegistry),
+  )
+
+  fun itemise(
+    crn: CRN,
+    ruleSet: String,
+    fetchCache: FetchCache,
+  ): CompletableFuture<List<Pair<OffenderEligibilityRule, EligibilityRuleOutcome>>> {
+    val rules = ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet)
+    require(rules.isNotEmpty()) { "Empty rule set: $ruleSet" }
+
+    return rules.fold(CompletableFuture.completedFuture(emptyList())) { resultsFuture, rule ->
+      resultsFuture.thenCompose { results ->
+        evaluateRule(rule, crn, fetchCache).thenApply { (outcome, _) ->
+          results + (rule to outcome)
         }
       }
+    }
   }
 
   companion object {
