@@ -118,7 +118,7 @@ class QuestionService(
     }
     val today = clock.today()
     when (offender.mode) {
-      CheckinMode.AD_HOC -> if (!isUnsetAdHocFirstCheckin(offender.mode, offender.firstCheckin, today) && offender.firstCheckin <= today) {
+      CheckinMode.AD_HOC -> if (isUnsetAdHocFirstCheckin(offender.mode, offender.firstCheckin, today) || offender.firstCheckin <= today) {
         throw BadArgumentException("offender does not have an upcoming check-in")
       }
       CheckinMode.SCHEDULED -> null
@@ -154,7 +154,7 @@ class QuestionService(
 
     val nextCheckin = when (offender.mode) {
       CheckinMode.SCHEDULED -> nextCheckinDay(offender, today)
-      CheckinMode.AD_HOC -> if (isUnsetAdHocFirstCheckin(offender.mode, offender.firstCheckin, today)) null else offender.firstCheckin
+      CheckinMode.AD_HOC -> offender.firstCheckin
     }
     return AssignCustomQuestionsResponse(nextCheckin, listId)
   }
