@@ -22,5 +22,4 @@ fun resolveFirstCheckinForPersistence(mode: CheckinMode, firstCheckin: LocalDate
   else -> firstCheckin ?: throw BadArgumentException("First check-in date is required.")
 }
 
-fun isUnsetAdHocFirstCheckin(mode: CheckinMode, firstCheckin: LocalDate?, today: LocalDate): Boolean =
-  mode == CheckinMode.AD_HOC && firstCheckin != null && firstCheckin <= today.minusDays(1)
+fun isUnsetAdHocFirstCheckin(mode: CheckinMode, firstCheckin: LocalDate?, today: LocalDate): Boolean = mode == CheckinMode.AD_HOC && firstCheckin != null && firstCheckin <= today.minusDays(1)
