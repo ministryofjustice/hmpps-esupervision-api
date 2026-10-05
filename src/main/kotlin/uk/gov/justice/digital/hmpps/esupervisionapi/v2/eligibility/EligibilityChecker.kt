@@ -16,6 +16,8 @@ import java.util.concurrent.ExecutionException
 /**
  * A shim around the [EligibilityEvaluationEngine] meant to hide the differences between the
  * pilot eligibility code paths and the rule-based eligibility code paths in HTTP resources.
+ *
+ *  The message template in returned value will be already evaluated.
  */
 @Service
 class EligibilityChecker(
@@ -34,8 +36,10 @@ class EligibilityChecker(
           .evaluate(
             offender.crn,
             eligibilityEvaluationEngine.activeRuleSet,
-            mapOf(
-              "NDELIUS" to java.util.concurrent.CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+            eligibilityEvaluationEngine.newFetchCache(
+              mapOf(
+                "NDELIUS" to java.util.concurrent.CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+              ),
             ),
           ).get() // we rely on the engine already having timeouts for each data provider
       } catch (_: CancellationException) {
@@ -53,7 +57,7 @@ class EligibilityChecker(
         }
       }
       LOGGER.info("Eligibility evaluation for {} result: {}", offender.crn, result)
-      return result
+      return result.copy(message = result.message?.let { applyTemplate(it, contactDetails.name) })
     } else {
       val ineligibility = checkinIneligibilityReason(offender, contactDetails)
       return if (ineligibility == null) {
