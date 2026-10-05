@@ -125,6 +125,7 @@ mkdir -p "$T/bin"
 cat > "$T/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash
 echo "kubectl ${*:1:5}" >> "$FAKE_LOG"
+[[ -z "${PGPASSWORD:-}" ]] || echo "PGPASSWORD seen by kubectl ${*:1:5}" >> "$FAKE_LOG"
 b64() { printf %s "$1" | base64; }
 case "$*" in
   *"auth can-i"*) [[ -z "${FAKE_DENY:-}" || "$*" != *"can-i $FAKE_DENY"* ]] ;;
@@ -236,7 +237,7 @@ test_refreshes_the_token_on_a_401_mid_pass() {
   printf '%s\n' X000001 EXPIRE1 > "$T/expire.txt"
   local out rc; out="$(run "$T/c15" FAKE_CRNS="$T/expire.txt")"; rc=$?
   assert_eq 0 "$rc" "exit code"
-  assert_eq 2 "$(grep -c 'exec deploy/hmpps-esupervision-ui' "$T/fake.log")" "token fetched for the pass and refreshed once"
+  assert_eq 2 "$(grep -c '^kubectl .*exec deploy/hmpps-esupervision-ui' "$T/fake.log")" "token fetched for the pass and refreshed once"
   assert_file_eq 'Tier,CRNs
 "B",1
 "C",1
@@ -289,6 +290,25 @@ test_stops_before_creating_a_pod_it_could_not_delete() {
   [[ $rc -ne 0 ]] || fail "run succeeded without delete permission"
   assert_contains "$out" "cannot delete pods" "names the missing permission"
   ! grep -q "kubectl .* run " "$T/fake.log" || fail "a pod was created"
+}
+
+test_a_failed_preflight_leaves_no_earlier_results_behind() {
+  mkdir -p "$T/stale"
+  echo "yesterday" > "$T/stale/tier_counts.csv"
+  local rc=0
+  run "$T/stale" FAKE_DENY="create pods" >/dev/null || rc=$?
+  [[ $rc -ne 0 ]] || fail "run succeeded without create permission"
+  [[ ! -e "$T/stale/tier_counts.csv" ]] || fail "an earlier run's tier_counts.csv was left in place"
+}
+
+test_the_database_password_is_not_passed_on_after_the_sql_step() {
+  local rc=0
+  run "$T/pgenv" >/dev/null || rc=$?
+  assert_eq 0 "$rc" "exit code"
+  grep -q "^PGPASSWORD seen by kubectl .*port-forward" "$T/fake.log" || fail "fake did not detect PGPASSWORD at all"
+  local late
+  late=$(grep "^PGPASSWORD seen by kubectl .* \(exec\|delete\) " "$T/fake.log")
+  assert_eq "" "$late" "PGPASSWORD still set for later commands"
 }
 
 test_pod_names_are_unique_per_run() {

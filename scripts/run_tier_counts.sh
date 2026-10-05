@@ -100,6 +100,15 @@ case "$WORK_DIR/" in
 esac
 chmod 700 "$WORK_DIR"
 
+CRNS="$WORK_DIR/active_crns.txt"
+RESULTS="$WORK_DIR/tiers.jsonl"
+COUNTS="$WORK_DIR/tier_counts.csv"
+UNRESOLVED="$WORK_DIR/unresolved.txt"
+# Every run starts afresh: a count is only meaningful against one cohort.
+# That happens before any check that can fail, so a run that stops early
+# never leaves an earlier run's results looking current.
+rm -f "$CRNS" "$RESULTS" "$COUNTS" "$UNRESOLVED"
+
 kubectl -n "$NS" auth can-i create pods >/dev/null 2>&1 \
   || die "kubectl cannot create pods in $NS -- check your Cloud Platform login and context"
 # Creating and deleting are authorised separately: without delete, every
@@ -124,12 +133,6 @@ echo "API:         $API_BASE" >&2
 echo "Token:       $token_desc" >&2
 echo "Output:      $WORK_DIR" >&2
 
-CRNS="$WORK_DIR/active_crns.txt"
-RESULTS="$WORK_DIR/tiers.jsonl"
-COUNTS="$WORK_DIR/tier_counts.csv"
-UNRESOLVED="$WORK_DIR/unresolved.txt"
-# Every run starts afresh: a count is only meaningful against one cohort.
-rm -f "$CRNS" "$RESULTS" "$COUNTS" "$UNRESOLVED"
 
 # ---------------------------------------------------------------------------
 # Secrets, held in shell variables only -- never written to disk
@@ -204,6 +207,8 @@ psql -X -qtA -v ON_ERROR_STOP=1 \
   || die "SQL step failed"
 
 kill "$PF_PID" 2>/dev/null || true; PF_PID=""
+# The database is finished with: nothing from here on inherits its password.
+unset PGPASSWORD PGUSER PGDATABASE PGHOST PGPORT PGOPTIONS
 kubectl -n "$NS" delete pod "$POD" --ignore-not-found --wait=false >/dev/null 2>&1 || true
 
 total=$(grep -c . "$CRNS" || true)
