@@ -102,3 +102,11 @@ practitioner_export.csv
 practitioners_unmatched.csv
 extract_report.txt
 practitioners.previous.jsonl
+
+# Outputs of scripts/run_pop_contact_export.sh (names and phone numbers of
+# people on probation), same reasoning.
+active_crns.txt
+pop_contacts.jsonl
+pop_contacts.csv
+excluded.csv
+unresolved.txt
