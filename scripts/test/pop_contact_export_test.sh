@@ -110,6 +110,8 @@ class Handler(BaseHTTPRequestHandler):
       return self.reply(200, person(crn, "Ivy", "07700900010"))
     if crn == "DOWN001":                        # NDelius down throughout
       return self.reply(200, person(crn, None, None, details=False))
+    if crn == "NOSTAT1":                        # 200, but not the shape we expect
+      return self.reply(200, {"crn": crn})
     if crn == "ERROR01":
       return self.reply(500, {})
     if crn in CASES:
@@ -204,8 +206,8 @@ test_exports_only_first_name_and_phone_for_contactable_people() {
 "X000006","no_mobile"' "$T/c1/excluded.csv" "excluded"
   [[ ! -e "$T/c1/pop_contacts.PARTIAL.csv" ]] || fail "complete run wrote a PARTIAL export"
   assert_contains "$out" "Exported:  7 of 12 active people" "summary"
-  assert_contains "$out" "1 non-UK phone numbers" "non-UK numbers noted"
-  assert_contains "$out" "1 phone numbers are shared" "shared numbers noted"
+  assert_contains "$out" "1 non-UK phone number, flagged" "non-UK numbers noted"
+  assert_contains "$out" "1 phone number shared" "shared numbers noted"
   assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
 }
 
@@ -224,6 +226,7 @@ test_deletes_the_per_crn_working_file() {
   printf '%s\n' X000001 FORBID1 > "$T/fail-midway.txt"
   run "$T/c3b" FAKE_CRNS="$T/fail-midway.txt" >/dev/null
   [[ ! -e "$T/c3b/pop_contacts.jsonl" ]] || fail "pop_contacts.jsonl left behind after a failure"
+  [[ -z "$(ls -A "$T/c3" "$T/c3b" | grep '^\.response\.')" ]] || fail "a response file was left behind"
 }
 
 test_selects_only_verified_crns_over_a_read_only_session() {
@@ -252,13 +255,14 @@ test_retries_an_ndelius_blip_on_the_next_pass() {
 }
 
 test_reports_crns_still_unresolved_and_exits_3() {
-  printf '%s\n' X000001 DOWN001 ERROR01 NOSUCH1 > "$T/down.txt"
+  printf '%s\n' X000001 DOWN001 ERROR01 NOSTAT1 NOSUCH1 > "$T/down.txt"
   local out rc; out="$(run "$T/c7" FAKE_CRNS="$T/down.txt")"; rc=$?
   assert_eq 3 "$rc" "exit code"
-  assert_contains "$out" "3 of 4 CRNs are not in the export" "warning"
+  assert_contains "$out" "4 of 5 CRNs are not in the export" "warning"
+  assert_contains "$out" "RETRY crn=NOSTAT1 response has no status" "unexpected shape retried, not excluded"
   assert_contains "$out" "RETRY crn=ERROR01 HTTP 500" "server error retried"
   assert_contains "$out" "RETRY crn=NOSUCH1 CRN not registered" "404 retried"
-  assert_file_eq $'DOWN001\nERROR01\nNOSUCH1' "$T/c7/unresolved.txt" "unresolved list"
+  assert_file_eq $'DOWN001\nERROR01\nNOSTAT1\nNOSUCH1' "$T/c7/unresolved.txt" "unresolved list"
   assert_file_eq 'First name,Phone number,Non-UK number
 "Zoe","+447700900001","No"' "$T/c7/pop_contacts.PARTIAL.csv" "resolved people exported, under a PARTIAL name"
   [[ ! -e "$T/c7/pop_contacts.csv" ]] || fail "partial run wrote pop_contacts.csv"

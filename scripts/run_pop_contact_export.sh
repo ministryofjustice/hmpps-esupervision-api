@@ -310,7 +310,8 @@ CLASSIFY='
         | if ($n | test("^[1-9][0-9]{8,9}$")) then {number: ("+44" + $n), non_uk: false} else null end
       elif ($d | test("^(\\+|00)[1-9][0-9]{6,14}$")) then {number: $held, non_uk: true}
       else null end;
-  if .status != "VERIFIED" then {outcome: "excluded", reason: "no_longer_active"}
+  if (.status | type) != "string" then {outcome: "retry", reason: "response has no status"}
+  elif .status != "VERIFIED" then {outcome: "excluded", reason: "no_longer_active"}
   elif .details == null then {outcome: "retry", reason: "NDelius details unavailable"}
   elif .details.contactSuspended == true then {outcome: "excluded", reason: "contact_suspended"}
   elif (.details.mobile | trimmed) == "" then {outcome: "excluded", reason: "no_mobile"}
@@ -328,7 +329,10 @@ for pass in $(seq 1 "$PASSES"); do
   step "Fetching contact details, pass $pass of $PASSES ($todo CRNs)"
   new_token
   retry=""; done_n=0; failed=0
-  body=$(mktemp)
+  # Each response holds more than we export (surname, date of birth, email), so
+  # it lands in the private work_dir, is emptied after each request, and is
+  # deleted at the end of the pass or on exit.
+  body=$(mktemp "$WORK_DIR/.response.XXXXXX")
   while read -r crn; do
     [[ -n "$crn" ]] || continue
     request "$crn"
@@ -389,8 +393,9 @@ step "Done"
 echo "  Exported:  $exported of $total active people" >&2
 jq -rs "$LATEST"' | map(select(.outcome == "excluded")) | group_by(.reason) | .[]
                   | "  Excluded:  \(length) \(.[0].reason)"' "$RESULTS" >&2
-(( non_uk == 0 )) || echo "  Note:      $non_uk non-UK phone numbers, flagged in the Non-UK number column" >&2
-(( shared == 0 )) || echo "  Note:      $shared phone numbers are shared by more than one person" >&2
+numbers() { if (( $1 == 1 )); then echo "1 $2 number"; else echo "$1 $2 numbers"; fi; }
+(( non_uk == 0 )) || echo "  Note:      $(numbers "$non_uk" "non-UK phone"), flagged in the Non-UK number column" >&2
+(( shared == 0 )) || echo "  Note:      $(numbers "$shared" "phone") shared by more than one person" >&2
 cat >&2 <<EOF
 
   Export:    $EXPORT
