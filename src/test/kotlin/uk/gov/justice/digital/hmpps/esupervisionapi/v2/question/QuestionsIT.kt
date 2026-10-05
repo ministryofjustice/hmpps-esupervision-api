@@ -377,6 +377,28 @@ class QuestionsIT(
   }
 
   @Test
+  fun `assign custom questions directly to a checkin validates question count`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123458",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today(),
+    ).toEntity()
+    offenderRepository.save(offender)
+    val created = offenderCheckinService.debugCreateCheckin(offender, clock)
+    val checkin = offenderCheckinRepository.findByUuid(created.uuid).orElseThrow()
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val validRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+
+    assertThrows(jakarta.validation.ConstraintViolationException::class.java) {
+      questionService.assignCustomQuestionsToCheckin(checkin, validRequest.copy(questions = emptyList()))
+    }
+    assertThrows(jakarta.validation.ConstraintViolationException::class.java) {
+      questionService.assignCustomQuestionsToCheckin(checkin, validRequest.copy(questions = validRequest.questions + validRequest.questions + validRequest.questions + validRequest.questions))
+    }
+  }
+
+  @Test
   fun `QuestionService - upcoming questions for ad-hoc check-ins`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val dueDate = clock.today()

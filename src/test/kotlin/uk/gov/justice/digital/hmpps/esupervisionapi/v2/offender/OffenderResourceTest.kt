@@ -566,6 +566,32 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `reactivateOffender - rejects custom questions in checkin schedule`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
+    val request = ReactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Reactivating",
+      checkinSchedule = CheckinScheduleUpdateRequest(
+        requestedBy = "PRACT001",
+        firstCheckin = clock.today().plusDays(1),
+        checkinInterval = null,
+        mode = CheckinMode.AD_HOC,
+        questions = mock(),
+      ),
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.reactivateOffender(uuid, request)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(ndiliusApiClient, times(0)).getContactDetails(any(), any())
+    verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
+  }
+
+  @Test
   fun `reactivateOffender - cancelled check in exists - first check in set to TODAY - creates a NEW fresh check in`() {
     val uuid = UUID.randomUUID()
     val today = LocalDate.now(clock)

@@ -144,7 +144,10 @@ class QuestionService(
   }
 
   @Transactional
-  fun assignCustomQuestionsToCheckin(checkin: uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin, request: AssignCustomQuestionsRequest) {
+  fun assignCustomQuestionsToCheckin(
+    checkin: uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin,
+    @ValidQuestionParams request: AssignCustomQuestionsRequest,
+  ) {
     if (checkin.status != CheckinStatus.CREATED) {
       throw BadArgumentException("Can't add questions to checkin with status ${checkin.status}")
     }

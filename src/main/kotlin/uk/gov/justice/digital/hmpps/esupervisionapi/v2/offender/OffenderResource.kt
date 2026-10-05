@@ -467,6 +467,10 @@ class OffenderResource(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only INACTIVE offenders can be reactivated.")
     }
 
+    if (request.checkinSchedule?.questions != null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Questions cannot be assigned when reactivating an offender.")
+    }
+
     val contactDetails = getContactDetails(offender)
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
@@ -832,6 +836,7 @@ data class ReactivateOffenderRequest(
   @field:NotBlank
   val reason: String,
 
+  @field:Valid
   val checkinSchedule: CheckinScheduleUpdateRequest? = null,
   val contactPreference: ContactPreferenceUpdateRequest? = null,
 )
@@ -863,6 +868,7 @@ data class ContactPreferenceUpdateRequest(
  * make it clear what the semantics of the update is/should be and make validation easier.
  */
 data class OffenderDetailsUpdateRequest(
+  @field:Valid
   val checkinSchedule: CheckinScheduleUpdateRequest? = null,
   val contactPreference: ContactPreferenceUpdateRequest? = null,
 )
