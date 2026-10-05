@@ -377,6 +377,43 @@ class QuestionsIT(
   }
 
   @Test
+  fun `move pending ad-hoc checkin to today without resending questions`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123461",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today().plusDays(1),
+    ).toEntity()
+    offenderRepository.save(offender)
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val questionRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    val pendingAssignment = questionService.assignCustomQuestions(offender.crn, questionRequest)
+    val scheduleUpdate = CheckinScheduleUpdateRequest(
+      requestedBy = "BARRY.WHITE",
+      firstCheckin = clock.today(),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+    )
+
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .exchange()
+      .expectStatus().isOk
+
+    val checkin = offenderCheckinRepository.findByOffenderAndDueDate(offender, clock.today()).orElseThrow()
+    val linkedAssignmentId = questionListAssignmentRepository.checkinAssignment(checkin.id)
+    assertEquals(pendingAssignment.listId, linkedAssignmentId)
+    assertEquals(1, questionListAssignmentRepository.findAll().count { it.checkinId == checkin.id })
+    assertEquals(
+      questionRequest.questions.map { it.params },
+      questionRepository.getListItems(linkedAssignmentId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
+    )
+  }
+
+  @Test
   fun `ad-hoc questions can be changed until the day before the checkin`() {
     val dueDate = clock.today().plusDays(1)
     val offender = offenderTemplate.copy(
