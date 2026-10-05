@@ -301,7 +301,7 @@ class QuestionsIT(
   }
 
   @Test
-  fun `schedule ad-hoc checkin for today with questions and replace its assignment`() {
+  fun `schedule ad-hoc checkin for today with questions and reject later changes`() {
     val offender = offenderTemplate.copy(
       crn = "A123457",
       mode = CheckinMode.AD_HOC,
@@ -364,16 +364,47 @@ class QuestionsIT(
         ),
       )
       .exchange()
-      .expectStatus().isOk
+      .expectStatus().isEqualTo(422)
 
-    val replacementListId = questionListAssignmentRepository.checkinAssignment(checkin.id)
-    assertNotNull(replacementListId)
-    assertNotEquals(firstListId, replacementListId)
+    val unchangedListId = questionListAssignmentRepository.checkinAssignment(checkin.id)
+    assertEquals(firstListId, unchangedListId)
     assertEquals(
-      replacementRequest.questions.map { it.params },
-      questionRepository.getListItems(replacementListId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
+      initialRequest.questions.map { it.params },
+      questionRepository.getListItems(unchangedListId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
     )
+    assertEquals(1, questionListAssignmentRepository.findAll().count { it.checkinId == checkin.id })
     assertEquals(checkin.uuid, offenderCheckinRepository.findByOffenderAndDueDate(offender, clock.today()).orElseThrow().uuid)
+  }
+
+  @Test
+  fun `ad-hoc questions can be changed until the day before the checkin`() {
+    val dueDate = clock.today().plusDays(1)
+    val offender = offenderTemplate.copy(
+      crn = "A123459",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = dueDate,
+    ).toEntity()
+    offenderRepository.save(offender)
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val originalRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    questionService.assignCustomQuestions(offender.crn, originalRequest)
+
+    val replacementRequest = originalRequest.copy(
+      questions = originalRequest.questions.map { item ->
+        item.copy(params = mapOf("placeholders" to mapOf("thing" to "last-day replacement")))
+      },
+    )
+    clock.advanceTo(dueDate.atStartOfDay(clock.zone).toInstant().minusSeconds(1))
+    val replacement = questionService.assignCustomQuestions(offender.crn, replacementRequest)
+    assertEquals(dueDate, replacement.expectedCheckinDate)
+    assertEquals(replacement.listId, questionService.upcomingAssignment(offender).questionList)
+
+    clock.advanceTo(dueDate.atStartOfDay(clock.zone).toInstant())
+    assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, originalRequest)
+    }
   }
 
   @Test

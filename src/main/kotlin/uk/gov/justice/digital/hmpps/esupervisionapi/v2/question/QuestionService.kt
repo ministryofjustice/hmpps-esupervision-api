@@ -147,16 +147,28 @@ class QuestionService(
   fun assignCustomQuestionsToCheckin(
     checkin: uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin,
     @ValidQuestionParams request: AssignCustomQuestionsRequest,
+    allowSameDayInitialAssignment: Boolean = false,
   ) {
-    if (checkin.status != CheckinStatus.CREATED) {
-      throw BadArgumentException("Can't add questions to checkin with status ${checkin.status}")
+    val lockedCheckin = checkinRepository.findByIdForUpdate(checkin.id).orElseThrow {
+      BadArgumentException("Checkin not found for UUID=${checkin.uuid}")
+    }
+    if (lockedCheckin.status != CheckinStatus.CREATED) {
+      throw BadArgumentException("Can't add questions to checkin with status ${lockedCheckin.status}")
+    }
+    if (lockedCheckin.dueDate.isBefore(clock.today())) {
+      throw BadArgumentException("Can't add questions to an overdue check-in")
+    }
+    if (lockedCheckin.dueDate == clock.today() &&
+      (!allowSameDayInitialAssignment || questionListAssignmentRepository.checkinAssignment(lockedCheckin.id) != null)
+    ) {
+      throw BadArgumentException("Questions must be assigned before the check-in due date")
     }
     validateQuestionRequest(request)
     val listId = createQuestionList(request)
-    val updated = questionListAssignmentRepository.updateCheckinAssignment(checkin.id, listId)
-    val assigned = updated > 0 || questionListAssignmentRepository.createAssignment(checkin.offender.id, listId, checkin.id) == 1
+    val updated = questionListAssignmentRepository.updateCheckinAssignment(lockedCheckin.id, listId)
+    val assigned = updated > 0 || questionListAssignmentRepository.createAssignment(lockedCheckin.offender.id, listId, lockedCheckin.id) == 1
     if (!assigned) {
-      throw BadArgumentException("Could not assign questions to checkin ${checkin.uuid}")
+      throw BadArgumentException("Could not assign questions to checkin ${lockedCheckin.uuid}")
     }
   }
 

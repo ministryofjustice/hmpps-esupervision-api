@@ -617,7 +617,13 @@ assigned to the offender's upcoming check-in.""",
         val checkin = todaysCheckin.orElseGet {
           checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
         }
-        request.checkinSchedule.questions?.let { questionService.assignCustomQuestionsToCheckin(checkin, it) }
+        request.checkinSchedule.questions?.let {
+          questionService.assignCustomQuestionsToCheckin(
+            checkin,
+            it,
+            allowSameDayInitialAssignment = todaysCheckin.isEmpty,
+          )
+        }
         LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       } else if (request.checkinSchedule?.questions != null) {
         questionService.assignCustomQuestions(offenderAfter.crn, request.checkinSchedule.questions)

@@ -1,10 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import jakarta.persistence.LockModeType
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -184,6 +186,12 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
 interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @EntityGraph(attributePaths = ["offender"])
+  @Query("select c from OffenderCheckin c where c.id = :checkinId")
+  fun findByIdForUpdate(checkinId: Long): Optional<OffenderCheckin>
+
   fun findAllByOffenderAndStatus(offender: Offender, status: CheckinStatus): List<OffenderCheckin>
 
   @Query("""select c from OffenderCheckin c where c.id in :ids""")
@@ -812,9 +820,9 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
     """
     insert into question_list_assignment (question_list_id, offender_id, checkin_id, updated_at)
     select :listId, :offenderId, :checkinId, now()
-    on conflict (offender_id) where checkin_id is null 
+    on conflict (offender_id) where checkin_id is null
     do update set
-        question_list_id = :listId,
+      question_list_id = :listId,
         updated_at = now()
   """,
     nativeQuery = true,

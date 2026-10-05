@@ -880,7 +880,7 @@ class OffenderResourceTest {
 
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(checkinCreationService).createCheckin(uuid, clock.today(), "XYZ0111")
-    verify(questionService).assignCustomQuestionsToCheckin(checkin, questions)
+    verify(questionService).assignCustomQuestionsToCheckin(checkin, questions, true)
   }
 
   @Test
@@ -928,7 +928,7 @@ class OffenderResourceTest {
     verify(offenderRepository, times(0)).save(any())
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     verify(questionService, times(0)).assignCustomQuestions(any(), any())
-    verify(questionService, times(0)).assignCustomQuestionsToCheckin(any(), any())
+    verify(questionService, times(0)).assignCustomQuestionsToCheckin(any(), any(), any())
   }
 
   @Test
