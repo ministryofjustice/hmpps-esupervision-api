@@ -294,6 +294,34 @@ test_laptop_token_mode_works_and_reports_auth_errors() {
   assert_contains "$out" "HTTP 401 -- unauthorized: Bad credentials" "auth error"
 }
 
+test_laptop_token_mode_writes_nothing_to_tmpdir() {
+  # Interrupting a run cannot be relied on to hit the moment a temp file holds
+  # the token, so check the cause instead: every mktemp must be in the private
+  # work dir, which a bare mktemp (in TMPDIR) is not.
+  mkdir -p "$T/mktemp-bin"
+  cat > "$T/mktemp-bin/mktemp" <<EOF
+#!/usr/bin/env bash
+echo "mktemp \$*" >> "$T/mktemp.log"
+exec $(command -v mktemp) "\$@"
+EOF
+  chmod +x "$T/mktemp-bin/mktemp"
+  : > "$T/mktemp.log"
+  run "$T/c-tmp" TOKEN_SOURCE=laptop PATH="$T/mktemp-bin:$T/bin:$PATH" >/dev/null
+  local outside
+  outside=$(grep -v "^mktemp /.*/c-tmp/\.response\.XXXXXX$" "$T/mktemp.log")
+  assert_eq "" "$outside" "temp files created outside the work dir"
+}
+
+test_pod_names_are_unique_per_run() {
+  local first second
+  run "$T/c-pod1" >/dev/null; first=$(awk '$4 == "run" {print $5}' "$T/fake.log")
+  run "$T/c-pod2" >/dev/null; second=$(awk '$4 == "run" {print $5}' "$T/fake.log")
+  # The PID alone can repeat across machines: the name needs a random part.
+  [[ "$first" =~ ^pop-contact-export-[a-z0-9]+-[0-9]+-[0-9a-f]{8}$ ]] || fail "pod name has no random suffix: $first"
+  [[ "$first" != "$second" ]] || fail "pod names not unique: '$first' then '$second'"
+  (( ${#first} <= 63 )) || fail "pod name longer than 63 characters: $first"
+}
+
 test_pod_token_mode_does_not_read_the_ui_secret() {
   run "$T/c12" >/dev/null
   assert_contains "$(cat "$T/fake.log")" "exec deploy/hmpps-esupervision-ui" "token from the pod"

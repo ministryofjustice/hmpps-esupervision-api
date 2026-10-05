@@ -178,7 +178,10 @@ fi
 # ---------------------------------------------------------------------------
 # Port-forward and per-CRN working file, both cleaned up on any exit
 # ---------------------------------------------------------------------------
-POD="pop-contact-export-$(whoami | tr -cd 'a-z0-9' | cut -c1-20)-$$"
+# The namespace is shared, and cleanup deletes this pod by name, so the name
+# must be this run's alone: user and PID can repeat across machines, the random
+# suffix makes a clash practically impossible.
+POD="pop-contact-export-$(whoami | tr -cd 'a-z0-9' | cut -c1-20)-$$-$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
 PF_PID=""
 body=""
 
@@ -252,17 +255,18 @@ token_from_pod() {
 }
 
 token_from_laptop() {
-  local resp status detail
-  resp=$(mktemp)
-  status=$(printf 'user = "%s:%s"\n' "$CLIENT_ID" "$CLIENT_SECRET" \
-    | curl -s -o "$resp" -w '%{http_code}' --connect-timeout 10 --max-time 30 -K - -X POST \
+  # The response holds the token, so it stays in memory: no temp file for an
+  # interrupted run to leave behind. -w appends the status on a line of its own.
+  local out status resp detail
+  out=$(printf 'user = "%s:%s"\n' "$CLIENT_ID" "$CLIENT_SECRET" \
+    | curl -s -w '\n%{http_code}' --connect-timeout 10 --max-time 30 -K - -X POST \
         "$AUTH_URL/oauth/token?grant_type=client_credentials") || true
-  if [[ "$status" == 200 ]] && TOKEN=$(jq -er .access_token "$resp" 2>/dev/null); then
-    rm -f "$resp"; return 0
+  status="${out##*$'\n'}"; resp="${out%$'\n'*}"
+  if [[ "$status" == 200 ]] && TOKEN=$(jq -er .access_token <<<"$resp" 2>/dev/null); then
+    return 0
   fi
-  detail=$(jq -r '[.error, .error_description] | map(select(.)) | join(": ")' "$resp" 2>/dev/null \
-           || head -c 300 "$resp")
-  rm -f "$resp"
+  detail=$(jq -r '[.error, .error_description] | map(select(.)) | join(": ")' <<<"$resp" 2>/dev/null \
+           || head -c 300 <<<"$resp")
   die "HMPPS Auth refused the token request: HTTP ${status:-000}${detail:+ -- $detail}
        If the client is IP-restricted in this environment, use TOKEN_SOURCE=pod (the default)."
 }
