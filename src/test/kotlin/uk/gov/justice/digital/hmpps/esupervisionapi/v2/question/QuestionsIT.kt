@@ -41,6 +41,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
@@ -49,6 +51,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinScheduleLowerBound
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.CheckinScheduleUpdateRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
@@ -56,6 +60,9 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestClockConfiguration::class)
@@ -95,11 +102,13 @@ class QuestionsIT(
 
   @MockitoBean lateinit var ndiliusApiClient: INdiliusApiClient
 
+  @MockitoBean lateinit var notificationService: NotificationService
+
   @BeforeEach
   fun setUp() {
     (clock as MutableTestClock).advanceTo(Instant.now())
 
-    reset(s3UploadService, ndiliusApiClient)
+    reset(s3UploadService, ndiliusApiClient, notificationService)
     whenever(s3UploadService.isCheckinVideoUploaded(any())).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(any(), any())).thenAnswer { invocation ->
       GeneratingStubDataProvider().provideCase(invocation.getArgument<String>(0))
@@ -289,6 +298,82 @@ class QuestionsIT(
     questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
     val assignmentAfter = questionService.upcomingAssignment(offender)
     assertEquals(offender.firstCheckin, assignmentAfter.expectedCheckinDate)
+  }
+
+  @Test
+  fun `schedule ad-hoc checkin for today with questions and replace its assignment`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123457",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today().minusDays(1),
+    ).toEntity()
+    offenderRepository.save(offender)
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val initialRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    val notificationProcessed = CountDownLatch(1)
+    val questionsVisibleWhenNotificationRuns = AtomicBoolean(false)
+    whenever(notificationService.sendCheckinCreatedNotifications(any())).thenAnswer { invocation ->
+      val event = invocation.getArgument<CheckinCreatedEvent>(0)
+      val notifiedCheckin = offenderCheckinRepository.findByUuid(event.checkin.uuid).orElseThrow()
+      val assignedListId = questionListAssignmentRepository.checkinAssignment(notifiedCheckin.id)
+      questionsVisibleWhenNotificationRuns.set(
+        assignedListId != null && questionRepository.getListItems(assignedListId, Language.ENGLISH).any { it.params.isNotEmpty() },
+      )
+      notificationProcessed.countDown()
+      null
+    }
+    val todaySchedule = CheckinScheduleUpdateRequest(
+      requestedBy = "BARRY.WHITE",
+      firstCheckin = clock.today(),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+      questions = initialRequest,
+    )
+
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = todaySchedule))
+      .exchange()
+      .expectStatus().isOk
+
+    assertTrue(notificationProcessed.await(5, TimeUnit.SECONDS), "check-in notification was not processed")
+    assertTrue(questionsVisibleWhenNotificationRuns.get(), "questions must be assigned before notification processing")
+
+    val checkin = offenderCheckinRepository.findByOffenderAndDueDate(offender, clock.today()).orElseThrow()
+    val firstListId = questionListAssignmentRepository.checkinAssignment(checkin.id)
+    assertNotNull(firstListId)
+    assertEquals(
+      initialRequest.questions.map { it.params },
+      questionRepository.getListItems(firstListId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
+    )
+
+    val replacementRequest = initialRequest.copy(
+      questions = initialRequest.questions.map { item ->
+        item.copy(params = mapOf("placeholders" to mapOf("thing" to "replacement value")))
+      },
+    )
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(
+        OffenderDetailsUpdateRequest(
+          checkinSchedule = todaySchedule.copy(questions = replacementRequest),
+        ),
+      )
+      .exchange()
+      .expectStatus().isOk
+
+    val replacementListId = questionListAssignmentRepository.checkinAssignment(checkin.id)
+    assertNotNull(replacementListId)
+    assertNotEquals(firstListId, replacementListId)
+    assertEquals(
+      replacementRequest.questions.map { it.params },
+      questionRepository.getListItems(replacementListId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
+    )
+    assertEquals(checkin.uuid, offenderCheckinRepository.findByOffenderAndDueDate(offender, clock.today()).orElseThrow().uuid)
   }
 
   @Test

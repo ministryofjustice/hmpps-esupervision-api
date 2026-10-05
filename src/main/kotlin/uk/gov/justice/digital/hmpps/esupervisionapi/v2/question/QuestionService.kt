@@ -101,15 +101,7 @@ class QuestionService(
   @Transactional
   fun assignCustomQuestions(crn: CRN, @ValidQuestionParams request: AssignCustomQuestionsRequest): AssignCustomQuestionsResponse {
     require(crn.matches(crnRegex))
-    // validate the supplied params
-    val questionsById = questionsRepository
-      .getQuestionTemplates(request.questions.map { it.id }, request.language)
-      .associateBy { it.id }
-    request.questions.forEach {
-      val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
-      require(template.policy == QuestionPolicy.CUSTOMISABLE) { "Question ${it.id} is not customisable" }
-      validateAgainstTemplates(it, template)
-    }
+    validateQuestionRequest(request)
 
     val offender = offenderRepository.findByCrn(crn).orElseThrow { BadArgumentException("Offender not found for CRN=$crn") }
     if (offender.status != OffenderStatus.VERIFIED) {
@@ -132,14 +124,7 @@ class QuestionService(
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
-    val listId = questionsRepository.upsertQuestionList(
-      null,
-      request.author,
-      request.questions.mapIndexed { index, item ->
-        assert(item.params.containsKey("placeholders"))
-        mapOf("id" to item.id, "params" to item.params)
-      },
-    )
+    val listId = createQuestionList(request)
     if (listId == null) {
       LOG.warn("Failed to create question list for CRN={}, author={}, questions={}", crn, request.author, request.questions)
       throw RuntimeException("Failed to create question list.")
@@ -156,6 +141,40 @@ class QuestionService(
       CheckinMode.AD_HOC -> offender.firstCheckin
     }
     return AssignCustomQuestionsResponse(nextCheckin, listId)
+  }
+
+  @Transactional
+  fun assignCustomQuestionsToCheckin(checkin: uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin, request: AssignCustomQuestionsRequest) {
+    if (checkin.status != CheckinStatus.CREATED) {
+      throw BadArgumentException("Can't add questions to checkin with status ${checkin.status}")
+    }
+    validateQuestionRequest(request)
+    val listId = createQuestionList(request)
+    val updated = questionListAssignmentRepository.updateCheckinAssignment(checkin.id, listId)
+    val assigned = updated > 0 || questionListAssignmentRepository.createAssignment(checkin.offender.id, listId, checkin.id) == 1
+    if (!assigned) {
+      throw BadArgumentException("Could not assign questions to checkin ${checkin.uuid}")
+    }
+  }
+
+  private fun createQuestionList(request: AssignCustomQuestionsRequest): Long = questionsRepository.upsertQuestionList(
+    null,
+    request.author,
+    request.questions.map { item ->
+      assert(item.params.containsKey("placeholders"))
+      mapOf("id" to item.id, "params" to item.params)
+    },
+  ) ?: throw RuntimeException("Failed to create question list.")
+
+  private fun validateQuestionRequest(request: AssignCustomQuestionsRequest) {
+    val questionsById = questionsRepository
+      .getQuestionTemplates(request.questions.map { it.id }, request.language)
+      .associateBy { it.id }
+    request.questions.forEach {
+      val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
+      require(template.policy == QuestionPolicy.CUSTOMISABLE) { "Question ${it.id} is not customisable" }
+      validateAgainstTemplates(it, template)
+    }
   }
 
   @Transactional

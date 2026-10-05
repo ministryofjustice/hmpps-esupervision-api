@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
@@ -28,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
@@ -48,6 +50,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.net.URI
 import java.time.Clock
@@ -76,6 +79,7 @@ class OffenderResourceTest {
   private val eligibilityChecker: EligibilityChecker = mock()
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
   private val supervisionPackageService: SupervisionPackageService = mock()
+  private val questionService: QuestionService = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -100,6 +104,7 @@ class OffenderResourceTest {
       eligibilityEvaluationEngine,
       eligibilityChecker,
       supervisionPackageService,
+      questionService,
     )
   }
 
@@ -822,6 +827,82 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(scheduleUpdate.firstCheckin, result.body?.firstCheckin)
     assertEquals(scheduleUpdate.checkinInterval, result.body?.checkinInterval)
+  }
+
+  @Test
+  fun `updateDetails - assigns questions to checkin scheduled for today`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
+      firstCheckin = clock.today().minusDays(1)
+    }
+    val checkin = mock<OffenderCheckin>()
+    val questions = mock<AssignCustomQuestionsRequest>()
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(checkinRepository.findByOffenderAndDueDate(offender, clock.today())).thenReturn(Optional.empty())
+    whenever(checkinCreationService.createCheckin(uuid, clock.today(), "XYZ0111")).thenReturn(checkin)
+
+    val schedule = CheckinScheduleUpdateRequest(
+      requestedBy = "XYZ0111",
+      firstCheckin = clock.today(),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+      questions = questions,
+    )
+    val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(checkinCreationService).createCheckin(uuid, clock.today(), "XYZ0111")
+    verify(questionService).assignCustomQuestionsToCheckin(checkin, questions)
+  }
+
+  @Test
+  fun `updateDetails - assigns questions for future ad hoc checkin`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val questions = mock<AssignCustomQuestionsRequest>()
+
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(checkinRepository.findByOffenderAndDueDate(offender, clock.today())).thenReturn(Optional.empty())
+
+    val schedule = CheckinScheduleUpdateRequest(
+      requestedBy = "XYZ0111",
+      firstCheckin = clock.today().plusDays(2),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+      questions = questions,
+    )
+    val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(questionService).assignCustomQuestions(offender.crn, questions)
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+  }
+
+  @Test
+  fun `updateDetails - rejects embedded questions for recurring checkins`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val schedule = CheckinScheduleUpdateRequest(
+      requestedBy = "XYZ0111",
+      firstCheckin = clock.today().plusDays(2),
+      checkinInterval = CheckinInterval.FOUR_WEEKS,
+      mode = CheckinMode.SCHEDULED,
+      questions = mock(),
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderRepository, times(0)).save(any())
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    verify(questionService, times(0)).assignCustomQuestions(any(), any())
+    verify(questionService, times(0)).assignCustomQuestionsToCheckin(any(), any())
   }
 
   @Test

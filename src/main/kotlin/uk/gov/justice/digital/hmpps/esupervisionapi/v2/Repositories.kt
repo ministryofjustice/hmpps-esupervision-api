@@ -822,6 +822,17 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   @Modifying
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
 
+  @Query(
+    """
+    update question_list_assignment
+    set question_list_id = :listId, updated_at = now()
+    where checkin_id = :checkinId
+    """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun updateCheckinAssignment(checkinId: Long, listId: Long): Int
+
   /**
    * In case of no explicit assignment, question list id will be set to the default list id.
    */
