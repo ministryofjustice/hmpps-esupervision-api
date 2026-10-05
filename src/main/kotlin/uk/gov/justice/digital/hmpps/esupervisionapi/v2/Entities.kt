@@ -99,6 +99,9 @@ open class Offender(
 
   @Column(name = "current_event", nullable = true)
   open override var currentEvent: Long? = null,
+
+  @Column(name = "in_pilot", nullable = false)
+  open var inPilot: Boolean = false,
 ) : V2BaseEntity(),
   CheckinSchedule,
   ActiveEvent {

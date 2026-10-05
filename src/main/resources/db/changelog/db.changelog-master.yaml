@@ -151,3 +151,5 @@ databaseChangeLog:
       file: db/changelog/changesets/75_offender_eligibility_rules.sql
   - include:
       file: db/changelog/changesets/76_new_job_type.sql
+  - include:
+      file: db/changelog/changesets/77_add_eligibility_rules.sql
