@@ -407,7 +407,7 @@ class NdiliusApiClient(
   }
 }
 
-class NdeliusEligibilityApiClient(webClient: WebClient) : NdiliusApiClient(webClient) {
+open class NdeliusEligibilityApiClient(webClient: WebClient) : NdiliusApiClient(webClient) {
   @CircuitBreaker(name = "ndiliusEligibilityApi")
   @Timed(
     "ndelius.get-contact-details",
