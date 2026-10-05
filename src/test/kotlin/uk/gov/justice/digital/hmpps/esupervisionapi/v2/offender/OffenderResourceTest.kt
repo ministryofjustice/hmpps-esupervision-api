@@ -1132,7 +1132,8 @@ class OffenderResourceTest {
     val crn = "x123456"
     whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.Cache>())).thenReturn(
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
         EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null),
       ),
@@ -1150,9 +1151,10 @@ class OffenderResourceTest {
     val crn = "X123456"
     whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.Cache>())).thenReturn(
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
-        uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult(
+        EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
           message = "Not eligible: person is recorded as deceased.",
           triggeredRuleCode = "IS_ALIVE",
@@ -1181,8 +1183,8 @@ class OffenderResourceTest {
     whenever(rule.messageOnMatch).thenReturn(null)
     whenever(rule.messageOnNoMatch).thenReturn("Person is deceased")
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.newFetchCache()).thenReturn(fetchCache)
-    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.Cache>())).thenReturn(
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(fetchCache)
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
         EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
@@ -1191,7 +1193,7 @@ class OffenderResourceTest {
         ),
       ),
     )
-    whenever(eligibilityEvaluationEngine.itemise(any(), any(), any<EligibilityEvaluationEngine.Cache>())).thenReturn(
+    whenever(eligibilityEvaluationEngine.itemise(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
         listOf(rule to EligibilityRuleOutcome.NOT_ELIGIBLE),
       ),
@@ -1210,8 +1212,8 @@ class OffenderResourceTest {
       ),
       response.body?.allRules?.single(),
     )
-    verify(eligibilityEvaluationEngine).evaluate(any(), any(), any<EligibilityEvaluationEngine.Cache>())
-    verify(eligibilityEvaluationEngine).itemise(any(), any(), any<EligibilityEvaluationEngine.Cache>())
+    verify(eligibilityEvaluationEngine).evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())
+    verify(eligibilityEvaluationEngine).itemise(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())
   }
 
   // ========================================
