@@ -263,10 +263,11 @@ ROWS='
           username: (if ($r.username // "") != "" and $r.unallocated != true
                      then ($r.username | ascii_upcase)
                      else ($g.storedUsername // "") end),
-          # Only from a live, allocated answer: a fallback to the stored
-          # username has no name to go with it.
-          forename: (if ($r.username // "") != "" and $r.unallocated != true
-                     then ($r.forename // "" | gsub("^\\s+|\\s+$"; "")) else "" end),
+          # Taken on the same terms as the email, so the two always describe
+          # the same person: from any allocated answer, even one missing a
+          # username, and never from a placeholder or a failed lookup.
+          forename: (if $r.unallocated == true then ""
+                     else ($r.forename // "" | gsub("^\\s+|\\s+$"; "")) end),
           # NDelius unallocated-staff placeholders are not people to write to.
           email:  (if $r.unallocated == true then "" else ($r.email // "" | ascii_downcase) end) } ]'
 
@@ -287,16 +288,20 @@ ROWS='
 # order of the CRNs. jq's own ascii_downcase/ascii_upcase leave accented letters
 # alone ("ÉLODIE" and "élodie" would stay apart), so lc/uc below also fold
 # Latin-1 and Latin Extended-A -- enough for European names held in NDelius.
+# Turkish İ and ı are left as they are: they are not each other's case
+# (İ lower-cases to i, ı upper-cases to I), so İpek and ıpek stay apart.
 COLLAPSE='
   def lc: explode | map(
       if (. >= 65 and . <= 90) or (. >= 192 and . <= 222 and . != 215) then . + 32
       elif . == 376 then 255
+      elif . == 304 or . == 305 then .
       elif ((. >= 256 and . <= 311) or (. >= 330 and . <= 375)) and . % 2 == 0 then . + 1
       elif ((. >= 313 and . <= 328) or (. >= 377 and . <= 382)) and . % 2 == 1 then . + 1
       else . end) | implode;
   def uc: explode | map(
       if (. >= 97 and . <= 122) or (. >= 224 and . <= 254 and . != 247) then . - 32
       elif . == 255 then 376
+      elif . == 304 or . == 305 then .
       elif ((. >= 256 and . <= 311) or (. >= 330 and . <= 375)) and . % 2 == 1 then . - 1
       elif ((. >= 313 and . <= 328) or (. >= 377 and . <= 382)) and . % 2 == 0 then . - 1
       else . end) | implode;

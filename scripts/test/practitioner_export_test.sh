@@ -102,6 +102,11 @@ CASES = {
   "C000007": {"name": {"forename": "Łukasz"}, "username": "CASE.TEST", "unallocated": False},
   "C000008": {"name": {"forename": "JO"}, "username": "CASE.TEST", "unallocated": False},
   "C000009": {"name": {"forename": "jo"}, "username": "CASE.TEST", "unallocated": False},
+  "C000010": {"name": {"forename": "İpek"}, "username": "CASE.TEST", "unallocated": False},
+  "C000011": {"name": {"forename": "ıpek"}, "username": "CASE.TEST", "unallocated": False},
+  # allocated, but NDelius sent no username
+  "N000001": {"name": {"forename": "Priya", "surname": "Shah"}, "email": "priya.shah@justice.gov.uk",
+              "unallocated": False},
 }
 GOOD_BASIC = "Basic " + base64.b64encode(b"ui-client:s3cr3t").decode()
 
@@ -260,17 +265,27 @@ test_export_has_one_row_per_practitioner_with_the_requested_columns() {
 test_forename_spelling_is_chosen_by_case_not_by_crn_order() {
   mkdir -p "$T/n1" "$T/n2"
   local c
-  for c in 1 2 3 4 5 6 7 8 9; do printf '{"crn":"C00000%s","storedUsername":"CASE.TEST"}\n' "$c"; done > "$T/n1/crns.jsonl"
+  for c in 1 2 3 4 5 6 7 8 9 10 11; do printf '{"crn":"C%06d","storedUsername":"CASE.TEST"}\n' "$c"; done > "$T/n1/crns.jsonl"
   # the same CRNs in reverse: the choice must not change
   sort -r "$T/n1/crns.jsonl" > "$T/n2/crns.jsonl"
   fetch "$T/n1" >/dev/null
   fetch "$T/n2" >/dev/null
   # Mixed case beats lower beats capitals (Barry, Łukasz); accented capitals
   # fold onto their lower case (ÉLODIE/élodie -> élodie, not two names); with
-  # no mixed case, lower case wins over capitals (JO/jo -> jo).
-  local want='"Barry; jo; élodie; Łukasz"'
+  # no mixed case, lower case wins over capitals (JO/jo -> jo); Turkish İ and
+  # ı are different letters, not cases of one (İpek, ıpek stay apart).
+  local want='"Barry; jo; élodie; İpek; ıpek; Łukasz"'
   assert_contains "$(cat "$T/n1/practitioner_export.csv")" "$want" "forenames"
   assert_contains "$(cat "$T/n2/practitioner_export.csv")" "$want" "forenames, CRNs reversed"
+}
+
+test_forename_is_kept_when_ndelius_sends_no_username() {
+  mkdir -p "$T/n3"
+  printf '%s\n' '{"crn":"N000001","storedUsername":"PRIYA.SHAH"}' > "$T/n3/crns.jsonl"
+  fetch "$T/n3" >/dev/null
+  # the row falls back to the stored username, and keeps the name that goes
+  # with the email from the same answer
+  assert_contains "$(cat "$T/n3/practitioner_export.csv")" '"Priya","priya.shah@justice.gov.uk"' "forename with email"
 }
 
 test_worksheet_names_every_practitioner_without_an_email() {
