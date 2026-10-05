@@ -72,6 +72,8 @@ CASES = {
   "X000010": person("X000010", "Ian", "0044 7700 900012"),
   "X000011": person("X000011", "Jules", "+33 6 12 34 56 78"),
   "X000012": person("X000012", "Kim", "12345"),
+  "X000013": person("X000013", "Lee", "020 7946 0958"),  # a landline
+  "X000014": person("X000014", "Mo", "07700 90001"),      # a digit short
 }
 GOOD_BASIC = "Basic " + base64.b64encode(b"ui-client:s3cr3t").decode()
 calls = {}
@@ -138,7 +140,7 @@ cat > "$T/bin/kubectl" <<'EOF'
 echo "kubectl ${*:1:5}" >> "$FAKE_LOG"
 b64() { printf %s "$1" | base64; }
 case "$*" in
-  *"auth can-i"*) exit 0 ;;
+  *"auth can-i"*) [[ -z "${FAKE_DENY:-}" || "$*" != *"can-i $FAKE_DENY"* ]] ;;
   *"get deploy/"*) [[ "$*" == *"deploy/hmpps-esupervision-ui"* ]] ;;
   *" exec "*)
     HMPPS_AUTH_URL="$FAKE_AUTH" CLIENT_CREDS_CLIENT_ID=ui-client \
@@ -171,7 +173,7 @@ EOF
 chmod +x "$T/bin/kubectl" "$T/bin/psql"
 
 printf '%s\n' X000001 X000002 X000003 X000004 X000005 X000006 X000007 X000008 \
-  X000009 X000010 X000011 X000012 > "$T/crns.txt"
+  X000009 X000010 X000011 X000012 X000013 X000014 > "$T/crns.txt"
 
 run() {  # workdir [extra env...]
   local dir="$1"; shift
@@ -180,6 +182,17 @@ run() {  # workdir [extra env...]
       EXPORT_API_BASE="$STUB" EXPORT_AUTH_URL="$STUB/auth" RATE_SLEEP=0 "$@" \
       "$SCRIPT" "$dir" 2>&1
 }
+
+# Runs a command, discarding its output, and fails the test unless it exits
+# with the given code -- so a run that should succeed cannot fail early and
+# leave the assertions after it checking files that were never written.
+expect_exit() {  # code command...
+  local want="$1"; shift
+  local out rc=0
+  out="$("$@")" || rc=$?
+  [[ "$rc" == "$want" ]] || fail "$* exited $rc, expected $want"$'\n'"$(echo "$out" | tail -5 | sed 's/^/      | /')"
+}
+run_umask_022() { (umask 022; run "$@"); }
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -201,18 +214,21 @@ test_exports_only_first_name_and_phone_for_contactable_people() {
   assert_file_eq 'CRN,Reason
 "X000004","contact_suspended"
 "X000012","invalid_number"
+"X000014","invalid_number"
 "X000007","no_longer_active"
 "X000005","no_mobile"
-"X000006","no_mobile"' "$T/c1/excluded.csv" "excluded"
+"X000006","no_mobile"
+"X000013","not_a_mobile"' "$T/c1/excluded.csv" "excluded"
   [[ ! -e "$T/c1/pop_contacts.PARTIAL.csv" ]] || fail "complete run wrote a PARTIAL export"
-  assert_contains "$out" "Exported:  7 of 12 active people" "summary"
+  assert_contains "$out" "Exported:  7 of 14 active people" "summary"
   assert_contains "$out" "1 non-UK phone number, flagged" "non-UK numbers noted"
   assert_contains "$out" "1 phone number shared" "shared numbers noted"
   assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
 }
 
 test_no_surname_email_dob_or_crn_in_the_export() {
-  run "$T/c2" >/dev/null
+  expect_exit 0 run "$T/c2"
+  [[ -s "$T/c2/pop_contacts.csv" ]] || fail "no export to check"
   local csv; csv="$(cat "$T/c2/pop_contacts.csv")"
   for leak in SURNAME @example.com 1990-01-01 X0000 Practitioner 12345; do
     [[ "$csv" != *"$leak"* ]] || fail "export contains $leak"
@@ -221,16 +237,16 @@ test_no_surname_email_dob_or_crn_in_the_export() {
 }
 
 test_deletes_the_per_crn_working_file() {
-  run "$T/c3" >/dev/null
+  expect_exit 0 run "$T/c3"
   [[ ! -e "$T/c3/pop_contacts.jsonl" ]] || fail "pop_contacts.jsonl left behind"
   printf '%s\n' X000001 FORBID1 > "$T/fail-midway.txt"
-  run "$T/c3b" FAKE_CRNS="$T/fail-midway.txt" >/dev/null
+  expect_exit 1 run "$T/c3b" FAKE_CRNS="$T/fail-midway.txt"
   [[ ! -e "$T/c3b/pop_contacts.jsonl" ]] || fail "pop_contacts.jsonl left behind after a failure"
   [[ -z "$(ls -A "$T/c3" "$T/c3b" | grep '^\.response\.')" ]] || fail "a response file was left behind"
 }
 
 test_selects_only_verified_crns_over_a_read_only_session() {
-  run "$T/c4" >/dev/null
+  expect_exit 0 run "$T/c4"
   assert_contains "$(cat "$T/fake.log")" "SELECT crn FROM offender_v2 WHERE status = 'VERIFIED'" "query"
   local all ro
   all=$(grep -c '^psql ' "$T/fake.log"); ro=$(grep -c '^psql PGOPTIONS=-c default_transaction_read_only=on ' "$T/fake.log")
@@ -290,7 +306,8 @@ test_stops_on_a_403() {
 test_laptop_token_mode_works_and_reports_auth_errors() {
   local out rc; out="$(run "$T/c10" TOKEN_SOURCE=laptop)"; rc=$?
   assert_eq 0 "$rc" "laptop mode exit code"
-  out="$(run "$T/c11" TOKEN_SOURCE=laptop FAKE_SECRET=wrong)"
+  out="$(run "$T/c11" TOKEN_SOURCE=laptop FAKE_SECRET=wrong)"; rc=$?
+  assert_eq 1 "$rc" "bad secret exit code"
   assert_contains "$out" "HTTP 401 -- unauthorized: Bad credentials" "auth error"
 }
 
@@ -306,16 +323,42 @@ exec $(command -v mktemp) "\$@"
 EOF
   chmod +x "$T/mktemp-bin/mktemp"
   : > "$T/mktemp.log"
-  run "$T/c-tmp" TOKEN_SOURCE=laptop PATH="$T/mktemp-bin:$T/bin:$PATH" >/dev/null
+  expect_exit 0 run "$T/c-tmp" TOKEN_SOURCE=laptop PATH="$T/mktemp-bin:$T/bin:$PATH"
   local outside
   outside=$(grep -v "^mktemp /.*/c-tmp/\.response\.XXXXXX$" "$T/mktemp.log")
   assert_eq "" "$outside" "temp files created outside the work dir"
 }
 
+test_stops_before_creating_a_pod_it_could_not_delete() {
+  local out rc=0
+  out="$(run "$T/nodelete" FAKE_DENY="delete pods")" || rc=$?
+  [[ $rc -ne 0 ]] || fail "run succeeded without delete permission"
+  assert_contains "$out" "cannot delete pods" "names the missing permission"
+  ! grep -q "kubectl .* run " "$T/fake.log" || fail "a pod was created"
+}
+
+test_a_failure_while_writing_leaves_no_export_behind() {
+  # jq fails on the export step alone, after the fetch has gone well
+  mkdir -p "$T/jq-bin"
+  cat > "$T/jq-bin/jq" <<STUB
+#!/usr/bin/env bash
+[[ "\$*" == *'"Yes" else "No"'* ]] && { echo "jq: disk full" >&2; exit 5; }
+exec $(command -v jq) "\$@"
+STUB
+  chmod +x "$T/jq-bin/jq"
+  local out rc=0
+  out="$(run "$T/c-atomic" PATH="$T/jq-bin:$T/bin:$PATH")" || rc=$?
+  [[ $rc -ne 0 ]] || fail "run succeeded although the export could not be written"
+  assert_contains "$out" "jq: disk full" "the run reached the export step"
+  [[ ! -e "$T/c-atomic/pop_contacts.csv" ]] || fail "a truncated pop_contacts.csv was left behind"
+  [[ ! -e "$T/c-atomic/excluded.csv" ]] || fail "excluded.csv published without the export"
+  [[ -z "$(ls -A "$T/c-atomic" | grep '\.tmp$')" ]] || fail "a temporary output was left behind"
+}
+
 test_pod_names_are_unique_per_run() {
   local first second
-  run "$T/c-pod1" >/dev/null; first=$(awk '$4 == "run" {print $5}' "$T/fake.log")
-  run "$T/c-pod2" >/dev/null; second=$(awk '$4 == "run" {print $5}' "$T/fake.log")
+  expect_exit 0 run "$T/c-pod1"; first=$(awk '$4 == "run" {print $5}' "$T/fake.log")
+  expect_exit 0 run "$T/c-pod2"; second=$(awk '$4 == "run" {print $5}' "$T/fake.log")
   # The PID alone can repeat across machines: the name needs a random part.
   [[ "$first" =~ ^pop-contact-export-[a-z0-9]+-[0-9]+-[0-9a-f]{8}$ ]] || fail "pod name has no random suffix: $first"
   [[ "$first" != "$second" ]] || fail "pod names not unique: '$first' then '$second'"
@@ -323,23 +366,23 @@ test_pod_names_are_unique_per_run() {
 }
 
 test_pod_token_mode_does_not_read_the_ui_secret() {
-  run "$T/c12" >/dev/null
+  expect_exit 0 run "$T/c12"
   assert_contains "$(cat "$T/fake.log")" "exec deploy/hmpps-esupervision-ui" "token from the pod"
   [[ "$(cat "$T/fake.log")" != *"ui-client-creds"* ]] || fail "pod mode read the UI client secret"
 }
 
 test_rerun_starts_afresh() {
   printf '%s\n' X000001 DOWN001 > "$T/rerun.txt"
-  run "$T/c13" FAKE_CRNS="$T/rerun.txt" >/dev/null
+  expect_exit 3 run "$T/c13" FAKE_CRNS="$T/rerun.txt"
   [[ -f "$T/c13/unresolved.txt" && -f "$T/c13/pop_contacts.PARTIAL.csv" ]] || fail "first run should be partial"
-  run "$T/c13" >/dev/null
+  expect_exit 0 run "$T/c13"
   [[ ! -f "$T/c13/unresolved.txt" ]] || fail "stale unresolved.txt kept"
   [[ ! -f "$T/c13/pop_contacts.PARTIAL.csv" ]] || fail "stale PARTIAL export kept beside the complete one"
   assert_eq 8 "$(wc -l < "$T/c13/pop_contacts.csv" | tr -d ' ')" "header plus seven people"
 }
 
 test_work_dir_and_files_are_private() {
-  (umask 022; run "$T/c14" >/dev/null)
+  expect_exit 0 run_umask_022 "$T/c14"
   assert_eq "drwx------" "$(ls -ld "$T/c14" | cut -c1-10)" "work dir permissions"
   local f
   for f in pop_contacts.csv excluded.csv active_crns.txt; do

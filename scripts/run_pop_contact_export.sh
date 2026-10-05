@@ -22,13 +22,16 @@
 #   contact_suspended  NDelius has contact suspended -- they must not be contacted
 #   no_longer_active   their status here changed from VERIFIED since the listing
 #   no_mobile          NDelius holds no mobile number for them
-#   invalid_number     the number is neither a UK number nor an international
+#   not_a_mobile       a well-formed UK number that is not a mobile (a landline,
+#                      03..., 08..., 09...), held in NDelius's mobile field
+#   invalid_number     the number is neither a UK mobile nor an international
 #                      one (+ or 00 then a country code), so cannot be used
 #
-# Phone numbers: UK numbers -- 07..., +44..., +44 (0)..., 0044..., 44... with
-# any spaces, dots, dashes or brackets -- are normalised to +44 and the digits,
-# e.g. +447700900123. Any other international number is kept as NDelius holds
-# it and flagged Yes in the Non-UK number column. Spreadsheets mangle these
+# Phone numbers: UK mobiles -- 07..., +44 7..., +44 (0)7..., 0044 7..., 44 7...
+# with any spaces, dots, dashes or brackets -- are normalised to +44 and the ten
+# digits, e.g. +447700900123. Any other international number is kept as NDelius
+# holds it and flagged Yes in the Non-UK number column: there is no telling
+# from a foreign number alone whether it is a mobile. Spreadsheets mangle these
 # (a leading + or 0 is read as a formula or dropped), so hand the file over or
 # upload it as it is, rather than opening and re-saving it.
 #
@@ -121,6 +124,10 @@ chmod 700 "$WORK_DIR"
 
 kubectl -n "$NS" auth can-i create pods >/dev/null 2>&1 \
   || die "kubectl cannot create pods in $NS -- check your Cloud Platform login and context"
+# Creating and deleting are authorised separately: without delete, every
+# cleanup would fail and leave the port-forward pod running.
+kubectl -n "$NS" auth can-i delete pods >/dev/null 2>&1 \
+  || die "kubectl cannot delete pods in $NS -- the port-forward pod could not be cleaned up"
 
 case "$TOKEN_SOURCE" in
   pod)
@@ -145,8 +152,13 @@ EXPORT="$WORK_DIR/pop_contacts.csv"
 PARTIAL_EXPORT="$WORK_DIR/pop_contacts.PARTIAL.csv"
 EXCLUDED="$WORK_DIR/excluded.csv"
 UNRESOLVED="$WORK_DIR/unresolved.txt"
+# The export and exclusions are written here first and renamed into place only
+# once both are complete, so a failure part-way never leaves a truncated file
+# under a name that says it is finished.
+EXPORT_TMP="$WORK_DIR/.export.tmp"
+EXCLUDED_TMP="$WORK_DIR/.excluded.tmp"
 # Every run starts afresh: the export is only meaningful against one cohort.
-rm -f "$CRNS" "$RESULTS" "$EXPORT" "$PARTIAL_EXPORT" "$EXCLUDED" "$UNRESOLVED"
+rm -f "$CRNS" "$RESULTS" "$EXPORT" "$PARTIAL_EXPORT" "$EXCLUDED" "$UNRESOLVED" "$EXPORT_TMP" "$EXCLUDED_TMP"
 
 # ---------------------------------------------------------------------------
 # Secrets, held in shell variables only -- never written to disk
@@ -191,7 +203,7 @@ cleanup() {
   echo "Deleting port-forward pod $POD" >&2
   kubectl -n "$NS" delete pod "$POD" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   # The working file ties CRNs to names and numbers; the deliverable does not.
-  rm -f "$RESULTS" ${body:+"$body"}
+  rm -f "$RESULTS" "$EXPORT_TMP" "$EXCLUDED_TMP" ${body:+"$body"}
   exit "$rc"
 }
 trap cleanup EXIT
@@ -295,9 +307,11 @@ request() {  # crn
 # retrying. Only forename and mobile are kept from the response.
 #
 # phone: separators and a "(0)" trunk prefix are dropped, then a UK number
-# (07..., +44..., 0044..., or 44 and ten digits) becomes +44 and its 9 or 10
-# significant digits. Anything else starting + or 00 then a country code is
-# taken as non-UK and kept as NDelius holds it. null if it is neither.
+# (07..., +44..., 0044..., or 44 and ten digits) becomes +44 and its ten
+# significant digits if it is a mobile (7 then nine digits), or is rejected as
+# not_a_mobile if it has the shape of another UK number. Anything else starting
+# + or 00 then a country code is taken as non-UK and kept as NDelius holds it.
+# Otherwise, invalid_number.
 # shellcheck disable=SC2016  # jq variables, not shell ones
 CLASSIFY='
   def trimmed: (. // "") | gsub("^\\s+|\\s+$"; "");
@@ -311,16 +325,18 @@ CLASSIFY='
        else null end) as $uk
     | if $uk != null then
         ($uk | sub("^0"; "")) as $n
-        | if ($n | test("^[1-9][0-9]{8,9}$")) then {number: ("+44" + $n), non_uk: false} else null end
+        | if ($n | test("^7[0-9]{9}$")) then {number: ("+44" + $n), non_uk: false}
+          elif ($n | test("^[1-689][0-9]{8,9}$")) then {reason: "not_a_mobile"}
+          else {reason: "invalid_number"} end
       elif ($d | test("^(\\+|00)[1-9][0-9]{6,14}$")) then {number: $held, non_uk: true}
-      else null end;
+      else {reason: "invalid_number"} end;
   if (.status | type) != "string" then {outcome: "retry", reason: "response has no status"}
   elif .status != "VERIFIED" then {outcome: "excluded", reason: "no_longer_active"}
   elif .details == null then {outcome: "retry", reason: "NDelius details unavailable"}
   elif .details.contactSuspended == true then {outcome: "excluded", reason: "contact_suspended"}
   elif (.details.mobile | trimmed) == "" then {outcome: "excluded", reason: "no_mobile"}
   else (.details.mobile | phone) as $p
-    | if $p == null then {outcome: "excluded", reason: "invalid_number"}
+    | if $p.reason != null then {outcome: "excluded", reason: $p.reason}
       else {outcome: "ok", forename: (.details.name.forename | trimmed), mobile: $p.number, non_uk: $p.non_uk} end
   end'
 
@@ -381,13 +397,15 @@ LATEST='reduce .[] as $r ({}; .[$r.crn] = $r) | [.[]]'
   echo "First name,Phone number,Non-UK number"
   jq -rs "$LATEST"' | map(select(.outcome == "ok")) | sort_by([(.forename | ascii_downcase), .mobile])
                     | .[] | [.forename, .mobile, (if .non_uk then "Yes" else "No" end)] | @csv' "$RESULTS"
-} > "$EXPORT"
+} > "$EXPORT_TMP"
 
 {
   echo "CRN,Reason"
   jq -rs "$LATEST"' | map(select(.outcome == "excluded")) | sort_by([.reason, .crn])
                     | .[] | [.crn, .reason] | @csv' "$RESULTS"
-} > "$EXCLUDED"
+} > "$EXCLUDED_TMP"
+mv -f "$EXCLUDED_TMP" "$EXCLUDED"
+mv -f "$EXPORT_TMP" "$EXPORT"
 
 exported=$(jq -s "$LATEST"' | map(select(.outcome == "ok")) | length' "$RESULTS")
 non_uk=$(jq -s "$LATEST"' | map(select(.outcome == "ok" and .non_uk)) | length' "$RESULTS")
