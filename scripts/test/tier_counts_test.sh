@@ -127,7 +127,7 @@ cat > "$T/bin/kubectl" <<'EOF'
 echo "kubectl ${*:1:5}" >> "$FAKE_LOG"
 b64() { printf %s "$1" | base64; }
 case "$*" in
-  *"auth can-i"*) exit 0 ;;
+  *"auth can-i"*) [[ -z "${FAKE_DENY:-}" || "$*" != *"can-i $FAKE_DENY"* ]] ;;
   *"get deploy/"*) [[ "$*" == *"deploy/hmpps-esupervision-ui"* ]] ;;
   *" exec "*)
     HMPPS_AUTH_URL="$FAKE_AUTH" CLIENT_CREDS_CLIENT_ID=ui-client \
@@ -281,6 +281,14 @@ EOF
   local outside
   outside=$(grep -v "^mktemp /.*/c-tmp/\.response\.XXXXXX$" "$T/mktemp.log")
   assert_eq "" "$outside" "temp files created outside the work dir"
+}
+
+test_stops_before_creating_a_pod_it_could_not_delete() {
+  local out rc=0
+  out="$(run "$T/nodelete" FAKE_DENY="delete pods")" || rc=$?
+  [[ $rc -ne 0 ]] || fail "run succeeded without delete permission"
+  assert_contains "$out" "cannot delete pods" "names the missing permission"
+  ! grep -q "kubectl .* run " "$T/fake.log" || fail "a pod was created"
 }
 
 test_pod_names_are_unique_per_run() {

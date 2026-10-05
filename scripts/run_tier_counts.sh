@@ -102,6 +102,10 @@ chmod 700 "$WORK_DIR"
 
 kubectl -n "$NS" auth can-i create pods >/dev/null 2>&1 \
   || die "kubectl cannot create pods in $NS -- check your Cloud Platform login and context"
+# Creating and deleting are authorised separately: without delete, every
+# cleanup would fail and leave the port-forward pod running.
+kubectl -n "$NS" auth can-i delete pods >/dev/null 2>&1 \
+  || die "kubectl cannot delete pods in $NS -- the port-forward pod could not be cleaned up"
 
 case "$TOKEN_SOURCE" in
   pod)
