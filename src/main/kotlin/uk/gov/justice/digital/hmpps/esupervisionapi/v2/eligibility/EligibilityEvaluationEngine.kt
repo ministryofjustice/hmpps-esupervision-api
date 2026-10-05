@@ -67,6 +67,11 @@ class EligibilityEvaluationEngine(
 
   fun newFetchCache(): FetchCache = LazyFetchCache(providerRegistry)
 
+  /**
+   * Note: Prefer overload accepting a [FetchCache] instance over this one.
+   */
+  fun newFetchCache(cache: Cache): FetchCache = PrePopulatedFetchCache(cache, providerRegistry)
+
   fun evaluate(crn: CRN, ruleSet: String): CompletableFuture<EligibilityResult> = evaluate(
     crn,
     ruleSet,

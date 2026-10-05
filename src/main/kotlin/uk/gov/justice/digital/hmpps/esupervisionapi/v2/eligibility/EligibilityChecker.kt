@@ -36,8 +36,10 @@ class EligibilityChecker(
           .evaluate(
             offender.crn,
             eligibilityEvaluationEngine.activeRuleSet,
-            mapOf(
-              "NDELIUS" to java.util.concurrent.CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+            eligibilityEvaluationEngine.newFetchCache(
+              mapOf(
+                "NDELIUS" to java.util.concurrent.CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+              ),
             ),
           ).get() // we rely on the engine already having timeouts for each data provider
       } catch (_: CancellationException) {

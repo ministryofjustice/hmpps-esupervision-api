@@ -176,9 +176,10 @@ class OffenderResource(
     val contactDetails = ndiliusApiClient.getContactDetailsStrict(normalisedCrn)
       ?: return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.NOT_FOUND).build())
 
-    val cache = mapOf(
+    val cacheData = mapOf(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
     )
+    val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
 
     if (!itemise) {
       return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
