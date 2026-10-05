@@ -82,6 +82,41 @@ UI_DEPLOYMENT="${UI_DEPLOYMENT:-hmpps-esupervision-ui}"
 TOKEN_SOURCE="${TOKEN_SOURCE:-pod}"
 WORK_DIR="${1:-$HOME/esup-practitioner-tier-export/$(date +%Y-%m-%d)-$ENV}"
 
+step() { printf '\n==> %s\n' "$*" >&2; }
+die()  { echo "ERROR: $*" >&2; exit 1; }
+
+# Resolves WORK_DIR, refuses one inside the repo, and sets the output paths.
+use_work_dir() {
+  WORK_DIR="$(cd -- "$WORK_DIR" && pwd -P)"
+  case "$WORK_DIR/" in
+    "$(cd -- "$REPO_ROOT" && pwd -P)/"*)
+      die "work_dir $WORK_DIR is inside the repo. The export ties staff to the CRNs they supervise -- pick a directory outside it." ;;
+  esac
+  ROWS="$WORK_DIR/practitioner_rows.jsonl"
+  CRNS="$WORK_DIR/active_crns.txt"
+  RESULTS="$WORK_DIR/tiers.jsonl"
+  EXPORT="$WORK_DIR/practitioner_tiers.csv"
+  CRN_EXPORT="$WORK_DIR/crn_tiers.csv"
+  PARTIAL_EXPORT="$WORK_DIR/practitioner_tiers.PARTIAL.csv"
+  PARTIAL_CRN_EXPORT="$WORK_DIR/crn_tiers.PARTIAL.csv"
+  UNRESOLVED="$WORK_DIR/unresolved.txt"
+  # Outputs are written here first and renamed into place only once both are
+  # complete, so a failure part-way never leaves a truncated file under a name
+  # that says it is finished.
+  EXPORT_TMP="$WORK_DIR/.export.tmp"
+  CRN_EXPORT_TMP="$WORK_DIR/.crn_export.tmp"
+}
+
+# Every run starts afresh, and an earlier run's outputs go before any check
+# that can fail -- bad settings and missing tools included -- so a run that
+# stops early never leaves them looking current. Only an existing work_dir is
+# touched here; a new one is not created until the checks have passed.
+if [[ -d "$WORK_DIR" ]]; then
+  use_work_dir
+  rm -f "$ROWS" "$CRNS" "$RESULTS" "$EXPORT" "$CRN_EXPORT" "$PARTIAL_EXPORT" "$PARTIAL_CRN_EXPORT" \
+    "$UNRESOLVED" "$EXPORT_TMP" "$CRN_EXPORT_TMP"
+fi
+
 case "$ENV" in
   prod)    default_api=https://esupervision-api.hmpps.service.justice.gov.uk
            default_auth=https://sign-in.hmpps.service.justice.gov.uk/auth ;;
@@ -91,16 +126,13 @@ case "$ENV" in
            default_auth=https://sign-in-dev.hmpps.service.justice.gov.uk/auth ;;
   dev)     default_api=https://esupervision-api-dev.hmpps.service.justice.gov.uk
            default_auth=https://sign-in-dev.hmpps.service.justice.gov.uk/auth ;;
-  *) echo "ERROR: ENV must be dev, test, preprod or prod (got '$ENV')" >&2; exit 1 ;;
+  *) die "ENV must be dev, test, preprod or prod (got '$ENV')" ;;
 esac
 API_BASE="${EXPORT_API_BASE:-$default_api}"
 AUTH_URL="${EXPORT_AUTH_URL:-$default_auth}"
 
 [[ "$PASSES" =~ ^[1-9][0-9]*$ ]] \
-  || { echo "ERROR: PASSES must be a positive whole number (got '$PASSES')" >&2; exit 1; }
-
-step() { printf '\n==> %s\n' "$*" >&2; }
-die()  { echo "ERROR: $*" >&2; exit 1; }
+  || die "PASSES must be a positive whole number (got '$PASSES')"
 
 # The stats query, returning each row as JSON so the CRNs come back as a list
 # rather than a comma-joined string.
@@ -130,30 +162,8 @@ psql_major=$(psql --version | sed -nE 's/^psql \(PostgreSQL\) ([0-9]+).*/\1/p')
   || die "psql 14 or later is required to force a read-only connection (found: $(psql --version))"
 
 mkdir -p "$WORK_DIR"
-WORK_DIR="$(cd -- "$WORK_DIR" && pwd -P)"
-case "$WORK_DIR/" in
-  "$(cd -- "$REPO_ROOT" && pwd -P)/"*)
-    die "work_dir $WORK_DIR is inside the repo. The export ties staff to the CRNs they supervise -- pick a directory outside it." ;;
-esac
+use_work_dir
 chmod 700 "$WORK_DIR"
-
-ROWS="$WORK_DIR/practitioner_rows.jsonl"
-CRNS="$WORK_DIR/active_crns.txt"
-RESULTS="$WORK_DIR/tiers.jsonl"
-EXPORT="$WORK_DIR/practitioner_tiers.csv"
-CRN_EXPORT="$WORK_DIR/crn_tiers.csv"
-PARTIAL_EXPORT="$WORK_DIR/practitioner_tiers.PARTIAL.csv"
-PARTIAL_CRN_EXPORT="$WORK_DIR/crn_tiers.PARTIAL.csv"
-UNRESOLVED="$WORK_DIR/unresolved.txt"
-# Outputs are written here first and renamed into place only once both are
-# complete, so a failure part-way never leaves a truncated file under a name
-# that says it is finished.
-EXPORT_TMP="$WORK_DIR/.export.tmp"
-CRN_EXPORT_TMP="$WORK_DIR/.crn_export.tmp"
-# Every run starts afresh, before any check that can fail, so a run that stops
-# early never leaves an earlier run's results looking current.
-rm -f "$ROWS" "$CRNS" "$RESULTS" "$EXPORT" "$CRN_EXPORT" "$PARTIAL_EXPORT" "$PARTIAL_CRN_EXPORT" \
-  "$UNRESOLVED" "$EXPORT_TMP" "$CRN_EXPORT_TMP"
 
 kubectl -n "$NS" auth can-i create pods >/dev/null 2>&1 \
   || die "kubectl cannot create pods in $NS -- check your Cloud Platform login and context"

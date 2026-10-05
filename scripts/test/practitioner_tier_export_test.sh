@@ -394,12 +394,35 @@ test_stops_before_creating_a_pod_it_could_not_delete() {
 }
 
 test_a_failed_preflight_leaves_no_earlier_results_behind() {
-  mkdir -p "$T/stale"
-  echo "last week" > "$T/stale/practitioner_tiers.csv"
+  local why
+  for why in "FAKE_DENY=create pods" "PASSES=0" "FAKE_PSQL_VERSION=13.9" "ENV=nope" "TOKEN_SOURCE=nope"; do
+    mkdir -p "$T/stale"
+    local f
+    for f in practitioner_tiers.csv crn_tiers.csv practitioner_tiers.PARTIAL.csv crn_tiers.PARTIAL.csv unresolved.txt; do
+      echo "last week" > "$T/stale/$f"
+    done
+    local rc=0
+    run "$T/stale" "$why" >/dev/null || rc=$?
+    [[ $rc -ne 0 ]] || fail "run succeeded with $why"
+    [[ -z "$(ls -A "$T/stale")" ]] || fail "with $why, earlier results were left in place: $(ls -A "$T/stale" | tr '\n' ' ')"
+  done
+}
+
+test_a_failed_check_does_not_create_the_work_dir() {
   local rc=0
-  run "$T/stale" FAKE_DENY="create pods" >/dev/null || rc=$?
-  [[ $rc -ne 0 ]] || fail "run succeeded without create permission"
-  [[ ! -e "$T/stale/practitioner_tiers.csv" ]] || fail "an earlier run's export was left in place"
+  run "$T/never-made" PASSES=0 >/dev/null || rc=$?
+  assert_eq 1 "$rc" "exit code"
+  [[ ! -e "$T/never-made" ]] || fail "work dir created by a run that failed its checks"
+}
+
+test_never_deletes_files_in_a_work_dir_inside_the_repo() {
+  local d="$REPO_ROOT/build/practitioner-tier-export-guard-test"
+  mkdir -p "$d"; echo keep > "$d/practitioner_tiers.csv"
+  local out rc; out="$(run "$d" PASSES=0)"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "is inside the repo" "message"
+  assert_eq keep "$(cat "$d/practitioner_tiers.csv" 2>/dev/null)" "file inside the repo"
+  rm -rf "$d"
 }
 
 test_the_database_password_is_not_passed_on_after_the_sql_step() {
