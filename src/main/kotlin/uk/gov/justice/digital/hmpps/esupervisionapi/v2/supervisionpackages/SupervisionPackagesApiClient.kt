@@ -4,8 +4,6 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
-import org.springframework.context.annotation.Profile
-import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
@@ -141,15 +139,17 @@ interface ISupervisionPackagesApiClient {
  * `Retry(CircuitBreaker(call))`, so a circuit-breaker fallback would turn a 5xx into a result before
  * the retry ever saw it, and nothing would be retried.
  */
-@Profile("!stubsupervisionpackages")
-@Service
-class SupervisionPackagesApiClient(
+open class SupervisionPackagesApiClient(
   private val supervisionPackagesApiWebClient: WebClient,
 ) : ISupervisionPackagesApiClient {
 
   @Retry(name = "supervisionPackagesApi", fallbackMethod = "getSupervisionPackageDetailsFallback")
   @CircuitBreaker(name = "supervisionPackagesApi")
-  @Timed("supervision-packages.get-frontend-context", extraTags = ["method", "GET", "endpoint", "/frontend-context/{crn}"], description = "Time taken to get supervision package details")
+  @Timed(
+    "supervision-packages.get-frontend-context",
+    extraTags = ["method", "GET", "endpoint", "/frontend-context/{crn}"],
+    description = "Time taken to get supervision package details",
+  )
   override fun getSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails? {
     LOGGER.info("Fetching supervision package details for CRN: {}", crn)
 
@@ -168,7 +168,10 @@ class SupervisionPackagesApiClient(
   }
 
   private fun getSupervisionPackageDetailsFallback(crn: CRN, e: Exception): SupervisionPackageDetails? {
-    LOGGER.error("Supervision Packages unavailable: {}", PiiSanitizer.sanitizeForFallback(e, "getSupervisionPackageDetails, crn=$crn"))
+    LOGGER.error(
+      "Supervision Packages unavailable: {}",
+      PiiSanitizer.sanitizeForFallback(e, "getSupervisionPackageDetails, crn=$crn"),
+    )
     throw SupervisionPackagesFetchException(crn, "Could not fetch supervision package details for $crn", e)
   }
 
