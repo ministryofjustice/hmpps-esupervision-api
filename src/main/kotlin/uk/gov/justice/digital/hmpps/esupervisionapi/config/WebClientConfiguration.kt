@@ -52,7 +52,10 @@ class WebClientConfiguration(
     .apply { setAuthorizedClientProvider(authorizedClientProvider) }
 
   @Bean
-  fun manageUsersApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
+  fun manageUsersApiWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    builder: WebClient.Builder,
+  ): WebClient = builder
     .filters {
       it.add(
         ExchangeFilterFunction.ofRequestProcessor { req ->
@@ -62,7 +65,12 @@ class WebClientConfiguration(
       )
       it.add(BackgroundClientCredentialsFilter(MANAGE_USERS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = MANAGE_USERS_API_REGISTRATION_ID, url = manageUsersApiBaseUri, timeout = timeout)
+    .authorisedWebClient(
+      authorizedClientManager,
+      registrationId = MANAGE_USERS_API_REGISTRATION_ID,
+      url = manageUsersApiBaseUri,
+      timeout = timeout,
+    )
 
   /**
    * The scheduled jobs are the only NDelius callers with no request in scope - the batch
@@ -71,7 +79,10 @@ class WebClientConfiguration(
    */
   @Bean
   @Profile("!stubndilius")
-  fun ndiliusApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
+  fun ndiliusApiWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    builder: WebClient.Builder,
+  ): WebClient = builder
     .filters {
       it.add(
         ExchangeFilterFunction.ofRequestProcessor { req ->
@@ -81,10 +92,18 @@ class WebClientConfiguration(
       )
       it.add(BackgroundClientCredentialsFilter(NDILIUS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = NDILIUS_API_REGISTRATION_ID, url = ndiliusApiBaseUri, timeout = timeout)
+    .authorisedWebClient(
+      authorizedClientManager,
+      registrationId = NDILIUS_API_REGISTRATION_ID,
+      url = ndiliusApiBaseUri,
+      timeout = timeout,
+    )
 
   @Bean
-  fun ndeliusEligibilityWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
+  fun ndeliusEligibilityWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    builder: WebClient.Builder,
+  ): WebClient = builder
     .filters {
       it.add(
         ExchangeFilterFunction.ofRequestProcessor { req ->
@@ -111,6 +130,25 @@ class WebClientConfiguration(
     authorizedClientManager: OAuth2AuthorizedClientManager,
     authorizedClientService: OAuth2AuthorizedClientService,
     builder: WebClient.Builder,
+  ): WebClient = buildTierApiWebClient(authorizedClientManager, authorizedClientService, builder, timeout)
+
+  @Bean
+  fun tierEligibilityWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    authorizedClientService: OAuth2AuthorizedClientService,
+    builder: WebClient.Builder,
+  ): WebClient = buildTierApiWebClient(
+    authorizedClientManager,
+    authorizedClientService,
+    builder,
+    Duration.ofMillis(eligibilitySourceTimeoutMs),
+  )
+
+  private fun buildTierApiWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    authorizedClientService: OAuth2AuthorizedClientService,
+    builder: WebClient.Builder,
+    timeout: Duration,
   ): WebClient = builder
     .filters {
       it.add(
@@ -123,7 +161,12 @@ class WebClientConfiguration(
       // Inside the refresh filter, so its retry re-mints rather than replaying the evicted token.
       it.add(BackgroundClientCredentialsFilter(TIER_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = TIER_API_REGISTRATION_ID, url = tierApiBaseUri, timeout = timeout)
+    .authorisedWebClient(
+      authorizedClientManager,
+      registrationId = TIER_API_REGISTRATION_ID,
+      url = tierApiBaseUri,
+      timeout = timeout,
+    )
 
   @Bean
   fun arnsApiWebClient(authorizedClientManager: OAuth2AuthorizedClientManager, builder: WebClient.Builder): WebClient = builder
@@ -136,7 +179,12 @@ class WebClientConfiguration(
       )
       it.add(BackgroundClientCredentialsFilter(ARNS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = ARNS_API_REGISTRATION_ID, url = arnsApiBaseUri, timeout = timeout)
+    .authorisedWebClient(
+      authorizedClientManager,
+      registrationId = ARNS_API_REGISTRATION_ID,
+      url = arnsApiBaseUri,
+      timeout = timeout,
+    )
 
   /**
    * Eligibility checks will run from the scheduled jobs as well as requests, so this carries both
@@ -149,6 +197,26 @@ class WebClientConfiguration(
     authorizedClientManager: OAuth2AuthorizedClientManager,
     authorizedClientService: OAuth2AuthorizedClientService,
     builder: WebClient.Builder,
+  ): WebClient = buildSupervisionPackagesApiWebClient(authorizedClientManager, authorizedClientService, builder, timeout)
+
+  @Bean
+  @Profile("!stubsupervisionpackages")
+  fun supervisionPackagesEligibilityWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    authorizedClientService: OAuth2AuthorizedClientService,
+    builder: WebClient.Builder,
+  ): WebClient = buildSupervisionPackagesApiWebClient(
+    authorizedClientManager,
+    authorizedClientService,
+    builder,
+    Duration.ofMillis(eligibilitySourceTimeoutMs),
+  )
+
+  private fun buildSupervisionPackagesApiWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    authorizedClientService: OAuth2AuthorizedClientService,
+    builder: WebClient.Builder,
+    timeout: Duration,
   ): WebClient = builder
     .filters {
       it.add(
@@ -160,7 +228,12 @@ class WebClientConfiguration(
       it.add(RefreshTokenOnUnauthorizedFilter(SUPERVISION_PACKAGES_API_REGISTRATION_ID, authorizedClientService))
       it.add(BackgroundClientCredentialsFilter(SUPERVISION_PACKAGES_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(authorizedClientManager, registrationId = SUPERVISION_PACKAGES_API_REGISTRATION_ID, url = supervisionPackagesApiBaseUri, timeout = timeout)
+    .authorisedWebClient(
+      authorizedClientManager,
+      registrationId = SUPERVISION_PACKAGES_API_REGISTRATION_ID,
+      url = supervisionPackagesApiBaseUri,
+      timeout = timeout,
+    )
 
   // HMPPS Auth health ping is required if your service calls HMPPS Auth to get a token to call other services
   @Bean

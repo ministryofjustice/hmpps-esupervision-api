@@ -6,7 +6,9 @@ import io.github.resilience4j.retry.annotation.Retry
 import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Lazy
+import org.springframework.context.annotation.Primary
 import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -46,7 +48,7 @@ interface INdeliusCommonApiClient {
    * cannot tell "no such CRN" apart from "NDelius unavailable". Use [getContactDetailsStrict]
    * where that distinction matters.
    */
-  fun getContactDetails(crn: String, useCase: ApiUseCase = ApiUseCase.GENERAL): ContactDetails?
+  fun getContactDetails(crn: String): ContactDetails?
 
   /**
    * Get contact details by CRN, reserving null for a genuine NDelius 404.
@@ -55,14 +57,8 @@ interface INdeliusCommonApiClient {
    * carrying the upstream 4xx status, or the raw exception for 5xx, connection failures, timeouts
    * and an open circuit breaker. Not retried, so the caller waits at most one request timeout.
    */
-  fun getContactDetailsStrict(crn: String, useCase: ApiUseCase = ApiUseCase.GENERAL): ContactDetails?
-
-  /** Internal proxy entry point for strict general calls. */
-  fun getContactDetailsStrictGeneral(crn: String): ContactDetails?
-
-  /** Internal proxy entry point for strict eligibility calls. */
-  fun getContactDetailsStrictEligibility(crn: String): ContactDetails?
-  fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase = ApiUseCase.GENERAL): List<ContactDetails>
+  fun getContactDetailsStrict(crn: String): ContactDetails?
+  fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails>
 }
 
 interface INdiliusApiClient : INdeliusCommonApiClient {
@@ -91,12 +87,14 @@ interface INdiliusApiClient : INdeliusCommonApiClient {
  */
 @Profile("!stubndilius")
 @Service
+@Primary
 class NdiliusApiClient(
-  private val ndiliusApiWebClient: WebClient,
-  private val ndeliusEligibilityWebClient: WebClient,
+  @Qualifier("ndiliusApiWebClient")
+  protected val ndiliusApiWebClient: WebClient,
 ) : INdiliusApiClient {
   @Autowired
   @Lazy
+  @field:Qualifier("ndiliusApiClient")
   private lateinit var self: INdiliusApiClient
 
   /**
@@ -105,8 +103,12 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
-  override fun getContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? = fetchContactDetails(crn, useCase)
+  @Timed(
+    "ndelius.get-contact-details",
+    extraTags = ["method", "GET", "endpoint", "/case/{crn}"],
+    description = "Time taken to get contact details",
+  )
+  override fun getContactDetails(crn: String): ContactDetails? = fetchContactDetails(crn)
 
   /**
    * As [getContactDetails] but without a swallowing fallback: only a 404 becomes null, every
@@ -117,26 +119,19 @@ class NdiliusApiClient(
    * fallback, Retry would run three attempts at the full request timeout each, which is far too
    * long for an interactive caller that can degrade instead.
    */
-  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details")
-  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = when (useCase) {
-    ApiUseCase.GENERAL -> self.getContactDetailsStrictGeneral(crn)
-    ApiUseCase.ELIGIBILITY_CHECK -> self.getContactDetailsStrictEligibility(crn)
-  }
-
   @CircuitBreaker(name = "ndiliusApi")
-  override fun getContactDetailsStrictGeneral(crn: String): ContactDetails? = fetchContactDetails(crn, ApiUseCase.GENERAL)
+  @Timed(
+    "ndelius.get-contact-details",
+    extraTags = ["method", "GET", "endpoint", "/case/{crn}"],
+    description = "Time taken to get contact details",
+  )
+  override fun getContactDetailsStrict(crn: String): ContactDetails? = fetchContactDetails(crn)
 
-  @CircuitBreaker(name = "ndiliusEligibilityApi")
-  override fun getContactDetailsStrictEligibility(crn: String): ContactDetails? = fetchContactDetails(crn, ApiUseCase.ELIGIBILITY_CHECK)
-
-  private fun fetchContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? {
+  protected fun fetchContactDetails(crn: String): ContactDetails? {
     LOGGER.info("Fetching contact details for CRN: {}", crn)
 
     return try {
-      when (useCase) {
-        ApiUseCase.GENERAL -> ndiliusApiWebClient
-        ApiUseCase.ELIGIBILITY_CHECK -> ndeliusEligibilityWebClient
-      }.get()
+      ndiliusApiWebClient.get()
         .uri("/case/{crn}", crn)
         .retrieve()
         .bodyToMono(ContactDetails::class.java)
@@ -168,8 +163,8 @@ class NdiliusApiClient(
     throw e
   }
 
-  private fun getContactDetailsFallback(crn: String, useCase: ApiUseCase, e: Exception): ContactDetails? {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetails, crn=$crn, $useCase"))
+  private fun getContactDetailsFallback(crn: String, e: Exception): ContactDetails? {
+    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetails, crn=$crn"))
     return null
   }
 
@@ -192,8 +187,12 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getContactDetailsForMultipleFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.get-contact-details-for-multiple", extraTags = ["method", "POST", "endpoint", "/cases"], description = "Time taken to get contact details")
-  override fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase): List<ContactDetails> {
+  @Timed(
+    "ndelius.get-contact-details-for-multiple",
+    extraTags = ["method", "POST", "endpoint", "/cases"],
+    description = "Time taken to get contact details",
+  )
+  override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
     if (crns.isEmpty()) {
       return emptyList()
     }
@@ -206,10 +205,7 @@ class NdiliusApiClient(
     LOGGER.info("Fetching contact details for {} CRNs in batch", batchCrns.size)
 
     return try {
-      when (useCase) {
-        ApiUseCase.GENERAL -> ndiliusApiWebClient
-        ApiUseCase.ELIGIBILITY_CHECK -> ndeliusEligibilityWebClient
-      }.post()
+      ndiliusApiWebClient.post()
         .uri("/cases")
         .bodyValue(batchCrns)
         .retrieve()
@@ -217,7 +213,10 @@ class NdiliusApiClient(
         .collectList()
         .block() ?: emptyList()
     } catch (e: Exception) {
-      LOGGER.warn("Error fetching contact details for batch: {}", PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null) + " [batchSize=${batchCrns.size}]")
+      LOGGER.warn(
+        "Error fetching contact details for batch: {}",
+        PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", null, null) + " [batchSize=${batchCrns.size}]",
+      )
       throw NdiliusBatchFetchException(crns, "Error fetching contact details", e)
     }
   }
@@ -238,8 +237,14 @@ class NdiliusApiClient(
    * fallback's parameter type does not match, so the [NdiliusBatchFetchException] thrown by the
    * body still propagates as-is rather than being re-wrapped.
    */
-  private fun getContactDetailsForMultipleFallback(crns: List<String>, useCase: ApiUseCase, e: CallNotPermittedException): List<ContactDetails> {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns.size}"))
+  private fun getContactDetailsForMultipleFallback(
+    crns: List<String>,
+    e: CallNotPermittedException,
+  ): List<ContactDetails> {
+    LOGGER.error(
+      "Circuit breaker activated: {}",
+      PiiSanitizer.sanitizeForFallback(e, "getContactDetailsForMultiple, batchSize=${crns.size}"),
+    )
     throw NdiliusBatchFetchException(crns, "Circuit breaker open for NDelius batch fetch", e)
   }
 
@@ -253,7 +258,11 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "updateContactDetailsFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.update-contact-details", extraTags = ["method", "PUT", "endpoint", "/case/{crn}/contact-details"], description = "Time taken to update contact details")
+  @Timed(
+    "ndelius.update-contact-details",
+    extraTags = ["method", "PUT", "endpoint", "/case/{crn}/contact-details"],
+    description = "Time taken to update contact details",
+  )
   override fun updateContactDetails(crn: String, request: ContactDetailsUpdateRequest): ContactDetailsUpdateResponse {
     LOGGER.info("Updating contact details for CRN: {} requested by practitioner: {}", crn, request.practitionerId)
 
@@ -289,9 +298,16 @@ class NdiliusApiClient(
     }
   }
 
-  private fun updateContactDetailsFallback(crn: String, request: ContactDetailsUpdateRequest, e: Exception): ContactDetailsUpdateResponse {
+  private fun updateContactDetailsFallback(
+    crn: String,
+    request: ContactDetailsUpdateRequest,
+    e: Exception,
+  ): ContactDetailsUpdateResponse {
     LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "updateContactDetails, crn=$crn"))
-    throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Encountered an issue whilst updating the contact details in NDelius for $crn.")
+    throw ResponseStatusException(
+      HttpStatus.SERVICE_UNAVAILABLE,
+      "Encountered an issue whilst updating the contact details in NDelius for $crn.",
+    )
   }
 
   /**
@@ -301,7 +317,11 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "validatePersonalDetailsFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.validate-details", extraTags = ["method", "POST", "endpoint", "/case/{crn}/validate-details"], description = "Time taken to validate personal details")
+  @Timed(
+    "ndelius.validate-details",
+    extraTags = ["method", "POST", "endpoint", "/case/{crn}/validate-details"],
+    description = "Time taken to validate personal details",
+  )
   override fun validatePersonalDetails(personalDetails: PersonalDetails): Boolean {
     LOGGER.info("Validating personal details for CRN: {}", personalDetails.crn)
 
@@ -320,14 +340,20 @@ class NdiliusApiClient(
         LOGGER.info("Personal details validation failed for CRN: {}", personalDetails.crn)
         false
       } else {
-        LOGGER.error("Unexpected error validating personal details: {}", PiiSanitizer.sanitizeException(e, personalDetails.crn))
+        LOGGER.error(
+          "Unexpected error validating personal details: {}",
+          PiiSanitizer.sanitizeException(e, personalDetails.crn),
+        )
         throw e
       }
     }
   }
 
   private fun validatePersonalDetailsFallback(personalDetails: PersonalDetails, e: Exception): Boolean {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "validatePersonalDetails, crn=${personalDetails.crn}"))
+    LOGGER.error(
+      "Circuit breaker activated: {}",
+      PiiSanitizer.sanitizeForFallback(e, "validatePersonalDetails, crn=${personalDetails.crn}"),
+    )
     return false
   }
 
@@ -337,7 +363,11 @@ class NdiliusApiClient(
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "getAlertCountFallback")
   @Retry(name = "ndiliusApi")
-  @Timed("ndelius.get-alert-count", extraTags = ["method", "GET", "endpoint", "/user/{username}/alerts"], description = "Time taken to get alert count")
+  @Timed(
+    "ndelius.get-alert-count",
+    extraTags = ["method", "GET", "endpoint", "/user/{username}/alerts"],
+    description = "Time taken to get alert count",
+  )
   override fun getAlertCount(username: String): Int? {
     LOGGER.info("Fetching alert count for username: {}", username)
 
@@ -348,7 +378,10 @@ class NdiliusApiClient(
         .bodyToMono(NdiliusAlertsResponse::class.java)
         .block()
         ?.count
-        ?: throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Empty response whilst fetching alerts in NDelius for $username.")
+        ?: throw ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "Empty response whilst fetching alerts in NDelius for $username.",
+        )
     } catch (e: WebClientResponseException.NotFound) {
       LOGGER.warn("Alerts not found for username: {}", username)
       null
@@ -362,11 +395,24 @@ class NdiliusApiClient(
   }
 
   private fun getAlertCountFallback(username: String, e: Exception): Int? {
-    LOGGER.error("Circuit breaker activated: {}", PiiSanitizer.sanitizeForFallback(e, "getAlertCount, username=$username"))
+    LOGGER.error(
+      "Circuit breaker activated: {}",
+      PiiSanitizer.sanitizeForFallback(e, "getAlertCount, username=$username"),
+    )
     return null
   }
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(this::class.java)
   }
+}
+
+open class NdeliusEligibilityApiClient(webClient: WebClient) : NdiliusApiClient(webClient) {
+  @CircuitBreaker(name = "ndiliusEligibilityApi")
+  @Timed(
+    "ndelius.get-contact-details",
+    extraTags = ["method", "GET", "endpoint", "/case/{crn}"],
+    description = "Time taken to get contact details",
+  )
+  override fun getContactDetailsStrict(crn: String): ContactDetails? = fetchContactDetails(crn)
 }

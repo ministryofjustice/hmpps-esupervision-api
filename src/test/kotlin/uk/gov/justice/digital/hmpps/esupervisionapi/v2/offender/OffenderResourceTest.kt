@@ -21,10 +21,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProv
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
@@ -44,6 +46,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligibilityRule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -1126,10 +1130,12 @@ class OffenderResourceTest {
   @Test
   fun `getEligibilityByCrn - eligible - returns eligible response`() {
     val crn = "x123456"
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.evaluate("X123456", DEFAULT_RULE_SET)).thenReturn(
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
-        uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null),
+        EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null),
       ),
     )
 
@@ -1143,10 +1149,12 @@ class OffenderResourceTest {
   @Test
   fun `getEligibilityByCrn - not eligible - returns reason message`() {
     val crn = "X123456"
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.evaluate(crn, eligibilityEvaluationEngine.activeRuleSet)).thenReturn(
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
-        uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult(
+        EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
           message = "Not eligible: person is recorded as deceased.",
           triggeredRuleCode = "IS_ALIVE",
@@ -1159,6 +1167,53 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, response.statusCode)
     assertEquals(EligibilityCheckOutcome.INELIGIBLE, response.body?.outcome)
     assertEquals("Not eligible: person is recorded as deceased.", response.body?.message)
+  }
+
+  private fun makeContactDetails(crn: String): ContactDetails = ContactDetails(crn = crn, name = Name("John", "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1))
+
+  @Test
+  fun `getEligibilityByCrn - itemise - returns full report using shared cache`() {
+    val crn = "x123456"
+    val fetchCache = mock<EligibilityEvaluationEngine.FetchCache>()
+    val rule = mock<OffenderEligibilityRule>()
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(rule.source).thenReturn("NDELIUS")
+    whenever(rule.code).thenReturn("IS_ALIVE")
+    whenever(rule.dataPoint).thenReturn("DECEASED_DATE")
+    whenever(rule.messageOnMatch).thenReturn(null)
+    whenever(rule.messageOnNoMatch).thenReturn("Person is deceased")
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(fetchCache)
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      java.util.concurrent.CompletableFuture.completedFuture(
+        EligibilityResult(
+          outcome = EligibilityCheckOutcome.INELIGIBLE,
+          message = "Person is deceased",
+          triggeredRuleCode = "IS_ALIVE",
+        ),
+      ),
+    )
+    whenever(eligibilityEvaluationEngine.itemise(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      java.util.concurrent.CompletableFuture.completedFuture(
+        listOf(rule to EligibilityRuleOutcome.NOT_ELIGIBLE),
+      ),
+    )
+
+    val response = resource.getEligibilityByCrn(crn, itemise = true).join()
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    assertEquals(
+      EligibilityCheckResponse.RuleResult(
+        source = "NDELIUS",
+        code = "IS_ALIVE",
+        dataPoint = "DECEASED_DATE",
+        outcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
+        message = "Person is deceased",
+      ),
+      response.body?.allRules?.single(),
+    )
+    verify(eligibilityEvaluationEngine).evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())
+    verify(eligibilityEvaluationEngine).itemise(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())
   }
 
   // ========================================
