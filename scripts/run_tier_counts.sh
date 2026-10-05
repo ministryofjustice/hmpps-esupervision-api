@@ -157,14 +157,19 @@ fi
 # ---------------------------------------------------------------------------
 # Port-forward, torn down on any exit
 # ---------------------------------------------------------------------------
-POD="tier-counts-$(whoami | tr -cd 'a-z0-9' | cut -c1-20)-$$"
+# The namespace is shared, and cleanup deletes this pod by name, so the name
+# must be this run's alone: user and PID can repeat across machines, the random
+# suffix makes a clash practically impossible.
+POD="tier-counts-$(whoami | tr -cd 'a-z0-9' | cut -c1-20)-$$-$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
 PF_PID=""
+body=""
 
 cleanup() {
   local rc=$?
   [[ -n "$PF_PID" ]] && kill "$PF_PID" 2>/dev/null || true
   echo "Deleting port-forward pod $POD" >&2
   kubectl -n "$NS" delete pod "$POD" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  rm -f ${body:+"$body"}
   exit "$rc"
 }
 trap cleanup EXIT
@@ -228,17 +233,18 @@ token_from_pod() {
 }
 
 token_from_laptop() {
-  local body status detail
-  body=$(mktemp)
-  status=$(printf 'user = "%s:%s"\n' "$CLIENT_ID" "$CLIENT_SECRET" \
-    | curl -s -o "$body" -w '%{http_code}' --connect-timeout 10 --max-time 30 -K - -X POST \
+  # The response holds the token, so it stays in memory: no temp file for an
+  # interrupted run to leave behind. -w appends the status on a line of its own.
+  local out status resp detail
+  out=$(printf 'user = "%s:%s"\n' "$CLIENT_ID" "$CLIENT_SECRET" \
+    | curl -s -w '\n%{http_code}' --connect-timeout 10 --max-time 30 -K - -X POST \
         "$AUTH_URL/oauth/token?grant_type=client_credentials") || true
-  if [[ "$status" == 200 ]] && TOKEN=$(jq -er .access_token "$body" 2>/dev/null); then
-    rm -f "$body"; return 0
+  status="${out##*$'\n'}"; resp="${out%$'\n'*}"
+  if [[ "$status" == 200 ]] && TOKEN=$(jq -er .access_token <<<"$resp" 2>/dev/null); then
+    return 0
   fi
-  detail=$(jq -r '[.error, .error_description] | map(select(.)) | join(": ")' "$body" 2>/dev/null \
-           || head -c 300 "$body")
-  rm -f "$body"
+  detail=$(jq -r '[.error, .error_description] | map(select(.)) | join(": ")' <<<"$resp" 2>/dev/null \
+           || head -c 300 <<<"$resp")
   die "HMPPS Auth refused the token request: HTTP ${status:-000}${detail:+ -- $detail}
        If the client is IP-restricted in this environment, use TOKEN_SOURCE=pod (the default)."
 }
@@ -285,7 +291,10 @@ for pass in $(seq 1 "$PASSES"); do
   step "Fetching tiers, pass $pass of $PASSES ($todo CRNs)"
   new_token
   retry=""; done_n=0; failed=0
-  body=$(mktemp)
+  # Each response holds more than we count (date of birth, overall risk), so it
+  # lands in the private work_dir, is emptied after each request, and is deleted
+  # at the end of the pass or, by cleanup, on any exit.
+  body=$(mktemp "$WORK_DIR/.response.XXXXXX")
   while read -r crn; do
     [[ -n "$crn" ]] || continue
     request "$crn"
@@ -301,6 +310,7 @@ for pass in $(seq 1 "$PASSES"); do
       404) result='{"outcome":"retry","reason":"CRN not found in NDelius (HTTP 404)"}' ;;
       *)   result=$(jq -cn --arg c "$code" '{outcome: "retry", reason: ("HTTP " + $c)}') ;;
     esac
+    : > "$body"
 
     outcome=$(jq -r .outcome <<<"$result")
     if [[ "$outcome" == not_v3 ]]; then
@@ -323,7 +333,7 @@ for pass in $(seq 1 "$PASSES"); do
     (( show_progress )) && printf '\r\033[K%d/%d  failed=%d' "$done_n" "$todo" "$failed" >&2
     sleep "$RATE_SLEEP"
   done <<<"$pending"
-  rm -f "$body"
+  rm -f "$body"; body=""
   (( show_progress )) && printf '\r\033[K' >&2
   echo "pass $pass: requested=$done_n unresolved=$failed" >&2
   pending="$retry"
