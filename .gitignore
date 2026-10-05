@@ -108,5 +108,6 @@ practitioners.previous.jsonl
 active_crns.txt
 pop_contacts.jsonl
 pop_contacts.csv
+pop_contacts.PARTIAL.csv
 excluded.csv
 unresolved.txt

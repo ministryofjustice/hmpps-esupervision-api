@@ -68,6 +68,10 @@ CASES = {
   "X000006": person("X000006", "Eve", "   "),
   "X000007": person("X000007", "Finn", "07700900007", status="INACTIVE"),
   "X000008": person("X000008", "Gail", "07700900001"),   # shares Zoe's number
+  "X000009": person("X000009", "Hana", "+44 (0)7700 900011"),
+  "X000010": person("X000010", "Ian", "0044 7700 900012"),
+  "X000011": person("X000011", "Jules", "+33 6 12 34 56 78"),
+  "X000012": person("X000012", "Kim", "12345"),
 }
 GOOD_BASIC = "Basic " + base64.b64encode(b"ui-client:s3cr3t").decode()
 calls = {}
@@ -164,7 +168,8 @@ esac
 EOF
 chmod +x "$T/bin/kubectl" "$T/bin/psql"
 
-printf '%s\n' X000001 X000002 X000003 X000004 X000005 X000006 X000007 X000008 > "$T/crns.txt"
+printf '%s\n' X000001 X000002 X000003 X000004 X000005 X000006 X000007 X000008 \
+  X000009 X000010 X000011 X000012 > "$T/crns.txt"
 
 run() {  # workdir [extra env...]
   local dir="$1"; shift
@@ -180,19 +185,26 @@ run() {  # workdir [extra env...]
 test_exports_only_first_name_and_phone_for_contactable_people() {
   local out rc; out="$(run "$T/c1")"; rc=$?
   assert_eq 0 "$rc" "exit code"
-  # Trimmed, as NDelius holds them otherwise, sorted case-insensitively by name.
-  # A shared number gets a row per person.
-  assert_file_eq 'First name,Phone number
-"adam","07700 900002"
-"BARRY","07700900003"
-"Gail","07700900001"
-"Zoe","07700900001"' "$T/c1/pop_contacts.csv" "export"
+  # Names trimmed, as NDelius holds them otherwise, sorted case-insensitively.
+  # UK numbers in any form normalised to +44; a non-UK one kept as held and
+  # flagged. A shared number gets a row per person.
+  assert_file_eq 'First name,Phone number,Non-UK number
+"adam","+447700900002","No"
+"BARRY","+447700900003","No"
+"Gail","+447700900001","No"
+"Hana","+447700900011","No"
+"Ian","+447700900012","No"
+"Jules","+33 6 12 34 56 78","Yes"
+"Zoe","+447700900001","No"' "$T/c1/pop_contacts.csv" "export"
   assert_file_eq 'CRN,Reason
 "X000004","contact_suspended"
+"X000012","invalid_number"
 "X000007","no_longer_active"
 "X000005","no_mobile"
 "X000006","no_mobile"' "$T/c1/excluded.csv" "excluded"
-  assert_contains "$out" "Exported:  4 of 8 active people" "summary"
+  [[ ! -e "$T/c1/pop_contacts.PARTIAL.csv" ]] || fail "complete run wrote a PARTIAL export"
+  assert_contains "$out" "Exported:  7 of 12 active people" "summary"
+  assert_contains "$out" "1 non-UK phone numbers" "non-UK numbers noted"
   assert_contains "$out" "1 phone numbers are shared" "shared numbers noted"
   assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
 }
@@ -200,7 +212,7 @@ test_exports_only_first_name_and_phone_for_contactable_people() {
 test_no_surname_email_dob_or_crn_in_the_export() {
   run "$T/c2" >/dev/null
   local csv; csv="$(cat "$T/c2/pop_contacts.csv")"
-  for leak in SURNAME @example.com 1990-01-01 X0000 Practitioner; do
+  for leak in SURNAME @example.com 1990-01-01 X0000 Practitioner 12345; do
     [[ "$csv" != *"$leak"* ]] || fail "export contains $leak"
   done
   [[ "$(cat "$T/c2/excluded.csv")" != *"07700"* ]] || fail "excluded.csv contains a phone number"
@@ -234,9 +246,9 @@ test_retries_an_ndelius_blip_on_the_next_pass() {
   local out rc; out="$(run "$T/c6" FAKE_CRNS="$T/flaky.txt")"; rc=$?
   assert_eq 0 "$rc" "exit code"
   assert_contains "$out" "RETRY crn=FLAKY01 NDelius details unavailable" "retry logged"
-  assert_file_eq 'First name,Phone number
-"Ivy","07700900010"
-"Zoe","07700900001"' "$T/c6/pop_contacts.csv" "export after retry"
+  assert_file_eq 'First name,Phone number,Non-UK number
+"Ivy","+447700900010","No"
+"Zoe","+447700900001","No"' "$T/c6/pop_contacts.csv" "export after retry"
 }
 
 test_reports_crns_still_unresolved_and_exits_3() {
@@ -247,8 +259,10 @@ test_reports_crns_still_unresolved_and_exits_3() {
   assert_contains "$out" "RETRY crn=ERROR01 HTTP 500" "server error retried"
   assert_contains "$out" "RETRY crn=NOSUCH1 CRN not registered" "404 retried"
   assert_file_eq $'DOWN001\nERROR01\nNOSUCH1' "$T/c7/unresolved.txt" "unresolved list"
-  assert_file_eq 'First name,Phone number
-"Zoe","07700900001"' "$T/c7/pop_contacts.csv" "resolved people still exported"
+  assert_file_eq 'First name,Phone number,Non-UK number
+"Zoe","+447700900001","No"' "$T/c7/pop_contacts.PARTIAL.csv" "resolved people exported, under a PARTIAL name"
+  [[ ! -e "$T/c7/pop_contacts.csv" ]] || fail "partial run wrote pop_contacts.csv"
+  assert_contains "$out" "named pop_contacts.PARTIAL.csv because it is incomplete" "partial named in the warning"
 }
 
 test_refreshes_the_token_on_a_401_mid_pass() {
@@ -256,9 +270,9 @@ test_refreshes_the_token_on_a_401_mid_pass() {
   local out rc; out="$(run "$T/c8" FAKE_CRNS="$T/expire.txt")"; rc=$?
   assert_eq 0 "$rc" "exit code"
   assert_eq 2 "$(grep -c 'exec deploy/hmpps-esupervision-ui' "$T/fake.log")" "token fetched for the pass and refreshed once"
-  assert_file_eq 'First name,Phone number
-"Hal","07700900009"
-"Zoe","07700900001"' "$T/c8/pop_contacts.csv" "export"
+  assert_file_eq 'First name,Phone number,Non-UK number
+"Hal","+447700900009","No"
+"Zoe","+447700900001","No"' "$T/c8/pop_contacts.csv" "export"
 }
 
 test_stops_on_a_403() {
@@ -266,7 +280,7 @@ test_stops_on_a_403() {
   local out rc; out="$(run "$T/c9" FAKE_CRNS="$T/forbid.txt")"; rc=$?
   assert_eq 1 "$rc" "exit code"
   assert_contains "$out" "missing ROLE_ESUPERVISION__ESUPERVISION_UI" "message"
-  [[ ! -f "$T/c9/pop_contacts.csv" ]] || fail "wrote an export anyway"
+  [[ ! -f "$T/c9/pop_contacts.csv" && ! -f "$T/c9/pop_contacts.PARTIAL.csv" ]] || fail "wrote an export anyway"
 }
 
 test_laptop_token_mode_works_and_reports_auth_errors() {
@@ -285,10 +299,11 @@ test_pod_token_mode_does_not_read_the_ui_secret() {
 test_rerun_starts_afresh() {
   printf '%s\n' X000001 DOWN001 > "$T/rerun.txt"
   run "$T/c13" FAKE_CRNS="$T/rerun.txt" >/dev/null
-  [[ -f "$T/c13/unresolved.txt" ]] || fail "first run should leave unresolved.txt"
+  [[ -f "$T/c13/unresolved.txt" && -f "$T/c13/pop_contacts.PARTIAL.csv" ]] || fail "first run should be partial"
   run "$T/c13" >/dev/null
   [[ ! -f "$T/c13/unresolved.txt" ]] || fail "stale unresolved.txt kept"
-  assert_eq 5 "$(wc -l < "$T/c13/pop_contacts.csv" | tr -d ' ')" "header plus four people"
+  [[ ! -f "$T/c13/pop_contacts.PARTIAL.csv" ]] || fail "stale PARTIAL export kept beside the complete one"
+  assert_eq 8 "$(wc -l < "$T/c13/pop_contacts.csv" | tr -d ' ')" "header plus seven people"
 }
 
 test_work_dir_and_files_are_private() {

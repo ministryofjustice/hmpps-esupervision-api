@@ -22,10 +22,19 @@
 #   contact_suspended  NDelius has contact suspended -- they must not be contacted
 #   no_longer_active   their status here changed from VERIFIED since the listing
 #   no_mobile          NDelius holds no mobile number for them
+#   invalid_number     the number is neither a UK number nor an international
+#                      one (+ or 00 then a country code), so cannot be used
 #
-# First names and numbers are as NDelius holds them, trimmed of surrounding
-# whitespace. Two people sharing a number get a row each; the summary counts
-# how many numbers are shared.
+# Phone numbers: UK numbers -- 07..., +44..., +44 (0)..., 0044..., 44... with
+# any spaces, dots, dashes or brackets -- are normalised to +44 and the digits,
+# e.g. +447700900123. Any other international number is kept as NDelius holds
+# it and flagged Yes in the Non-UK number column. Spreadsheets mangle these
+# (a leading + or 0 is read as a formula or dropped), so hand the file over or
+# upload it as it is, rather than opening and re-saving it.
+#
+# First names are as NDelius holds them, trimmed of surrounding whitespace.
+# Two people sharing a number get a row each; the summary counts how many
+# numbers are shared.
 #
 # Prerequisites: kubectl authenticated to Cloud Platform with access to the
 # namespace, psql, jq, curl -- and the MoJ network, because the API ingress is
@@ -50,11 +59,15 @@
 #   EXPORT_API_BASE, EXPORT_AUTH_URL   override the per-environment URLs
 #
 # Outputs, in work_dir:
-#   pop_contacts.csv  the deliverable: First name,Phone number -- one row per
-#                     contactable person, sorted by first name
+#   pop_contacts.csv  the deliverable: First name,Phone number,Non-UK number --
+#                     one row per contactable person, sorted by first name
+#   pop_contacts.PARTIAL.csv
+#                     written INSTEAD of pop_contacts.csv when some CRNs could
+#                     not be read: the same columns, but people are missing
 #   excluded.csv      CRN,Reason for each person left out (no names or numbers)
 #   unresolved.txt    CRNs whose details could still not be read after every
-#                     pass (only written when there are some; the run then exits 3)
+#                     pass (only written when there are some; the run then
+#                     exits 3 and the export is named .PARTIAL.csv)
 
 set -euo pipefail
 umask 077
@@ -129,10 +142,11 @@ echo "Output:      $WORK_DIR" >&2
 CRNS="$WORK_DIR/active_crns.txt"
 RESULTS="$WORK_DIR/pop_contacts.jsonl"
 EXPORT="$WORK_DIR/pop_contacts.csv"
+PARTIAL_EXPORT="$WORK_DIR/pop_contacts.PARTIAL.csv"
 EXCLUDED="$WORK_DIR/excluded.csv"
 UNRESOLVED="$WORK_DIR/unresolved.txt"
 # Every run starts afresh: the export is only meaningful against one cohort.
-rm -f "$CRNS" "$RESULTS" "$EXPORT" "$EXCLUDED" "$UNRESOLVED"
+rm -f "$CRNS" "$RESULTS" "$EXPORT" "$PARTIAL_EXPORT" "$EXCLUDED" "$UNRESOLVED"
 
 # ---------------------------------------------------------------------------
 # Secrets, held in shell variables only -- never written to disk
@@ -271,18 +285,39 @@ request() {  # crn
   code="${code:-000}"
 }
 
-# Turns a 200 into the two fields we export, or a reason to leave the person
-# out. The endpoint answers with details null when NDelius could not be read
-# (its client falls back to null on errors and an open circuit) -- that is
-# worth retrying. Only forename and mobile are kept from the response.
+# Turns a 200 into the fields we export, or a reason to leave the person out.
+# The endpoint answers with details null when NDelius could not be read (its
+# client falls back to null on errors and an open circuit) -- that is worth
+# retrying. Only forename and mobile are kept from the response.
+#
+# phone: separators and a "(0)" trunk prefix are dropped, then a UK number
+# (07..., +44..., 0044..., or 44 and ten digits) becomes +44 and its 9 or 10
+# significant digits. Anything else starting + or 00 then a country code is
+# taken as non-UK and kept as NDelius holds it. null if it is neither.
 # shellcheck disable=SC2016  # jq variables, not shell ones
 CLASSIFY='
   def trimmed: (. // "") | gsub("^\\s+|\\s+$"; "");
+  def phone:
+    trimmed as $held
+    | ($held | gsub("\\(0\\)"; "") | gsub("[\\s().-]"; "")) as $d
+    | (if ($d | test("^\\+44")) then $d[3:]
+       elif ($d | test("^0044")) then $d[4:]
+       elif ($d | test("^44[1-9][0-9]{9}$")) then $d[2:]
+       elif ($d | test("^0[1-9]")) then $d[1:]
+       else null end) as $uk
+    | if $uk != null then
+        ($uk | sub("^0"; "")) as $n
+        | if ($n | test("^[1-9][0-9]{8,9}$")) then {number: ("+44" + $n), non_uk: false} else null end
+      elif ($d | test("^(\\+|00)[1-9][0-9]{6,14}$")) then {number: $held, non_uk: true}
+      else null end;
   if .status != "VERIFIED" then {outcome: "excluded", reason: "no_longer_active"}
   elif .details == null then {outcome: "retry", reason: "NDelius details unavailable"}
   elif .details.contactSuspended == true then {outcome: "excluded", reason: "contact_suspended"}
   elif (.details.mobile | trimmed) == "" then {outcome: "excluded", reason: "no_mobile"}
-  else {outcome: "ok", forename: (.details.name.forename | trimmed), mobile: (.details.mobile | trimmed)} end'
+  else (.details.mobile | phone) as $p
+    | if $p == null then {outcome: "excluded", reason: "invalid_number"}
+      else {outcome: "ok", forename: (.details.name.forename | trimmed), mobile: $p.number, non_uk: $p.non_uk} end
+  end'
 
 if [[ -t 2 ]]; then show_progress=1; else show_progress=0; fi
 
@@ -331,10 +366,13 @@ done
 # ---------------------------------------------------------------------------
 LATEST='reduce .[] as $r ({}; .[$r.crn] = $r) | [.[]]'
 
+# A partial export gets a name that cannot be mistaken for the real thing.
+[[ -z "$pending" ]] || EXPORT="$PARTIAL_EXPORT"
+
 {
-  echo "First name,Phone number"
+  echo "First name,Phone number,Non-UK number"
   jq -rs "$LATEST"' | map(select(.outcome == "ok")) | sort_by([(.forename | ascii_downcase), .mobile])
-                    | .[] | [.forename, .mobile] | @csv' "$RESULTS"
+                    | .[] | [.forename, .mobile, (if .non_uk then "Yes" else "No" end)] | @csv' "$RESULTS"
 } > "$EXPORT"
 
 {
@@ -344,18 +382,22 @@ LATEST='reduce .[] as $r ({}; .[$r.crn] = $r) | [.[]]'
 } > "$EXCLUDED"
 
 exported=$(jq -s "$LATEST"' | map(select(.outcome == "ok")) | length' "$RESULTS")
+non_uk=$(jq -s "$LATEST"' | map(select(.outcome == "ok" and .non_uk)) | length' "$RESULTS")
 shared=$(jq -s "$LATEST"' | map(select(.outcome == "ok")) | group_by(.mobile) | map(select(length > 1)) | length' "$RESULTS")
 
 step "Done"
 echo "  Exported:  $exported of $total active people" >&2
 jq -rs "$LATEST"' | map(select(.outcome == "excluded")) | group_by(.reason) | .[]
                   | "  Excluded:  \(length) \(.[0].reason)"' "$RESULTS" >&2
+(( non_uk == 0 )) || echo "  Note:      $non_uk non-UK phone numbers, flagged in the Non-UK number column" >&2
 (( shared == 0 )) || echo "  Note:      $shared phone numbers are shared by more than one person" >&2
 cat >&2 <<EOF
 
   Export:    $EXPORT
   Excluded:  $EXCLUDED
 
+  Hand over or upload the export as it is: opening and re-saving it in a
+  spreadsheet can strip the leading + from the phone numbers.
   These files are personal data. Delete $WORK_DIR once the export is handed over.
 EOF
 
@@ -363,6 +405,7 @@ if [[ -n "$pending" ]]; then
   printf '%s' "$pending" > "$UNRESOLVED"
   n=$(grep -c . "$UNRESOLVED")
   echo "  WARNING: $n of $total CRNs are not in the export -- their details could not be read after $PASSES passes." >&2
+  echo "           The export is named $(basename "$PARTIAL_EXPORT") because it is incomplete." >&2
   echo "           See $UNRESOLVED and the RETRY lines above; re-run to try again." >&2
   exit 3
 fi
