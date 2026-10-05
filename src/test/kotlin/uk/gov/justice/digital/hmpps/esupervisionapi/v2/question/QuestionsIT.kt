@@ -32,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequ
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
@@ -444,6 +445,45 @@ class QuestionsIT(
       questionRequest.questions.map { it.params },
       questionRepository.getListItems(linkedAssignmentId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
     )
+  }
+
+  @Test
+  fun `scheduling today creates a fresh checkin when today's checkin was cancelled`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123462",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today().plusDays(1),
+    ).toEntity()
+    offenderRepository.save(offender)
+
+    val cancelledDto = offenderCheckinService.debugCreateCheckin(offender, clock)
+    val cancelledCheckin = offenderCheckinRepository.findByUuid(cancelledDto.uuid).orElseThrow()
+    cancelledCheckin.status = CheckinStatus.CANCELLED
+    offenderCheckinRepository.saveAndFlush(cancelledCheckin)
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val questionRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    val pendingAssignment = questionService.assignCustomQuestions(offender.crn, questionRequest)
+    val scheduleUpdate = CheckinScheduleUpdateRequest(
+      requestedBy = "BARRY.WHITE",
+      firstCheckin = clock.today(),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+    )
+
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .exchange()
+      .expectStatus().isOk
+
+    val freshCheckin = offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single()
+    assertNotEquals(cancelledCheckin.uuid, freshCheckin.uuid)
+    val linkedAssignmentId = questionListAssignmentRepository.checkinAssignment(freshCheckin.id)
+    assertEquals(pendingAssignment.listId, linkedAssignmentId)
+    assertEquals(1, questionListAssignmentRepository.findAll().count { it.checkinId == freshCheckin.id })
   }
 
   @Test

@@ -591,7 +591,7 @@ class OffenderResourceTest {
     }
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
-    verify(ndiliusApiClient, times(0)).getContactDetails(any(), any())
+    verify(ndiliusApiClient, times(0)).getContactDetails(any())
     verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
   }
 

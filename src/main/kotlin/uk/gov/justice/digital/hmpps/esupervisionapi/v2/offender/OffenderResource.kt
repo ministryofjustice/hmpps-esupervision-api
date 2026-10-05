@@ -659,6 +659,7 @@ assigned to the offender's upcoming check-in.""",
     }
 
     val todaysCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
+    val reusableCheckin = todaysCheckin.filter { it.status != CheckinStatus.CANCELLED }
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null || request.contactPreference != null) {
       val saved = offenderRepository.save(offender)
@@ -666,17 +667,17 @@ assigned to the offender's upcoming check-in.""",
       if (request.checkinSchedule?.firstCheckin == clock.today() &&
         (newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today()) || request.checkinSchedule.questions != null)
       ) {
-        val checkin = todaysCheckin.orElseGet {
+        val checkin = reusableCheckin.orElseGet {
           checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
         }
         request.checkinSchedule.questions?.let {
           questionService.assignCustomQuestionsToCheckin(
             checkin,
             it,
-            allowSameDayInitialAssignment = todaysCheckin.isEmpty,
+            allowSameDayInitialAssignment = reusableCheckin.isEmpty,
           )
         }
-        LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
+        LOGGER.debug("{} check-in for offender {}", if (reusableCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       } else if (request.checkinSchedule?.questions != null) {
         questionService.assignCustomQuestions(offenderAfter.crn, request.checkinSchedule.questions)
       }
