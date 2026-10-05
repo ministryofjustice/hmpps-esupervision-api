@@ -55,7 +55,8 @@
 #
 # Outputs, in work_dir:
 #   practitioner_export.csv      the deliverable: PDU, Region, CRN, POP count,
-#                                Email address -- one row per practitioner
+#                                First name, Email address -- one row per
+#                                practitioner
 #   practitioners_unmatched.csv  worksheet for the rows with no email
 #   extract_report.txt           summary of what was extracted: CRNs by status
 #                                and by region/PDU, usernames not on record for any CRN,
