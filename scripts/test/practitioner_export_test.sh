@@ -92,6 +92,16 @@ CASES = {
   # no live PDU: the snapshot must be used
   "X000007": {"name": {"forename": "Sam", "surname": "Patel"}, "email": "sam.patel@justice.gov.uk",
               "username": "SAM.PATEL", "unallocated": False},
+  # forename spellings for one practitioner, used only by the spelling test
+  "C000001": {"name": {"forename": "barry"}, "username": "CASE.TEST", "unallocated": False},
+  "C000002": {"name": {"forename": "BARRY"}, "username": "CASE.TEST", "unallocated": False},
+  "C000003": {"name": {"forename": "Barry"}, "username": "CASE.TEST", "unallocated": False},
+  "C000004": {"name": {"forename": "ÉLODIE"}, "username": "CASE.TEST", "unallocated": False},
+  "C000005": {"name": {"forename": "élodie"}, "username": "CASE.TEST", "unallocated": False},
+  "C000006": {"name": {"forename": "ŁUKASZ"}, "username": "CASE.TEST", "unallocated": False},
+  "C000007": {"name": {"forename": "Łukasz"}, "username": "CASE.TEST", "unallocated": False},
+  "C000008": {"name": {"forename": "JO"}, "username": "CASE.TEST", "unallocated": False},
+  "C000009": {"name": {"forename": "jo"}, "username": "CASE.TEST", "unallocated": False},
 }
 GOOD_BASIC = "Basic " + base64.b64encode(b"ui-client:s3cr3t").decode()
 
@@ -245,6 +255,22 @@ test_export_has_one_row_per_practitioner_with_the_requested_columns() {
   # preferred, snapshot used when the live one is missing (X000007); commas in
   # a PDU name surviving CSV quoting; blank-email rows kept and sorted last.
   assert_file_eq "$EXPECTED_EXPORT" "$T/f1/practitioner_export.csv" "export content"
+}
+
+test_forename_spelling_is_chosen_by_case_not_by_crn_order() {
+  mkdir -p "$T/n1" "$T/n2"
+  local c
+  for c in 1 2 3 4 5 6 7 8 9; do printf '{"crn":"C00000%s","storedUsername":"CASE.TEST"}\n' "$c"; done > "$T/n1/crns.jsonl"
+  # the same CRNs in reverse: the choice must not change
+  sort -r "$T/n1/crns.jsonl" > "$T/n2/crns.jsonl"
+  fetch "$T/n1" >/dev/null
+  fetch "$T/n2" >/dev/null
+  # Mixed case beats lower beats capitals (Barry, Łukasz); accented capitals
+  # fold onto their lower case (ÉLODIE/élodie -> élodie, not two names); with
+  # no mixed case, lower case wins over capitals (JO/jo -> jo).
+  local want='"Barry; jo; élodie; Łukasz"'
+  assert_contains "$(cat "$T/n1/practitioner_export.csv")" "$want" "forenames"
+  assert_contains "$(cat "$T/n2/practitioner_export.csv")" "$want" "forenames, CRNs reversed"
 }
 
 test_worksheet_names_every_practitioner_without_an_email() {

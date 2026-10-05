@@ -281,14 +281,31 @@ ROWS='
 # has no column for a username.
 #
 # NDelius holds the same forename in different cases on different records
-# ("BARRY", "Barry"), so forenames are deduplicated case-insensitively, keeping
-# a mixed-case spelling over an all-capitals one where there is a choice.
+# ("BARRY", "Barry", "barry"), so forenames are deduplicated case-insensitively
+# and one spelling kept: mixed case first, then all lower case, then all
+# capitals, and alphabetically among equals so the choice never depends on the
+# order of the CRNs. jq's own ascii_downcase/ascii_upcase leave accented letters
+# alone ("ÉLODIE" and "élodie" would stay apart), so lc/uc below also fold
+# Latin-1 and Latin Extended-A -- enough for European names held in NDelius.
 COLLAPSE='
+  def lc: explode | map(
+      if (. >= 65 and . <= 90) or (. >= 192 and . <= 222 and . != 215) then . + 32
+      elif . == 376 then 255
+      elif ((. >= 256 and . <= 311) or (. >= 330 and . <= 375)) and . % 2 == 0 then . + 1
+      elif ((. >= 313 and . <= 328) or (. >= 377 and . <= 382)) and . % 2 == 1 then . + 1
+      else . end) | implode;
+  def uc: explode | map(
+      if (. >= 97 and . <= 122) or (. >= 224 and . <= 254 and . != 247) then . - 32
+      elif . == 255 then 376
+      elif ((. >= 256 and . <= 311) or (. >= 330 and . <= 375)) and . % 2 == 1 then . - 1
+      elif ((. >= 313 and . <= 328) or (. >= 377 and . <= 382)) and . % 2 == 0 then . - 1
+      else . end) | implode;
+  def spelling_rank: if . != uc and . != lc then 0 elif . == lc and . != uc then 1 else 2 end;
   group_by(.username)
   | map({ username: .[0].username,
           forename: (map(select(.forename != "") | .forename)
-                     | group_by(ascii_downcase)
-                     | map(sort_by(. == ascii_upcase) | .[0])
+                     | group_by(lc)
+                     | map(sort_by([spelling_rank, .]) | .[0])
                      | join("; ")),
           email:  (map(select(.email != "") | .email) | unique | join("; ")),
           pdu:    (map(select(.pdu    != "") | .pdu)    | unique | join("; ")),
