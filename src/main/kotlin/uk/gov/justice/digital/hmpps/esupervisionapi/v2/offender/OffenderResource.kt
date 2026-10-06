@@ -49,6 +49,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -634,9 +635,6 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
     val schedule = request.checkinSchedule
     schedule?.let {
       validate(it, initialOffender.mode)
-      if ((it.mode ?: initialOffender.mode) != CheckinMode.SCHEDULED) {
-        throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Use schedule-ad-hoc-check-in to schedule ad-hoc check-ins.")
-      }
     }
     val checkinsBeforeUpdate = if (schedule?.firstCheckin == today) {
       checkinRepository.findByOffenderAndDueDateAndStatusIn(
@@ -710,6 +708,7 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
         } else {
           val details = contactDetails
             ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while updating. Please retry.")
+          validateSameDayCheckinEligibility(saved, details)
           checkinCreationService.createCheckinForOffender(saved, saved.firstCheckin, schedule.requestedBy, details)
         }
       }
@@ -789,6 +788,7 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
           val checkin = reusableCheckin ?: run {
             val details = contactDetails
               ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while scheduling. Please retry.")
+            validateSameDayCheckinEligibility(saved, details)
             checkinCreationService.createCheckinForOffender(saved, request.firstCheckin, request.requestedBy, details)
           }
           request.questions?.let {
@@ -835,6 +835,16 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
     }
     if (firstCheckin.isBefore(LocalDate.now(clock))) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
+    }
+  }
+
+  private fun validateSameDayCheckinEligibility(offender: Offender, contactDetails: ContactDetails) {
+    if (offender.status != OffenderStatus.VERIFIED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only VERIFIED offenders can have a check-in created.")
+    }
+    val ineligibilityReason = checkinIneligibilityReason(offender, contactDetails)
+    if (ineligibilityReason != null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot create a check-in because ${ineligibilityReason.description}.")
     }
   }
 

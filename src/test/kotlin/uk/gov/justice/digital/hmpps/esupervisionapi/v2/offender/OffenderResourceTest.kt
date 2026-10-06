@@ -854,6 +854,35 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - does not create a same-day checkin for an INITIAL offender`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INITIAL).apply {
+      firstCheckin = clock.today().minusDays(1)
+    }
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(
+        uuid,
+        OffenderDetailsUpdateRequest(
+          checkinSchedule = CheckinScheduleUpdateRequest(
+            requestedBy = "XYZ0111",
+            firstCheckin = clock.today(),
+            checkinInterval = CheckinInterval.FOUR_WEEKS,
+          ),
+        ),
+      )
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+  }
+
+  @Test
   fun `updateDetails - does not create recurring checkin when date is already today`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
@@ -977,6 +1006,47 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `scheduleAdHocCheckin - rejects today's checkin when contact is suspended or has no active event`() {
+    val ineligibleDetails = listOf(
+      ContactDetails(
+        crn = "X123456",
+        name = Name("John", "Doe"),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+        events = emptyList(),
+      ),
+      ContactDetails(
+        crn = "X123456",
+        name = Name("John", "Doe"),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+        events = listOf(anEvent),
+        contactSuspended = true,
+      ),
+    )
+
+    for (contactDetails in ineligibleDetails) {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+        firstCheckin = clock.today().plusDays(1)
+      }
+      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.save(offender)).thenReturn(offender)
+      whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+      whenever(checkinRepository.findByOffenderAndDueDateAndStatusIn(any(), eq(clock.today()), any()))
+        .thenReturn(emptyList())
+      whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)).thenReturn(emptyList())
+
+      val exception = assertThrows(ResponseStatusException::class.java) {
+        resource.scheduleAdHocCheckin(uuid, ScheduleAdHocCheckinRequest("XYZ0111", clock.today()))
+      }
+
+      assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    }
+
+    verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+  }
+
+  @Test
   fun `scheduleAdHocCheckin - refreshes locked offender before validation`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC)
@@ -1085,20 +1155,16 @@ class OffenderResourceTest {
     val scheduleUpdate = CheckinScheduleUpdateRequest(
       mode = CheckinMode.AD_HOC,
       requestedBy = "BOB",
-      checkinInterval = CheckinInterval.FOUR_WEEKS,
+      checkinInterval = null,
       firstCheckin = clock.today().plusDays(1),
     )
-    var ex = assertThrows(ResponseStatusException::class.java) {
-      resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
-    }
-    assertTrue(ex.statusCode.is4xxClientError)
 
-    val result = resource.updateDetails(
-      uuid,
-      OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate.copy(mode = CheckinMode.SCHEDULED)),
-    )
-    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
+    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+
     assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(CheckinMode.AD_HOC, result.body?.mode)
+    assertEquals(null, result.body?.checkinInterval)
+    verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
   }
 
   @Test
