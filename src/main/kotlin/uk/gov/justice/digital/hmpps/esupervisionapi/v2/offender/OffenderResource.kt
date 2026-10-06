@@ -71,7 +71,6 @@ import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
-import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -640,21 +639,26 @@ assigned to the offender's upcoming check-in.""",
     val schedule = request.checkinSchedule
     val requestedMode = schedule?.mode ?: initialOffender.mode
     schedule?.let { validate(it, initialOffender.mode) }
-    val checkinBeforeUpdate = if (schedule?.firstCheckin == today) {
-      checkinRepository.findByOffenderAndDueDateAndStatus(initialOffender, today, CheckinStatus.CREATED)
-    } else {
-      Optional.empty()
-    }
-    val createsCheckinToday = schedule?.firstCheckin == today &&
-      (
-        initialOffender.firstCheckin != today ||
-          (requestedMode == CheckinMode.AD_HOC && checkinBeforeUpdate.isEmpty) ||
-          schedule.questions != null
+    val checkinsBeforeUpdate = if (schedule?.firstCheckin == today) {
+      checkinRepository.findByOffenderAndDueDateAndStatusIn(
+        initialOffender,
+        today,
+        setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED),
       )
-    if (createsCheckinToday && schedule?.questions != null && checkinBeforeUpdate.isPresent) {
+    } else {
+      emptyList()
+    }
+    val createsCheckinToday =
+      schedule?.firstCheckin == today &&
+        (
+          initialOffender.firstCheckin != today ||
+            (requestedMode == CheckinMode.AD_HOC && checkinsBeforeUpdate.isEmpty()) ||
+            schedule.questions != null
+          )
+    if (createsCheckinToday && schedule?.questions != null && checkinsBeforeUpdate.isNotEmpty()) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Questions must be assigned before the check-in due date")
     }
-    val contactDetails = if (createsCheckinToday && checkinBeforeUpdate.isEmpty) {
+    val contactDetails = if (createsCheckinToday && checkinsBeforeUpdate.isEmpty()) {
       ndiliusApiClient.getContactDetails(initialOffender.crn)
         ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${initialOffender.crn}")
     } else {
@@ -685,11 +689,17 @@ assigned to the offender's upcoming check-in.""",
         offender.updatedAt = clock.instant()
       }
 
-      val reusableCheckin = if (schedule?.firstCheckin == today) {
-        checkinRepository.findByOffenderAndDueDateAndStatus(offender, today, CheckinStatus.CREATED)
+      val checkinsDueToday = if (schedule?.firstCheckin == today) {
+        checkinRepository.findByOffenderAndDueDateAndStatusIn(
+          offender,
+          today,
+          setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED),
+        )
       } else {
-        Optional.empty()
+        emptyList()
       }
+      val reusableCheckin = checkinsDueToday.firstOrNull { it.status == CheckinStatus.CREATED }
+      val completedCheckinExists = checkinsDueToday.any { it.status == CheckinStatus.SUBMITTED || it.status == CheckinStatus.REVIEWED }
       LOGGER.info(
         "Update offender details, CRN={}, schedule updated={}, contact preference updated={}",
         offender.crn,
@@ -703,26 +713,34 @@ assigned to the offender's upcoming check-in.""",
 
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
-      if (schedule?.firstCheckin == today &&
+      if (
+        schedule?.firstCheckin == today &&
         (
           newFirstCheckinDateIsToday(offenderBefore, offenderAfter, today) ||
-            (offender.mode == CheckinMode.AD_HOC && reusableCheckin.isEmpty) ||
+            (offender.mode == CheckinMode.AD_HOC && checkinsDueToday.isEmpty()) ||
             schedule.questions != null
-        )
-      ) {
-        val checkin = reusableCheckin.orElseGet {
-          val details = contactDetails
-            ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while updating. Please retry.")
-          checkinCreationService.createCheckinForOffender(saved, saved.firstCheckin, schedule.requestedBy, details)
-        }
-        schedule.questions?.let {
-          questionService.assignCustomQuestionsToCheckin(
-            checkin,
-            it,
-            allowSameDayInitialAssignment = reusableCheckin.isEmpty,
           )
+      ) {
+        if (completedCheckinExists) {
+          if (schedule.questions != null) {
+            throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Questions must be assigned before the check-in due date")
+          }
+          LOGGER.debug("Check-in already completed for offender {}; skipping creation", offenderAfter.uuid)
+        } else {
+          val checkin = reusableCheckin ?: run {
+            val details = contactDetails
+              ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while updating. Please retry.")
+            checkinCreationService.createCheckinForOffender(saved, saved.firstCheckin, schedule.requestedBy, details)
+          }
+          schedule.questions?.let {
+            questionService.assignCustomQuestionsToCheckin(
+              checkin,
+              it,
+              allowSameDayInitialAssignment = reusableCheckin == null,
+            )
+          }
+          LOGGER.debug("{} check-in for offender {}", if (reusableCheckin != null) "skipped" else "created", offenderAfter.uuid)
         }
-        LOGGER.debug("{} check-in for offender {}", if (reusableCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       } else if (schedule?.questions != null) {
         questionService.assignCustomQuestions(offenderAfter.crn, schedule.questions)
       }
@@ -743,8 +761,9 @@ assigned to the offender's upcoming check-in.""",
     eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
-  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) =
+  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) {
     validateSchedule(scheduleUpdate.firstCheckin, scheduleUpdate.mode, scheduleUpdate.checkinInterval, currentMode)
+  }
 
   private fun validate(scheduleUpdate: CheckinScheduleWithQuestionsRequest, currentMode: CheckinMode) {
     val mode = scheduleUpdate.mode ?: currentMode

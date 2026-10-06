@@ -862,13 +862,52 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
-    whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED))
-      .thenReturn(Optional.empty())
+    whenever(
+      checkinRepository.findByOffenderAndDueDateAndStatusIn(
+        offender,
+        clock.today(),
+        setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED),
+      ),
+    ).thenReturn(emptyList())
 
     val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
 
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+  }
+
+  @Test
+  fun `updateDetails - does not create duplicate checkin when today's checkin was submitted or reviewed`() {
+    for (completedStatus in listOf(CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED)) {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
+        firstCheckin = clock.today()
+        mode = CheckinMode.AD_HOC
+        checkinInterval = null
+      }
+      val completedCheckin = mock<OffenderCheckin>()
+      whenever(completedCheckin.status).thenReturn(completedStatus)
+      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.save(offender)).thenReturn(offender)
+      whenever(
+        checkinRepository.findByOffenderAndDueDateAndStatusIn(
+          offender,
+          clock.today(),
+          setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED),
+        ),
+      ).thenReturn(listOf(completedCheckin))
+
+      val schedule = CheckinScheduleWithQuestionsRequest(
+        requestedBy = "XYZ0111",
+        firstCheckin = clock.today(),
+        checkinInterval = null,
+        mode = CheckinMode.AD_HOC,
+      )
+      val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+
+      assertEquals(HttpStatus.OK, response.statusCode)
+      verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+    }
   }
 
   @Test
@@ -882,7 +921,13 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
-    whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED)).thenReturn(Optional.empty())
+    whenever(
+      checkinRepository.findByOffenderAndDueDateAndStatusIn(
+        offender,
+        clock.today(),
+        setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED),
+      ),
+    ).thenReturn(emptyList())
     val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
@@ -909,7 +954,13 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
-    whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED)).thenReturn(Optional.empty())
+    whenever(
+      checkinRepository.findByOffenderAndDueDateAndStatusIn(
+        offender,
+        clock.today(),
+        setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED),
+      ),
+    ).thenReturn(emptyList())
 
     val schedule = CheckinScheduleWithQuestionsRequest(
       requestedBy = "XYZ0111",
