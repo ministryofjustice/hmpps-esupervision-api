@@ -116,3 +116,12 @@ pop_contacts.csv
 pop_contacts.PARTIAL.csv
 excluded.csv
 unresolved.txt
+
+# Outputs of scripts/run_practitioner_tier_export.sh (staff tied to the CRNs
+# they supervise, with tiers), same reasoning.
+practitioner_rows.jsonl
+tiers.jsonl
+practitioner_tiers.csv
+practitioner_tiers.PARTIAL.csv
+crn_tiers.csv
+crn_tiers.PARTIAL.csv
