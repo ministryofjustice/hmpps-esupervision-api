@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:77_allow_null_first_checkin_for_ad_hoc-1 splitStatements:false
+--changeset hmpps:78_allow_null_first_checkin_for_ad_hoc-1 splitStatements:false
 ALTER TABLE offender_v2
   ALTER COLUMN first_checkin DROP NOT NULL;
 
