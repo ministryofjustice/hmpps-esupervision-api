@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.integration
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager
@@ -48,5 +49,12 @@ class OAuthClientWiringTest : IntegrationTestBase() {
     assertEquals("outbound-api", outboundConnectionProvider.name())
     assertEquals(Duration.ofSeconds(20), webClientConfiguration.connectionPoolMaxIdleTime)
     assertEquals(Duration.ofSeconds(10), webClientConfiguration.connectionPoolEvictInBackground)
+  }
+
+  @Test
+  fun `clients get the singleton pool rather than building a new, unmanaged one each`() {
+    // The WebClient beans obtain the pool by calling the @Bean method, which relies on the
+    // configuration class being CGLIB-proxied.
+    assertSame(outboundConnectionProvider, webClientConfiguration.outboundConnectionProvider())
   }
 }

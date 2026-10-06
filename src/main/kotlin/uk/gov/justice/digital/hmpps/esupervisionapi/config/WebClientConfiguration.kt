@@ -267,8 +267,8 @@ class WebClientConfiguration(
    * hmpps-kotlin's `authorisedWebClient`, but with its connector swapped for one backed by
    * [outboundConnectionProvider]. The library hard-codes `HttpClient.create()` (default pool, no
    * idle eviction) and gives no hook for a provider, so we keep its OAuth filter and base URL via
-   * `mutate()` and rebuild only the connector with the same response timeout. Its proxy helpers are
-   * internal; we honour the standard JVM proxy system properties instead (unused in deployments).
+   * `mutate()` and rebuild only the connector, with the same response timeout and proxy resolution
+   * (see OutboundProxySupport.kt).
    */
   private fun WebClient.Builder.pooledAuthorisedWebClient(
     authorizedClientManager: OAuth2AuthorizedClientManager,
@@ -287,7 +287,7 @@ class WebClientConfiguration(
   companion object {
     internal fun pooledHttpClient(connectionProvider: ConnectionProvider, responseTimeout: Duration): HttpClient = HttpClient.create(connectionProvider)
       .responseTimeout(responseTimeout)
-      .proxyWithSystemProperties()
+      .withResolvedProxy()
 
     private const val TIER_API_REGISTRATION_ID = "tier-api"
     private const val NDILIUS_API_REGISTRATION_ID = "ndilius-api"
