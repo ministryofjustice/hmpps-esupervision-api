@@ -9,4 +9,5 @@ ALTER TABLE offender_v2
   CHECK (checkin_mode = 'AD_HOC' OR first_checkin IS NOT NULL);
 
 --rollback ALTER TABLE offender_v2 DROP CONSTRAINT offender_v2_first_checkin_check;
+--rollback UPDATE offender_v2 set first_checkin = '1970-1-1'::date where first_checkin is null;
 --rollback ALTER TABLE offender_v2 ALTER COLUMN first_checkin SET NOT NULL;
