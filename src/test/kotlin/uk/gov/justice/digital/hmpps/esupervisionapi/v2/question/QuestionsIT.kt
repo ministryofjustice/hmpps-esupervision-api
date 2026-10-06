@@ -269,8 +269,7 @@ class QuestionsIT(
   @Test
   fun `QuestionService - assigning and fetching questions for ad-hoc check-ins`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
-    val dueDate = clock.today().plusDays(-1)
-    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate).toEntity()
+    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = null).toEntity()
     offenderRepository.save(offender)
 
     val assignment = questionService.upcomingAssignment(offender)

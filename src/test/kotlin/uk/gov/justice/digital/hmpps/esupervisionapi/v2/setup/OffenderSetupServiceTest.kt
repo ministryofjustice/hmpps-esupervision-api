@@ -39,6 +39,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
@@ -151,6 +152,48 @@ class OffenderSetupServiceTest {
         this.uuid == expectedSetup.uuid && rationale == expectedSetup.rationale && eligibilityChoice == expectedSetup.eligibilityChoice
       },
     )
+  }
+
+  @Test
+  fun `startOffenderSetup - allows an ad-hoc offender without a first check-in date`() {
+    val offenderInfo = OffenderInfo(
+      setupUuid = UUID.randomUUID(),
+      practitionerId = "PRACT001",
+      crn = "X123456",
+      firstCheckin = null,
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+      contactPreference = ContactPreference.EMAIL,
+    )
+    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.arguments[0] }
+
+    service.startOffenderSetup(offenderInfo)
+
+    verify(offenderRepository).save(
+      argThat {
+        mode == CheckinMode.AD_HOC &&
+          firstCheckin == null &&
+          checkinInterval == null
+      },
+    )
+  }
+
+  @Test
+  fun `startOffenderSetup - rejects a scheduled offender without a first check-in date`() {
+    val offenderInfo = OffenderInfo(
+      setupUuid = UUID.randomUUID(),
+      practitionerId = "PRACT001",
+      crn = "X123456",
+      firstCheckin = null,
+      checkinInterval = CheckinInterval.WEEKLY,
+      contactPreference = ContactPreference.EMAIL,
+    )
+
+    assertThrows(BadArgumentException::class.java) {
+      service.startOffenderSetup(offenderInfo)
+    }
+
+    verify(offenderRepository, never()).save(any())
   }
 
   @Nested

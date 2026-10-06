@@ -1,8 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain
 
-import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
-import java.time.Clock
 import java.time.LocalDate
 
 /**
@@ -15,11 +13,8 @@ fun validateScheduleSettings(mode: CheckinMode, interval: CheckinInterval?) {
   }
 }
 
-fun resolveFirstCheckinForPersistence(mode: CheckinMode, firstCheckin: LocalDate?, clock: Clock): LocalDate = when {
-  mode == CheckinMode.AD_HOC && firstCheckin == null -> clock.today().minusDays(1)
-  mode == CheckinMode.AD_HOC && firstCheckin != null -> firstCheckin
-  mode == CheckinMode.SCHEDULED && firstCheckin == null -> throw BadArgumentException("First check-in date is required for scheduled check-ins.")
-  else -> firstCheckin ?: throw BadArgumentException("First check-in date is required.")
+fun validateFirstCheckin(mode: CheckinMode, firstCheckin: LocalDate?) {
+  if (mode == CheckinMode.SCHEDULED && firstCheckin == null) {
+    throw BadArgumentException("First check-in date is required for scheduled check-ins.")
+  }
 }
-
-fun isUnsetAdHocFirstCheckin(mode: CheckinMode, firstCheckin: LocalDate?, today: LocalDate): Boolean = mode == CheckinMode.AD_HOC && firstCheckin != null && firstCheckin <= today.minusDays(1)

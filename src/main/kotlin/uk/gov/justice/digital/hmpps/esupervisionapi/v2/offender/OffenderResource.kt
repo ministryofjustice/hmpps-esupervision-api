@@ -51,7 +51,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.resolveFirstCheckinForPersistence
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
@@ -444,6 +444,7 @@ class OffenderResource(
       This endpoint performs the following actions:
       1. Updates the offender's status to VERIFIED.
       2. Optionally updates the check in schedule (frequency and start date) and contact preferences.
+         The start date is optional for AD_HOC check-ins and required for SCHEDULED check-ins.
       3. Sends a registration notification to the offender
       4. Automatically creates a check in record for the 'firstCheckin' date. 
          - If a check in  for that date already exists, it will skip creation to prevent duplicates.
@@ -493,8 +494,10 @@ class OffenderResource(
 
     request.checkinSchedule?.let { schedule ->
       validate(schedule, offender.mode)
-      offender.mode = schedule.mode ?: offender.mode
-      offender.firstCheckin = resolveFirstCheckinForPersistence(offender.mode, schedule.firstCheckin, clock)
+      val mode = schedule.mode ?: offender.mode
+      offender.mode = mode
+      validateFirstCheckin(mode, schedule.firstCheckin)
+      offender.firstCheckin = schedule.firstCheckin
       offender.checkinInterval = schedule.checkinInterval?.duration
     }
     request.contactPreference?.let { pref ->
@@ -513,7 +516,8 @@ class OffenderResource(
       val savedOffender = event.offender
       val today = clock.today()
       // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
-      if (savedOffender.firstCheckin == today) {
+      val firstCheckin = savedOffender.firstCheckin
+      if (firstCheckin == today) {
         val existingCheckin = checkinRepository.findByOffenderAndDueDate(offender.id, today)
         val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
 
@@ -581,7 +585,8 @@ is *today*.""",
       validate(request.checkinSchedule, offender.mode)
       val scheduleUpdate = request.checkinSchedule
       offender.mode = mode
-      offender.firstCheckin = resolveFirstCheckinForPersistence(mode, scheduleUpdate.firstCheckin, clock)
+      validateFirstCheckin(mode, scheduleUpdate.firstCheckin)
+      offender.firstCheckin = scheduleUpdate.firstCheckin
       offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
       offender.updatedAt = clock.instant()
     }
@@ -601,7 +606,11 @@ is *today*.""",
       val offenderAfter = saved.toSummaryDto()
       if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
         if (todaysCheckin.isEmpty) {
-          checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+          checkinCreationService.createCheckin(
+            offenderAfter.uuid,
+            requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
+            request.checkinSchedule.requestedBy,
+          )
         }
         LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       }
@@ -724,7 +733,7 @@ data class OffenderSummaryDto(
   val uuid: UUID,
   val crn: String,
   val status: OffenderStatus,
-  val firstCheckin: LocalDate,
+  val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval?,
   val mode: CheckinMode,
   val contactPreference: ContactPreference,
@@ -827,6 +836,7 @@ data class ReactivateOffenderRequest(
 data class CheckinScheduleUpdateRequest(
   @field:Schema(description = "Id of the user requesting the change", required = true)
   val requestedBy: ExternalUserId,
+  @field:Schema(description = "Date of first check-in. Optional for AD_HOC check-ins; required for SCHEDULED check-ins.", required = false)
   @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class)
   val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval?,

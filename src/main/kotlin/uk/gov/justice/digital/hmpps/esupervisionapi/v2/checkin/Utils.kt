@@ -5,8 +5,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.isUnsetAdHocFirstCheckin
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -79,9 +77,9 @@ fun checkinIneligibilityReason(offender: ActiveEvent, details: ContactDetails): 
 fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
   val intervalDuration = offender.checkinInterval
   if (intervalDuration == null) {
-    return !isUnsetAdHocFirstCheckin(CheckinMode.AD_HOC, offender.firstCheckin, date) && date == offender.firstCheckin
+    return date == offender.firstCheckin
   }
-  val firstCheckin = offender.firstCheckin
+  val firstCheckin = requireNotNull(offender.firstCheckin) { "First check-in date is required for scheduled check-ins" }
   if (intervalDuration.toDays() > 0) {
     if (date < firstCheckin) {
       return false
@@ -105,9 +103,10 @@ fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
 fun nextCheckinDay(schedule: CheckinSchedule, today: LocalDate): LocalDate {
   val intervalDuration = schedule.checkinInterval
   require(intervalDuration != null) { "Check-in interval is required for scheduled check-ins" }
-  if (today < schedule.firstCheckin) return schedule.firstCheckin
+  val firstCheckin = requireNotNull(schedule.firstCheckin) { "First check-in date is required for scheduled check-ins" }
+  if (today < firstCheckin) return firstCheckin
 
-  val days = schedule.firstCheckin.until(today, ChronoUnit.DAYS)
+  val days = firstCheckin.until(today, ChronoUnit.DAYS)
   val rem = days % intervalDuration.toDays()
   return today.plusDays(intervalDuration.toDays() - rem)
 }

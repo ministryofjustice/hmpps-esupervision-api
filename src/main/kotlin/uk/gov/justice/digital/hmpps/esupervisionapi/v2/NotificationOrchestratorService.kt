@@ -74,7 +74,7 @@ class NotificationOrchestratorService(
         val personalisation =
           mapOf(
             "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
-            "date" to offender.firstCheckin.format(DATE_FORMATTER),
+            "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
             "frequency" to frequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }),
           )
 
@@ -126,7 +126,7 @@ class NotificationOrchestratorService(
         val personalisation =
           mapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
-            "date" to offender.firstCheckin.format(DATE_FORMATTER),
+            "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
             "frequency" to frequencyText(offender.mode, offender.checkinInterval),
           )
 

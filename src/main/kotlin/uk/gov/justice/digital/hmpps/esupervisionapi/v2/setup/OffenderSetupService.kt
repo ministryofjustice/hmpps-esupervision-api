@@ -21,7 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.resolveFirstCheckinForPersistence
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
@@ -56,7 +56,12 @@ class OffenderSetupPersistenceService(
 
     offenderRepository.save(offender)
     val checkin = if (createCheckin && contactDetails != null) {
-      checkinCreationService.createCheckinForOffender(offender, offender.firstCheckin, offender.createdBy, contactDetails)
+      checkinCreationService.createCheckinForOffender(
+        offender,
+        requireNotNull(offender.firstCheckin) { "Cannot create a check-in without a first check-in date" },
+        offender.createdBy,
+        contactDetails,
+      )
     } else {
       null
     }
@@ -94,6 +99,7 @@ class OffenderSetupService(
   @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
     validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
+    validateFirstCheckin(offenderInfo.mode, offenderInfo.firstCheckin)
     val now = clock.instant()
 
     val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)
@@ -104,7 +110,7 @@ class OffenderSetupService(
         throw BadArgumentException("Offender already exists.")
       }
       existing.practitionerId = offenderInfo.practitionerId
-      existing.firstCheckin = resolveFirstCheckinForPersistence(offenderInfo.mode, offenderInfo.firstCheckin, clock)
+      existing.firstCheckin = offenderInfo.firstCheckin
       existing.mode = offenderInfo.mode
       existing.checkinInterval = offenderInfo.checkinInterval?.duration
       existing.createdBy = offenderInfo.practitionerId
@@ -117,7 +123,7 @@ class OffenderSetupService(
         crn = offenderInfo.crn.trim().uppercase(),
         practitionerId = offenderInfo.practitionerId,
         status = OffenderStatus.INITIAL,
-        firstCheckin = resolveFirstCheckinForPersistence(offenderInfo.mode, offenderInfo.firstCheckin, clock),
+        firstCheckin = offenderInfo.firstCheckin,
         mode = offenderInfo.mode,
         checkinInterval = offenderInfo.checkinInterval?.duration,
         createdAt = now,
