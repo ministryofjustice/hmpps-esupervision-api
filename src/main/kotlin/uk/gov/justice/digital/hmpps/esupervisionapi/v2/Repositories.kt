@@ -41,6 +41,10 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select o from Offender o where o.id = :id")
+  fun findByIdForUpdate(id: Long): Optional<Offender>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select o from Offender o where o.uuid = :uuid")
   fun findByUuidForUpdate(uuid: UUID): Optional<Offender>
 
@@ -278,6 +282,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   fun findByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): Optional<OffenderCheckin>
 
   fun findByOffenderAndDueDateAndStatus(offender: Offender, dueDate: LocalDate, status: CheckinStatus): Optional<OffenderCheckin>
+
+  fun findByOffenderAndDueDateAndStatusIn(offender: Offender, dueDate: LocalDate, statuses: Collection<CheckinStatus>): List<OffenderCheckin>
 
   @Query(
     """

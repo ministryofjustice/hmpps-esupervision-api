@@ -31,6 +31,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHint
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
@@ -40,15 +42,18 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinScheduleLowerBound
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
@@ -109,6 +114,9 @@ class QuestionsIT(
 
   @Autowired
   lateinit var offenderCheckinService: CheckinService
+
+  @Autowired
+  lateinit var checkinCreationService: CheckinCreationService
 
   @Autowired
   lateinit var clock: Clock
@@ -419,7 +427,6 @@ class QuestionsIT(
       firstCheckin = clock.today().plusDays(1),
     ).toEntity()
     offenderRepository.save(offender)
-
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val questionRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
     val pendingAssignment = questionService.assignCustomQuestions(offender.crn, questionRequest)
@@ -445,6 +452,49 @@ class QuestionsIT(
       questionRequest.questions.map { it.params },
       questionRepository.getListItems(linkedAssignmentId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
     )
+  }
+
+  @Test
+  fun `scheduled job skips a stale candidate when a created checkin already exists`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123464",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today(),
+    ).toEntity()
+    offenderRepository.save(offender)
+    val existingCheckin = offenderCheckinService.debugCreateCheckin(offender, clock)
+    val staleCandidate = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offenderRepository.getReferenceById(offender.id),
+      status = CheckinStatus.CREATED,
+      dueDate = clock.today(),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+    )
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    val staleEvent = PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = offender.practitionerId,
+      checkin = CheckinDto(
+        uuid = staleCandidate.uuid,
+        crn = offender.crn,
+        status = staleCandidate.status,
+        dueDate = staleCandidate.dueDate,
+        createdAt = staleCandidate.createdAt,
+        createdBy = staleCandidate.createdBy,
+        personalDetails = contactDetails,
+        checkinLogs = CheckinLogsDto(CheckinLogsHint.OMITTED, emptyList()),
+      ),
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = offender.currentEvent,
+      checkinMode = offender.mode,
+    )
+
+    val created = checkinCreationService.createCheckins(listOf(staleCandidate to staleEvent))
+
+    assertTrue(created.isEmpty())
+    assertEquals(existingCheckin.uuid, offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single().uuid)
   }
 
   @Test
