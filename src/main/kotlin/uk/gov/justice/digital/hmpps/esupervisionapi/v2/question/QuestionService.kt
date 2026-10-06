@@ -156,7 +156,13 @@ class QuestionService(
       CheckinMode.SCHEDULED -> nextCheckinDay(offender, today)
       CheckinMode.AD_HOC -> offender.firstCheckin
     }
-    return AssignCustomQuestionsResponse(nextCheckin, listId)
+    return AssignCustomQuestionsResponse(
+      requireNotNull(nextCheckin) {
+        // we should not be able to get here and have a null nextCheckin
+        "Can't assign questions when next checkin date is null. offender=$crn: firstCheckin=${offender.firstCheckin}, interval=${offender.checkinInterval}, mode=${offender.mode}"
+      },
+      listId,
+    )
   }
 
   @Transactional

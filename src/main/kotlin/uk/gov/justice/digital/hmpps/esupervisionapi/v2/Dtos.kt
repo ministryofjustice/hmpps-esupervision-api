@@ -800,7 +800,7 @@ data class AssignCustomQuestionsRequest(
 )
 
 data class AssignCustomQuestionsResponse(
-  val expectedCheckinDate: LocalDate?,
+  val expectedCheckinDate: LocalDate,
   @field:Schema(description = "List ID", required = true, exclusiveMinimumValue = 0)
   val listId: Long,
 )
