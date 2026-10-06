@@ -15,6 +15,10 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
+import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BeanPropertyBindingResult
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
@@ -84,6 +88,7 @@ class OffenderResourceTest {
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
   private val supervisionPackageService: SupervisionPackageService = mock()
   private val questionService: QuestionService = mock()
+  private val transactionTemplate: TransactionTemplate = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -91,6 +96,10 @@ class OffenderResourceTest {
 
   @BeforeEach
   fun setUp() {
+    whenever(transactionTemplate.execute<ResponseEntity<OffenderSummaryDto>>(any())).thenAnswer {
+      val callback = it.getArgument<TransactionCallback<ResponseEntity<OffenderSummaryDto>>>(0)
+      callback.doInTransaction(SimpleTransactionStatus())
+    }
     resource = OffenderResource(
       offenderRepository,
       s3UploadService,
@@ -109,6 +118,7 @@ class OffenderResourceTest {
       eligibilityChecker,
       supervisionPackageService,
       questionService,
+      transactionTemplate,
     )
   }
 
@@ -849,11 +859,14 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(mock())
 
     val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
     val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
 
-    verify(checkinCreationService, times(1)).createCheckin(any(), any(), any())
+    verify(checkinCreationService, times(1)).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(scheduleUpdate.firstCheckin, result.body?.firstCheckin)
     assertEquals(scheduleUpdate.checkinInterval, result.body?.checkinInterval)
@@ -870,8 +883,10 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
-    whenever(checkinRepository.findByOffenderAndDueDate(offender, clock.today())).thenReturn(Optional.empty())
-    whenever(checkinCreationService.createCheckin(uuid, clock.today(), "XYZ0111")).thenReturn(checkin)
+    whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED)).thenReturn(Optional.empty())
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
 
     val schedule = CheckinScheduleUpdateRequest(
       requestedBy = "XYZ0111",
@@ -883,7 +898,7 @@ class OffenderResourceTest {
     val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
 
     assertEquals(HttpStatus.OK, response.statusCode)
-    verify(checkinCreationService).createCheckin(uuid, clock.today(), "XYZ0111")
+    verify(checkinCreationService).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
     verify(questionService).assignCustomQuestionsToCheckin(checkin, questions, true)
   }
 
@@ -895,7 +910,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
-    whenever(checkinRepository.findByOffenderAndDueDate(offender, clock.today())).thenReturn(Optional.empty())
+    whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED)).thenReturn(Optional.empty())
 
     val schedule = CheckinScheduleUpdateRequest(
       requestedBy = "XYZ0111",

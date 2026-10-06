@@ -12,7 +12,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -71,6 +71,7 @@ import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
+import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -95,6 +96,7 @@ class OffenderResource(
   private val eligibilityChecker: EligibilityChecker,
   private val supervisionPackageService: SupervisionPackageService,
   private val questionService: QuestionService,
+  private val transactionTemplate: TransactionTemplate,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -624,53 +626,91 @@ assigned to the offender's upcoming check-in.""",
   @ApiResponse(responseCode = "400", description = "Can't complete operation due to offender status or invalid input")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   @PostMapping("/{uuid}/update_details")
-  @Transactional
   fun updateDetails(
     @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
     @Valid @RequestBody request: OffenderDetailsUpdateRequest,
   ): ResponseEntity<OffenderSummaryDto> {
-    val offender = offenderRepository.findByUuid(uuid).orElse(null)
+    val initialOffender = offenderRepository.findByUuid(uuid).orElse(null)
       ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
 
-    if (offender.status == OffenderStatus.INACTIVE) {
+    if (initialOffender.status == OffenderStatus.INACTIVE) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
-        "Cannot update offender with status ${offender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+        "Cannot update offender with status ${initialOffender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
       )
     }
 
-    val offenderBefore = offender.toSummaryDto()
-    if (request.checkinSchedule != null) {
-      val mode = request.checkinSchedule.mode ?: offender.mode
-      validate(request.checkinSchedule, offender.mode)
-      val scheduleUpdate = request.checkinSchedule
-      offender.mode = mode
-      offender.firstCheckin = scheduleUpdate.firstCheckin
-      offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
-      offender.updatedAt = clock.instant()
+    val today = clock.today()
+    val schedule = request.checkinSchedule
+    schedule?.let { validate(it, initialOffender.mode) }
+    val createsCheckinToday = schedule?.firstCheckin == today &&
+      (initialOffender.firstCheckin != today || schedule.questions != null)
+    val checkinBeforeUpdate = if (schedule?.firstCheckin == today) {
+      checkinRepository.findByOffenderAndDueDateAndStatus(initialOffender, today, CheckinStatus.CREATED)
+    } else {
+      Optional.empty()
+    }
+    if (createsCheckinToday && schedule?.questions != null && checkinBeforeUpdate.isPresent) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Questions must be assigned before the check-in due date")
+    }
+    val contactDetails = if (createsCheckinToday && checkinBeforeUpdate.isEmpty) {
+      ndiliusApiClient.getContactDetails(initialOffender.crn)
+        ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${initialOffender.crn}")
+    } else {
+      null
     }
 
-    if (request.contactPreference != null) {
-      val preferenceUpdate = request.contactPreference
-      if (offender.contactPreference != preferenceUpdate.contactPreference) {
-        offender.contactPreference = preferenceUpdate.contactPreference
+    return transactionTemplate.execute {
+      val offender = offenderRepository.findByUuid(uuid).orElse(null)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+      if (offender.status == OffenderStatus.INACTIVE) {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Cannot update offender with status ${offender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+        )
+      }
+
+      val offenderBefore = offender.toSummaryDto()
+      if (schedule != null) {
+        validate(schedule, offender.mode)
+        offender.mode = schedule.mode ?: offender.mode
+        offender.firstCheckin = schedule.firstCheckin
+        offender.checkinInterval = schedule.checkinInterval?.duration
         offender.updatedAt = clock.instant()
       }
-    }
 
-    val todaysCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
-    val reusableCheckin = todaysCheckin.filter { it.status != CheckinStatus.CANCELLED }
-    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
-    if (request.checkinSchedule != null || request.contactPreference != null) {
+      if (request.contactPreference != null && offender.contactPreference != request.contactPreference.contactPreference) {
+        offender.contactPreference = request.contactPreference.contactPreference
+        offender.updatedAt = clock.instant()
+      }
+
+      val reusableCheckin = if (schedule?.firstCheckin == today) {
+        checkinRepository.findByOffenderAndDueDateAndStatus(offender, today, CheckinStatus.CREATED)
+      } else {
+        Optional.empty()
+      }
+      LOGGER.info(
+        "Update offender details, CRN={}, schedule updated={}, contact preference updated={}",
+        offender.crn,
+        schedule != null,
+        request.contactPreference != null,
+      )
+
+      if (schedule == null && request.contactPreference == null) {
+        return@execute ResponseEntity.noContent().build<OffenderSummaryDto>()
+      }
+
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
-      if (request.checkinSchedule?.firstCheckin == clock.today() &&
-        (newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today()) || request.checkinSchedule.questions != null)
+      if (schedule?.firstCheckin == today &&
+        (newFirstCheckinDateIsToday(offenderBefore, offenderAfter, today) || schedule.questions != null)
       ) {
         val checkin = reusableCheckin.orElseGet {
-          checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+          val details = contactDetails
+            ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while updating. Please retry.")
+          checkinCreationService.createCheckinForOffender(saved, saved.firstCheckin, schedule.requestedBy, details)
         }
-        request.checkinSchedule.questions?.let {
+        schedule.questions?.let {
           questionService.assignCustomQuestionsToCheckin(
             checkin,
             it,
@@ -678,13 +718,11 @@ assigned to the offender's upcoming check-in.""",
           )
         }
         LOGGER.debug("{} check-in for offender {}", if (reusableCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
-      } else if (request.checkinSchedule?.questions != null) {
-        questionService.assignCustomQuestions(offenderAfter.crn, request.checkinSchedule.questions)
+      } else if (schedule?.questions != null) {
+        questionService.assignCustomQuestions(offenderAfter.crn, schedule.questions)
       }
-      return ResponseEntity.ok(offenderAfter)
-    } else {
-      return ResponseEntity.noContent().build()
-    }
+      ResponseEntity.ok(offenderAfter)
+    } ?: throw IllegalStateException("Failed to update offender details")
   }
 
   private fun recordOffenderAuditEvent(eventType: OffenderAuditEventType, offender: Offender, reason: String, sensitive: Boolean = false) {

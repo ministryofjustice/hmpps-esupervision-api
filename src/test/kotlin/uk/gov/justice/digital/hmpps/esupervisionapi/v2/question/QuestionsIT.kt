@@ -484,6 +484,16 @@ class QuestionsIT(
     val linkedAssignmentId = questionListAssignmentRepository.checkinAssignment(freshCheckin.id)
     assertEquals(pendingAssignment.listId, linkedAssignmentId)
     assertEquals(1, questionListAssignmentRepository.findAll().count { it.checkinId == freshCheckin.id })
+
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .exchange()
+      .expectStatus().isOk
+
+    val stillReusableCheckin = offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single()
+    assertEquals(freshCheckin.uuid, stillReusableCheckin.uuid)
   }
 
   @Test
