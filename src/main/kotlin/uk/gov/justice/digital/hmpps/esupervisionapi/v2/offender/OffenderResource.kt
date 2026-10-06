@@ -521,10 +521,6 @@ class OffenderResource(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only INACTIVE offenders can be reactivated.")
     }
 
-    if (request.checkinSchedule?.questions != null) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Questions cannot be assigned when reactivating an offender.")
-    }
-
     val contactDetails = getContactDetails(offender)
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
@@ -642,14 +638,19 @@ assigned to the offender's upcoming check-in.""",
 
     val today = clock.today()
     val schedule = request.checkinSchedule
+    val requestedMode = schedule?.mode ?: initialOffender.mode
     schedule?.let { validate(it, initialOffender.mode) }
-    val createsCheckinToday = schedule?.firstCheckin == today &&
-      (initialOffender.firstCheckin != today || schedule.questions != null)
     val checkinBeforeUpdate = if (schedule?.firstCheckin == today) {
       checkinRepository.findByOffenderAndDueDateAndStatus(initialOffender, today, CheckinStatus.CREATED)
     } else {
       Optional.empty()
     }
+    val createsCheckinToday = schedule?.firstCheckin == today &&
+      (
+        initialOffender.firstCheckin != today ||
+          (requestedMode == CheckinMode.AD_HOC && checkinBeforeUpdate.isEmpty) ||
+          schedule.questions != null
+      )
     if (createsCheckinToday && schedule?.questions != null && checkinBeforeUpdate.isPresent) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Questions must be assigned before the check-in due date")
     }
@@ -661,7 +662,7 @@ assigned to the offender's upcoming check-in.""",
     }
 
     return transactionTemplate.execute {
-      val offender = offenderRepository.findByUuid(uuid).orElse(null)
+      val offender = offenderRepository.findByUuidForUpdate(uuid).orElse(null)
         ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
       if (offender.status == OffenderStatus.INACTIVE) {
         throw ResponseStatusException(
@@ -703,7 +704,11 @@ assigned to the offender's upcoming check-in.""",
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
       if (schedule?.firstCheckin == today &&
-        (newFirstCheckinDateIsToday(offenderBefore, offenderAfter, today) || schedule.questions != null)
+        (
+          newFirstCheckinDateIsToday(offenderBefore, offenderAfter, today) ||
+            (offender.mode == CheckinMode.AD_HOC && reusableCheckin.isEmpty) ||
+            schedule.questions != null
+        )
       ) {
         val checkin = reusableCheckin.orElseGet {
           val details = contactDetails
@@ -738,19 +743,32 @@ assigned to the offender's upcoming check-in.""",
     eventAuditService.recordOffenderEvent(eventType, offender.dto(details), details, reason, sensitive)
   }
 
-  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) {
+  private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) =
+    validateSchedule(scheduleUpdate.firstCheckin, scheduleUpdate.mode, scheduleUpdate.checkinInterval, currentMode)
+
+  private fun validate(scheduleUpdate: CheckinScheduleWithQuestionsRequest, currentMode: CheckinMode) {
     val mode = scheduleUpdate.mode ?: currentMode
-    if (scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
-      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
-    }
     if (scheduleUpdate.questions != null && mode != CheckinMode.AD_HOC) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Questions can only be included when scheduling ad-hoc check-ins.")
     }
+    validateSchedule(scheduleUpdate.firstCheckin, scheduleUpdate.mode, scheduleUpdate.checkinInterval, currentMode)
+  }
+
+  private fun validateSchedule(
+    firstCheckin: LocalDate,
+    requestedMode: CheckinMode?,
+    checkinInterval: CheckinInterval?,
+    currentMode: CheckinMode,
+  ) {
+    val mode = requestedMode ?: currentMode
+    if (firstCheckin.isBefore(LocalDate.now(clock))) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
+    }
     when (mode) {
-      CheckinMode.AD_HOC -> if (scheduleUpdate.checkinInterval != null) {
+      CheckinMode.AD_HOC -> if (checkinInterval != null) {
         throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval cannot be specified for ad-hoc check-ins.")
       }
-      CheckinMode.SCHEDULED -> if (scheduleUpdate.checkinInterval == null) {
+      CheckinMode.SCHEDULED -> if (checkinInterval == null) {
         throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval is required for scheduled check-ins.")
       }
     }
@@ -955,6 +973,16 @@ data class CheckinScheduleUpdateRequest(
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Checkin mode, SCHEDULED or AD_HOC", required = false)
   val mode: CheckinMode? = null,
+)
+
+/** Schedule payload for an offender details update, optionally including questions for the check-in. */
+data class CheckinScheduleWithQuestionsRequest(
+  @field:Schema(description = "Id of the user requesting the change", required = true)
+  val requestedBy: ExternalUserId,
+  @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
+  val checkinInterval: CheckinInterval?,
+  @field:Schema(description = "Checkin mode, SCHEDULED or AD_HOC", required = false)
+  val mode: CheckinMode? = null,
   @field:Valid
   val questions: AssignCustomQuestionsRequest? = null,
 )
@@ -975,7 +1003,7 @@ data class ContactPreferenceUpdateRequest(
  */
 data class OffenderDetailsUpdateRequest(
   @field:Valid
-  val checkinSchedule: CheckinScheduleUpdateRequest? = null,
+  val checkinSchedule: CheckinScheduleWithQuestionsRequest? = null,
   val contactPreference: ContactPreferenceUpdateRequest? = null,
 )
 

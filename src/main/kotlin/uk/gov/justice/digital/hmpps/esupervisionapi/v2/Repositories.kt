@@ -40,6 +40,10 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select o from Offender o where o.uuid = :uuid")
+  fun findByUuidForUpdate(uuid: UUID): Optional<Offender>
+
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 

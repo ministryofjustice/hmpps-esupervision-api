@@ -100,6 +100,9 @@ class OffenderResourceTest {
       val callback = it.getArgument<TransactionCallback<ResponseEntity<OffenderSummaryDto>>>(0)
       callback.doInTransaction(SimpleTransactionStatus())
     }
+    whenever(offenderRepository.findByUuidForUpdate(any())).thenAnswer {
+      offenderRepository.findByUuid(it.getArgument<UUID>(0))
+    }
     resource = OffenderResource(
       offenderRepository,
       s3UploadService,
@@ -580,32 +583,6 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `reactivateOffender - rejects custom questions in checkin schedule`() {
-    val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.INACTIVE)
-    val request = ReactivateOffenderRequest(
-      requestedBy = "PRACT001",
-      reason = "Reactivating",
-      checkinSchedule = CheckinScheduleUpdateRequest(
-        requestedBy = "PRACT001",
-        firstCheckin = clock.today().plusDays(1),
-        checkinInterval = null,
-        mode = CheckinMode.AD_HOC,
-        questions = mock(),
-      ),
-    )
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-
-    val exception = assertThrows(ResponseStatusException::class.java) {
-      resource.reactivateOffender(uuid, request)
-    }
-
-    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
-    verify(ndiliusApiClient, times(0)).getContactDetails(any())
-    verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
-  }
-
-  @Test
   fun `reactivateOffender - cancelled check in exists - first check in set to TODAY - creates a NEW fresh check in`() {
     val uuid = UUID.randomUUID()
     val today = LocalDate.now(clock)
@@ -863,13 +840,35 @@ class OffenderResourceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(mock())
 
-    val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
+    val scheduleUpdate = CheckinScheduleWithQuestionsRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
     val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
 
     verify(checkinCreationService, times(1)).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(scheduleUpdate.firstCheckin, result.body?.firstCheckin)
     assertEquals(scheduleUpdate.checkinInterval, result.body?.checkinInterval)
+  }
+
+  @Test
+  fun `updateDetails - does not create recurring checkin when date is already today`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val schedule = CheckinScheduleWithQuestionsRequest(
+      requestedBy = "XYZ0111",
+      firstCheckin = clock.today(),
+      checkinInterval = CheckinInterval.FOUR_WEEKS,
+      mode = CheckinMode.SCHEDULED,
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED))
+      .thenReturn(Optional.empty())
+
+    val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
   }
 
   @Test
@@ -888,7 +887,7 @@ class OffenderResourceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
 
-    val schedule = CheckinScheduleUpdateRequest(
+    val schedule = CheckinScheduleWithQuestionsRequest(
       requestedBy = "XYZ0111",
       firstCheckin = clock.today(),
       checkinInterval = null,
@@ -912,7 +911,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.save(offender)).thenReturn(offender)
     whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED)).thenReturn(Optional.empty())
 
-    val schedule = CheckinScheduleUpdateRequest(
+    val schedule = CheckinScheduleWithQuestionsRequest(
       requestedBy = "XYZ0111",
       firstCheckin = clock.today().plusDays(2),
       checkinInterval = null,
@@ -930,7 +929,7 @@ class OffenderResourceTest {
   fun `updateDetails - rejects embedded questions for recurring checkins`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
-    val schedule = CheckinScheduleUpdateRequest(
+    val schedule = CheckinScheduleWithQuestionsRequest(
       requestedBy = "XYZ0111",
       firstCheckin = clock.today().plusDays(2),
       checkinInterval = CheckinInterval.FOUR_WEEKS,
@@ -972,7 +971,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
-    val scheduleUpdate = CheckinScheduleUpdateRequest(
+    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
       mode = CheckinMode.AD_HOC,
       requestedBy = "BOB",
       checkinInterval = CheckinInterval.FOUR_WEEKS,

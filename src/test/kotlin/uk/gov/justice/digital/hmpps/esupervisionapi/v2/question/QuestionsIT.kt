@@ -54,7 +54,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.CheckinScheduleUpdateRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.CheckinScheduleWithQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
@@ -358,7 +358,7 @@ class QuestionsIT(
       notificationProcessed.countDown()
       null
     }
-    val todaySchedule = CheckinScheduleUpdateRequest(
+    val todaySchedule = CheckinScheduleWithQuestionsRequest(
       requestedBy = "BARRY.WHITE",
       firstCheckin = clock.today(),
       checkinInterval = null,
@@ -423,7 +423,7 @@ class QuestionsIT(
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val questionRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
     val pendingAssignment = questionService.assignCustomQuestions(offender.crn, questionRequest)
-    val scheduleUpdate = CheckinScheduleUpdateRequest(
+    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
       requestedBy = "BARRY.WHITE",
       firstCheckin = clock.today(),
       checkinInterval = null,
@@ -465,7 +465,7 @@ class QuestionsIT(
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val questionRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
     val pendingAssignment = questionService.assignCustomQuestions(offender.crn, questionRequest)
-    val scheduleUpdate = CheckinScheduleUpdateRequest(
+    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
       requestedBy = "BARRY.WHITE",
       firstCheckin = clock.today(),
       checkinInterval = null,
@@ -494,6 +494,38 @@ class QuestionsIT(
 
     val stillReusableCheckin = offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single()
     assertEquals(freshCheckin.uuid, stillReusableCheckin.uuid)
+  }
+
+  @Test
+  fun `scheduling today creates a checkin when first checkin is already today but none is active`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123463",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today(),
+    ).toEntity()
+    offenderRepository.save(offender)
+
+    val cancelledDto = offenderCheckinService.debugCreateCheckin(offender, clock)
+    val cancelledCheckin = offenderCheckinRepository.findByUuid(cancelledDto.uuid).orElseThrow()
+    cancelledCheckin.status = CheckinStatus.CANCELLED
+    offenderCheckinRepository.saveAndFlush(cancelledCheckin)
+
+    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
+      requestedBy = "BARRY.WHITE",
+      firstCheckin = clock.today(),
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+    )
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .exchange()
+      .expectStatus().isOk
+
+    val activeCheckin = offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single()
+    assertNotEquals(cancelledCheckin.uuid, activeCheckin.uuid)
   }
 
   @Test
