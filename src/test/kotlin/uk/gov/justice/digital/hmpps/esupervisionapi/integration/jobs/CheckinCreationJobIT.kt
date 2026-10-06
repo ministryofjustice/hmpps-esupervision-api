@@ -48,41 +48,64 @@ class CheckinCreationJobIT : IntegrationTestBase() {
   @Value("\${app.scheduling.v2-checkin-creation.chunk-size}")
   var chunkSize: Int = 0
 
-  @Autowired lateinit var jdbcTemplate: JdbcTemplate
+  @Autowired
+  lateinit var jdbcTemplate: JdbcTemplate
 
-  @Autowired lateinit var clock: Clock
+  @Autowired
+  lateinit var clock: Clock
 
-  @Autowired lateinit var offenderRepository: OffenderRepository
+  @Autowired
+  lateinit var offenderRepository: OffenderRepository
 
-  @Autowired lateinit var checkinRepository: OffenderCheckinRepository
+  @Autowired
+  lateinit var checkinRepository: OffenderCheckinRepository
 
-  @Autowired lateinit var outboxItemRepository: OutboxItemRepository
+  @Autowired
+  lateinit var outboxItemRepository: OutboxItemRepository
 
-  @Autowired lateinit var checkinCreationService: CheckinCreationService
+  @Autowired
+  lateinit var checkinCreationService: CheckinCreationService
 
-  @Autowired lateinit var offenderDeactivationService: OffenderDeactivationService
+  @Autowired
+  lateinit var offenderDeactivationService: OffenderDeactivationService
 
-  @Autowired lateinit var jobLogRepository: JobLogRepository
+  @Autowired
+  lateinit var jobLogRepository: JobLogRepository
 
-  @Autowired lateinit var entityManager: EntityManager
+  @Autowired
+  lateinit var entityManager: EntityManager
 
-  @Autowired lateinit var job: CheckinCreationJob
+  @Autowired
+  lateinit var job: CheckinCreationJob
 
-  @MockitoBean lateinit var ndeliusApiClient: INdiliusApiClient
+  @MockitoBean
+  lateinit var ndeliusApiClient: INdiliusApiClient
 
-  @MockitoBean lateinit var domainEventPublisher: DomainEventPublisher
+  @MockitoBean
+  lateinit var domainEventPublisher: DomainEventPublisher
 
-  @MockitoBean lateinit var notifyGateway: NotifyGatewayService
+  @MockitoBean
+  lateinit var notifyGateway: NotifyGatewayService
 
   @BeforeEach
   fun setup() {
-    offenderTemplate.copy(crn = "A000001", uuid = UUID.randomUUID(), firstCheckin = clock.today(), status = OffenderStatus.VERIFIED)
+    offenderTemplate.copy(
+      crn = "A000001",
+      uuid = UUID.randomUUID(),
+      firstCheckin = clock.today(),
+      status = OffenderStatus.VERIFIED,
+    )
       .toEntity().let { offenderRepository.save(it) }
-    offenderTemplate.copy(crn = "A000002", uuid = UUID.randomUUID(), firstCheckin = clock.today(), status = OffenderStatus.VERIFIED)
+    offenderTemplate.copy(
+      crn = "A000002",
+      uuid = UUID.randomUUID(),
+      firstCheckin = clock.today(),
+      status = OffenderStatus.VERIFIED,
+    )
       .toEntity().let { offenderRepository.save(it) }
 
     val practitionerDetails = PractitionerDetails(name = Name("John", "Smith"), email = "foo@example.com")
-    whenever(ndeliusApiClient.getContactDetailsForMultiple(any(), any()))
+    whenever(ndeliusApiClient.getContactDetailsForMultiple(any()))
       .thenAnswer { invocation ->
         val crns = invocation.getArgument<List<String>>(0)
         listOf(

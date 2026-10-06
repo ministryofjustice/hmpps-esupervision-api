@@ -109,6 +109,8 @@ data class Name(
   @field:Schema(description = "Surname", required = true, example = "Smith") val surname: String,
 )
 
+fun Name.fullName(): String = "$forename $surname"
+
 /** Practitioner details from Ndilius API */
 data class PractitionerDetails(
   @field:Schema(description = "Practitioner's staff code", required = false, example = "N01A001")
