@@ -17,6 +17,9 @@
 #      API (it also reads NDelius and ARNS, of which only the tier is kept)
 #   6. writes the CSVs, deletes the port-forward pod and the working files
 #      whatever happened
+#   7. prints a summary: how many PDUs, practitioners and CRNs the export
+#      covers -- with the change since COMPARE_TO, if given -- and check-in
+#      links sent and missed by tier group (A-C, D-G)
 #
 # The query is the twice-weekly practitioner stats query: one row per
 # practitioner and PDU, over VERIFIED (active) offenders, excluding PDU XXX001.
@@ -28,6 +31,12 @@
 # further labels are this script's own:
 #   None     the Tier API holds no tier for the CRN
 #   Unknown  the tier could not be read after every pass (see unresolved.txt)
+#
+# The check-in summary counts, for the export's CRNs, every check-in as a link
+# sent (one is created, and its link sent, on its due date -- including any
+# still open) and every EXPIRED one as missed. Each CRN is grouped by its tier
+# today, not its tier when the check-in was due; CRNs without an A-G tier are
+# grouped as Other. It is printed only, not written to a file.
 #
 # Prerequisites: kubectl authenticated to Cloud Platform with access to the
 # namespace, psql 14+, jq, curl -- and the MoJ network, because the API ingress is
@@ -49,6 +58,14 @@
 #   TOKEN_SOURCE   pod (default) | laptop -- as in run_practitioner_export.sh
 #   UI_NAMESPACE   default the API's own namespace
 #   UI_DEPLOYMENT  default hmpps-esupervision-ui
+#   CHECKINS_SINCE optional YYYY-MM-DD: count only check-ins due on or after
+#                  it in the summary (default: all check-ins)
+#   COMPARE_TO     optional YYYY-MM-DD or "YYYY-MM-DD HH:MM[:SS]", UK time
+#                  (a date alone means midnight): show the change in PDUs,
+#                  practitioners and CRNs since then, e.g. "PDUs: 41 (+2)" --
+#                  typically the date and time of the last stats run. Both
+#                  sides are rebuilt from the audit log (see POPULATION_SQL);
+#                  a warning is printed if today's rebuild differs from the export
 #   EXPORT_API_BASE, EXPORT_AUTH_URL   override the per-environment URLs
 #
 # Outputs, in work_dir:
@@ -80,6 +97,8 @@ NS="hmpps-esupervision-$ENV"
 UI_NAMESPACE="${UI_NAMESPACE:-$NS}"
 UI_DEPLOYMENT="${UI_DEPLOYMENT:-hmpps-esupervision-ui}"
 TOKEN_SOURCE="${TOKEN_SOURCE:-pod}"
+CHECKINS_SINCE="${CHECKINS_SINCE:-}"
+COMPARE_TO="${COMPARE_TO:-}"
 WORK_DIR="${1:-$HOME/esup-practitioner-tier-export/$(date +%Y-%m-%d)-$ENV}"
 
 step() { printf '\n==> %s\n' "$*" >&2; }
@@ -94,6 +113,8 @@ use_work_dir() {
   esac
   ROWS="$WORK_DIR/practitioner_rows.jsonl"
   CRNS="$WORK_DIR/active_crns.txt"
+  CHECKINS="$WORK_DIR/checkin_counts.jsonl"
+  HISTORY="$WORK_DIR/population_history.jsonl"
   RESULTS="$WORK_DIR/tiers.jsonl"
   EXPORT="$WORK_DIR/practitioner_tiers.csv"
   CRN_EXPORT="$WORK_DIR/crn_tiers.csv"
@@ -113,7 +134,7 @@ use_work_dir() {
 # touched here; a new one is not created until the checks have passed.
 if [[ -d "$WORK_DIR" ]]; then
   use_work_dir
-  rm -f "$ROWS" "$CRNS" "$RESULTS" "$EXPORT" "$CRN_EXPORT" "$PARTIAL_EXPORT" "$PARTIAL_CRN_EXPORT" \
+  rm -f "$ROWS" "$CRNS" "$CHECKINS" "$HISTORY" "$RESULTS" "$EXPORT" "$CRN_EXPORT" "$PARTIAL_EXPORT" "$PARTIAL_CRN_EXPORT" \
     "$UNRESOLVED" "$EXPORT_TMP" "$CRN_EXPORT_TMP"
 fi
 
@@ -133,6 +154,10 @@ AUTH_URL="${EXPORT_AUTH_URL:-$default_auth}"
 
 [[ "$PASSES" =~ ^[1-9][0-9]*$ ]] \
   || die "PASSES must be a positive whole number (got '$PASSES')"
+[[ -z "$CHECKINS_SINCE" || "$CHECKINS_SINCE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+  || die "CHECKINS_SINCE must be a date, YYYY-MM-DD (got '$CHECKINS_SINCE')"
+[[ -z "$COMPARE_TO" || "$COMPARE_TO" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}([\ T][0-9]{2}:[0-9]{2}(:[0-9]{2})?)?$ ]] \
+  || die "COMPARE_TO must be YYYY-MM-DD or YYYY-MM-DD HH:MM[:SS], UK time (got '$COMPARE_TO')"
 
 # The stats query, returning each row as JSON so the CRNs come back as a list
 # rather than a comma-joined string.
@@ -148,6 +173,59 @@ INNER JOIN offender_v2 ov ON ov.crn = ealv.crn
 WHERE ealv.pdu_code != 'XXX001' AND ov.status = 'VERIFIED'
 GROUP BY UPPER(ov.practitioner_id), ealv.pdu_description, ealv.pdu_code
 ORDER BY ealv.pdu_description, UPPER(ov.practitioner_id)"
+
+# Check-ins per active CRN, for the tier group summary. A check-in row is
+# created, and its link sent, on its due date; it is missed if it expired
+# without being submitted. Only CRNs that are also in the export are counted.
+checkins_since_clause=""
+[[ -z "$CHECKINS_SINCE" ]] || checkins_since_clause="AND oc.due_date >= DATE '$CHECKINS_SINCE'"
+CHECKIN_SQL="
+SELECT json_build_object(
+         'crn',    ov.crn,
+         'sent',   COUNT(*),
+         'missed', COUNT(*) FILTER (WHERE oc.status = 'EXPIRED'))
+FROM offender_checkin_v2 oc
+INNER JOIN offender_v2 ov ON ov.id = oc.offender_id
+WHERE ov.status = 'VERIFIED' $checkins_since_clause
+GROUP BY ov.crn"
+
+# The population -- PDUs, practitioners, CRNs -- rebuilt from the audit log as
+# it stood at COMPARE_TO, and again as it stands now. offender_v2 holds only the
+# current state, but every activation and deactivation is audited, with the
+# practitioner and PDU at the time. A CRN was active at an instant if its latest
+# such event by then was a setup or reactivation; its practitioner is the one on
+# that event (offender_v2.practitioner_id only changes on a new setup), and its
+# PDUs are those on its audit rows up to then, excluding XXX001 -- the export's
+# own rules, cut off at the instant. "now" is rebuilt the same way, so the
+# change compares like with like, and is checked against the export.
+POPULATION_SQL="
+WITH at(label, ts) AS (
+  VALUES ('then', TIMESTAMP '$COMPARE_TO' AT TIME ZONE 'Europe/London'), ('now', now())
+),
+latest_status AS (
+  SELECT DISTINCT ON (at.label, e.crn) at.label, at.ts, e.crn, e.event_type, UPPER(e.practitioner_id) AS pp
+  FROM at
+  INNER JOIN event_audit_log_v2 e ON e.occurred_at <= at.ts
+  WHERE e.event_type IN ('SETUP_COMPLETED', 'OFFENDER_REACTIVATED', 'OFFENDER_DEACTIVATED',
+                         'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED', 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS')
+  ORDER BY at.label, e.crn, e.occurred_at DESC, e.id DESC
+),
+population AS (
+  SELECT DISTINCT s.label, s.crn, s.pp, e.pdu_code
+  FROM latest_status s
+  INNER JOIN event_audit_log_v2 e ON e.crn = s.crn AND e.occurred_at <= s.ts
+  WHERE s.event_type IN ('SETUP_COMPLETED', 'OFFENDER_REACTIVATED') AND e.pdu_code != 'XXX001'
+)
+SELECT json_build_object(
+         'label',         at.label,
+         'at',            to_char(at.ts AT TIME ZONE 'Europe/London', 'YYYY-MM-DD HH24:MI:SS'),
+         'future',        at.ts > now(),
+         'pdus',          COUNT(DISTINCT p.pdu_code),
+         'practitioners', COUNT(DISTINCT p.pp),
+         'crns',          COUNT(DISTINCT p.crn))
+FROM at
+LEFT JOIN population p ON p.label = at.label
+GROUP BY at.label, at.ts"
 
 # ---------------------------------------------------------------------------
 # Preflight
@@ -234,7 +312,7 @@ cleanup() {
   [[ -n "$PF_PID" ]] && kill "$PF_PID" 2>/dev/null || true
   echo "Deleting port-forward pod $POD" >&2
   kubectl -n "$NS" delete pod "$POD" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  rm -f "$ROWS" "$CRNS" "$RESULTS" "$EXPORT_TMP" "$CRN_EXPORT_TMP" ${body:+"$body"}
+  rm -f "$ROWS" "$CRNS" "$CHECKINS" "$HISTORY" "$RESULTS" "$EXPORT_TMP" "$CRN_EXPORT_TMP" ${body:+"$body"}
   exit "$rc"
 }
 trap cleanup EXIT
@@ -269,10 +347,18 @@ echo "Database session confirmed read-only" >&2
 READ_ONLY_CHECK="DO \$\$ BEGIN IF current_setting('transaction_read_only') <> 'on' THEN
   RAISE EXCEPTION 'session is not read-only -- refusing to run the query'; END IF; END \$\$"
 
-step "Running the practitioner stats query (read-only)"
+step "Running the practitioner stats and check-in queries (read-only)"
 psql -X -qtA -v ON_ERROR_STOP=1 \
   -c "BEGIN TRANSACTION READ ONLY" -c "$READ_ONLY_CHECK" -c "$PRACTITIONER_SQL" -c "ROLLBACK" > "$ROWS" \
   || die "SQL step failed"
+psql -X -qtA -v ON_ERROR_STOP=1 \
+  -c "BEGIN TRANSACTION READ ONLY" -c "$READ_ONLY_CHECK" -c "$CHECKIN_SQL" -c "ROLLBACK" > "$CHECKINS" \
+  || die "SQL step failed (check-in counts)"
+if [[ -n "$COMPARE_TO" ]]; then
+  psql -X -qtA -v ON_ERROR_STOP=1 \
+    -c "BEGIN TRANSACTION READ ONLY" -c "$READ_ONLY_CHECK" -c "$POPULATION_SQL" -c "ROLLBACK" > "$HISTORY" \
+    || die "SQL step failed (population at $COMPARE_TO)"
+fi
 
 kill "$PF_PID" 2>/dev/null || true; PF_PID=""
 # The database is finished with: nothing from here on inherits its password.
@@ -284,6 +370,12 @@ rows=$(grep -c . "$ROWS" || true)
 total=$(grep -c . "$CRNS" || true)
 echo "$rows practitioner rows, $total distinct active CRNs" >&2
 (( total > 0 )) || die "the query returned no CRNs -- nothing to export"
+if [[ -n "$COMPARE_TO" ]]; then
+  [[ "$(jq -rs 'map(.label) | sort | join(",")' "$HISTORY" 2>/dev/null)" == "now,then" ]] \
+    || die "could not read the population at $COMPARE_TO"
+  [[ "$(jq -rs 'map(select(.label == "then"))[0].future' "$HISTORY")" == false ]] \
+    || die "COMPARE_TO $COMPARE_TO is in the future"
+fi
 
 # ---------------------------------------------------------------------------
 # Token -- the same two routes as run_practitioner_export.sh
@@ -443,6 +535,51 @@ step "Done"
 echo "  Practitioner rows: $rows" >&2
 echo "  Distinct CRNs:     $total" >&2
 jq -r 'to_entries | group_by(.value) | map("  Tier \(.[0].value): \(length)") | .[]' <<<"$TIERS" >&2
+
+history_file=/dev/null
+[[ -z "$COMPARE_TO" ]] || history_file="$HISTORY"
+# Aggregate counts only -- nothing here identifies anyone. Every count is over
+# the export's own CRNs, each counted once however many PDUs it sits under.
+# shellcheck disable=SC2016  # jq variables, not shell ones
+jq -rn --argjson t "$TIERS" --slurpfile rows "$ROWS" --slurpfile checkins "$CHECKINS" \
+  --arg since "$CHECKINS_SINCE" --slurpfile history "$history_file" '
+  def lpad($w): tostring | ((" " * ([$w - length, 0] | max)) // "") + .;
+  def rpad($w): tostring | . + ((" " * ([$w - length, 0] | max)) // "");
+  def group: if test("^[A-C]$") then "A-C" elif test("^[D-G]$") then "D-G" else "Other" end;
+  def pct: if .sent > 0 then "\((.missed * 1000 / .sent | round) / 10)%" else "-" end;
+  def change($k): if $history == [] then ""
+    else ($history | map({key: .label, value: .}) | from_entries) as $h
+    | ($h.now[$k] - $h.then[$k]) as $d
+    | " (\(if $d > 0 then "+\($d)" elif $d < 0 then "\($d)" else "0" end))" end;
+  def line: "    \(.name | rpad(12))\(.crns | lpad(6))\(.sent | lpad(12))\(.missed | lpad(9))\(pct | lpad(11))";
+  ($checkins | map({key: .crn, value: .}) | from_entries) as $c
+  | ($rows | map(.crns[]) | unique) as $crns
+  | ($crns | map({group: (($t[.] // "Unknown") | group), sent: ($c[.].sent // 0), missed: ($c[.].missed // 0)})) as $per
+  | ["A-C", "D-G", "Other"]
+  | map(. as $g | $per | map(select(.group == $g))
+        | {name: $g, crns: length, sent: (map(.sent) | add // 0), missed: (map(.missed) | add // 0)}) as $groups
+  | ($groups | {name: "Total", crns: (map(.crns) | add), sent: (map(.sent) | add), missed: (map(.missed) | add)}) as $all
+  | {pdus: ($rows | map(.pduCode) | unique | length),
+     practitioners: ($rows | map(.practitionerId) | unique | length),
+     crns: ($crns | length)} as $pop
+  | ($history | map({key: .label, value: .}) | from_entries) as $h
+  | "",
+    "  Active population, as in the export\(if $history == [] then "" else ", change since \($h.then.at) UK time" end)",
+    "    PDUs:           \($pop.pdus)\(change("pdus"))",
+    "    Practitioners:  \($pop.practitioners)\(change("practitioners"))",
+    "    CRNs:           \($pop.crns)\(change("crns"))",
+    (if $history == [] then empty
+     else [("pdus", "practitioners", "crns") | select($h.now[.] != $pop[.]) | "\(.) \($h.now[.]) vs \($pop[.])"] as $diff
+     | if $diff == [] then empty else
+         "    WARNING: today rebuilt from the audit log does not match the export (rebuilt vs export):",
+         "             \($diff | join(", ")). The change is between two rebuilt figures; treat it with care."
+       end end),
+    "",
+    "  Check-ins by current tier group, \(if $since == "" then "all due dates" else "due on or after \($since)" end)",
+    "    \("Tier group" | rpad(12))\("CRNs" | lpad(6))\("Links sent" | lpad(12))\("Missed" | lpad(9))\("Missed %" | lpad(11))",
+    ($groups[], $all | line),
+    if $groups[2].crns > 0 then "    Other: CRNs without an A-G tier (None, NOT_SUPERVISED, Unknown or a v2 tier)" else empty end
+  ' >&2
 cat >&2 <<EOF
 
   Export:     $EXPORT
