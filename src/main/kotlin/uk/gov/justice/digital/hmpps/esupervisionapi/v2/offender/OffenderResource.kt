@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.persistence.EntityManager
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import org.springframework.context.ApplicationEventPublisher
@@ -71,7 +72,6 @@ import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
-import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -97,6 +97,7 @@ class OffenderResource(
   private val supervisionPackageService: SupervisionPackageService,
   private val questionService: QuestionService,
   private val transactionTemplate: TransactionTemplate,
+  private val entityManager: EntityManager,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -637,13 +638,17 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
         throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Use schedule-ad-hoc-check-in to schedule ad-hoc check-ins.")
       }
     }
-    val checkinBeforeUpdate = if (schedule?.firstCheckin == today) {
-      checkinRepository.findByOffenderAndDueDateAndStatus(initialOffender, today, CheckinStatus.CREATED)
+    val checkinsBeforeUpdate = if (schedule?.firstCheckin == today) {
+      checkinRepository.findByOffenderAndDueDateAndStatusIn(
+        initialOffender,
+        today,
+        CHECKIN_STATUSES_OCCUPYING_DATE,
+      )
     } else {
-      Optional.empty()
+      emptyList()
     }
     val createsCheckinToday = schedule?.firstCheckin == today && initialOffender.firstCheckin != today
-    val contactDetails = if (createsCheckinToday && checkinBeforeUpdate.isEmpty) {
+    val contactDetails = if (createsCheckinToday && checkinsBeforeUpdate.isEmpty()) {
       ndiliusApiClient.getContactDetails(initialOffender.crn)
         ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${initialOffender.crn}")
     } else {
@@ -653,6 +658,7 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
     return transactionTemplate.execute {
       val offender = offenderRepository.findByUuidForUpdate(uuid).orElse(null)
         ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+      entityManager.refresh(offender)
       if (offender.status == OffenderStatus.INACTIVE) {
         throw ResponseStatusException(
           HttpStatus.BAD_REQUEST,
@@ -674,11 +680,13 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
         offender.updatedAt = clock.instant()
       }
 
-      val reusableCheckin = if (schedule?.firstCheckin == today) {
-        checkinRepository.findByOffenderAndDueDateAndStatus(offender, today, CheckinStatus.CREATED)
+      val checkinsDueToday = if (schedule?.firstCheckin == today) {
+        checkinRepository.findByOffenderAndDueDateAndStatusIn(offender, today, CHECKIN_STATUSES_OCCUPYING_DATE)
       } else {
-        Optional.empty()
+        emptyList()
       }
+      val reusableCheckin = checkinsDueToday.firstOrNull { it.status == CheckinStatus.CREATED }
+      val completedCheckinExists = checkinsDueToday.any { it.status == CheckinStatus.SUBMITTED || it.status == CheckinStatus.REVIEWED }
       LOGGER.info(
         "Update offender details, CRN={}, schedule updated={}, contact preference updated={}",
         offender.crn,
@@ -695,12 +703,15 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
       if (schedule?.firstCheckin == today &&
         newFirstCheckinDateIsToday(offenderBefore, offenderAfter, today)
       ) {
-        reusableCheckin.orElseGet {
+        if (completedCheckinExists) {
+          LOGGER.debug("Check-in already completed for offender {}; skipping creation", offenderAfter.uuid)
+        } else if (reusableCheckin != null) {
+          LOGGER.debug("Check-in already created for offender {}; skipping creation", offenderAfter.uuid)
+        } else {
           val details = contactDetails
             ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while updating. Please retry.")
           checkinCreationService.createCheckinForOffender(saved, saved.firstCheckin, schedule.requestedBy, details)
         }
-        LOGGER.debug("{} check-in for offender {}", if (reusableCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       }
       ResponseEntity.ok(offenderAfter)
     } ?: throw IllegalStateException("Failed to update offender details")
@@ -725,15 +736,19 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
     validateAdHocSchedule(initialOffender, request.firstCheckin)
 
     val today = clock.today()
-    val checkinBeforeUpdate = if (request.firstCheckin == today) {
-      checkinRepository.findByOffenderAndDueDateAndStatus(initialOffender, today, CheckinStatus.CREATED)
+    val checkinsBeforeUpdate = if (request.firstCheckin == today) {
+      checkinRepository.findByOffenderAndDueDateAndStatusIn(
+        initialOffender,
+        today,
+        CHECKIN_STATUSES_OCCUPYING_DATE,
+      )
     } else {
-      Optional.empty()
+      emptyList()
     }
-    if (request.questions != null && checkinBeforeUpdate.isPresent) {
+    if (request.questions != null && checkinsBeforeUpdate.isNotEmpty()) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Questions must be assigned before the check-in due date")
     }
-    val contactDetails = if (request.firstCheckin == today && checkinBeforeUpdate.isEmpty) {
+    val contactDetails = if (request.firstCheckin == today && checkinsBeforeUpdate.isEmpty()) {
       ndiliusApiClient.getContactDetails(initialOffender.crn)
         ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${initialOffender.crn}")
     } else {
@@ -743,6 +758,7 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
     return transactionTemplate.execute {
       val offender = offenderRepository.findByUuidForUpdate(uuid).orElse(null)
         ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+      entityManager.refresh(offender)
       validateAdHocSchedule(offender, request.firstCheckin)
       val conflictingCheckin = checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)
         .firstOrNull { it.dueDate != request.firstCheckin }
@@ -751,23 +767,33 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
       }
 
       val beforeChange = offender.toSummaryDto()
+      val checkinsDueToday = if (request.firstCheckin == today) {
+        checkinRepository.findByOffenderAndDueDateAndStatusIn(offender, today, CHECKIN_STATUSES_OCCUPYING_DATE)
+      } else {
+        emptyList()
+      }
+      val reusableCheckin = checkinsDueToday.firstOrNull { it.status == CheckinStatus.CREATED }
+      val completedCheckinExists = checkinsDueToday.any { it.status == CheckinStatus.SUBMITTED || it.status == CheckinStatus.REVIEWED }
+      if (request.questions != null && completedCheckinExists) {
+        throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Questions must be assigned before the check-in due date")
+      }
+
       offender.firstCheckin = request.firstCheckin
       offender.updatedAt = clock.instant()
-      val reusableCheckin = if (request.firstCheckin == today) {
-        checkinRepository.findByOffenderAndDueDateAndStatus(offender, today, CheckinStatus.CREATED)
-      } else {
-        Optional.empty()
-      }
 
       val saved = offenderRepository.save(offender)
       if (request.firstCheckin == today) {
-        val checkin = reusableCheckin.orElseGet {
-          val details = contactDetails
-            ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while scheduling. Please retry.")
-          checkinCreationService.createCheckinForOffender(saved, request.firstCheckin, request.requestedBy, details)
-        }
-        request.questions?.let {
-          questionService.assignCustomQuestionsToCheckin(checkin, it, allowSameDayInitialAssignment = reusableCheckin.isEmpty)
+        if (completedCheckinExists) {
+          LOGGER.debug("Check-in already completed for offender {}; skipping creation", saved.uuid)
+        } else {
+          val checkin = reusableCheckin ?: run {
+            val details = contactDetails
+              ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in state changed while scheduling. Please retry.")
+            checkinCreationService.createCheckinForOffender(saved, request.firstCheckin, request.requestedBy, details)
+          }
+          request.questions?.let {
+            questionService.assignCustomQuestionsToCheckin(checkin, it, allowSameDayInitialAssignment = reusableCheckin == null)
+          }
         }
       } else {
         request.questions?.let { questionService.assignCustomQuestions(saved.crn, it) }
@@ -844,6 +870,7 @@ through the dedicated schedule-ad-hoc-check-in endpoint.""",
   }
 
   companion object {
+    private val CHECKIN_STATUSES_OCCUPYING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED)
     private val LOGGER = logger<OffenderResource>()
   }
 }

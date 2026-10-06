@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
+import jakarta.persistence.EntityManager
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -89,6 +91,7 @@ class OffenderResourceTest {
   private val supervisionPackageService: SupervisionPackageService = mock()
   private val questionService: QuestionService = mock()
   private val transactionTemplate: TransactionTemplate = mock()
+  private val entityManager: EntityManager = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -122,6 +125,7 @@ class OffenderResourceTest {
       supervisionPackageService,
       questionService,
       transactionTemplate,
+      entityManager,
     )
   }
 
@@ -872,6 +876,55 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - does not create a duplicate for a submitted or reviewed checkin today`() {
+    for (completedStatus in listOf(CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED)) {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
+        firstCheckin = clock.today().minusDays(1)
+      }
+      val completedCheckin = mock<OffenderCheckin>()
+      whenever(completedCheckin.status).thenReturn(completedStatus)
+      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.save(offender)).thenReturn(offender)
+      whenever(checkinRepository.findByOffenderAndDueDateAndStatusIn(any(), eq(clock.today()), any()))
+        .thenReturn(listOf(completedCheckin))
+
+      val schedule = CheckinScheduleUpdateRequest(
+        requestedBy = "XYZ0111",
+        firstCheckin = clock.today(),
+        checkinInterval = CheckinInterval.FOUR_WEEKS,
+      )
+      val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+
+      assertEquals(HttpStatus.OK, response.statusCode)
+      verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+    }
+  }
+
+  @Test
+  fun `updateDetails - refreshes locked offender before applying a contact preference update`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val latestFirstCheckin = clock.today().plusDays(7)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    doAnswer {
+      offender.firstCheckin = latestFirstCheckin
+      null
+    }.whenever(entityManager).refresh(offender)
+
+    val response = resource.updateDetails(
+      uuid,
+      OffenderDetailsUpdateRequest(contactPreference = ContactPreferenceUpdateRequest("XYZ0111", ContactPreference.EMAIL)),
+    )
+
+    assertEquals(latestFirstCheckin, response.body?.firstCheckin)
+    verify(entityManager).refresh(offender)
+  }
+
+  @Test
   fun `scheduleAdHocCheckin - assigns questions to checkin scheduled for today`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
@@ -899,6 +952,47 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(checkinCreationService).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
     verify(questionService).assignCustomQuestionsToCheckin(checkin, questions, true)
+  }
+
+  @Test
+  fun `scheduleAdHocCheckin - does not create another checkin after today's checkin is submitted or reviewed`() {
+    for (completedStatus in listOf(CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED)) {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+        firstCheckin = clock.today().plusDays(1)
+      }
+      val completedCheckin = mock<OffenderCheckin>()
+      whenever(completedCheckin.status).thenReturn(completedStatus)
+      whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.save(offender)).thenReturn(offender)
+      whenever(checkinRepository.findByOffenderAndDueDateAndStatusIn(any(), eq(clock.today()), any()))
+        .thenReturn(listOf(completedCheckin))
+
+      val response = resource.scheduleAdHocCheckin(uuid, ScheduleAdHocCheckinRequest("XYZ0111", clock.today()))
+
+      assertEquals(HttpStatus.OK, response.statusCode)
+      verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+    }
+  }
+
+  @Test
+  fun `scheduleAdHocCheckin - refreshes locked offender before validation`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+    doAnswer {
+      offender.status = OffenderStatus.INACTIVE
+      null
+    }.whenever(entityManager).refresh(offender)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.scheduleAdHocCheckin(uuid, ScheduleAdHocCheckinRequest("XYZ0111", clock.today().plusDays(1)))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderRepository, times(0)).save(any())
   }
 
   @Test

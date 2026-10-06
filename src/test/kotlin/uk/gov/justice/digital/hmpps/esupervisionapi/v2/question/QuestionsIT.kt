@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
+import jakarta.persistence.EntityManager
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -78,6 +79,9 @@ class QuestionsIT(
 
   @Autowired
   lateinit var jdbcTemplate: JdbcTemplate
+
+  @Autowired
+  lateinit var entityManager: EntityManager
 
   @Autowired
   lateinit var questionRepository: QuestionRepository
@@ -604,6 +608,67 @@ class QuestionsIT(
 
     val activeCheckin = offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single()
     assertNotEquals(cancelledCheckin.uuid, activeCheckin.uuid)
+  }
+
+  @Test
+  fun `schedule future questions after cancelled and submitted checkins on today`() {
+    val futureDate = clock.today().plusDays(3)
+    val offender = offenderTemplate.copy(
+      crn = "A123466",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today().plusDays(1),
+    ).toEntity()
+    offenderRepository.save(offender)
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val inheritedQuestions = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    questionService.assignCustomQuestions(offender.crn, inheritedQuestions)
+
+    val cancelledDto = offenderCheckinService.debugCreateCheckin(offender, clock)
+    val cancelledCheckin = offenderCheckinRepository.findByUuid(cancelledDto.uuid).orElseThrow()
+    cancelledCheckin.status = CheckinStatus.CANCELLED
+    offenderCheckinRepository.saveAndFlush(cancelledCheckin)
+
+    val replacementQuestions = inheritedQuestions.copy(
+      questions = inheritedQuestions.questions.map { item ->
+        item.copy(params = mapOf("placeholders" to mapOf("thing" to "same-day replacement")))
+      },
+    )
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(ScheduleAdHocCheckinRequest("BARRY.WHITE", clock.today(), replacementQuestions))
+      .exchange()
+      .expectStatus().isOk
+
+    val replacement = offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single()
+    val replacementListId = questionListAssignmentRepository.checkinAssignment(replacement.id)
+    assertNotNull(replacementListId)
+    assertEquals(
+      replacementQuestions.questions.map { it.params },
+      questionRepository.getListItems(replacementListId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
+    )
+
+    offenderCheckinService.submitCheckin(replacement.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
+
+    val futureQuestions = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates).copy(
+      questions = templates.take(1).map { question ->
+        CustomQuestionItem(question.id, mapOf("placeholders" to mapOf("thing" to "future assignment")))
+      },
+    )
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(ScheduleAdHocCheckinRequest("BARRY.WHITE", futureDate, futureQuestions))
+      .exchange()
+      .expectStatus().isOk
+
+    entityManager.clear()
+    val updatedOffender = offenderRepository.findByUuid(offender.uuid).orElseThrow()
+    val assignment = questionService.upcomingAssignment(updatedOffender)
+    assertEquals(futureDate, assignment.expectedCheckinDate)
+    assertNotNull(assignment.questionList)
   }
 
   @Test

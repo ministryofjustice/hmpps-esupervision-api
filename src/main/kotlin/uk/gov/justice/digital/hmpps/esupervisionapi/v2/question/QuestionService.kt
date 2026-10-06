@@ -36,7 +36,6 @@ import java.time.Clock
 import java.time.Duration
 import java.util.UUID
 import kotlin.collections.emptyMap
-import kotlin.jvm.optionals.getOrNull
 
 @Service
 @Validated
@@ -115,12 +114,12 @@ class QuestionService(
       CheckinMode.SCHEDULED -> null
     }
 
-    val checkin = checkinRepository.findByOffenderAndDueDate(offender, today).getOrNull()
+    val checkins = checkinRepository.findAllByOffenderAndDueDate(offender, today)
     val isDueToday = when (offender.mode) {
       CheckinMode.SCHEDULED -> isCheckinDay(offender, today)
       CheckinMode.AD_HOC -> offender.firstCheckin == today
     }
-    if ((checkin == null && isDueToday) || (checkin != null && checkin.status == CheckinStatus.CREATED)) {
+    if ((checkins.isEmpty() && isDueToday) || checkins.any { it.status == CheckinStatus.CREATED }) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
@@ -158,9 +157,7 @@ class QuestionService(
     if (lockedCheckin.dueDate.isBefore(clock.today())) {
       throw BadArgumentException("Can't add questions to an overdue check-in")
     }
-    if (lockedCheckin.dueDate == clock.today() &&
-      (!allowSameDayInitialAssignment || questionListAssignmentRepository.checkinAssignment(lockedCheckin.id) != null)
-    ) {
+    if (lockedCheckin.dueDate == clock.today() && !allowSameDayInitialAssignment) {
       throw BadArgumentException("Questions must be assigned before the check-in due date")
     }
     validateQuestionRequest(request)

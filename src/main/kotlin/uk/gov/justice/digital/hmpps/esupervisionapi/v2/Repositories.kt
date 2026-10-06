@@ -281,6 +281,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   )
   fun findByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): Optional<OffenderCheckin>
 
+  fun findAllByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
+
   fun findByOffenderAndDueDateAndStatus(offender: Offender, dueDate: LocalDate, status: CheckinStatus): Optional<OffenderCheckin>
 
   fun findByOffenderAndDueDateAndStatusIn(offender: Offender, dueDate: LocalDate, statuses: Collection<CheckinStatus>): List<OffenderCheckin>
