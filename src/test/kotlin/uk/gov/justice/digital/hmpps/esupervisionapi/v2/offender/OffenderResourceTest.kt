@@ -840,7 +840,7 @@ class OffenderResourceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(mock())
 
-    val scheduleUpdate = CheckinScheduleWithQuestionsRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
+    val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
     val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
 
     verify(checkinCreationService, times(1)).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
@@ -853,7 +853,7 @@ class OffenderResourceTest {
   fun `updateDetails - does not create recurring checkin when date is already today`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
-    val schedule = CheckinScheduleWithQuestionsRequest(
+    val schedule = CheckinScheduleUpdateRequest(
       requestedBy = "XYZ0111",
       firstCheckin = clock.today(),
       checkinInterval = CheckinInterval.FOUR_WEEKS,
@@ -872,10 +872,12 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `updateDetails - assigns questions to checkin scheduled for today`() {
+  fun `scheduleAdHocCheckin - assigns questions to checkin scheduled for today`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
       firstCheckin = clock.today().minusDays(1)
+      mode = CheckinMode.AD_HOC
+      checkinInterval = null
     }
     val checkin = mock<OffenderCheckin>()
     val questions = mock<AssignCustomQuestionsRequest>()
@@ -887,14 +889,12 @@ class OffenderResourceTest {
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
 
-    val schedule = CheckinScheduleWithQuestionsRequest(
+    val schedule = ScheduleAdHocCheckinRequest(
       requestedBy = "XYZ0111",
       firstCheckin = clock.today(),
-      checkinInterval = null,
-      mode = CheckinMode.AD_HOC,
       questions = questions,
     )
-    val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+    val response = resource.scheduleAdHocCheckin(uuid, schedule)
 
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(checkinCreationService).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
@@ -902,23 +902,24 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `updateDetails - assigns questions for future ad hoc checkin`() {
+  fun `scheduleAdHocCheckin - assigns questions for future ad hoc checkin`() {
     val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
+      mode = CheckinMode.AD_HOC
+      checkinInterval = null
+    }
     val questions = mock<AssignCustomQuestionsRequest>()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
     whenever(checkinRepository.findByOffenderAndDueDateAndStatus(offender, clock.today(), CheckinStatus.CREATED)).thenReturn(Optional.empty())
 
-    val schedule = CheckinScheduleWithQuestionsRequest(
+    val schedule = ScheduleAdHocCheckinRequest(
       requestedBy = "XYZ0111",
       firstCheckin = clock.today().plusDays(2),
-      checkinInterval = null,
-      mode = CheckinMode.AD_HOC,
       questions = questions,
     )
-    val response = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+    val response = resource.scheduleAdHocCheckin(uuid, schedule)
 
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(questionService).assignCustomQuestions(offender.crn, questions)
@@ -926,20 +927,14 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `updateDetails - rejects embedded questions for recurring checkins`() {
+  fun `scheduleAdHocCheckin - rejects offenders on a recurring schedule`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
-    val schedule = CheckinScheduleWithQuestionsRequest(
-      requestedBy = "XYZ0111",
-      firstCheckin = clock.today().plusDays(2),
-      checkinInterval = CheckinInterval.FOUR_WEEKS,
-      mode = CheckinMode.SCHEDULED,
-      questions = mock(),
-    )
+    offender.mode = CheckinMode.SCHEDULED
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
-      resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = schedule))
+      resource.scheduleAdHocCheckin(uuid, ScheduleAdHocCheckinRequest("XYZ0111", clock.today().plusDays(2), mock()))
     }
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
@@ -950,6 +945,28 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `scheduleAdHocCheckin - requires cancelling a created checkin before changing its date`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED).apply {
+      mode = CheckinMode.AD_HOC
+      checkinInterval = null
+      firstCheckin = clock.today()
+    }
+    val activeCheckin = mock<OffenderCheckin>()
+    whenever(activeCheckin.dueDate).thenReturn(clock.today())
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)).thenReturn(listOf(activeCheckin))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.scheduleAdHocCheckin(uuid, ScheduleAdHocCheckinRequest("XYZ0111", clock.today().plusDays(2)))
+    }
+
+    assertEquals(HttpStatus.CONFLICT, exception.statusCode)
+    assertEquals(clock.today(), offender.firstCheckin)
+    verify(offenderRepository, times(0)).save(any())
+  }
+
+  @Test
   fun `updateDetails - no update`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
@@ -957,7 +974,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
-    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = null))
+    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest())
 
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     assertEquals(HttpStatus.NO_CONTENT, result.statusCode)
@@ -971,7 +988,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
-    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
+    val scheduleUpdate = CheckinScheduleUpdateRequest(
       mode = CheckinMode.AD_HOC,
       requestedBy = "BOB",
       checkinInterval = CheckinInterval.FOUR_WEEKS,
@@ -982,7 +999,10 @@ class OffenderResourceTest {
     }
     assertTrue(ex.statusCode.is4xxClientError)
 
-    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate.copy(checkinInterval = null)))
+    val result = resource.updateDetails(
+      uuid,
+      OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate.copy(mode = CheckinMode.SCHEDULED)),
+    )
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     assertEquals(HttpStatus.OK, result.statusCode)
   }
@@ -1001,7 +1021,7 @@ class OffenderResourceTest {
 
     val result = resource.updateDetails(
       uuid,
-      OffenderDetailsUpdateRequest(checkinSchedule = null, contactPreference = preferenceUpdate),
+      OffenderDetailsUpdateRequest(contactPreference = preferenceUpdate),
     )
 
     verify(offenderRepository).save(offender)

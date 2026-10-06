@@ -57,10 +57,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinScheduleLowerBound
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.CheckinScheduleWithQuestionsRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDetailsUpdateRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.ScheduleAdHocCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
@@ -366,18 +366,16 @@ class QuestionsIT(
       notificationProcessed.countDown()
       null
     }
-    val todaySchedule = CheckinScheduleWithQuestionsRequest(
+    val todaySchedule = ScheduleAdHocCheckinRequest(
       requestedBy = "BARRY.WHITE",
       firstCheckin = clock.today(),
-      checkinInterval = null,
-      mode = CheckinMode.AD_HOC,
       questions = initialRequest,
     )
 
     webTestClient.post()
-      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
       .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
-      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = todaySchedule))
+      .bodyValue(todaySchedule)
       .exchange()
       .expectStatus().isOk
 
@@ -398,13 +396,9 @@ class QuestionsIT(
       },
     )
     webTestClient.post()
-      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
       .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
-      .bodyValue(
-        OffenderDetailsUpdateRequest(
-          checkinSchedule = todaySchedule.copy(questions = replacementRequest),
-        ),
-      )
+      .bodyValue(todaySchedule.copy(questions = replacementRequest))
       .exchange()
       .expectStatus().isEqualTo(422)
 
@@ -430,17 +424,15 @@ class QuestionsIT(
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val questionRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
     val pendingAssignment = questionService.assignCustomQuestions(offender.crn, questionRequest)
-    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
+    val scheduleUpdate = ScheduleAdHocCheckinRequest(
       requestedBy = "BARRY.WHITE",
       firstCheckin = clock.today(),
-      checkinInterval = null,
-      mode = CheckinMode.AD_HOC,
     )
 
     webTestClient.post()
-      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
       .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
-      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .bodyValue(scheduleUpdate)
       .exchange()
       .expectStatus().isOk
 
@@ -498,6 +490,46 @@ class QuestionsIT(
   }
 
   @Test
+  fun `checkin creation refreshes event metadata from the locked offender`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123465",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = clock.today(),
+    ).toEntity().apply { currentEvent = 1L }
+    offenderRepository.saveAndFlush(offender)
+    val checkin = checkinCreationService.prepareCheckinForOffender(offender, clock.today())
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    val staleEvent = PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = "PRACT001",
+      checkin = CheckinDto(
+        uuid = checkin.uuid,
+        crn = offender.crn,
+        status = checkin.status,
+        dueDate = checkin.dueDate,
+        createdAt = checkin.createdAt,
+        createdBy = checkin.createdBy,
+        personalDetails = contactDetails,
+        checkinLogs = CheckinLogsDto(CheckinLogsHint.OMITTED, emptyList()),
+      ),
+      offenderContactPreference = ContactPreference.PHONE,
+      currentEvent = 1L,
+      checkinMode = CheckinMode.AD_HOC,
+    )
+    offender.practitionerId = "PRACT002"
+    offender.contactPreference = ContactPreference.EMAIL
+    offender.currentEvent = 2L
+    offenderRepository.saveAndFlush(offender)
+
+    val createdEvent = checkinCreationService.createCheckins(listOf(checkin to staleEvent)).single().second
+
+    assertEquals("PRACT002", createdEvent.practitionerId)
+    assertEquals(ContactPreference.EMAIL, createdEvent.offenderContactPreference)
+    assertEquals(2L, createdEvent.currentEvent)
+  }
+
+  @Test
   fun `scheduling today creates a fresh checkin when today's checkin was cancelled`() {
     val offender = offenderTemplate.copy(
       crn = "A123462",
@@ -515,17 +547,15 @@ class QuestionsIT(
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val questionRequest = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
     val pendingAssignment = questionService.assignCustomQuestions(offender.crn, questionRequest)
-    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
+    val scheduleUpdate = ScheduleAdHocCheckinRequest(
       requestedBy = "BARRY.WHITE",
       firstCheckin = clock.today(),
-      checkinInterval = null,
-      mode = CheckinMode.AD_HOC,
     )
 
     webTestClient.post()
-      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
       .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
-      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .bodyValue(scheduleUpdate)
       .exchange()
       .expectStatus().isOk
 
@@ -536,9 +566,9 @@ class QuestionsIT(
     assertEquals(1, questionListAssignmentRepository.findAll().count { it.checkinId == freshCheckin.id })
 
     webTestClient.post()
-      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
       .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
-      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .bodyValue(scheduleUpdate)
       .exchange()
       .expectStatus().isOk
 
@@ -561,16 +591,14 @@ class QuestionsIT(
     cancelledCheckin.status = CheckinStatus.CANCELLED
     offenderCheckinRepository.saveAndFlush(cancelledCheckin)
 
-    val scheduleUpdate = CheckinScheduleWithQuestionsRequest(
+    val scheduleUpdate = ScheduleAdHocCheckinRequest(
       requestedBy = "BARRY.WHITE",
       firstCheckin = clock.today(),
-      checkinInterval = null,
-      mode = CheckinMode.AD_HOC,
     )
     webTestClient.post()
-      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .uri("/v2/offenders/${offender.uuid}/schedule-ad-hoc-check-in")
       .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
-      .bodyValue(OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate))
+      .bodyValue(scheduleUpdate)
       .exchange()
       .expectStatus().isOk
 

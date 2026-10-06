@@ -153,9 +153,18 @@ class CheckinCreationService(
         ) {
           continue
         }
+        val contactDetails = event.checkin.personalDetails ?: continue
+        val refreshedEvent = event.copy(
+          offenderId = offender.id,
+          practitionerId = offender.practitionerId,
+          offenderContactPreference = offender.contactPreference,
+          currentEvent = activeEventNumber(offender, contactDetails),
+          checkinMode = offender.mode,
+        )
+        if (refreshedEvent.currentEvent == null) continue
         checkin.offender = offender
-        checkinPersistenceService.checkinCreation(checkin, event)
-        createdCheckins.add(checkin to event)
+        checkinPersistenceService.checkinCreation(checkin, refreshedEvent)
+        createdCheckins.add(checkin to refreshedEvent)
       }
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)
