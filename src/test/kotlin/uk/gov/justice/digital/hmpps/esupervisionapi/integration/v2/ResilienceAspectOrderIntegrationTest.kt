@@ -8,6 +8,7 @@ import com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import com.github.tomakehurst.wiremock.stubbing.Scenario
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import io.github.resilience4j.core.functions.Either
 import io.github.resilience4j.retry.RetryRegistry
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
+import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -32,6 +34,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyGatewayService
 import uk.gov.service.notify.NotificationClientApi
 import uk.gov.service.notify.NotificationClientException
+import java.net.SocketTimeoutException
 
 /**
  * Pins the resilience4j aspect nesting to CircuitBreaker( Retry( call ) ).
@@ -166,6 +169,27 @@ class ResilienceAspectOrderIntegrationTest : IntegrationTestBase() {
 
     verify(notificationClient, times(1)).sendSms(any(), any(), any(), any())
     assertEquals(0, circuitBreakerRegistry.circuitBreaker("govNotify").metrics.numberOfFailedCalls)
+  }
+
+  /** Notify has no idempotency key, so resending a request it may already have accepted risks a duplicate message. */
+  @Test
+  fun `a Notify failure after the request may have been sent is recorded but not retried`() {
+    whenever(notificationClient.sendSms(any(), any(), any(), any()))
+      .thenThrow(NotificationClientException(SocketTimeoutException("Read timed out")))
+
+    assertThrows<NotificationClientException> { notifyGatewayService.send("SMS", "template-id", "07700900000", emptyMap(), "ref-1") }
+
+    verify(notificationClient, times(1)).sendSms(any(), any(), any(), any())
+    assertEquals(1, circuitBreakerRegistry.circuitBreaker("govNotify").metrics.numberOfFailedCalls)
+  }
+
+  @Test
+  fun `an open Notify circuit fails fast without calling Notify`() {
+    circuitBreakerRegistry.circuitBreaker("govNotify").transitionToOpenState()
+
+    assertThrows<CallNotPermittedException> { notifyGatewayService.send("SMS", "template-id", "07700900000", emptyMap(), "ref-1") }
+
+    verify(notificationClient, never()).sendSms(any(), any(), any(), any())
   }
 
   /** The (status, message) constructor Notify uses for HTTP errors is package-private. */

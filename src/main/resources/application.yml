@@ -464,8 +464,9 @@ resilience4j:
         wait-duration: 1000ms
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
-        # Transient failures only (network, 429, 5xx) - never 4xx. See NotifyTransientFailure.
-        retry-exception-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyTransientFailure
+        # Only failures where Notify cannot have created the notification, to avoid duplicate
+        # sends - narrower than the breaker's predicate. See NotifyRetryableFailure.
+        retry-exception-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyRetryableFailure
 
       awsS3:
         max-attempts: 2
