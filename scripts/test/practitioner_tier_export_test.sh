@@ -186,15 +186,15 @@ cat > "$T/rows.jsonl" <<'EOF'
 {"pduCode":"PDU2","pdu":"Beta PDU","regions":"Region Two","practitionerId":"ANN.SMITH","crns":["X000003","X000005","X000006"]}
 EOF
 
-# What the check-in query returns: sent and missed per active CRN. A CRN with no
+# What the check-in query returns: check-ins, links sent and missed per active CRN. A CRN with no
 # check-ins has no row; ZZZ9999 is active but not in the export, so not counted.
 cat > "$T/checkins.jsonl" <<'EOF'
-{"crn":"X000001","sent":4,"missed":1}
-{"crn":"X000002","sent":2,"missed":0}
-{"crn":"X000003","sent":3,"missed":2}
-{"crn":"X000004","sent":2,"missed":2}
-{"crn":"X000006","sent":1,"missed":0}
-{"crn":"ZZZ9999","sent":10,"missed":10}
+{"crn":"X000001","checkins":5,"sent":4,"missed":1}
+{"crn":"X000002","checkins":2,"sent":2,"missed":0}
+{"crn":"X000003","checkins":3,"sent":3,"missed":2}
+{"crn":"X000004","checkins":2,"sent":2,"missed":2}
+{"crn":"X000006","checkins":1,"sent":1,"missed":0}
+{"crn":"ZZZ9999","checkins":10,"sent":10,"missed":10}
 EOF
 
 # What the population query returns: the default rows rebuilt now (2 PDUs,
@@ -257,11 +257,11 @@ test_prints_population_and_tier_group_checkin_counts() {
 {"pduCode":"PDU2","pdu":"Beta PDU","regions":"Region Two","practitionerId":"BOB.JONES","crns":["X000008"]}
 EOF
   cat > "$T/group_checkins.jsonl" <<'EOF'
-{"crn":"X000001","sent":4,"missed":1}
-{"crn":"X000007","sent":3,"missed":2}
-{"crn":"X000008","sent":1,"missed":0}
-{"crn":"X000004","sent":2,"missed":2}
-{"crn":"ZZZ9999","sent":10,"missed":10}
+{"crn":"X000001","checkins":6,"sent":4,"missed":1}
+{"crn":"X000007","checkins":3,"sent":3,"missed":2}
+{"crn":"X000008","checkins":1,"sent":1,"missed":0}
+{"crn":"X000004","checkins":2,"sent":2,"missed":2}
+{"crn":"ZZZ9999","checkins":10,"sent":10,"missed":10}
 EOF
   local out rc; out="$(run "$T/c-groups" FAKE_ROWS="$T/groups.jsonl" FAKE_CHECKINS="$T/group_checkins.jsonl")"; rc=$?
   assert_eq 0 "$rc" "exit code"
@@ -269,27 +269,28 @@ EOF
   assert_contains "$out" "    Practitioners:  2" "distinct practitioners"
   assert_contains "$out" "    CRNs:           4" "distinct CRNs, X000001 once"
   assert_contains "$out" "Check-ins by current tier group, all due dates" "period"
-  assert_contains "$out" "    Tier group    CRNs  Links sent   Missed   Missed %" "header"
-  assert_contains "$out" "    A-C              1           4        1        25%" "A-C: X000001 once"
-  assert_contains "$out" "    D-G              2           4        2        50%" "D-G: E and G"
-  assert_contains "$out" "    Other            1           2        2       100%" "Other: no tier"
-  assert_contains "$out" "    Total            4          10        5        50%" "total excludes CRNs not in the export"
+  assert_contains "$out" "    Tier group    CRNs  Check-ins  Links sent   Missed   Missed %" "header"
+  assert_contains "$out" "    A-C              1          6           4        1        25%" "A-C: X000001 once"
+  assert_contains "$out" "    D-G              2          4           4        2        50%" "D-G: E and G"
+  assert_contains "$out" "    Other            1          2           2        2       100%" "Other: no tier"
+  assert_contains "$out" "    Total            4         12          10        5        50%" "total excludes CRNs not in the export"
   assert_contains "$out" "Other: CRNs without an A-G tier" "Other explained"
+  assert_contains "$out" "Links sent: invite accepted by GOV.UK Notify" "Links sent explained"
 }
 
 test_tier_group_counts_cover_crns_with_no_checkins_and_empty_groups() {
   local out rc; out="$(run "$T/c-groups2")"; rc=$?
   assert_eq 0 "$rc" "exit code"
-  assert_contains "$out" "    A-C              3           9        3      33.3%" "A-C"
-  assert_contains "$out" "    D-G              0           0        0          -" "empty group"
-  assert_contains "$out" "    Other            3           3        2      66.7%" "Other, X000005 with no check-ins"
+  assert_contains "$out" "    A-C              3         10           9        3      33.3%" "A-C"
+  assert_contains "$out" "    D-G              0          0           0        0          -" "empty group"
+  assert_contains "$out" "    Other            3          3           3        2      66.7%" "Other, X000005 with no check-ins"
   assert_contains "$out" "    PDUs:           2" "distinct PDUs"
   assert_contains "$out" "    Practitioners:  2" "distinct practitioners"
 }
 
 test_checkins_since_limits_the_checkin_query() {
   expect_exit 0 run "$T/c-since" CHECKINS_SINCE=2026-10-01
-  assert_contains "$(cat "$T/fake.log")" "AND oc.due_date >= DATE '2026-10-01'" "date filter in the query"
+  assert_contains "$(cat "$T/fake.log")" "WHERE c.due_date >= DATE '2026-10-01'" "date filter in the query"
   local out; out="$(run "$T/c-since2" CHECKINS_SINCE=2026-10-01)"
   assert_contains "$out" "due on or after 2026-10-01" "period shown"
   expect_exit 0 run "$T/c-nosince"
@@ -309,6 +310,8 @@ test_checkin_query_runs_in_a_read_only_transaction_that_is_rolled_back() {
   assert_contains "$call" "-c BEGIN TRANSACTION READ ONLY -c DO" "transaction opened read-only, then checked"
   assert_contains "$call" "-c ROLLBACK" "transaction rolled back"
   assert_contains "$call" "WHERE ov.status = 'VERIFIED'" "active offenders only"
+  assert_contains "$call" "n.event_type = 'OffenderCheckinInvite' AND n.status = 'sent'" "links sent are invites Notify accepted"
+  assert_contains "$call" "FILTER (WHERE sent AND status = 'EXPIRED')" "missed only among links sent"
 }
 
 test_stops_when_the_checkin_query_fails() {
@@ -438,8 +441,12 @@ test_query_runs_in_a_read_only_transaction_that_is_rolled_back() {
 }
 
 test_sends_no_writing_sql_at_all() {
-  expect_exit 0 run "$T/c-nowrite"
-  local sql; sql="$(grep -v '^kubectl \|^PGPASSWORD ' "$T/fake.log" | sed 's/^psql TSA=[^ ]* PGOPTIONS=[^ ]* [^ ]* args=//')"
+  # COMPARE_TO so that every query the script can send is checked.
+  expect_exit 0 run "$T/c-nowrite" COMPARE_TO=2026-10-02
+  # created_at is a column the check-in query reads, not a CREATE.
+  local sql; sql="$(grep -v '^kubectl \|^PGPASSWORD ' "$T/fake.log" | sed 's/^psql TSA=[^ ]* PGOPTIONS=[^ ]* [^ ]* args=//' \
+    | sed -E 's/\.created_at([^A-Za-z0-9_]|$)/\1/g')"
+  assert_contains "$sql" "WITH at(label, ts)" "population query included"
   local word
   for word in INSERT UPDATE DELETE MERGE UPSERT CREATE ALTER DROP TRUNCATE GRANT REVOKE COPY VACUUM REINDEX \
               CLUSTER LOCK COMMIT "SELECT INTO" nextval setval pg_terminate pg_cancel lo_; do

@@ -32,11 +32,12 @@
 #   None     the Tier API holds no tier for the CRN
 #   Unknown  the tier could not be read after every pass (see unresolved.txt)
 #
-# The check-in summary counts, for the export's CRNs, every check-in as a link
-# sent (one is created, and its link sent, on its due date -- including any
-# still open) and every EXPIRED one as missed. Each CRN is grouped by its tier
-# today, not its tier when the check-in was due; CRNs without an A-G tier are
-# grouped as Other. It is printed only, not written to a file.
+# The check-in summary counts, for the export's CRNs: check-ins created
+# (including any still open); links sent, i.e. those whose invite GOV.UK Notify
+# accepted; and, of those, the ones missed -- expired without being submitted.
+# Each CRN is grouped by its tier today, not its tier when the check-in was
+# due; CRNs without an A-G tier are grouped as Other. See CHECKIN_SQL. It is
+# printed only, not written to a file.
 #
 # Prerequisites: kubectl authenticated to Cloud Platform with access to the
 # namespace, psql 14+, jq, curl -- and the MoJ network, because the API ingress is
@@ -174,20 +175,43 @@ WHERE ealv.pdu_code != 'XXX001' AND ov.status = 'VERIFIED'
 GROUP BY UPPER(ov.practitioner_id), ealv.pdu_description, ealv.pdu_code
 ORDER BY ealv.pdu_description, UPPER(ov.practitioner_id)"
 
-# Check-ins per active CRN, for the tier group summary. A check-in row is
-# created, and its link sent, on its due date; it is missed if it expired
-# without being submitted. Only CRNs that are also in the export are counted.
+# Check-ins per active CRN, for the tier group summary. Only CRNs that are also
+# in the export are counted. A check-in is created on its due date, then its
+# invite is sent separately, so the two are counted apart:
+#   checkins  check-ins created
+#   sent      those with an invite GOV.UK Notify accepted (status 'sent' in
+#             generic_notification_v2). Invites are not linked to their
+#             check-in, so an invite belongs to the check-in its offender had
+#             most recently been given when it was created. An invite resent by
+#             hand counts once. Delivery to the phone or inbox is not recorded
+#   missed    of those sent, the ones that expired without being submitted
 checkins_since_clause=""
-[[ -z "$CHECKINS_SINCE" ]] || checkins_since_clause="AND oc.due_date >= DATE '$CHECKINS_SINCE'"
+[[ -z "$CHECKINS_SINCE" ]] || checkins_since_clause="WHERE c.due_date >= DATE '$CHECKINS_SINCE'"
 CHECKIN_SQL="
+WITH c AS (
+  SELECT ov.crn, oc.offender_id, oc.status, oc.due_date, oc.created_at AS opened_at,
+         LEAD(oc.created_at) OVER (PARTITION BY oc.offender_id ORDER BY oc.created_at, oc.id) AS next_opened_at
+  FROM offender_checkin_v2 oc
+  INNER JOIN offender_v2 ov ON ov.id = oc.offender_id
+  WHERE ov.status = 'VERIFIED'
+),
+with_invite AS (
+  SELECT c.crn, c.status,
+         EXISTS (SELECT 1 FROM generic_notification_v2 n
+                 WHERE n.offender_id = c.offender_id
+                   AND n.event_type = 'OffenderCheckinInvite' AND n.status = 'sent'
+                   AND n.created_at >= c.opened_at
+                   AND (c.next_opened_at IS NULL OR n.created_at < c.next_opened_at)) AS sent
+  FROM c
+  $checkins_since_clause
+)
 SELECT json_build_object(
-         'crn',    ov.crn,
-         'sent',   COUNT(*),
-         'missed', COUNT(*) FILTER (WHERE oc.status = 'EXPIRED'))
-FROM offender_checkin_v2 oc
-INNER JOIN offender_v2 ov ON ov.id = oc.offender_id
-WHERE ov.status = 'VERIFIED' $checkins_since_clause
-GROUP BY ov.crn"
+         'crn',      crn,
+         'checkins', COUNT(*),
+         'sent',     COUNT(*) FILTER (WHERE sent),
+         'missed',   COUNT(*) FILTER (WHERE sent AND status = 'EXPIRED'))
+FROM with_invite
+GROUP BY crn"
 
 # The population -- PDUs, practitioners, CRNs -- rebuilt from the audit log as
 # it stood at COMPARE_TO, and again as it stands now. offender_v2 holds only the
@@ -551,14 +575,15 @@ jq -rn --argjson t "$TIERS" --slurpfile rows "$ROWS" --slurpfile checkins "$CHEC
     else ($history | map({key: .label, value: .}) | from_entries) as $h
     | ($h.now[$k] - $h.then[$k]) as $d
     | " (\(if $d > 0 then "+\($d)" elif $d < 0 then "\($d)" else "0" end))" end;
-  def line: "    \(.name | rpad(12))\(.crns | lpad(6))\(.sent | lpad(12))\(.missed | lpad(9))\(pct | lpad(11))";
+  def line: "    \(.name | rpad(12))\(.crns | lpad(6))\(.checkins | lpad(11))\(.sent | lpad(12))\(.missed | lpad(9))\(pct | lpad(11))";
   ($checkins | map({key: .crn, value: .}) | from_entries) as $c
   | ($rows | map(.crns[]) | unique) as $crns
-  | ($crns | map({group: (($t[.] // "Unknown") | group), sent: ($c[.].sent // 0), missed: ($c[.].missed // 0)})) as $per
+  | ($crns | map({group: (($t[.] // "Unknown") | group), checkins: ($c[.].checkins // 0), sent: ($c[.].sent // 0), missed: ($c[.].missed // 0)})) as $per
   | ["A-C", "D-G", "Other"]
   | map(. as $g | $per | map(select(.group == $g))
-        | {name: $g, crns: length, sent: (map(.sent) | add // 0), missed: (map(.missed) | add // 0)}) as $groups
-  | ($groups | {name: "Total", crns: (map(.crns) | add), sent: (map(.sent) | add), missed: (map(.missed) | add)}) as $all
+        | {name: $g, crns: length, checkins: (map(.checkins) | add // 0),
+           sent: (map(.sent) | add // 0), missed: (map(.missed) | add // 0)}) as $groups
+  | ($groups | {name: "Total", crns: (map(.crns) | add), checkins: (map(.checkins) | add), sent: (map(.sent) | add), missed: (map(.missed) | add)}) as $all
   | {pdus: ($rows | map(.pduCode) | unique | length),
      practitioners: ($rows | map(.practitionerId) | unique | length),
      crns: ($crns | length)} as $pop
@@ -576,8 +601,9 @@ jq -rn --argjson t "$TIERS" --slurpfile rows "$ROWS" --slurpfile checkins "$CHEC
        end end),
     "",
     "  Check-ins by current tier group, \(if $since == "" then "all due dates" else "due on or after \($since)" end)",
-    "    \("Tier group" | rpad(12))\("CRNs" | lpad(6))\("Links sent" | lpad(12))\("Missed" | lpad(9))\("Missed %" | lpad(11))",
+    "    \("Tier group" | rpad(12))\("CRNs" | lpad(6))\("Check-ins" | lpad(11))\("Links sent" | lpad(12))\("Missed" | lpad(9))\("Missed %" | lpad(11))",
     ($groups[], $all | line),
+    "    Links sent: invite accepted by GOV.UK Notify. Missed: of those, expired unsubmitted.",
     if $groups[2].crns > 0 then "    Other: CRNs without an A-G tier (None, NOT_SUPERVISED, Unknown or a v2 tier)" else empty end
   ' >&2
 cat >&2 <<EOF
