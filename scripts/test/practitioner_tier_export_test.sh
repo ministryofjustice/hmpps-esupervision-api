@@ -62,6 +62,8 @@ CASES = {
   "X000004": header("X000004", error="NOT_FOUND"),
   "X000005": header("X000005", "NOT_SUPERVISED"),
   "X000006": header("X000006", "D2"),
+  "X000007": header("X000007", "E"),
+  "X000008": header("X000008", "G"),
 }
 GOOD_BASIC = "Basic " + base64.b64encode(b"ui-client:s3cr3t").decode()
 calls = {}
@@ -161,6 +163,12 @@ fi
 case "$*" in
   *"select 1"*) echo 1 ;;
   *"show default_transaction_read_only"*) echo "$ro" ;;
+  *"WITH at(label, ts)"*)
+    [[ -n "${FAKE_HISTORY_FAIL:-}" ]] && { echo "ERROR: invalid input syntax for type timestamp" >&2; exit 3; }
+    cat "$FAKE_HISTORY" ;;
+  *"FROM offender_checkin_v2"*)
+    [[ -n "${FAKE_CHECKIN_FAIL:-}" ]] && { echo "ERROR: relation does not exist" >&2; exit 3; }
+    cat "$FAKE_CHECKINS" ;;
   *"FROM event_audit_log_v2"*)
     [[ -n "${FAKE_PSQL_FAIL:-}" ]] && { echo "ERROR: relation does not exist" >&2; exit 3; }
     [[ -n "${FAKE_TXN_NOT_RO:-}" ]] && { echo "ERROR:  session is not read-only -- refusing to run the query" >&2; exit 3; }
@@ -178,6 +186,24 @@ cat > "$T/rows.jsonl" <<'EOF'
 {"pduCode":"PDU2","pdu":"Beta PDU","regions":"Region Two","practitionerId":"ANN.SMITH","crns":["X000003","X000005","X000006"]}
 EOF
 
+# What the check-in query returns: check-ins, links sent and missed per active CRN. A CRN with no
+# check-ins has no row; ZZZ9999 is active but not in the export, so not counted.
+cat > "$T/checkins.jsonl" <<'EOF'
+{"crn":"X000001","checkins":5,"sent":4,"missed":1}
+{"crn":"X000002","checkins":2,"sent":2,"missed":0}
+{"crn":"X000003","checkins":3,"sent":3,"missed":2}
+{"crn":"X000004","checkins":2,"sent":2,"missed":2}
+{"crn":"X000006","checkins":1,"sent":1,"missed":0}
+{"crn":"ZZZ9999","checkins":10,"sent":10,"missed":10}
+EOF
+
+# What the population query returns: the default rows rebuilt now (2 PDUs,
+# 2 practitioners, 6 CRNs, matching the export) and at COMPARE_TO.
+cat > "$T/history.jsonl" <<'EOF'
+{"label":"now","at":"2026-10-06 15:00:00","future":false,"pdus":2,"practitioners":2,"crns":6}
+{"label":"then","at":"2026-10-02 09:30:00","future":false,"pdus":1,"practitioners":3,"crns":6}
+EOF
+
 rows_for() {  # file crn...
   local f="$1"; shift
   jq -cn --args '{pduCode: "PDU1", pdu: "Alpha PDU", regions: "Region One", practitionerId: "ANN.SMITH", crns: $ARGS.positional}' "$@" > "$f"
@@ -186,7 +212,7 @@ rows_for() {  # file crn...
 run() {  # workdir [extra env...]
   local dir="$1"; shift
   : > "$T/fake.log"
-  env PATH="$T/bin:$PATH" FAKE_LOG="$T/fake.log" FAKE_ROWS="$T/rows.jsonl" FAKE_AUTH="$STUB/auth" \
+  env PATH="$T/bin:$PATH" FAKE_LOG="$T/fake.log" FAKE_ROWS="$T/rows.jsonl" FAKE_CHECKINS="$T/checkins.jsonl" FAKE_HISTORY="$T/history.jsonl" FAKE_AUTH="$STUB/auth" \
       EXPORT_API_BASE="$STUB" EXPORT_AUTH_URL="$STUB/auth" RATE_SLEEP=0 "$@" \
       "$SCRIPT" "$dir" 2>&1
 }
@@ -222,6 +248,145 @@ test_adds_each_crns_tier_to_the_practitioner_rows() {
   assert_contains "$out" "Distinct CRNs:     6" "summary"
   assert_contains "$out" "Tier B: 2" "tier summary"
   assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
+}
+
+test_prints_population_and_tier_group_checkin_counts() {
+  cat > "$T/groups.jsonl" <<'EOF'
+{"pduCode":"PDU1","pdu":"Alpha PDU","regions":"Region One","practitionerId":"ANN.SMITH","crns":["X000001","X000007"]}
+{"pduCode":"PDU2","pdu":"Beta PDU","regions":"Region Two","practitionerId":"ANN.SMITH","crns":["X000001","X000004"]}
+{"pduCode":"PDU2","pdu":"Beta PDU","regions":"Region Two","practitionerId":"BOB.JONES","crns":["X000008"]}
+EOF
+  cat > "$T/group_checkins.jsonl" <<'EOF'
+{"crn":"X000001","checkins":6,"sent":4,"missed":1}
+{"crn":"X000007","checkins":3,"sent":3,"missed":2}
+{"crn":"X000008","checkins":1,"sent":1,"missed":0}
+{"crn":"X000004","checkins":2,"sent":2,"missed":2}
+{"crn":"ZZZ9999","checkins":10,"sent":10,"missed":10}
+EOF
+  local out rc; out="$(run "$T/c-groups" FAKE_ROWS="$T/groups.jsonl" FAKE_CHECKINS="$T/group_checkins.jsonl")"; rc=$?
+  assert_eq 0 "$rc" "exit code"
+  assert_contains "$out" "    PDUs:           2" "distinct PDUs"
+  assert_contains "$out" "    Practitioners:  2" "distinct practitioners"
+  assert_contains "$out" "    CRNs:           4" "distinct CRNs, X000001 once"
+  assert_contains "$out" "Check-ins by current tier group, all due dates" "period"
+  assert_contains "$out" "    Tier group    CRNs  Check-ins  Links sent   Missed   Missed %" "header"
+  assert_contains "$out" "    A-C              1          6           4        1        25%" "A-C: X000001 once"
+  assert_contains "$out" "    D-G              2          4           4        2        50%" "D-G: E and G"
+  assert_contains "$out" "    Other            1          2           2        2       100%" "Other: no tier"
+  assert_contains "$out" "    Total            4         12          10        5        50%" "total excludes CRNs not in the export"
+  assert_contains "$out" "Other: CRNs without an A-G tier" "Other explained"
+  assert_contains "$out" "Links sent: invite accepted by GOV.UK Notify" "Links sent explained"
+}
+
+test_tier_group_counts_cover_crns_with_no_checkins_and_empty_groups() {
+  local out rc; out="$(run "$T/c-groups2")"; rc=$?
+  assert_eq 0 "$rc" "exit code"
+  assert_contains "$out" "    A-C              3         10           9        3      33.3%" "A-C"
+  assert_contains "$out" "    D-G              0          0           0        0          -" "empty group"
+  assert_contains "$out" "    Other            3          3           3        2      66.7%" "Other, X000005 with no check-ins"
+  assert_contains "$out" "    PDUs:           2" "distinct PDUs"
+  assert_contains "$out" "    Practitioners:  2" "distinct practitioners"
+}
+
+test_checkins_since_limits_the_checkin_query() {
+  expect_exit 0 run "$T/c-since" CHECKINS_SINCE=2026-10-01
+  assert_contains "$(cat "$T/fake.log")" "WHERE c.due_date >= DATE '2026-10-01'" "date filter in the query"
+  local out; out="$(run "$T/c-since2" CHECKINS_SINCE=2026-10-01)"
+  assert_contains "$out" "due on or after 2026-10-01" "period shown"
+  expect_exit 0 run "$T/c-nosince"
+  [[ "$(cat "$T/fake.log")" != *"due_date >="* ]] || fail "date filter without CHECKINS_SINCE"
+}
+
+test_rejects_a_bad_checkins_since_value() {
+  local out rc; out="$(run "$T/c-badsince" "CHECKINS_SINCE=2026-10-01' OR '1'='1")"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "CHECKINS_SINCE must be a date" "message"
+  ! grep -q "kubectl .* run " "$T/fake.log" || fail "a pod was created"
+}
+
+test_checkin_query_runs_in_a_read_only_transaction_that_is_rolled_back() {
+  expect_exit 0 run "$T/c-ctxn"
+  local call; call="$(awk '/^psql /{buf=""} {buf=buf $0 "\n"} /ROLLBACK/ && buf ~ /offender_checkin_v2/ {printf "%s", buf; exit}' "$T/fake.log")"
+  assert_contains "$call" "-c BEGIN TRANSACTION READ ONLY -c DO" "transaction opened read-only, then checked"
+  assert_contains "$call" "-c ROLLBACK" "transaction rolled back"
+  assert_contains "$call" "WHERE ov.status = 'VERIFIED'" "active offenders only"
+  assert_contains "$call" "n.event_type = 'OffenderCheckinInvite' AND n.status = 'sent'" "links sent are invites Notify accepted"
+  assert_contains "$call" "FILTER (WHERE sent AND status = 'EXPIRED')" "missed only among links sent"
+}
+
+test_stops_when_the_checkin_query_fails() {
+  local out rc; out="$(run "$T/c-cfail" FAKE_CHECKIN_FAIL=1)"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "SQL step failed (check-in counts)" "message"
+  [[ -z "$(ls "$T/c-cfail" | grep '\.csv$')" ]] || fail "wrote an export anyway"
+  assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
+}
+
+test_compare_to_shows_the_change_in_the_population() {
+  local out rc; out="$(run "$T/c-cmp" "COMPARE_TO=2026-10-02 09:30")"; rc=$?
+  assert_eq 0 "$rc" "exit code"
+  assert_contains "$out" "Active population, as in the export, change since 2026-10-02 09:30:00 UK time" "heading"
+  assert_contains "$out" "    PDUs:           2 (+1)" "PDUs up"
+  assert_contains "$out" "    Practitioners:  2 (-1)" "practitioners down"
+  assert_contains "$out" "    CRNs:           6 (0)" "CRNs unchanged"
+  [[ "$out" != *WARNING* ]] || fail "warned although the rebuild matches the export"
+  local call; call="$(awk '/^psql /{buf=""} {buf=buf $0 "\n"} /ROLLBACK/ && buf ~ /WITH at\(label/ {printf "%s", buf; exit}' "$T/fake.log")"
+  assert_contains "$call" "-c BEGIN TRANSACTION READ ONLY -c DO" "read-only transaction, checked"
+  assert_contains "$call" "TIMESTAMP '2026-10-02 09:30' AT TIME ZONE 'Europe/London'" "instant in UK time"
+  assert_contains "$call" "-c ROLLBACK" "rolled back"
+}
+
+test_compare_to_accepts_a_date_alone_or_with_a_t() {
+  expect_exit 0 run "$T/c-cmpd" COMPARE_TO=2026-10-02
+  assert_contains "$(cat "$T/fake.log")" "TIMESTAMP '2026-10-02' AT TIME ZONE" "date alone"
+  expect_exit 0 run "$T/c-cmpt" COMPARE_TO=2026-10-02T09:30:15
+  assert_contains "$(cat "$T/fake.log")" "TIMESTAMP '2026-10-02T09:30:15' AT TIME ZONE" "ISO T with seconds"
+}
+
+test_without_compare_to_there_is_no_population_query_or_change() {
+  local out; out="$(run "$T/c-nocmp")"
+  [[ "$(cat "$T/fake.log")" != *"WITH at(label"* ]] || fail "ran the population query"
+  assert_contains "$out" "    PDUs:           2"$'\n' "no change shown"
+}
+
+test_compare_to_warns_when_the_rebuilt_now_differs_from_the_export() {
+  cat > "$T/history_off.jsonl" <<'EOF'
+{"label":"now","at":"2026-10-06 15:00:00","future":false,"pdus":2,"practitioners":2,"crns":5}
+{"label":"then","at":"2026-10-02 09:30:00","future":false,"pdus":2,"practitioners":2,"crns":4}
+EOF
+  local out rc; out="$(run "$T/c-cmpoff" COMPARE_TO=2026-10-02 FAKE_HISTORY="$T/history_off.jsonl")"; rc=$?
+  assert_eq 0 "$rc" "exit code"
+  assert_contains "$out" "    CRNs:           6 (+1)" "change between the two rebuilt figures"
+  assert_contains "$out" "does not match the export (rebuilt vs export):" "warning"
+  assert_contains "$out" "crns 5 vs 6" "names the difference"
+}
+
+test_compare_to_in_the_future_is_refused() {
+  cat > "$T/history_future.jsonl" <<'EOF'
+{"label":"now","at":"2026-10-06 15:00:00","future":false,"pdus":2,"practitioners":2,"crns":6}
+{"label":"then","at":"2027-01-01 00:00:00","future":true,"pdus":2,"practitioners":2,"crns":6}
+EOF
+  local out rc; out="$(run "$T/c-cmpfut" COMPARE_TO=2027-01-01 FAKE_HISTORY="$T/history_future.jsonl")"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "COMPARE_TO 2027-01-01 is in the future" "message"
+  [[ -z "$(ls "$T/c-cmpfut" | grep '\.csv$')" ]] || fail "wrote an export anyway"
+}
+
+test_stops_when_the_population_query_fails() {
+  local out rc; out="$(run "$T/c-cmpfail" COMPARE_TO=2026-02-30 FAKE_HISTORY_FAIL=1)"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "SQL step failed (population at 2026-02-30)" "message"
+  assert_contains "$(cat "$T/fake.log")" "delete pod" "port-forward pod deleted"
+}
+
+test_rejects_a_bad_compare_to_value() {
+  local v
+  for v in "2026-10-02' OR '1'='1" "02/10/2026" "2026-10-02 9:30" "yesterday"; do
+    local out rc; out="$(run "$T/c-badcmp" "COMPARE_TO=$v")"; rc=$?
+    assert_eq 1 "$rc" "exit code for $v"
+    assert_contains "$out" "COMPARE_TO must be YYYY-MM-DD" "message for $v"
+    ! grep -q "kubectl .* run " "$T/fake.log" || fail "a pod was created for $v"
+  done
 }
 
 test_fetches_each_crn_once_even_when_it_is_under_two_pdus() {
@@ -276,8 +441,12 @@ test_query_runs_in_a_read_only_transaction_that_is_rolled_back() {
 }
 
 test_sends_no_writing_sql_at_all() {
-  expect_exit 0 run "$T/c-nowrite"
-  local sql; sql="$(grep -v '^kubectl \|^PGPASSWORD ' "$T/fake.log" | sed 's/^psql TSA=[^ ]* PGOPTIONS=[^ ]* [^ ]* args=//')"
+  # COMPARE_TO so that every query the script can send is checked.
+  expect_exit 0 run "$T/c-nowrite" COMPARE_TO=2026-10-02
+  # created_at is a column the check-in query reads, not a CREATE.
+  local sql; sql="$(grep -v '^kubectl \|^PGPASSWORD ' "$T/fake.log" | sed 's/^psql TSA=[^ ]* PGOPTIONS=[^ ]* [^ ]* args=//' \
+    | sed -E 's/\.created_at([^A-Za-z0-9_]|$)/\1/g')"
+  assert_contains "$sql" "WITH at(label, ts)" "population query included"
   local word
   for word in INSERT UPDATE DELETE MERGE UPSERT CREATE ALTER DROP TRUNCATE GRANT REVOKE COPY VACUUM REINDEX \
               CLUSTER LOCK COMMIT "SELECT INTO" nextval setval pg_terminate pg_cancel lo_; do
@@ -395,7 +564,7 @@ test_stops_before_creating_a_pod_it_could_not_delete() {
 
 test_a_failed_preflight_leaves_no_earlier_results_behind() {
   local why
-  for why in "FAKE_DENY=create pods" "PASSES=0" "FAKE_PSQL_VERSION=13.9" "ENV=nope" "TOKEN_SOURCE=nope"; do
+  for why in "FAKE_DENY=create pods" "PASSES=0" "CHECKINS_SINCE=yesterday" "COMPARE_TO=yesterday" "FAKE_PSQL_VERSION=13.9" "ENV=nope" "TOKEN_SOURCE=nope"; do
     mkdir -p "$T/stale"
     local f
     for f in practitioner_tiers.csv crn_tiers.csv practitioner_tiers.PARTIAL.csv crn_tiers.PARTIAL.csv unresolved.txt; do

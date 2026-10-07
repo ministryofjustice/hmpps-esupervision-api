@@ -11,6 +11,12 @@ api:
       tier-ui: ${TIER_UI_URL:https://tier-dev.hmpps.service.justice.gov.uk}
       arns-api: ${ARNS_API_URL:https://assess-risks-and-needs-dev.hmpps.service.justice.gov.uk}
       supervision-packages-api: ${SUPERVISION_PACKAGES_API_URL:https://supervision-packages-api-dev.hmpps.service.justice.gov.uk}
+  # Shared pool for the authorised outbound WebClients (see WebClientConfiguration.outboundConnectionProvider).
+  # max-idle-time MUST stay below the upstream ingress keep-alive idle timeout (~60s), otherwise we
+  # reuse sockets the upstream has already closed ("Connection reset by peer", error(-104)).
+  connection-pool:
+    max-idle-time: ${API_CONNECTION_POOL_MAX_IDLE_TIME:20s}
+    evict-in-background: ${API_CONNECTION_POOL_EVICT_IN_BACKGROUND:10s}
 
 app:
   env: ${APP_ENV}
