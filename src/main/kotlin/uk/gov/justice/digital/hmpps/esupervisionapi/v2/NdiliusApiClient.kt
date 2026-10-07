@@ -114,10 +114,8 @@ class NdiliusApiClient(
    * As [getContactDetails] but without a swallowing fallback: only a 404 becomes null, every
    * other failure (including an open circuit) propagates to the caller.
    *
-   * Deliberately not annotated with @Retry. On [getContactDetails] the circuit-breaker fallback
-   * returns before the outer Retry aspect sees an exception, so it never retries. Without a
-   * fallback, Retry would run three attempts at the full request timeout each, which is far too
-   * long for an interactive caller that can degrade instead.
+   * Deliberately not annotated with @Retry: three attempts at the full request timeout each, plus
+   * backoff, is far too long for an interactive caller that can degrade instead.
    */
   @CircuitBreaker(name = "ndiliusApi")
   @Timed(
