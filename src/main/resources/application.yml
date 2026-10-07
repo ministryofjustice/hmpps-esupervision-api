@@ -296,7 +296,15 @@ rekognition:
   call-timeout-seconds: 30
 
 resilience4j:
+  # Aspect nesting is CircuitBreaker( Retry( call ) ): a call is retried up to max-attempts, and
+  # only once every attempt has failed does the breaker record ONE failure and invoke the
+  # fallbackMethod. A lower order value is the outer aspect. Resilience4j's default is the reverse
+  # (Retry outermost), under which a fallback that returns a value swallows the exception before
+  # Retry sees it, so nothing is ever retried. Pinned by ResilienceAspectOrderIntegrationTest.
+  # Put fallbackMethod on @CircuitBreaker, never on @Retry: a Retry fallback sits inside the breaker
+  # and hides every failure from it, so the circuit could never open.
   circuitbreaker:
+    circuit-breaker-aspect-order: 1
     instances:
       ndiliusApi:
         register-health-indicator: true
@@ -413,6 +421,8 @@ resilience4j:
           - software.amazon.awssdk.services.rekognition.model.InvalidParameterException
 
   retry:
+    # Must be higher than circuit-breaker-aspect-order so Retry runs inside the CircuitBreaker.
+    retry-aspect-order: 2
     instances:
       ndiliusApi:
         max-attempts: 3
