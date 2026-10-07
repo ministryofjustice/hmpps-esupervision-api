@@ -177,7 +177,9 @@ class QuestionService(
     null,
     request.author,
     request.questions.map { item ->
-      assert(item.params.containsKey("placeholders"))
+      if (!item.params.containsKey("placeholders")) {
+        throw BadArgumentException("Question ${item.id} is missing placeholders")
+      }
       mapOf("id" to item.id, "params" to item.params)
     },
   ) ?: throw RuntimeException("Failed to create question list.")

@@ -212,6 +212,22 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionService - rejects custom questions without placeholders`() {
+    val offender = offenderTemplate.copy(crn = "A123457").toEntity()
+    offenderRepository.save(offender)
+    val templates = questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val request = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates).copy(
+      questions = templates.map { CustomQuestionItem(id = it.id, params = emptyMap()) },
+    )
+
+    val exception = assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, request)
+    }
+
+    assertEquals("Question ${templates.single().id} is missing placeholders", exception.message)
+  }
+
+  @Test
   fun `Checkin status change causes assignment update`() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderRepository.save(offender)

@@ -16,7 +16,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
 import org.springframework.transaction.support.SimpleTransactionStatus
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
@@ -98,8 +97,8 @@ class OffenderResourceTest {
 
   @BeforeEach
   fun setUp() {
-    whenever(transactionTemplate.execute<ResponseEntity<OffenderSummaryDto>>(any())).thenAnswer {
-      val callback = it.getArgument<TransactionCallback<ResponseEntity<OffenderSummaryDto>>>(0)
+    whenever(transactionTemplate.execute<Any>(any())).thenAnswer {
+      val callback = it.getArgument<TransactionCallback<Any>>(0)
       callback.doInTransaction(SimpleTransactionStatus())
     }
     whenever(offenderRepository.findByUuidForUpdate(any())).thenAnswer {

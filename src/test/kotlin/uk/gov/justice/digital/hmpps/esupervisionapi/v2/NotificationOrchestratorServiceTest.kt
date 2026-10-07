@@ -148,6 +148,53 @@ class NotificationOrchestratorServiceTest {
   }
 
   @Test
+  fun `sendAdHocCheckinScheduledNotification - sends scheduled template to offender with personalisation`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetails()
+    val scheduledDate = LocalDate.of(2025, 12, 15)
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderAdHocCheckinScheduled.name,
+      recipientType = "OFFENDER",
+      channel = "SMS",
+      offenderId = offender.id,
+      reference = "ADHOC-BOOKING-001",
+      templateId = "ad-hoc-scheduled-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "07700900123"
+    val notifyId = UUID.randomUUID()
+    whenever(
+      notificationPersistence.buildOffenderNotifications(
+        eq(offender.id),
+        eq(offender.crn),
+        eq(offender.contactPreference),
+        eq(contactDetails),
+        eq(NotificationType.OffenderAdHocCheckinScheduled),
+      ),
+    ).thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(notifyId)
+
+    service.sendAdHocCheckinScheduledNotification(offender, contactDetails, scheduledDate)
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      offenderId = offender.id,
+      crn = offender.crn,
+      contactPreference = offender.contactPreference,
+      contactDetails = contactDetails,
+      notificationType = NotificationType.OffenderAdHocCheckinScheduled,
+    )
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("ad-hoc-scheduled-template"),
+      eq(recipient),
+      eq(mapOf("name" to "John Smith", "date" to "Monday 15 December 2025")),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
   fun `sendReminderCheckinNotifications - happy path - sends to offender only`() {
     val offender = createOffender()
     val checkin = createCheckin(offender)
