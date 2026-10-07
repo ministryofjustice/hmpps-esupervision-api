@@ -252,9 +252,9 @@ data class OffenderDto(
   @field:Schema(description = "Practitioner ID", required = true)
   val practitionerId: ExternalUserId,
   @field:Schema(description = "Offender status", required = true) val status: OffenderStatus,
-  @field:Schema(description = "Date of first checkin", required = true)
+  @field:Schema(description = "Date of first checkin. Null when no AD_HOC date is configured.", required = false)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
+  val firstCheckin: LocalDate?,
   @field:Schema(description = "Interval between checkins", required = false)
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Check-in mode", required = true)
@@ -282,9 +282,9 @@ data class OffenderInfo(
   @field:NotBlank
   @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
   val crn: String,
-  @field:Schema(description = "Date of first checkin", required = true)
+  @field:Schema(description = "Date of first checkin. Optional for AD_HOC check-ins; scheduled check-ins require a date.", required = false)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
+  val firstCheckin: LocalDate?,
   @field:Schema(description = "Interval between checkins", required = false)
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Check-in mode", required = true)

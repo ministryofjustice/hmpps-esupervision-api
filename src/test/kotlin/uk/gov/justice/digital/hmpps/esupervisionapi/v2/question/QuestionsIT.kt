@@ -300,10 +300,7 @@ class QuestionsIT(
   @Test
   fun `QuestionService - assigning and fetching questions for ad-hoc check-ins`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
-    val dueDate = clock.today().plusDays(-1)
-    val offender =
-      offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate)
-        .toEntity()
+    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = null).toEntity()
     offenderRepository.save(offender)
 
     val assignment = questionService.upcomingAssignment(offender)
@@ -462,26 +459,16 @@ class QuestionsIT(
     assertNotEquals(defaultListId, upcoming2.questionListId)
     assertEquals(checkin2.dueDate, upcoming2.dueDate)
 
-    assertThrows(
-      BadArgumentException::class.java,
-      {
-        questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-      },
-      "We can't assign questions until check-in is submitted/expired",
-    )
+    assertThrows(BadArgumentException::class.java, {
+      questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
+    }, "We can't assign questions until check-in is submitted/expired")
 
     // Verify our assignment hasn't changed
     val upcoming3 = questionService.upcomingAssignment(offender)
     assertEquals(upcoming2.questionListId, upcoming3.questionList)
 
-    val submission2 =
-      offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
-    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
-      offender.id,
-      clock.today(),
-      nextCheckinDay(offender, clock.today()),
-      checkinWindow.toDays(),
-    )
+    val submission2 = offenderCheckinService.submitCheckin(checkin2.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
+    val upcoming4 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
     assertEquals(defaultListId, upcoming4.questionListId)
     assertEquals(checkin1.dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming4.dueDate)
 
@@ -499,17 +486,10 @@ class QuestionsIT(
   @Test
   @Transactional
   fun `CustomQuestionsReminderJob - test our query`() {
-    val offender1 =
-      offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
-    val offender2 =
-      offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID())
-        .toEntity()
-    val offender3 =
-      offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID())
-        .toEntity()
-    val offender4 =
-      offenderTemplate.copy(crn = "A000004", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID())
-        .toEntity()
+    val offender1 = offenderTemplate.copy(crn = "A000001", firstCheckin = clock.today(), uuid = UUID.randomUUID()).toEntity()
+    val offender2 = offenderTemplate.copy(crn = "A000002", firstCheckin = clock.today().plusDays(1), uuid = UUID.randomUUID()).toEntity()
+    val offender3 = offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
+    val offender4 = offenderTemplate.copy(crn = "A000004", firstCheckin = clock.today().plusDays(4), uuid = UUID.randomUUID()).toEntity()
     offenderRepository.saveAll(listOf(offender1, offender2, offender3, offender4))
 
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
