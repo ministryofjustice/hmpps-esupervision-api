@@ -1058,6 +1058,7 @@ data class CheckinScheduleUpdateRequest(
 /** Request to schedule an ad hoc check-in, optionally including questions. */
 data class ScheduleAdHocCheckinRequest(
   @field:Schema(description = "Id of the user requesting the change", required = true)
+  @field:NotBlank
   val requestedBy: ExternalUserId,
   @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
   @field:Schema(description = "Optional complete custom-question assignment; include one to three questions.")

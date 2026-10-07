@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import jakarta.persistence.EntityManager
+import jakarta.validation.Validation
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -130,6 +131,17 @@ class OffenderResourceTest {
   // ========================================
   // Deactivate Tests
   // ========================================
+
+  @Test
+  fun `scheduleAdHocCheckin - rejects blank requester identifier`() {
+    val request = ScheduleAdHocCheckinRequest("  ", clock.today())
+
+    Validation.buildDefaultValidatorFactory().use { factory ->
+      val violations = factory.validator.validate(request)
+
+      assertTrue(violations.any { it.propertyPath.toString() == "requestedBy" })
+    }
+  }
 
   @Test
   fun `deactivateOffender - happy path - delegates to deactivation service and returns INACTIVE`() {
