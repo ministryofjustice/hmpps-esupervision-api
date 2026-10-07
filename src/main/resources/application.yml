@@ -304,7 +304,15 @@ rekognition:
   call-timeout-seconds: 30
 
 resilience4j:
+  # Aspect nesting is CircuitBreaker( Retry( call ) ): a call is retried up to max-attempts, and
+  # only once every attempt has failed does the breaker record ONE failure and invoke the
+  # fallbackMethod. A lower order value is the outer aspect. Resilience4j's default is the reverse
+  # (Retry outermost), under which a fallback that returns a value swallows the exception before
+  # Retry sees it, so nothing is ever retried. Pinned by ResilienceAspectOrderIntegrationTest.
+  # Put fallbackMethod on @CircuitBreaker, never on @Retry: a Retry fallback sits inside the breaker
+  # and hides every failure from it, so the circuit could never open.
   circuitbreaker:
+    circuit-breaker-aspect-order: 1
     instances:
       ndiliusApi:
         register-health-indicator: true
@@ -386,8 +394,8 @@ resilience4j:
         failure-rate-threshold: 50
         slow-call-rate-threshold: 80
         slow-call-duration-threshold: 5s
-        record-exceptions:
-          - uk.gov.service.notify.NotificationClientException
+        # Transient failures only (network, 429, 5xx) - never 4xx. See NotifyTransientFailure.
+        record-failure-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyTransientFailure
 
       awsS3:
         register-health-indicator: true
@@ -421,6 +429,8 @@ resilience4j:
           - software.amazon.awssdk.services.rekognition.model.InvalidParameterException
 
   retry:
+    # Must be higher than circuit-breaker-aspect-order so Retry runs inside the CircuitBreaker.
+    retry-aspect-order: 2
     instances:
       ndiliusApi:
         max-attempts: 3
@@ -456,8 +466,9 @@ resilience4j:
         wait-duration: 1000ms
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
-        retry-exceptions:
-          - uk.gov.service.notify.NotificationClientException
+        # Only failures where Notify cannot have created the notification, to avoid duplicate
+        # sends - narrower than the breaker's predicate. See NotifyRetryableFailure.
+        retry-exception-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyRetryableFailure
 
       awsS3:
         max-attempts: 2

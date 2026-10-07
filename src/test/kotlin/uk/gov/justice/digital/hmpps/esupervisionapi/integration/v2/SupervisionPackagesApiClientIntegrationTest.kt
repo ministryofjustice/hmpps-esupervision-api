@@ -8,6 +8,7 @@ import com.github.tomakehurst.wiremock.client.WireMock.get
 import com.github.tomakehurst.wiremock.client.WireMock.post
 import com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -54,6 +55,9 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   @Autowired
   private lateinit var client: ISupervisionPackagesApiClient
 
+  @Autowired
+  private lateinit var circuitBreakerRegistry: CircuitBreakerRegistry
+
   companion object {
     private val upstream = WireMockServer(options().dynamicPort()).apply { start() }
 
@@ -72,6 +76,7 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
   fun resetUpstream() {
     upstream.resetAll()
     hmppsAuth.stubGrantToken()
+    circuitBreakerRegistry.circuitBreaker("supervisionPackagesApi").reset()
   }
 
   private val mapper = jacksonObjectMapper()
@@ -337,9 +342,11 @@ class SupervisionPackagesApiClientIntegrationTest : IntegrationTestBase() {
     val thrown = assertThrows<SupervisionPackagesFetchException> { offRequestThread { client.getSupervisionPackageDetails(crn) } }
 
     assertEquals(crn, thrown.crn)
-    // Proves the retry wraps the circuit breaker's call: had the fallback been on the circuit
-    // breaker, the first 503 would have become the exception and there would be one call, not three.
+    // Proves the retry runs inside the circuit breaker: three attempts reach the upstream, and only
+    // the exhausted call - not each attempt, and not zero as a fallback on the retry would give - is
+    // recorded as a failure.
     assertEquals(3, callsTo(contextUrl).size)
+    assertEquals(1, circuitBreakerRegistry.circuitBreaker("supervisionPackagesApi").metrics.numberOfFailedCalls)
   }
 
   @Test

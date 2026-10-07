@@ -12,10 +12,11 @@ import kotlin.jvm.java
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker as CircuitBreakerAnnotation
 
 /**
- * Resilience4j only invokes a @CircuitBreaker's fallbackMethod through the AOP proxy when the
- * circuit is actually open, which is impractical to trigger from a unit test. These tests instead
- * call the private fallback methods directly via reflection, to pin down their return behaviour
- * (fail-open vs fail-closed) so a future edit can't silently flip it.
+ * Resilience4j invokes a @CircuitBreaker's fallbackMethod through the AOP proxy, once retries are
+ * exhausted or the circuit is open, which needs the full Spring context to exercise (see
+ * ResilienceAspectOrderIntegrationTest). These tests instead call the private fallback methods
+ * directly via reflection, to pin down their return behaviour (fail-open vs fail-closed) so a
+ * future edit can't silently flip it.
  */
 class NdiliusApiClientTest {
 
