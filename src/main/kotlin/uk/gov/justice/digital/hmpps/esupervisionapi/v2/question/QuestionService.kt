@@ -36,7 +36,6 @@ import java.time.Clock
 import java.time.Duration
 import java.util.UUID
 import kotlin.collections.emptyMap
-import kotlin.jvm.optionals.getOrNull
 
 @Service
 @Validated
@@ -101,15 +100,7 @@ class QuestionService(
   @Transactional
   fun assignCustomQuestions(crn: CRN, @ValidQuestionParams request: AssignCustomQuestionsRequest): AssignCustomQuestionsResponse {
     require(crn.matches(crnRegex))
-    // validate the supplied params
-    val questionsById = questionsRepository
-      .getQuestionTemplates(request.questions.map { it.id }, request.language)
-      .associateBy { it.id }
-    request.questions.forEach {
-      val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
-      require(template.policy == QuestionPolicy.CUSTOMISABLE) { "Question ${it.id} is not customisable" }
-      validateAgainstTemplates(it, template)
-    }
+    validateQuestionRequest(request)
 
     val offender = offenderRepository.findByCrn(crn).orElseThrow { BadArgumentException("Offender not found for CRN=$crn") }
     if (offender.status != OffenderStatus.VERIFIED) {
@@ -124,27 +115,16 @@ class QuestionService(
       CheckinMode.SCHEDULED -> null
     }
 
-    val checkin = checkinRepository.findByOffenderAndDueDate(offender, today).getOrNull()
+    val checkins = checkinRepository.findAllByOffenderAndDueDate(offender, today)
     val isDueToday = when (offender.mode) {
       CheckinMode.SCHEDULED -> isCheckinDay(offender, today)
       CheckinMode.AD_HOC -> offender.firstCheckin == today
     }
-    if ((checkin == null && isDueToday) || (checkin != null && checkin.status == CheckinStatus.CREATED)) {
+    if ((checkins.isEmpty() && isDueToday) || checkins.any { it.status == CheckinStatus.CREATED }) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
-    val listId = questionsRepository.upsertQuestionList(
-      null,
-      request.author,
-      request.questions.mapIndexed { index, item ->
-        assert(item.params.containsKey("placeholders"))
-        mapOf("id" to item.id, "params" to item.params)
-      },
-    )
-    if (listId == null) {
-      LOG.warn("Failed to create question list for CRN={}, author={}, questions={}", crn, request.author, request.questions)
-      throw RuntimeException("Failed to create question list.")
-    }
+    val listId = createQuestionList(request)
 
     val assigned = questionListAssignmentRepository.createAssignment(offender.id, listId) == 1
     LOG.info("Question list assignment for offender={}, listId={} assigned?={}", crn, listId, assigned)
@@ -163,6 +143,54 @@ class QuestionService(
       },
       listId,
     )
+  }
+
+  @Transactional
+  fun assignCustomQuestionsToCheckin(
+    checkin: uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin,
+    @ValidQuestionParams request: AssignCustomQuestionsRequest,
+    allowSameDayInitialAssignment: Boolean = false,
+  ) {
+    val lockedCheckin = checkinRepository.findByIdForUpdate(checkin.id).orElseThrow {
+      BadArgumentException("Checkin not found for UUID=${checkin.uuid}")
+    }
+    if (lockedCheckin.status != CheckinStatus.CREATED) {
+      throw BadArgumentException("Can't add questions to checkin with status ${lockedCheckin.status}")
+    }
+    if (lockedCheckin.dueDate.isBefore(clock.today())) {
+      throw BadArgumentException("Can't add questions to an overdue check-in")
+    }
+    if (lockedCheckin.dueDate == clock.today() && !allowSameDayInitialAssignment) {
+      throw BadArgumentException("Questions must be assigned before the check-in due date")
+    }
+
+    validateQuestionRequest(request)
+    val listId = createQuestionList(request)
+    val updated = questionListAssignmentRepository.updateCheckinAssignment(lockedCheckin.id, listId)
+    val assigned = updated > 0 || questionListAssignmentRepository.createAssignment(lockedCheckin.offender.id, listId, lockedCheckin.id) == 1
+    if (!assigned) {
+      throw BadArgumentException("Could not assign questions to checkin ${lockedCheckin.uuid}")
+    }
+  }
+
+  private fun createQuestionList(request: AssignCustomQuestionsRequest): Long = questionsRepository.upsertQuestionList(
+    null,
+    request.author,
+    request.questions.map { item ->
+      assert(item.params.containsKey("placeholders"))
+      mapOf("id" to item.id, "params" to item.params)
+    },
+  ) ?: throw RuntimeException("Failed to create question list.")
+
+  private fun validateQuestionRequest(request: AssignCustomQuestionsRequest) {
+    val questionsById = questionsRepository
+      .getQuestionTemplates(request.questions.map { it.id }, request.language)
+      .associateBy { it.id }
+    request.questions.forEach {
+      val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
+      require(template.policy == QuestionPolicy.CUSTOMISABLE) { "Question ${it.id} is not customisable" }
+      validateAgainstTemplates(it, template)
+    }
   }
 
   @Transactional

@@ -1,10 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import jakarta.persistence.LockModeType
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -37,6 +39,14 @@ import java.util.stream.Stream
 @Repository
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select o from Offender o where o.id = :id")
+  fun findByIdForUpdate(id: Long): Optional<Offender>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select o from Offender o where o.uuid = :uuid")
+  fun findByUuidForUpdate(uuid: UUID): Optional<Offender>
 
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
@@ -186,6 +196,12 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
 interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @EntityGraph(attributePaths = ["offender"])
+  @Query("select c from OffenderCheckin c where c.id = :checkinId")
+  fun findByIdForUpdate(checkinId: Long): Optional<OffenderCheckin>
+
   fun findAllByOffenderAndStatus(offender: Offender, status: CheckinStatus): List<OffenderCheckin>
 
   @Query("""select c from OffenderCheckin c where c.id in :ids""")
@@ -266,6 +282,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): Optional<OffenderCheckin>
+
+  fun findAllByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
 
   @Query(
     """
@@ -823,6 +841,17 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   )
   @Modifying
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
+
+  @Query(
+    """
+    update question_list_assignment
+    set question_list_id = :listId, updated_at = now()
+    where checkin_id = :checkinId
+    """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun updateCheckinAssignment(checkinId: Long, listId: Long): Int
 
   /**
    * In case of no explicit assignment, question list id will be set to the default list id.
