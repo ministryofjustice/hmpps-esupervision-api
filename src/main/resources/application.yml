@@ -386,8 +386,8 @@ resilience4j:
         failure-rate-threshold: 50
         slow-call-rate-threshold: 80
         slow-call-duration-threshold: 5s
-        record-exceptions:
-          - uk.gov.service.notify.NotificationClientException
+        # Transient failures only (network, 429, 5xx) - never 4xx. See NotifyTransientFailure.
+        record-failure-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyTransientFailure
 
       awsS3:
         register-health-indicator: true
@@ -458,8 +458,8 @@ resilience4j:
         wait-duration: 1000ms
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
-        retry-exceptions:
-          - uk.gov.service.notify.NotificationClientException
+        # Transient failures only (network, 429, 5xx) - never 4xx. See NotifyTransientFailure.
+        retry-exception-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyTransientFailure
 
       awsS3:
         max-attempts: 2

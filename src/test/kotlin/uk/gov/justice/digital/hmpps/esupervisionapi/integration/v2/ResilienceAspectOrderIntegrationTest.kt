@@ -133,17 +133,46 @@ class ResilienceAspectOrderIntegrationTest : IntegrationTestBase() {
     assertEquals(1, metrics.numberOfSuccessfulCalls)
   }
 
+  /**
+   * Goes through [NotifyGatewayService.send], the entry point production uses, so this also pins
+   * that its delegation to sendSms/sendEmail goes through the proxy rather than `this`.
+   */
   @Test
-  fun `Notify send is attempted max-attempts times before the fallback runs, recording one failure`() {
-    whenever(notificationClient.sendSms(any(), any(), any(), any())).thenThrow(NotificationClientException("Notify unavailable"))
+  fun `Notify SMS send is attempted max-attempts times before the fallback runs, recording one failure`() {
+    whenever(notificationClient.sendSms(any(), any(), any(), any())).thenThrow(notifyFailure(503))
 
-    assertThrows<NotificationClientException> {
-      notifyGatewayService.sendSms("template-id", "07700900000", emptyMap(), "ref-1")
-    }
+    assertThrows<NotificationClientException> { notifyGatewayService.send("SMS", "template-id", "07700900000", emptyMap(), "ref-1") }
 
     verify(notificationClient, times(3)).sendSms(any(), any(), any(), any())
     assertEquals(1, circuitBreakerRegistry.circuitBreaker("govNotify").metrics.numberOfFailedCalls)
   }
+
+  @Test
+  fun `Notify email send is attempted max-attempts times before the fallback runs, recording one failure`() {
+    whenever(notificationClient.sendEmail(any(), any(), any(), any())).thenThrow(notifyFailure(500))
+
+    assertThrows<NotificationClientException> { notifyGatewayService.send("EMAIL", "template-id", "a@example.com", emptyMap(), "ref-1") }
+
+    verify(notificationClient, times(3)).sendEmail(any(), any(), any(), any())
+    assertEquals(1, circuitBreakerRegistry.circuitBreaker("govNotify").metrics.numberOfFailedCalls)
+  }
+
+  /** A bad number or template is the recipient's problem, not Notify's: retrying cannot help, and it must not open the breaker for everyone. */
+  @Test
+  fun `a Notify client error is neither retried nor recorded as a breaker failure`() {
+    whenever(notificationClient.sendSms(any(), any(), any(), any())).thenThrow(notifyFailure(400))
+
+    assertThrows<NotificationClientException> { notifyGatewayService.send("SMS", "template-id", "not-a-number", emptyMap(), "ref-1") }
+
+    verify(notificationClient, times(1)).sendSms(any(), any(), any(), any())
+    assertEquals(0, circuitBreakerRegistry.circuitBreaker("govNotify").metrics.numberOfFailedCalls)
+  }
+
+  /** The (status, message) constructor Notify uses for HTTP errors is package-private. */
+  private fun notifyFailure(status: Int): NotificationClientException = NotificationClientException::class.java
+    .getDeclaredConstructor(Int::class.javaPrimitiveType, String::class.java)
+    .apply { isAccessible = true }
+    .newInstance(status, "Status code: $status")
 
   @Test
   fun `retry backoff timings are unchanged`() {

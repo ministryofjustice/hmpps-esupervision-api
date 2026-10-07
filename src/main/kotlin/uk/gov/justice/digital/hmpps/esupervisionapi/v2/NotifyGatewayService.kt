@@ -4,11 +4,14 @@ import com.google.common.util.concurrent.RateLimiter
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
 import uk.gov.service.notify.NotificationClientApi
 import uk.gov.service.notify.NotificationClientException
 import java.util.UUID
+import java.util.function.Predicate
 
 /**
  * Service responsible for all interactions with GOV.UK Notify
@@ -20,6 +23,14 @@ class NotifyGatewayService(
 ) {
   // Rate limiting: 3000 requests/minute = 45/sec with safety margin
   private val rateLimiter = RateLimiter.create(45.0)
+
+  /**
+   * This bean's own proxy. [send] must delegate through it: a call on `this` bypasses Spring AOP,
+   * so sendSms/sendEmail would run with no retry or circuit breaker.
+   */
+  @Autowired
+  @Lazy
+  private lateinit var self: NotifyGatewayService
 
   /**
    * Send SMS via GOV.UK Notify with rate limiting and resilience
@@ -75,8 +86,8 @@ class NotifyGatewayService(
     personalisation: Map<String, String>,
     reference: String,
   ): UUID = when (channel) {
-    "SMS" -> sendSms(templateId, recipient, personalisation, reference)
-    "EMAIL" -> sendEmail(templateId, recipient, personalisation, reference)
+    "SMS" -> self.sendSms(templateId, recipient, personalisation, reference)
+    "EMAIL" -> self.sendEmail(templateId, recipient, personalisation, reference)
     else -> throw IllegalArgumentException("Unknown notification channel: $channel")
   }
 
@@ -146,4 +157,17 @@ class NotifyGatewayService(
   companion object {
     private val LOGGER = LoggerFactory.getLogger(NotifyGatewayService::class.java)
   }
+}
+
+/**
+ * Which GOV.UK Notify failures the `govNotify` retry and circuit breaker act on (see application.yml).
+ *
+ * Only transient ones: no HTTP status (a network/IO failure), 429 rate limiting, and 5xx. A 4xx is a
+ * problem with this request - an invalid phone number, email address or template - so retrying
+ * cannot help, and recording it would let a run of bad recipient data open the breaker and block
+ * every notification.
+ */
+class NotifyTransientFailure : Predicate<Throwable> {
+  override fun test(t: Throwable): Boolean = t is NotificationClientException &&
+    (t.httpResult == 0 || t.httpResult == 429 || t.httpResult >= 500)
 }
