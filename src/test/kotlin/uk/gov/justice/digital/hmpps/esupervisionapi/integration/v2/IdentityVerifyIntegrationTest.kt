@@ -108,6 +108,29 @@ class IdentityVerifyIntegrationTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `a 404 CRN-not-found from NDelius is still a definitive not-verified, not a retryable 503`() {
+    ndelius.stubFor(post(urlEqualTo(VALIDATE_PATH)).willReturn(aResponse().withStatus(404)))
+
+    verifyIdentity()
+      .expectStatus().isOk
+      .expectBody()
+      .jsonPath("$.verified").isEqualTo(false)
+      .jsonPath("$.error").isEqualTo("Personal details do not match our records")
+  }
+
+  @Test
+  fun `a 5xx from NDelius is 503, not a mismatch`() {
+    ndelius.stubFor(post(urlEqualTo(VALIDATE_PATH)).willReturn(aResponse().withStatus(500)))
+
+    verifyIdentity()
+      .expectStatus().isEqualTo(503)
+      .expectBody()
+      .jsonPath("$.verified").doesNotExist()
+
+    ndelius.verify(postRequestedFor(urlEqualTo(VALIDATE_PATH)))
+  }
+
+  @Test
   fun `a transport failure to NDelius is 503, not a mismatch`() {
     ndelius.stubFor(
       post(urlEqualTo(VALIDATE_PATH)).willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)),

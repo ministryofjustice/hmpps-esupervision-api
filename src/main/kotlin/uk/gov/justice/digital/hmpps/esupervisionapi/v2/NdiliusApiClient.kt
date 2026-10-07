@@ -319,10 +319,11 @@ class NdiliusApiClient(
   /**
    * Validate personal details for a person on probation
    * POST /case/{crn}/validate-details
-   * Returns true if valid (200 OK), false if invalid (400 Bad Request)
+   * Returns true if valid (200 OK), false if invalid (400 Bad Request) or the CRN is not known to
+   * NDelius (404 Not Found) - both are definitive answers that a retry will not change.
    *
    * @throws PersonalDetailsVerificationUnavailableException on any other failure (network error,
-   *   5xx, open circuit) - never false, as that would tell the person their details are wrong.
+   *   5xx, 401/403, open circuit) - never false, as that would tell the person their details are wrong.
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "validatePersonalDetailsFallback")
   @Retry(name = "ndiliusApi")
@@ -348,6 +349,9 @@ class NdiliusApiClient(
       if (e.statusCode == HttpStatus.BAD_REQUEST) {
         LOGGER.info("Personal details validation failed for CRN: {}", personalDetails.crn)
         false
+      } else if (e.statusCode == HttpStatus.NOT_FOUND) {
+        LOGGER.warn("Personal details validation failed, CRN not found in NDelius: {}", personalDetails.crn)
+        false
       } else {
         LOGGER.error(
           "Unexpected error validating personal details: {}",
@@ -359,7 +363,7 @@ class NdiliusApiClient(
   }
 
   /**
-   * A genuine 400 is returned as false inside [validatePersonalDetails] and never reaches here, so
+   * A genuine 400 or 404 is returned as false inside [validatePersonalDetails] and never reaches here, so
    * everything that does is "could not check" and must not be reported as a mismatch.
    */
   private fun validatePersonalDetailsFallback(personalDetails: PersonalDetails, e: Exception): Boolean {
