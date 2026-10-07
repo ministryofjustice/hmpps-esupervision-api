@@ -864,6 +864,15 @@ class OffenderResourceTest {
     val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate.copy(checkinInterval = null)))
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     assertEquals(HttpStatus.OK, result.statusCode)
+
+    val nullDateResult = resource.updateDetails(
+      uuid,
+      OffenderDetailsUpdateRequest(
+        checkinSchedule = scheduleUpdate.copy(firstCheckin = null, checkinInterval = null),
+      ),
+    )
+    assertEquals(HttpStatus.OK, nullDateResult.statusCode)
+    assertNull(nullDateResult.body?.firstCheckin)
   }
 
   @Test

@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
@@ -55,7 +56,12 @@ class OffenderSetupPersistenceService(
 
     offenderRepository.save(offender)
     val checkin = if (createCheckin && contactDetails != null) {
-      checkinCreationService.createCheckinForOffender(offender, offender.firstCheckin, offender.createdBy, contactDetails)
+      checkinCreationService.createCheckinForOffender(
+        offender,
+        requireNotNull(offender.firstCheckin) { "Cannot create a check-in without a first check-in date" },
+        offender.createdBy,
+        contactDetails,
+      )
     } else {
       null
     }
@@ -93,6 +99,7 @@ class OffenderSetupService(
   @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
     validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
+    validateFirstCheckin(offenderInfo.mode, offenderInfo.firstCheckin)
     val now = clock.instant()
 
     val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)

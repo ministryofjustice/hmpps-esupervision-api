@@ -116,8 +116,9 @@ class QuestionService(
       throw BadArgumentException("Can't add question to offender with status ${offender.status}")
     }
     val today = clock.today()
+    val firstCheckin = offender.firstCheckin
     when (offender.mode) {
-      CheckinMode.AD_HOC -> if (offender.firstCheckin <= today) {
+      CheckinMode.AD_HOC -> if (firstCheckin == null || firstCheckin <= today) {
         throw BadArgumentException("offender does not have an upcoming check-in")
       }
       CheckinMode.SCHEDULED -> null
@@ -155,7 +156,13 @@ class QuestionService(
       CheckinMode.SCHEDULED -> nextCheckinDay(offender, today)
       CheckinMode.AD_HOC -> offender.firstCheckin
     }
-    return AssignCustomQuestionsResponse(nextCheckin, listId)
+    return AssignCustomQuestionsResponse(
+      requireNotNull(nextCheckin) {
+        // we should not be able to get here and have a null nextCheckin
+        "Can't assign questions when next checkin date is null. offender=$crn: firstCheckin=${offender.firstCheckin}, interval=${offender.checkinInterval}, mode=${offender.mode}"
+      },
+      listId,
+    )
   }
 
   @Transactional
