@@ -157,7 +157,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offenderPersistenceService.offenderDeactivation(offender, deactivationEvent)
 
     val dtoAfterDeactivation = offender.dto()
-    val dtoForReactivation = dtoAfterDeactivation.copy(firstCheckin = dtoAfterDeactivation.firstCheckin.plusWeeks(1))
+    val dtoForReactivation = dtoAfterDeactivation.copy(firstCheckin = dtoAfterDeactivation.firstCheckin?.plusWeeks(1))
     val partialEvent = PartialOffenderReactivatedEvent(
       offenderId = offender.id,
       offender = dtoForReactivation,

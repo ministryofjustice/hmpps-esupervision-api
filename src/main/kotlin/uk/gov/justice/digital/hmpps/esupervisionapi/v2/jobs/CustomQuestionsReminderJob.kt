@@ -37,7 +37,7 @@ private data class OffenderInfo(
   val crn: CRN,
   val uuid: UUID,
   val practitioner: ExternalUserId,
-  override val firstCheckin: LocalDate,
+  override val firstCheckin: LocalDate?,
   override val checkinInterval: Duration?,
   val mode: CheckinMode,
 ) : CheckinSchedule
@@ -113,14 +113,20 @@ class CustomQuestionsReminderJob(
           continue
         }
         for (info in batch) {
-          val added = crnToDetails[info.crn]?.let {
+          val firstCheckin = info.firstCheckin
+          if (firstCheckin == null) {
+            LOGGER.info("Skipping custom questions reminder for CRN={} because no first check-in date is configured", info.crn)
+            continue
+          }
+          val contactDetails = crnToDetails[info.crn]
+          if (contactDetails != null) {
             val expectedCheckinDate = when (info.mode) {
               CheckinMode.SCHEDULED -> nextCheckinDay(info, today)
-              CheckinMode.AD_HOC -> info.firstCheckin
+              CheckinMode.AD_HOC -> firstCheckin
             }
-            sendable.add(QuestionsReminderInfo(info.uuid, it, info.practitioner, expectedCheckinDate))
+            sendable.add(QuestionsReminderInfo(info.uuid, contactDetails, info.practitioner, expectedCheckinDate))
           }
-          if (added == null) {
+          if (contactDetails == null) {
             unsendable.add(info.crn)
           }
         }

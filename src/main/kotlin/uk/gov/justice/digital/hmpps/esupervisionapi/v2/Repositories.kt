@@ -53,9 +53,10 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     WHERE o.status = 'VERIFIED'
       AND (
         (o.checkin_mode = 'SCHEDULED'
+          AND o.first_checkin IS NOT NULL
           AND o.first_checkin <= :lowerBoundInclusive
           AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
-        OR (o.checkin_mode = 'AD_HOC' AND o.first_checkin = :lowerBoundInclusive)
+        OR (o.checkin_mode = 'AD_HOC' AND o.first_checkin IS NOT NULL AND o.first_checkin = :lowerBoundInclusive)
       )
       AND NOT EXISTS (
         SELECT 1 FROM offender_checkin_v2 c
@@ -107,9 +108,10 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
           where o.status = 'VERIFIED'
           and (
             (o.checkin_mode = 'SCHEDULED'
+              and o.first_checkin is not null
               and o.first_checkin != :today
               and MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
-            or (o.checkin_mode = 'AD_HOC' and o.first_checkin = (cast(:today as date) + '4 day'::interval)::date)
+            or (o.checkin_mode = 'AD_HOC' and o.first_checkin is not null and o.first_checkin = (cast(:today as date) + '4 day'::interval)::date)
           )
       )
       select * from the_offenders
@@ -829,7 +831,7 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
     """select * from get_upcoming_assignment_info_v2(:offenderId, cast(:today as date), cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
+  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate?, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.

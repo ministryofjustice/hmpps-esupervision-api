@@ -247,9 +247,37 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     assertEquals(null, saved.checkinInterval)
   }
 
+  @Test
+  fun `saving AD_HOC offender with null firstCheckin succeeds`() {
+    val offender = createOffenderV2(
+      crn = "V200013",
+      firstCheckin = null,
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+    )
+
+    val saved = offenderRepository.saveAndFlush(offender)
+
+    assertEquals(CheckinMode.AD_HOC, saved.mode)
+    assertEquals(null, saved.firstCheckin)
+  }
+
+  @Test
+  fun `saving SCHEDULED offender with null firstCheckin fails constraint`() {
+    val offender = createOffenderV2(
+      crn = "V200014",
+      firstCheckin = null,
+      mode = CheckinMode.SCHEDULED,
+    )
+
+    assertThrows<DataIntegrityViolationException> {
+      offenderRepository.saveAndFlush(offender)
+    }
+  }
+
   private fun createOffenderV2(
     crn: String,
-    firstCheckin: LocalDate,
+    firstCheckin: LocalDate?,
     checkinInterval: Duration? = Duration.ofDays(7),
     status: OffenderStatus = OffenderStatus.VERIFIED,
     mode: CheckinMode = CheckinMode.SCHEDULED,
