@@ -2,6 +2,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -40,6 +42,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.UploadLocationsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
+import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 import java.util.UUID
 
 private const val PAST_DUE_DATE_NOTE =
@@ -115,10 +118,18 @@ class CheckinResource(
   @Operation(
     summary = "Verify offender identity against Ndilius",
     description =
-    "Validate personal details (name, DOB, CRN) against Ndilius before allowing checkin submission",
+    "Validate personal details (name, DOB, CRN) against Ndilius before allowing checkin submission. " +
+      "200 with verified=true: details match. 200 with verified=false: details do not match. " +
+      "503: Ndilius could not be reached, so the details were not checked - the caller should " +
+      "offer a retry rather than treat this as a mismatch.",
   )
-  @ApiResponse(responseCode = "200", description = "Identity validation result")
+  @ApiResponse(responseCode = "200", description = "Identity validation result (verified or not verified)")
   @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(
+    responseCode = "503",
+    description = "Ndilius unavailable; personal details could not be verified. Retryable.",
+    content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+  )
   fun identityVerify(
     @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
     @RequestBody @Valid personalDetails: PersonalDetails,

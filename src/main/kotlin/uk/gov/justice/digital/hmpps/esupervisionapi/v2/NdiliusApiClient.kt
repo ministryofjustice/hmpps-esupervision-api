@@ -21,6 +21,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.P
 class NdiliusBatchFetchException(val crns: List<CRN>, message: String, cause: Exception) : RuntimeException(message, cause)
 
 /**
+ * NDelius could not be asked whether a person's personal details match - as opposed to NDelius
+ * answering that they don't. Mapped to 503 so the caller can offer a retry instead of a rejection.
+ */
+class PersonalDetailsVerificationUnavailableException(cause: Exception) : RuntimeException("Could not verify personal details: NDelius unavailable", cause)
+
+/**
  * Wire shape expected by esupervision-and-delius's PUT /case/{crn}/contact-details (PI-4356).
  * Field names (`mobileNumber`/`emailAddress`) match their `UpdateContactDetails` request DTO,
  * which differs from our own [ContactDetailsUpdateRequest]'s `mobile`/`email` naming.
@@ -314,6 +320,9 @@ class NdiliusApiClient(
    * Validate personal details for a person on probation
    * POST /case/{crn}/validate-details
    * Returns true if valid (200 OK), false if invalid (400 Bad Request)
+   *
+   * @throws PersonalDetailsVerificationUnavailableException on any other failure (network error,
+   *   5xx, open circuit) - never false, as that would tell the person their details are wrong.
    */
   @CircuitBreaker(name = "ndiliusApi", fallbackMethod = "validatePersonalDetailsFallback")
   @Retry(name = "ndiliusApi")
@@ -349,12 +358,16 @@ class NdiliusApiClient(
     }
   }
 
+  /**
+   * A genuine 400 is returned as false inside [validatePersonalDetails] and never reaches here, so
+   * everything that does is "could not check" and must not be reported as a mismatch.
+   */
   private fun validatePersonalDetailsFallback(personalDetails: PersonalDetails, e: Exception): Boolean {
     LOGGER.error(
-      "Circuit breaker activated: {}",
+      "Identity verification unavailable, NDelius could not be reached: {}",
       PiiSanitizer.sanitizeForFallback(e, "validatePersonalDetails, crn=${personalDetails.crn}"),
     )
-    return false
+    throw PersonalDetailsVerificationUnavailableException(e)
   }
 
   /**

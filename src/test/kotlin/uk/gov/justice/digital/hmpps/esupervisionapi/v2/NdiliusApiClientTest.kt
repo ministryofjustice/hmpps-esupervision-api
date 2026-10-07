@@ -4,10 +4,17 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
 import org.springframework.web.reactive.function.client.WebClient
+import org.springframework.web.reactive.function.client.WebClientRequestException
 import java.lang.reflect.InvocationTargetException
+import java.net.ConnectException
+import java.net.URI
+import java.time.LocalDate
 import kotlin.jvm.java
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker as CircuitBreakerAnnotation
 
@@ -70,6 +77,43 @@ class NdiliusApiClientTest {
     val cause = thrown.targetException
     assertEquals(NdiliusBatchFetchException::class.java, cause.javaClass)
     assertEquals(crns, (cause as NdiliusBatchFetchException).crns)
+  }
+
+  /**
+   * ESUP-2181: returning false here told the person on probation their details were wrong when
+   * NDelius was simply unreachable. A genuine 400 is handled inside the method and never gets here.
+   */
+  @Test
+  fun `validatePersonalDetailsFallback fails closed on a transport failure, never reporting a mismatch`() {
+    val transportFailure = WebClientRequestException(
+      ConnectException("Connection refused"),
+      HttpMethod.POST,
+      URI.create("http://ndelius/case/X000001/validate-details"),
+      HttpHeaders(),
+    )
+
+    val cause = invokeValidatePersonalDetailsFallback(transportFailure)
+
+    assertEquals(PersonalDetailsVerificationUnavailableException::class.java, cause.javaClass)
+    assertSame(transportFailure, cause.cause)
+  }
+
+  @Test
+  fun `validatePersonalDetailsFallback fails closed when the circuit is open`() {
+    val cause = invokeValidatePersonalDetailsFallback(openCircuit())
+
+    assertEquals(PersonalDetailsVerificationUnavailableException::class.java, cause.javaClass)
+  }
+
+  private fun invokeValidatePersonalDetailsFallback(e: Exception): Throwable {
+    val method = NdiliusApiClient::class.java.getDeclaredMethod(
+      "validatePersonalDetailsFallback",
+      PersonalDetails::class.java,
+      Exception::class.java,
+    )
+    method.isAccessible = true
+    val details = PersonalDetails("X000001", Name("John", "Smith"), LocalDate.of(1985, 5, 14))
+    return assertThrows<InvocationTargetException> { method.invoke(client, details, e) }.targetException
   }
 
   private fun openCircuit(): CallNotPermittedException {
