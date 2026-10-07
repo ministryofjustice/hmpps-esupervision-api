@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
+import org.springframework.http.client.reactive.ReactorClientHttpConnector
 import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider
@@ -13,6 +14,8 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction
 import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Mono
+import reactor.netty.http.client.HttpClient
+import reactor.netty.resources.ConnectionProvider
 import uk.gov.justice.hmpps.kotlin.auth.authorisedWebClient
 import uk.gov.justice.hmpps.kotlin.auth.healthWebClient
 import uk.gov.justice.hmpps.kotlin.auth.service.GlobalPrincipalOAuth2AuthorizedClientService
@@ -29,7 +32,32 @@ class WebClientConfiguration(
   @Value("\${api.health-timeout:2s}") val healthTimeout: Duration,
   @Value("\${api.timeout:20s}") val timeout: Duration,
   @Value($$"${app.offender-eligibility.source-timeout-ms:2000}") val eligibilitySourceTimeoutMs: Long,
+  @Value("\${api.connection-pool.max-idle-time:20s}") val connectionPoolMaxIdleTime: Duration,
+  @Value("\${api.connection-pool.evict-in-background:10s}") val connectionPoolEvictInBackground: Duration,
 ) {
+  /**
+   * Shared connection pool for every authorised outbound WebClient, so the settings can't drift
+   * per-client. (reactor-netty still keeps a separate sub-pool per remote host.)
+   *
+   * Without this, hmpps-kotlin's `authorisedWebClient` uses reactor-netty's default pool, which has
+   * no `maxIdleTime`: keep-alive connections are held indefinitely. The upstream ingress/ALB closes
+   * idle connections after its own keep-alive idle timeout (typically 60s on HMPPS), so we would later
+   * borrow a socket the upstream already closed and fail with
+   * `recvAddress(..) failed with error(-104): Connection reset by peer`.
+   *
+   * `maxIdleTime` therefore MUST stay below the upstream keep-alive idle timeout. The default of 20s
+   * leaves a wide margin under 60s. `evictInBackground` (default 10s) reaps idle connections
+   * periodically rather than only checking them on borrow, so even a reaped-late connection is gone
+   * well before 60s (worst case maxIdleTime + interval = 30s).
+   *
+   * Override with API_CONNECTION_POOL_MAX_IDLE_TIME / API_CONNECTION_POOL_EVICT_IN_BACKGROUND.
+   */
+  @Bean(destroyMethod = "dispose")
+  fun outboundConnectionProvider(): ConnectionProvider = ConnectionProvider.builder("outbound-api")
+    .maxIdleTime(connectionPoolMaxIdleTime)
+    .evictInBackground(connectionPoolEvictInBackground)
+    .build()
+
   /**
    * The token store behind [authorizedClientManager], exposed as a bean so that
    * [RefreshTokenOnUnauthorizedFilter] can evict a rejected token.
@@ -65,7 +93,7 @@ class WebClientConfiguration(
       )
       it.add(BackgroundClientCredentialsFilter(MANAGE_USERS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(
+    .pooledAuthorisedWebClient(
       authorizedClientManager,
       registrationId = MANAGE_USERS_API_REGISTRATION_ID,
       url = manageUsersApiBaseUri,
@@ -92,7 +120,7 @@ class WebClientConfiguration(
       )
       it.add(BackgroundClientCredentialsFilter(NDILIUS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(
+    .pooledAuthorisedWebClient(
       authorizedClientManager,
       registrationId = NDILIUS_API_REGISTRATION_ID,
       url = ndiliusApiBaseUri,
@@ -113,7 +141,7 @@ class WebClientConfiguration(
       )
       it.add(BackgroundClientCredentialsFilter(NDILIUS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(
+    .pooledAuthorisedWebClient(
       authorizedClientManager,
       registrationId = NDILIUS_API_REGISTRATION_ID,
       url = ndiliusApiBaseUri,
@@ -161,7 +189,7 @@ class WebClientConfiguration(
       // Inside the refresh filter, so its retry re-mints rather than replaying the evicted token.
       it.add(BackgroundClientCredentialsFilter(TIER_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(
+    .pooledAuthorisedWebClient(
       authorizedClientManager,
       registrationId = TIER_API_REGISTRATION_ID,
       url = tierApiBaseUri,
@@ -179,7 +207,7 @@ class WebClientConfiguration(
       )
       it.add(BackgroundClientCredentialsFilter(ARNS_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(
+    .pooledAuthorisedWebClient(
       authorizedClientManager,
       registrationId = ARNS_API_REGISTRATION_ID,
       url = arnsApiBaseUri,
@@ -228,18 +256,39 @@ class WebClientConfiguration(
       it.add(RefreshTokenOnUnauthorizedFilter(SUPERVISION_PACKAGES_API_REGISTRATION_ID, authorizedClientService))
       it.add(BackgroundClientCredentialsFilter(SUPERVISION_PACKAGES_API_REGISTRATION_ID, authorizedClientManager))
     }
-    .authorisedWebClient(
+    .pooledAuthorisedWebClient(
       authorizedClientManager,
       registrationId = SUPERVISION_PACKAGES_API_REGISTRATION_ID,
       url = supervisionPackagesApiBaseUri,
       timeout = timeout,
     )
 
+  /**
+   * hmpps-kotlin's `authorisedWebClient`, but with its connector swapped for one backed by
+   * [outboundConnectionProvider]. The library hard-codes `HttpClient.create()` (default pool, no
+   * idle eviction) and gives no hook for a provider, so we keep its OAuth filter and base URL via
+   * `mutate()` and rebuild only the connector, with the same response timeout and proxy resolution
+   * (see OutboundProxySupport.kt).
+   */
+  private fun WebClient.Builder.pooledAuthorisedWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    registrationId: String,
+    url: String,
+    timeout: Duration,
+  ): WebClient = authorisedWebClient(authorizedClientManager, registrationId, url, timeout)
+    .mutate()
+    .clientConnector(ReactorClientHttpConnector(pooledHttpClient(outboundConnectionProvider(), timeout)))
+    .build()
+
   // HMPPS Auth health ping is required if your service calls HMPPS Auth to get a token to call other services
   @Bean
   fun hmppsAuthHealthWebClient(builder: WebClient.Builder): WebClient = builder.healthWebClient(hmppsAuthBaseUri, healthTimeout)
 
   companion object {
+    internal fun pooledHttpClient(connectionProvider: ConnectionProvider, responseTimeout: Duration): HttpClient = HttpClient.create(connectionProvider)
+      .responseTimeout(responseTimeout)
+      .withResolvedProxy()
+
     private const val TIER_API_REGISTRATION_ID = "tier-api"
     private const val NDILIUS_API_REGISTRATION_ID = "ndilius-api"
     private const val MANAGE_USERS_API_REGISTRATION_ID = "manage-users-api"
