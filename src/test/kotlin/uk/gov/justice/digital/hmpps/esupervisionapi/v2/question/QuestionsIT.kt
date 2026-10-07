@@ -228,6 +228,22 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionService - rejects fixed templates as invalid custom questions`() {
+    val templates = questionRepository.getFixedQuestionTemplates(Language.ENGLISH)
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(templates.first().id, mapOf("placeholders" to emptyMap<String, String>()))),
+    )
+
+    val exception = assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions("A123458", request)
+    }
+
+    assertEquals("Question ${templates.first().id} is not customisable", exception.message)
+  }
+
+  @Test
   fun `Checkin status change causes assignment update`() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderRepository.save(offender)

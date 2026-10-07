@@ -190,7 +190,9 @@ class QuestionService(
       .associateBy { it.id }
     request.questions.forEach {
       val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
-      require(template.policy == QuestionPolicy.CUSTOMISABLE) { "Question ${it.id} is not customisable" }
+      if (template.policy != QuestionPolicy.CUSTOMISABLE) {
+        throw BadArgumentException("Question ${it.id} is not customisable")
+      }
       validateAgainstTemplates(it, template)
     }
   }

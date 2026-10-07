@@ -688,6 +688,7 @@ is *today*.""",
   @ApiResponse(responseCode = "200", description = "Ad hoc check-in scheduled")
   @ApiResponse(responseCode = "400", description = "Offender is not configured for ad hoc check-ins or the date is invalid")
   @ApiResponse(responseCode = "409", description = "An active check-in already exists for a different date")
+  @ApiResponse(responseCode = "422", description = "Contact details are unavailable or custom questions cannot be assigned")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   @PostMapping("/crn/{crn}/schedule-ad-hoc-check-in")
   fun scheduleAdHocCheckin(
