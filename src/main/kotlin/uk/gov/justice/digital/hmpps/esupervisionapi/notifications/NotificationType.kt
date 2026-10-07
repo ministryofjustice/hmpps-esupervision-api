@@ -11,4 +11,5 @@ enum class NotificationType {
   PractitionerInviteIssueGeneric,
   RegistrationConfirmation,
   PractitionerCustomQuestionsReminder,
+  OffenderAdHocCheckinScheduled,
 }

@@ -17,6 +17,7 @@ object NotificationContext {
       NotificationType.RegistrationConfirmation -> "OREG-$date-$env"
       NotificationType.OffenderCheckinInvite -> "OCHK-$date-$env"
       NotificationType.OffenderCheckinReminder -> "OREM-$date-$env"
+      NotificationType.OffenderAdHocCheckinScheduled -> "OAHC-$date-$env"
 
       // Practitioner notifications
       NotificationType.PractitionerCheckinSubmitted -> "PSUB-$date-$env"

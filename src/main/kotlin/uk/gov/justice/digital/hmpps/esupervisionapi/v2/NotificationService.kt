@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
+import java.time.LocalDate
 
 /**
  * V2 Notification Service
@@ -39,6 +40,10 @@ class NotificationService(
    */
   fun sendCheckinCreatedNotifications(event: CheckinCreatedEvent) {
     orchestrator.sendCheckinCreatedNotifications(event)
+  }
+
+  fun sendAdHocCheckinScheduledNotification(offender: Offender, contactDetails: ContactDetails, scheduledDate: LocalDate) {
+    orchestrator.sendAdHocCheckinScheduledNotification(offender, contactDetails, scheduledDate)
   }
 
   /**

@@ -878,6 +878,28 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `scheduleAdHocCheckin - sends booking notification when date changes`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+      firstCheckin = null
+    }
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    val scheduledDate = clock.today().plusDays(3)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val response = resource.scheduleAdHocCheckin(
+      offender.crn,
+      ScheduleAdHocCheckinRequest("XYZ0111", scheduledDate),
+    )
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(notificationService).sendAdHocCheckinScheduledNotification(offender, contactDetails, scheduledDate)
+  }
+
+  @Test
   fun `scheduleAdHocCheckin - does not create today's checkin for ineligible contact`() {
     val ineligibleContactDetails = listOf(
       ContactDetails(
