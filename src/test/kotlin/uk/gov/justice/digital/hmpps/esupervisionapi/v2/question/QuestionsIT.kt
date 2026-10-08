@@ -137,6 +137,9 @@ class QuestionsIT(
     whenever(ndiliusApiClient.getContactDetails(any())).thenAnswer { invocation ->
       GeneratingStubDataProvider().provideCase(invocation.getArgument<String>(0))
     }
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenAnswer { invocation ->
+      GeneratingStubDataProvider().provideCase(invocation.getArgument<String>(0))
+    }
 
     questionDefinitionRepository.defineCustomQuestion(
       "BARRY.WHITE",
@@ -371,7 +374,9 @@ class QuestionsIT(
   }
 
   @Test
-  fun `schedule questions directly onto an existing future checkin`() {
+  fun `schedule questions directly onto an existing future checkin - should fail with 4xx`() {
+    // NOTE(rosado): we do not insert check-in records before their due date, so this scenario
+    // tests the behaviour of the app when something went horribly wrong and such check-in was created.
     val dueDate = clock.today().plusDays(3)
     val offender = offenderTemplate.copy(
       crn = "A123467",
@@ -390,12 +395,10 @@ class QuestionsIT(
       .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
       .bodyValue(ScheduleAdHocCheckinRequest("BARRY.WHITE", dueDate, questions))
       .exchange()
-      .expectStatus().isOk
+      .expectStatus().is4xxClientError
 
     val listId = questionListAssignmentRepository.checkinAssignment(checkin.id)
-    assertNotNull(listId)
-    assertEquals(questions.questions.map { it.params }, questionRepository.getListItems(listId!!, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params })
-    assertEquals(checkin.id, questionListAssignmentRepository.findAll().single().checkinId)
+    assertNull(listId)
   }
 
   @Test
@@ -471,9 +474,8 @@ class QuestionsIT(
       .expectStatus().isOk
 
     val createdByEndpoint = offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single()
-    val createdByJob = checkinCreationService.createCheckins(listOf(candidate to staleEvent))
+    checkinCreationService.createCheckins(listOf(candidate to staleEvent))
 
-    assertTrue(createdByJob.isEmpty())
     assertEquals(createdByEndpoint.uuid, offenderCheckinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).single().uuid)
     assertEquals(1, offenderCheckinRepository.findAllByOffenderAndDueDate(offender, clock.today()).count { it.status in setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED) })
   }

@@ -97,6 +97,12 @@ class QuestionService(
     )
   }
 
+  /**
+   * Assigns questions to an offender's upcoming check-in.
+   *
+   * Different behaviour depending on the offender's check-in mode: For ad-hoc check-ins, we can assign questions
+   * if one is scheduled (but not **created** yet) for today.
+   */
   @Transactional
   fun assignCustomQuestions(crn: CRN, @ValidQuestionParams request: AssignCustomQuestionsRequest): AssignCustomQuestionsResponse {
     require(crn.matches(crnRegex))
@@ -109,7 +115,7 @@ class QuestionService(
     val today = clock.today()
     val firstCheckin = offender.firstCheckin
     when (offender.mode) {
-      CheckinMode.AD_HOC -> if (firstCheckin == null || firstCheckin <= today) {
+      CheckinMode.AD_HOC -> if (firstCheckin == null || firstCheckin < today) {
         throw BadArgumentException("offender does not have an upcoming check-in")
       }
       CheckinMode.SCHEDULED -> null
@@ -120,7 +126,7 @@ class QuestionService(
       CheckinMode.SCHEDULED -> isCheckinDay(offender, today)
       CheckinMode.AD_HOC -> offender.firstCheckin == today
     }
-    if ((checkins.isEmpty() && isDueToday) || checkins.any { it.status == CheckinStatus.CREATED }) {
+    if ((checkins.isEmpty() && isDueToday && offender.mode == CheckinMode.SCHEDULED) || checkins.any { it.status == CheckinStatus.CREATED }) {
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
@@ -143,34 +149,6 @@ class QuestionService(
       },
       listId,
     )
-  }
-
-  @Transactional
-  fun assignCustomQuestionsToCheckin(
-    checkin: uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin,
-    @ValidQuestionParams request: AssignCustomQuestionsRequest,
-    allowSameDayInitialAssignment: Boolean = false,
-  ) {
-    val lockedCheckin = checkinRepository.findByIdForUpdate(checkin.id).orElseThrow {
-      BadArgumentException("Checkin not found for UUID=${checkin.uuid}")
-    }
-    if (lockedCheckin.status != CheckinStatus.CREATED) {
-      throw BadArgumentException("Can't add questions to checkin with status ${lockedCheckin.status}")
-    }
-    if (lockedCheckin.dueDate.isBefore(clock.today())) {
-      throw BadArgumentException("Can't add questions to an overdue check-in")
-    }
-    if (lockedCheckin.dueDate == clock.today() && !allowSameDayInitialAssignment) {
-      throw BadArgumentException("Questions must be assigned before the check-in due date")
-    }
-
-    validateQuestionRequest(request)
-    val listId = createQuestionList(request)
-    val updated = questionListAssignmentRepository.updateCheckinAssignment(lockedCheckin.id, listId)
-    val assigned = updated > 0 || questionListAssignmentRepository.createAssignment(lockedCheckin.offender.id, listId, lockedCheckin.id) == 1
-    if (!assigned) {
-      throw BadArgumentException("Could not assign questions to checkin ${lockedCheckin.uuid}")
-    }
   }
 
   private fun createQuestionList(request: AssignCustomQuestionsRequest): Long = questionsRepository.upsertQuestionList(

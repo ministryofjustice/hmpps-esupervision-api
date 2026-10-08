@@ -40,16 +40,49 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select o from Offender o where o.id = :id")
-  fun findByIdForUpdate(id: Long): Optional<Offender>
-
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select o from Offender o where o.uuid = :uuid")
-  fun findByUuidForUpdate(uuid: UUID): Optional<Offender>
-
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
+
+  /**
+   * Update an offender based on new due_date and today's date.
+   *
+   * If update didn't happen, we should  not be creating a check-in
+   */
+  @Query(
+    """
+        with update_data as (
+          select
+           id,
+           status,
+           due_date,
+           case 
+              when status = 'CREATED' and due_date <> :newDueDate 
+                then 'An active check-in already exists for a different date'
+              when status in ('SUBMITTED', 'REVIEWED') and :newDueDate = :today and due_date = :today 
+                then 'Questions must be assigned before the check-in due date'
+              when :newDueDate < :today
+                then 'Check-in due date cannot be in the past'
+              when due_date > :today
+                then 'A check-in cannot be created in the future' -- we assume this never happens, but for completeness...
+              else NULL
+           end as hint
+          from offender_checkin_v2
+          where offender_id = :offenderId
+            and due_date > (cast(:today as date) - '3 day'::interval)
+        )
+        update offender_v2 o
+        set first_checkin = :newDueDate,
+            updated_at = now()
+        where o.id = :offenderId
+          and :newDueDate >= :today
+          and not exists (
+            select 1 from update_data u
+            where u.hint is not null
+          )""",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun maybeUpdate(offenderId: Long, newDueDate: LocalDate, today: LocalDate): Int
 
   @Query(
     value = """
