@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
+import jakarta.persistence.EntityManager
+import jakarta.validation.Validation
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -15,10 +17,14 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
+import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BeanPropertyBindingResult
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -29,6 +35,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
@@ -51,6 +58,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligi
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.net.URI
@@ -80,6 +88,9 @@ class OffenderResourceTest {
   private val eligibilityChecker: EligibilityChecker = mock()
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
   private val supervisionPackageService: SupervisionPackageService = mock()
+  private val questionService: QuestionService = mock()
+  private val transactionTemplate: TransactionTemplate = mock()
+  private val entityManager: EntityManager = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -87,6 +98,13 @@ class OffenderResourceTest {
 
   @BeforeEach
   fun setUp() {
+    whenever(transactionTemplate.execute<Any>(any())).thenAnswer {
+      val callback = it.getArgument<TransactionCallback<Any>>(0)
+      callback.doInTransaction(SimpleTransactionStatus())
+    }
+    whenever(offenderRepository.findByUuidForUpdate(any())).thenAnswer {
+      offenderRepository.findByUuid(it.getArgument<UUID>(0))
+    }
     resource = OffenderResource(
       offenderRepository,
       s3UploadService,
@@ -104,12 +122,26 @@ class OffenderResourceTest {
       eligibilityEvaluationEngine,
       eligibilityChecker,
       supervisionPackageService,
+      questionService,
+      transactionTemplate,
+      entityManager,
     )
   }
 
   // ========================================
   // Deactivate Tests
   // ========================================
+
+  @Test
+  fun `scheduleAdHocCheckin - rejects blank requester identifier`() {
+    val request = ScheduleAdHocCheckinRequest("  ", clock.today())
+
+    Validation.buildDefaultValidatorFactory().use { factory ->
+      val violations = factory.validator.validate(request)
+
+      assertTrue(violations.any { it.propertyPath.toString() == "requestedBy" })
+    }
+  }
 
   @Test
   fun `deactivateOffender - happy path - delegates to deactivation service and returns INACTIVE`() {
@@ -826,6 +858,97 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(scheduleUpdate.firstCheckin, result.body?.firstCheckin)
     assertEquals(scheduleUpdate.checkinInterval, result.body?.checkinInterval)
+  }
+
+  @Test
+  fun `scheduleAdHocCheckin - creates today's checkin with questions`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+      firstCheckin = clock.today().minusDays(1)
+    }
+    val questions = mock<AssignCustomQuestionsRequest>()
+    val checkin = mock<OffenderCheckin>()
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()))
+      .thenReturn(emptyList())
+      .thenReturn(emptyList())
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
+
+    val response = resource.scheduleAdHocCheckin(
+      offender.crn,
+      ScheduleAdHocCheckinRequest("XYZ0111", clock.today(), questions),
+    )
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(checkinCreationService).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
+    verify(questionService).assignCustomQuestionsToCheckin(checkin, questions, true)
+  }
+
+  @Test
+  fun `scheduleAdHocCheckin - sends booking notification when date changes`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+      firstCheckin = null
+    }
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    val scheduledDate = clock.today().plusDays(3)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val response = resource.scheduleAdHocCheckin(
+      offender.crn,
+      ScheduleAdHocCheckinRequest("XYZ0111", scheduledDate),
+    )
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(notificationService).sendAdHocCheckinScheduledNotification(offender, contactDetails, scheduledDate)
+  }
+
+  @Test
+  fun `scheduleAdHocCheckin - does not create today's checkin for ineligible contact`() {
+    val ineligibleContactDetails = listOf(
+      ContactDetails(
+        crn = "X123456",
+        name = Name("John", "Doe"),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+        events = emptyList(),
+      ),
+      ContactDetails(
+        crn = "X123456",
+        name = Name("John", "Doe"),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+        events = listOf(anEvent),
+        contactSuspended = true,
+      ),
+    )
+
+    for (contactDetails in ineligibleContactDetails) {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+        firstCheckin = clock.today().plusDays(1)
+      }
+      whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+      whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
+      whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)).thenReturn(emptyList())
+      whenever(
+        checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()),
+      ).thenReturn(emptyList())
+      whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+      val exception = assertThrows(ResponseStatusException::class.java) {
+        resource.scheduleAdHocCheckin(offender.crn, ScheduleAdHocCheckinRequest("XYZ0111", clock.today()))
+      }
+
+      assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    }
+
+    verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
   }
 
   @Test

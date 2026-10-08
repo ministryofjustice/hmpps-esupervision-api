@@ -780,19 +780,30 @@ fun QuestionTemplateDto.placeholders(): List<String> = questionTemplatePlacehold
  * Specifies parameters for a choice item of a custom question item
  */
 data class CustomQuestionItem(
-  @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
+  @field:Schema(
+    description = "Question template ID returned by GET /v2/questions/templates for the selected language.",
+    required = true,
+    exclusiveMinimumValue = 0,
+  )
   val id: Long,
 
-  @field:Schema(description = "Params for the custom question. Depends on question's response format", required = true)
+  @field:Schema(
+    description = "For custom questions, provide a placeholders object whose keys match the selected question template.",
+    required = true,
+    example = """{"placeholders":{"thing":"your course"}}""",
+  )
   val params: Map<String, Any>,
 )
 
 /**
  * Specifies custom questions to be added to a checkin.
  */
+@Schema(
+  description = "Assigns one to three custom questions. Use each question template ID returned by GET /v2/questions/templates for the selected language; placeholder keys must match that template.",
+)
 @ValidQuestionParams
 data class AssignCustomQuestionsRequest(
-  @field:Schema(description = "List of custom questions", required = true)
+  @field:Schema(description = "One to three selected custom questions", required = true)
   val questions: List<CustomQuestionItem>,
 
   @field:Schema(description = "Language (en-GB or cy-GB)", required = true)
