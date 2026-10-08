@@ -869,10 +869,11 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(offenderRepository.maybeUpdate(any(), any(), any())).thenReturn(1)
     whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()))
       .thenReturn(emptyList())
       .thenReturn(emptyList())
-    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
     whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
 
     val response = resource.scheduleAdHocCheckin(
@@ -896,7 +897,8 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
-    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(offenderRepository.maybeUpdate(any(), any(), any())).thenReturn(1)
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
 
     val response = resource.scheduleAdHocCheckin(
       offender.crn,
@@ -932,10 +934,11 @@ class OffenderResourceTest {
       }
       whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
       whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)).thenReturn(emptyList())
+      whenever(offenderRepository.maybeUpdate(any(), any(), any())).thenReturn(1)
       whenever(
         checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()),
       ).thenReturn(emptyList())
-      whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+      whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
 
       val exception = assertThrows(ResponseStatusException::class.java) {
         resource.scheduleAdHocCheckin(offender.crn, ScheduleAdHocCheckinRequest("XYZ0111", clock.today()))
