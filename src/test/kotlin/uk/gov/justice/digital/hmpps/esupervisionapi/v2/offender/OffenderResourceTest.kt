@@ -102,9 +102,6 @@ class OffenderResourceTest {
       val callback = it.getArgument<TransactionCallback<Any>>(0)
       callback.doInTransaction(SimpleTransactionStatus())
     }
-    whenever(offenderRepository.findByUuidForUpdate(any())).thenAnswer {
-      offenderRepository.findByUuid(it.getArgument<UUID>(0))
-    }
     resource = OffenderResource(
       offenderRepository,
       s3UploadService,
@@ -885,7 +882,7 @@ class OffenderResourceTest {
 
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(checkinCreationService).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
-    verify(questionService).assignCustomQuestionsToCheckin(checkin, questions, true)
+    verify(questionService).assignCustomQuestions(offender.crn, questions)
   }
 
   @Test
@@ -934,7 +931,6 @@ class OffenderResourceTest {
         firstCheckin = clock.today().plusDays(1)
       }
       whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
-      whenever(offenderRepository.findByUuidForUpdate(uuid)).thenReturn(Optional.of(offender))
       whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)).thenReturn(emptyList())
       whenever(
         checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()),
