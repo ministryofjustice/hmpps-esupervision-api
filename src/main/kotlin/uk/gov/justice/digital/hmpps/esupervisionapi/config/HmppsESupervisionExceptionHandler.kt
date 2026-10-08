@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ResourceNotFoundException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetailsVerificationUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackagesFetchException
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
@@ -166,6 +167,18 @@ class HmppsESupervisionExceptionHandler {
         developerMessage = e.message,
       ),
     ).also { log.warn("Eligibility data unavailable: {}", e.message) }
+
+  // The client has already logged the sanitised cause at ERROR.
+  @ExceptionHandler(PersonalDetailsVerificationUnavailableException::class)
+  fun handlePersonalDetailsVerificationUnavailableException(e: PersonalDetailsVerificationUnavailableException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(SERVICE_UNAVAILABLE)
+    .body(
+      ErrorResponse(
+        status = SERVICE_UNAVAILABLE,
+        userMessage = "Unable to verify personal details at the moment, please try again",
+        developerMessage = e.message,
+      ),
+    ).also { log.warn("Identity verification unavailable, returning 503") }
 
   @ExceptionHandler(NoResourceFoundException::class)
   fun handleNoResourceFoundException(e: NoResourceFoundException): ResponseEntity<ErrorResponse> = ResponseEntity
