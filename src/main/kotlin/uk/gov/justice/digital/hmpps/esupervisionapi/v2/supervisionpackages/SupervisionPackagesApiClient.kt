@@ -135,16 +135,17 @@ interface ISupervisionPackagesApiClient {
  * with no active package is a 200 with `currentPhase: null`, which `/case/{crn}/current-phase` would
  * instead report as a 404.
  *
- * The fallback sits on [Retry], not [CircuitBreaker]. Resilience4j wraps as
- * `Retry(CircuitBreaker(call))`, so a circuit-breaker fallback would turn a 5xx into a result before
- * the retry ever saw it, and nothing would be retried.
+ * The fallback sits on [CircuitBreaker]. application.yml nests the aspects as
+ * `CircuitBreaker(Retry(call))`, so it runs once retries are exhausted (or the circuit is open), and
+ * the breaker records one failure per exhausted call. A fallback on [Retry] would sit inside the
+ * breaker and hide every failure from it, so the circuit could never open.
  */
 open class SupervisionPackagesApiClient(
   private val supervisionPackagesApiWebClient: WebClient,
 ) : ISupervisionPackagesApiClient {
 
-  @Retry(name = "supervisionPackagesApi", fallbackMethod = "getSupervisionPackageDetailsFallback")
-  @CircuitBreaker(name = "supervisionPackagesApi")
+  @CircuitBreaker(name = "supervisionPackagesApi", fallbackMethod = "getSupervisionPackageDetailsFallback")
+  @Retry(name = "supervisionPackagesApi")
   @Timed(
     "supervision-packages.get-frontend-context",
     extraTags = ["method", "GET", "endpoint", "/frontend-context/{crn}"],
