@@ -858,7 +858,7 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `scheduleAdHocCheckin - creates today's checkin with questions`() {
+  fun `scheduleAdHocCheckin - creates today's checkin with questions using canonical CRN`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
       firstCheckin = clock.today().minusDays(1)
@@ -877,7 +877,7 @@ class OffenderResourceTest {
     whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
 
     val response = resource.scheduleAdHocCheckin(
-      offender.crn,
+      " ${offender.crn.lowercase()} ",
       ScheduleAdHocCheckinRequest("XYZ0111", clock.today(), questions),
     )
 
@@ -887,13 +887,14 @@ class OffenderResourceTest {
   }
 
   @Test
-  fun `scheduleAdHocCheckin - sends booking notification when date changes`() {
+  fun `scheduleAdHocCheckin - assigns future questions using canonical CRN and sends booking notification`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
       firstCheckin = null
     }
     val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
     val scheduledDate = clock.today().plusDays(3)
+    val questions = mock<AssignCustomQuestionsRequest>()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
@@ -901,11 +902,12 @@ class OffenderResourceTest {
     whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
 
     val response = resource.scheduleAdHocCheckin(
-      offender.crn,
-      ScheduleAdHocCheckinRequest("XYZ0111", scheduledDate),
+      " ${offender.crn.lowercase()} ",
+      ScheduleAdHocCheckinRequest("XYZ0111", scheduledDate, questions),
     )
 
     assertEquals(HttpStatus.OK, response.statusCode)
+    verify(questionService).assignCustomQuestions(offender.crn, questions)
     verify(notificationService).sendAdHocCheckinScheduledNotification(offender, contactDetails, scheduledDate)
   }
 
