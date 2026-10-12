@@ -122,6 +122,9 @@ class CheckinService(
   /**
    * Validate personal details against Ndilius This is called before offender can proceed with
    * checkin
+   *
+   * @throws PersonalDetailsVerificationUnavailableException if NDelius could not be asked; this is
+   *   deliberately not turned into a "do not match" response.
    */
   fun validateIdentity(uuid: UUID, personalDetails: PersonalDetails): IdentityValidationResponse {
     val checkin =

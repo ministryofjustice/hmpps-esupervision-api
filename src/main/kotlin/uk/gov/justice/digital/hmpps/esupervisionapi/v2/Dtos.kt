@@ -193,9 +193,12 @@ data class PersonalDetails(
   val dateOfBirth: LocalDate,
 )
 
-/** Identity validation response */
+/**
+ * Identity validation response. Only returned when Ndilius gave an answer; if it could not be
+ * reached the endpoint responds 503 instead, so verified=false always means a genuine mismatch.
+ */
 data class IdentityValidationResponse(
-  @Schema(description = "Whether identity was verified", required = true)
+  @Schema(description = "Whether identity was verified. false means Ndilius reported the details do not match", required = true)
   val verified: Boolean,
   @Schema(description = "Error message if validation failed", required = false)
   val error: String? = null,
