@@ -10,4 +10,9 @@ enum class Feature {
    * ESUP-1763: Remove snapshots from checkins if the manual check confirms it is a match
    */
   ESUP_1763,
+
+  /**
+   * ESUP-2082: New eligibility rules
+   */
+  ESUP_2082,
 }

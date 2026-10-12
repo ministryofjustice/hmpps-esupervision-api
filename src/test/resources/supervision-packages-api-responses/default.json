@@ -1,0 +1,4 @@
+{
+  "---COMMENT---": "CRNs the stubbed Supervision Packages client knows. The last digit picks the phase - see GeneratingStubDataProvider.",
+  "crns": ["X000001","X000002","X000003","X000004","X000005","X000006","X000007"]
+}

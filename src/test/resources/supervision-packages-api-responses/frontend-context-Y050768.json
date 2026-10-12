@@ -1,0 +1,71 @@
+{
+  "currentPhase": {
+    "supervisionPackage": {
+      "code": "SPNK",
+      "description": "Not Yet Known"
+    },
+    "phase": {
+      "code": "SENT",
+      "description": "In Custody"
+    },
+    "eventNumber": "1",
+    "startDate": "2026-09-07T12:10:47+01:00",
+    "endDate": "2027-08-07T00:00:00+01:00"
+  },
+  "currentYear": {
+    "startDate": "2026-09-07",
+    "endDate": "2027-08-06",
+    "proRataFromDate": "2026-09-07",
+    "isFirstYear": true,
+    "appointments": {
+      "allowance": 0,
+      "scheduled": 0,
+      "completed": 0
+    }
+  },
+  "createdAt": "2026-09-07T12:10:47+01:00",
+  "updatedAt": "2026-09-07T12:10:47+01:00",
+  "context": {
+    "name": {
+      "forename": "Test",
+      "surname": "Person"
+    },
+    "gender": "Female",
+    "sentences": [
+      {
+        "eventNumber": "1",
+        "startDate": "2026-09-07",
+        "endDate": "2027-08-06",
+        "supervisionPackage": {
+          "code": "SPNK",
+          "description": "Not Yet Known"
+        },
+        "type": {
+          "code": "307",
+          "description": "Adult Custody < 12m",
+          "isCustodial": true
+        },
+        "custody": {
+          "status": {
+            "code": "A",
+            "description": "Sentenced - In Custody"
+          },
+          "location": {
+            "code": "UNKNOW",
+            "description": "Unknown"
+          },
+          "releases": []
+        },
+        "inBreach": false
+      }
+    ],
+    "integratedOffenderManagementRedRated": false,
+    "offenderPersonalDisorderPathway": false,
+    "intensiveSupervisionCourt": false,
+    "nationalSecurityDivision": false,
+    "finalThirdEligibility": {
+      "eligible": true,
+      "since": "2026-09-07"
+    }
+  }
+}

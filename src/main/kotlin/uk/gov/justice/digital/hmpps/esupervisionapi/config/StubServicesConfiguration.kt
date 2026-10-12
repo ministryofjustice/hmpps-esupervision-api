@@ -3,8 +3,10 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.config
 import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
 import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
@@ -18,7 +20,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.IArnsApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.ISupervisionPackagesApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.ITierApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.nio.file.Path
 
@@ -27,6 +32,8 @@ class StubServicesConfiguration {
 
   @Bean
   @Profile("local & stubndilius")
+  @Primary
+  @Qualifier("ndeliusEligibilityApiClient")
   fun ndiliusApiClient(): INdiliusApiClient {
     LOG.info("Creating stubbed Ndilius API client")
     return StubNdiliusApiClient()
@@ -34,6 +41,8 @@ class StubServicesConfiguration {
 
   @Bean
   @Profile("local & stubtier")
+  @Primary
+  @Qualifier("tierEligibilityApiClient")
   fun tierApiClient(): ITierApiClient {
     LOG.info("Creating stubbed Tier API client")
     return StubTierApiClient()
@@ -44,6 +53,15 @@ class StubServicesConfiguration {
   fun arnsApiClient(): IArnsApiClient {
     LOG.info("Creating stubbed Arns API client")
     return StubArnsApiClient()
+  }
+
+  @Bean
+  @Profile("local & stubsupervisionpackages")
+  @Primary
+  @Qualifier("supervisionPackagesEligibilityApiClient")
+  fun supervisionPackagesApiClient(): ISupervisionPackagesApiClient {
+    LOG.info("Creating stubbed Supervision Packages API client")
+    return StubSupervisionPackagesApiClient()
   }
 
   companion object {
@@ -76,7 +94,11 @@ open class StubNdiliusApiClient(
     return watcher.allowedCrns.contains(personalDetails.crn)
   }
 
-  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details (STUB)")
+  @Timed(
+    "ndelius.get-contact-details",
+    extraTags = ["method", "GET", "endpoint", "/case/{crn}"],
+    description = "Time taken to get contact details (STUB)",
+  )
   override fun getContactDetails(crn: String): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {
@@ -140,10 +162,10 @@ open class StubTierApiClient(
     watcher.stopWatchingChanges()
   }
 
-  override fun getTierDetails(crn: String): TierDetails? {
-    LOG.debug("Fetching tier details for CRN: {}", crn)
+  override fun getTierDetails(crn: String, version: TierApiVersion): TierDetails? {
+    LOG.debug("Fetching {} tier details for CRN: {}", version, crn)
     if (watcher.allowedCrns.contains(crn)) {
-      return dataProvider.provideTierDetails(crn)
+      return dataProvider.provideTierDetails(crn, version)
     }
     LOG.debug("CRN {} not found in allowed list", crn)
     return null
@@ -172,6 +194,34 @@ open class StubArnsApiClient(
     LOG.debug("Fetching tier details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideArnsWidget(crn)
+    }
+    LOG.debug("CRN {} not found in allowed list", crn)
+    return null
+  }
+
+  companion object {
+    val LOG = LoggerFactory.getLogger(this::class.java)
+  }
+}
+
+open class StubSupervisionPackagesApiClient(
+  val watcher: StubDataWatcher = StubDataWatcher(Path.of("src/test/resources/supervision-packages-api-responses/default.json")),
+  val dataProvider: StubDataProvider = GeneratingStubDataProvider(),
+) : ISupervisionPackagesApiClient,
+  DisposableBean {
+
+  init {
+    watcher.startWatchingChanges()
+  }
+
+  override fun destroy() {
+    watcher.stopWatchingChanges()
+  }
+
+  override fun getSupervisionPackageDetails(crn: String): SupervisionPackageDetails? {
+    LOG.debug("Fetching supervision package details for CRN: {}", crn)
+    if (watcher.allowedCrns.contains(crn)) {
+      return dataProvider.provideSupervisionPackageDetails(crn)
     }
     LOG.debug("CRN {} not found in allowed list", crn)
     return null

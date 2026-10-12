@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
@@ -94,6 +95,12 @@ data class ContactDetails(
     required = false,
   )
   val contactSuspended: Boolean = false,
+
+//  @field:Schema(
+//    description = "Date the person was recorded as deceased in NDelius, if applicable (optional)",
+//    required = false,
+//  )
+//  val deceasedDate: LocalDate? = null,
 ) : INamedPerson
 
 /** Person's name from Ndilius */
@@ -101,6 +108,8 @@ data class Name(
   @field:Schema(description = "Forename", required = true, example = "John") val forename: String,
   @field:Schema(description = "Surname", required = true, example = "Smith") val surname: String,
 )
+
+fun Name.fullName(): String = "$forename $surname"
 
 /** Practitioner details from Ndilius API */
 data class PractitionerDetails(
@@ -184,9 +193,12 @@ data class PersonalDetails(
   val dateOfBirth: LocalDate,
 )
 
-/** Identity validation response */
+/**
+ * Identity validation response. Only returned when Ndilius gave an answer; if it could not be
+ * reached the endpoint responds 503 instead, so verified=false always means a genuine mismatch.
+ */
 data class IdentityValidationResponse(
-  @Schema(description = "Whether identity was verified", required = true)
+  @Schema(description = "Whether identity was verified. false means Ndilius reported the details do not match", required = true)
   val verified: Boolean,
   @Schema(description = "Error message if validation failed", required = false)
   val error: String? = null,
@@ -243,11 +255,13 @@ data class OffenderDto(
   @field:Schema(description = "Practitioner ID", required = true)
   val practitionerId: ExternalUserId,
   @field:Schema(description = "Offender status", required = true) val status: OffenderStatus,
-  @field:Schema(description = "Date of first checkin", required = true)
+  @field:Schema(description = "Date of first checkin. Null when no AD_HOC date is configured.", required = false)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
-  @field:Schema(description = "Interval between checkins", required = true)
-  val checkinInterval: CheckinInterval,
+  val firstCheckin: LocalDate?,
+  @field:Schema(description = "Interval between checkins", required = false)
+  val checkinInterval: CheckinInterval?,
+  @field:Schema(description = "Check-in mode", required = true)
+  val mode: CheckinMode = CheckinMode.SCHEDULED,
   @field:Schema(description = "Created timestamp", required = true) val createdAt: Instant,
   @field:Schema(description = "Created by practitioner ID", required = true) val createdBy: String,
   @field:Schema(description = "Last updated timestamp", required = true) val updatedAt: Instant,
@@ -271,11 +285,13 @@ data class OffenderInfo(
   @field:NotBlank
   @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
   val crn: String,
-  @field:Schema(description = "Date of first checkin", required = true)
+  @field:Schema(description = "Date of first checkin. Optional for AD_HOC check-ins; scheduled check-ins require a date.", required = false)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
-  @field:Schema(description = "Interval between checkins", required = true)
-  val checkinInterval: CheckinInterval,
+  val firstCheckin: LocalDate?,
+  @field:Schema(description = "Interval between checkins", required = false)
+  val checkinInterval: CheckinInterval?,
+  @field:Schema(description = "Check-in mode", required = true)
+  val mode: CheckinMode = CheckinMode.SCHEDULED,
   @field:Schema(description = "POP contact preference", required = true)
   val contactPreference: ContactPreference,
   @field:Schema(description = "Setup start timestamp (optional)", required = false)
@@ -823,7 +839,7 @@ data class OffenderQuestionList(
 )
 
 data class UpcomingQuestionAssignmentInfo(
-  val expectedCheckinDate: LocalDate,
+  val expectedCheckinDate: LocalDate?,
   val questionList: Long?,
 )
 
@@ -832,7 +848,7 @@ data class UpcomingQuestionAssignmentResponse(
 )
 
 data class UpcomingQuestionListItems(
-  val expectedCheckinDate: LocalDate,
+  val expectedCheckinDate: LocalDate?,
   val items: List<QuestionListItemDto>,
 )
 
@@ -850,8 +866,11 @@ data class UpcomingQuestionItemsResponse(
   val upcoming: UpcomingQuestionListItems,
 )
 
+/**
+ * Used by the manage check-ins page.
+ */
 data class UpcomingOffenderQuestions(
-  val expectedCheckinDate: LocalDate,
+  val expectedCheckinDate: LocalDate?,
   val questions: List<OffenderQuestion>,
 )
 

@@ -96,6 +96,22 @@ class OpenApiDocsTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `the supervision package errors do not advertise a status body`() {
+    val responses = "$.paths['/v2/offenders/crn/{crn}/supervision-package'].get.responses"
+
+    webTestClient.get()
+      .uri("/v3/api-docs")
+      .accept(MediaType.APPLICATION_JSON)
+      .exchange()
+      .expectStatus().isOk
+      .expectBody()
+      // Without an explicit content, springdoc would give the errors the 200's schema.
+      .jsonPath("$responses.404.content").doesNotExist()
+      .jsonPath("$responses.503.content['application/json'].schema.\$ref").isEqualTo("#/components/schemas/ErrorResponse")
+      .jsonPath("$responses.200.content['application/json'].schema.\$ref").isEqualTo("#/components/schemas/SupervisionPackageStatus")
+  }
+
+  @Test
   @Disabled("TODO Enable this test once you have an endpoint.")
   fun `all endpoints have a security scheme defined`() {
     webTestClient.get()

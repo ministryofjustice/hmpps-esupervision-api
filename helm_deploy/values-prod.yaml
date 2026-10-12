@@ -20,6 +20,7 @@ generic-service:
     TIER_API_URL: "https://hmpps-tier.hmpps.service.justice.gov.uk"
     TIER_UI_URL: "https://tier.hmpps.service.justice.gov.uk"
     ARNS_API_URL: "https://assess-risks-and-needs.hmpps.service.justice.gov.uk"
+    SUPERVISION_PACKAGES_API_URL: "https://supervision-packages-api.hmpps.service.justice.gov.uk"
     APP_ENV: "PROD"
     APP_SCHEDULING_MIGRATION_EVENT_REPLAY_CRON: "0 * * * * *"
     APP_SCHEDULING_CHECKIN_NOTE_RESEND_CRON: "0 */15 * * * *"
@@ -30,6 +31,7 @@ generic-service:
     CHECKIN_LEGACY_CLEANUP_DRY_RUN: "false"
     APP_FEATURES_ESUP_1239: "true"
     APP_FEATURES_ESUP_1763: "true"
+    APP_FEATURES_ESUP_2186_TIER_V3_FROM: "2026-10-01T00:00:00+01:00"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
 # See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts

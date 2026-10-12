@@ -30,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEven
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -84,11 +85,20 @@ class CheckinCreationJobTest {
   @Test
   fun `ineligible (contact suspended) - deactivates and creates no checkin`() {
     val offender = offender("X000002")
-    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)))
+    stubEligible(
+      listOf(offender),
+      mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)),
+    )
 
     job.process()
 
-    verify(deactivationService).deactivateOffender(eq(offender), any(), any(), any(), eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED))
+    verify(deactivationService).deactivateOffender(
+      eq(offender),
+      any(),
+      any(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+    )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
 
@@ -99,7 +109,13 @@ class CheckinCreationJobTest {
 
     job.process()
 
-    verify(deactivationService).deactivateOffender(eq(offender), any(), any(), any(), eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS))
+    verify(deactivationService).deactivateOffender(
+      eq(offender),
+      any(),
+      any(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+    )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
 
@@ -149,10 +165,22 @@ class CheckinCreationJobTest {
       override val crn: CRN,
       override val practitionerId: ExternalUserId,
       override val contactPreference: ContactPreference,
+      override val checkinMode: CheckinMode,
       override val currentEvent: Long?,
     ) : OffenderRepository.IOffenderCheckinCreationInfo
     whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), anyOrNull()))
-      .thenReturn(offenders.map { CheckinCreationInfo(it.id, it.crn, it.practitionerId, it.contactPreference, it.currentEvent) })
+      .thenReturn(
+        offenders.map {
+          CheckinCreationInfo(
+            it.id,
+            it.crn,
+            it.practitionerId,
+            it.contactPreference,
+            it.mode,
+            it.currentEvent,
+          )
+        },
+      )
     whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<Offender>())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
     whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenAnswer { arg ->
@@ -166,11 +194,29 @@ class CheckinCreationJobTest {
         createdBy = "SYSTEM",
       )
     }
-    whenever(checkinCreationService.createCheckins(any())).thenAnswer { it.getArgument<List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>>(0) }
-    whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(checkinCreationService.createCheckins(any())).thenAnswer {
+      it.getArgument<List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>>(
+        0,
+      )
+    }
+    whenever(
+      deactivationService.deactivateOffender(
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+      ),
+    ).thenAnswer { it.getArgument<Offender>(0) }
   }
 
-  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended, dateOfBirth = LocalDate.of(1980, 1, 1))
+  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(
+    crn = crn,
+    name = Name("John", "Doe"),
+    events = events,
+    contactSuspended = suspended,
+    dateOfBirth = LocalDate.of(1980, 1, 1),
+  )
 
   private fun offender(crn: String) = Offender(
     uuid = UUID.randomUUID(),

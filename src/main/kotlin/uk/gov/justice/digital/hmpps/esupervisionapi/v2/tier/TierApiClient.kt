@@ -1,10 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier
 
 import org.slf4j.LoggerFactory
-import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
-import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
@@ -13,7 +11,7 @@ import java.time.LocalDate
 import java.util.*
 
 interface ITierApiClient {
-  fun getTierDetails(crn: String): TierDetails?
+  fun getTierDetails(crn: String, version: TierApiVersion): TierDetails?
 }
 
 /**
@@ -24,18 +22,16 @@ interface ITierApiClient {
  * [uk.gov.justice.digital.hmpps.esupervisionapi.config.RefreshTokenOnUnauthorizedFilter], so a 401
  * only reaches the catch below once a freshly minted token has also been rejected.
  */
-@Profile("!stubtier")
-@Service
-class TierApiClient(
+open class TierApiClient(
   private val tierApiWebClient: WebClient,
 ) : ITierApiClient {
 
-  override fun getTierDetails(crn: String): TierDetails? {
-    LOGGER.info("Fetching tier details for CRN: {}", crn)
+  override fun getTierDetails(crn: String, version: TierApiVersion): TierDetails? {
+    LOGGER.info("Fetching {} tier details for CRN: {}", version, crn)
 
     return try {
       tierApiWebClient.get()
-        .uri("/v2/crn/{crn}/tier", crn)
+        .uri(version.tierPath, crn)
         .retrieve()
         .bodyToMono(TierDetails::class.java)
         .block()
@@ -99,9 +95,24 @@ class TierApiClient(
   }
 }
 
+/**
+ * v2 scores look like "D2". v3 scores are a single letter A-G, or [TierDetails.NOT_SUPERVISED] /
+ * [TierDetails.MISSING] when no tier applies.
+ */
 data class TierDetails(
   val tierScore: String,
   val calculationId: UUID,
+  /**
+   * Upstream sends a date-time on both v2 and v3 (e.g. "2026-10-01T08:15:30.123"). Jackson's
+   * LocalDate deserializer accepts an ISO date-time and keeps the date - see TierApiClientTest.
+   */
   val calculationDate: LocalDate,
   val changeReason: String?,
-)
+  /** v3 only. */
+  val provisional: Boolean? = null,
+) {
+  companion object {
+    const val NOT_SUPERVISED = "NOT_SUPERVISED"
+    const val MISSING = "MISSING"
+  }
+}

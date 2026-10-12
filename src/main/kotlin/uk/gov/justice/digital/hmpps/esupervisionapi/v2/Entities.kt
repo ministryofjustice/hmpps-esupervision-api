@@ -20,6 +20,7 @@ import org.hibernate.type.SqlTypes
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
@@ -35,8 +36,8 @@ import java.time.Period
 import java.util.UUID
 
 interface CheckinSchedule {
-  val firstCheckin: LocalDate
-  val checkinInterval: Duration
+  val firstCheckin: LocalDate?
+  val checkinInterval: Duration?
 }
 
 /**
@@ -72,11 +73,16 @@ open class Offender(
   @Enumerated(EnumType.STRING)
   open var status: OffenderStatus = OffenderStatus.INITIAL,
 
-  @Column(name = "first_checkin", nullable = false)
-  open override var firstCheckin: LocalDate,
+  @Column(name = "first_checkin")
+  open override var firstCheckin: LocalDate?,
 
-  @Column(name = "checkin_interval", nullable = false)
-  open override var checkinInterval: Duration,
+  @Column(name = "checkin_mode", nullable = false)
+  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+  @Enumerated(EnumType.STRING)
+  open var mode: CheckinMode = CheckinMode.SCHEDULED,
+
+  @Column(name = "checkin_interval")
+  open override var checkinInterval: Duration? = null,
 
   @Column(name = "created_at", nullable = false)
   open var createdAt: Instant,
@@ -93,6 +99,9 @@ open class Offender(
 
   @Column(name = "current_event", nullable = true)
   open override var currentEvent: Long? = null,
+
+  @Column(name = "in_pilot", nullable = false)
+  open var inPilot: Boolean = false,
 ) : V2BaseEntity(),
   CheckinSchedule,
   ActiveEvent {
@@ -102,7 +111,8 @@ open class Offender(
     practitionerId = practitionerId,
     status = status,
     firstCheckin = firstCheckin,
-    checkinInterval = CheckinInterval.fromDuration(checkinInterval),
+    checkinInterval = checkinInterval?.let { CheckinInterval.fromDuration(it) },
+    mode = mode,
     createdAt = createdAt,
     createdBy = createdBy,
     updatedAt = updatedAt,

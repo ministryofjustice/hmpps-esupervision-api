@@ -39,7 +39,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
@@ -47,6 +49,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetailsVerificationUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -1370,6 +1374,65 @@ class CheckinServiceTest {
     dueDate = dueDate,
     createdAt = clock.instant(),
     createdBy = "PRACT001",
+  )
+
+  @Test
+  fun `validateIdentity - verified - returns verified and marks checkin started`() {
+    val checkin = identityCheckin()
+    whenever(ndiliusApiClient.validatePersonalDetails(any())).thenReturn(true)
+
+    val result = service.validateIdentity(checkin.uuid, personalDetails(checkin.offender.crn))
+
+    assertEquals(IdentityValidationResponse(verified = true), result)
+    assertEquals(clock.instant(), checkin.checkinStartedAt)
+  }
+
+  @Test
+  fun `validateIdentity - NDelius says details do not match - returns the existing not-verified response`() {
+    val checkin = identityCheckin()
+    whenever(ndiliusApiClient.validatePersonalDetails(any())).thenReturn(false)
+
+    val result = service.validateIdentity(checkin.uuid, personalDetails(checkin.offender.crn))
+
+    assertEquals(
+      IdentityValidationResponse(verified = false, error = "Personal details do not match our records"),
+      result,
+    )
+    assertNull(checkin.checkinStartedAt)
+  }
+
+  @Test
+  fun `validateIdentity - ESUP-2181 NDelius unavailable - propagates rather than reporting a mismatch`() {
+    val checkin = identityCheckin()
+    val unavailable = PersonalDetailsVerificationUnavailableException(RuntimeException("connection refused"))
+    whenever(ndiliusApiClient.validatePersonalDetails(any())).thenThrow(unavailable)
+
+    val thrown = assertThrows(PersonalDetailsVerificationUnavailableException::class.java) {
+      service.validateIdentity(checkin.uuid, personalDetails(checkin.offender.crn))
+    }
+
+    assertEquals(unavailable, thrown)
+    assertNull(checkin.checkinStartedAt)
+    verify(transactionTemplate, never()).executeWithoutResult(any())
+  }
+
+  private fun identityCheckin(): OffenderCheckin {
+    val checkin = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = createOffender(),
+      status = CheckinStatus.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "PRACT001",
+    )
+    whenever(checkinRepository.findByUuid(checkin.uuid)).thenReturn(Optional.of(checkin))
+    return checkin
+  }
+
+  private fun personalDetails(crn: String) = PersonalDetails(
+    crn = crn,
+    name = Name(forename = "John", surname = "Smith"),
+    dateOfBirth = LocalDate.of(1985, 5, 14),
   )
 
   private fun createOffender() = Offender(

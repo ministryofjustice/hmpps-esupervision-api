@@ -8,6 +8,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.ArnsWidget
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.arns.RiskInSituation
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.CustodyDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
 import java.time.LocalDate
 import java.time.ZoneId
@@ -17,8 +20,9 @@ typealias CRN = String
 
 interface StubDataProvider {
   fun provideCase(crn: CRN): ContactDetails
-  fun provideTierDetails(crn: CRN): TierDetails
+  fun provideTierDetails(crn: CRN, version: TierApiVersion): TierDetails
   fun provideArnsWidget(crn: CRN): ArnsWidget
+  fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails
 }
 
 class DefaultStubDataProvider : StubDataProvider {
@@ -55,11 +59,12 @@ class DefaultStubDataProvider : StubDataProvider {
     ),
   )
 
-  override fun provideTierDetails(crn: String): TierDetails = TierDetails(
-    tierScore = "D2",
+  override fun provideTierDetails(crn: String, version: TierApiVersion): TierDetails = TierDetails(
+    tierScore = if (version == TierApiVersion.V3) "D" else "D2",
     calculationId = UUID.randomUUID(),
     calculationDate = LocalDate.of(2026, 1, 1),
     changeReason = "A registration was added",
+    provisional = if (version == TierApiVersion.V3) false else null,
   )
 
   override fun provideArnsWidget(crn: CRN): ArnsWidget = ArnsWidget(
@@ -80,6 +85,12 @@ class DefaultStubDataProvider : StubDataProvider {
       prisoners = "VERY_HIGH",
     ),
   )
+
+  override fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails = SupervisionPackageDetails(
+    supervisionPackage = CodedDescription("SPC", "C"),
+    phase = CodedDescription("STD", "Standard supervision"),
+    recallStatus = null,
+  )
 }
 
 /**
@@ -87,8 +98,13 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> "001122" will become part of the offender's surname and contact info
  * - X001122 -> "00" will become part of the practitioner's surname and contact info
  * - X001122 -> "11" will become part of the practitioner's local admin, probation delivery and provider code
- * - X001122 -> First & last character "X2" will become the tier score
+ * - X001122 -> First & last character "X2" will become the v2 tier score
+ * - X001122 -> Last character will decide the v3 tier score: "0"-"6" become "A"-"G", "7" NOT_SUPERVISED,
+ *   "8" MISSING, "9" "D". Last character "0" also makes that v3 tier provisional.
  * - X001122 -> Last character will decide the risk level "2" will become "MEDIUM"
+ * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
+ *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
+ *   request, "7" recalled and unlawfully at large, anything else standard supervision
  */
 class GeneratingStubDataProvider : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
@@ -137,11 +153,15 @@ class GeneratingStubDataProvider : StubDataProvider {
     )
   }
 
-  override fun provideTierDetails(crn: String): TierDetails = TierDetails(
-    tierScore = "${crn.substring(0)}${crn.substring(5)}",
+  override fun provideTierDetails(crn: String, version: TierApiVersion): TierDetails = TierDetails(
+    tierScore = when (version) {
+      TierApiVersion.V2 -> "${crn.substring(0)}${crn.substring(5)}"
+      TierApiVersion.V3 -> V3_SCORES_BY_LAST_DIGIT[crn.last().digitToInt()]
+    },
     calculationId = UUID.randomUUID(),
     calculationDate = LocalDate.of(2026, 1, 1),
     changeReason = "A registration was added",
+    provisional = if (version == TierApiVersion.V3) crn.last() == '0' else null,
   )
 
   override fun provideArnsWidget(crn: CRN): ArnsWidget {
@@ -172,6 +192,57 @@ class GeneratingStubDataProvider : StubDataProvider {
     )
   }
 
+  override fun provideSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails {
+    val packageC = CodedDescription("SPC", "C")
+    return when (crn.last()) {
+      '1' -> SupervisionPackageDetails(packageC, CodedDescription("INIT", "Early engagement"), recallStatus = null)
+      '2' -> SupervisionPackageDetails(packageC, CodedDescription("FTHRD", "Final third"), recallStatus = null)
+      // Released, then recalled, and back in prison. C "Recalled" is confirmed by Manage People on
+      // Probation; the prison is from Supervision Packages' own test data.
+      '3' -> SupervisionPackageDetails(
+        packageC,
+        CodedDescription("SENT", "In Custody"),
+        // The recall has been decided, which end-dates the request NSI, so no recall status remains.
+        recallStatus = null,
+        custody = listOf(
+          CustodyDetails(
+            eventNumber = "1",
+            status = CodedDescription("C", "Recalled"),
+            location = CodedDescription("SWIHMP", "Swansea (HMP)"),
+            latestReleaseDate = LocalDate.of(2026, 1, 12),
+            latestRecallDate = LocalDate.of(2026, 3, 2),
+          ),
+        ),
+      )
+      '4' -> SupervisionPackageDetails(supervisionPackage = null, phase = null, recallStatus = null)
+      // An undecided recall request, like Y058556 on dev: REC01 is a real r_nsi_status for the REC
+      // ("Request for Recall") NSI type. Nothing is recalled yet, so there is no custody record.
+      '6' -> SupervisionPackageDetails(
+        CodedDescription("SPNK", "Not Yet Known"),
+        CodedDescription("SPNK", "Not Yet Known"),
+        CodedDescription("REC01", "Recall Initiated"),
+      )
+      // Recalled but not returned to custody. UATLRG is the location Manage People on Probation checks
+      // for "unlawfully at large". It does not count as recalled. Unlawfully at large is not in custody, so the phase is not SENT; what
+      // Supervision Packages reports for it is not confirmed, so it is left as not yet known.
+      '7' -> SupervisionPackageDetails(
+        packageC,
+        CodedDescription("SPNK", "Not Yet Known"),
+        recallStatus = null,
+        custody = listOf(
+          CustodyDetails(
+            eventNumber = "1",
+            status = CodedDescription("C", "Recalled"),
+            location = CodedDescription("UATLRG", "Unlawfully at Large"),
+            latestReleaseDate = LocalDate.of(2026, 1, 12),
+            latestRecallDate = LocalDate.of(2026, 3, 2),
+          ),
+        ),
+      )
+      else -> SupervisionPackageDetails(packageC, CodedDescription("STD", "Standard supervision"), recallStatus = null)
+    }
+  }
+
   private data class CrnIds(
     val person: String,
     val practitioner: String,
@@ -181,5 +252,9 @@ class GeneratingStubDataProvider : StubDataProvider {
   private fun parseCrn(crn: CRN): CrnIds {
     assert(crn.matches(Regex("[A-Z][0-9]{6}"))) { "Invalid CRN supplied: $crn" }
     return CrnIds(crn.substring(1), crn.substring(1, 3), crn.substring(3, 5))
+  }
+
+  private companion object {
+    val V3_SCORES_BY_LAST_DIGIT = listOf("A", "B", "C", "D", "E", "F", "G", TierDetails.NOT_SUPERVISED, TierDetails.MISSING, "D")
   }
 }

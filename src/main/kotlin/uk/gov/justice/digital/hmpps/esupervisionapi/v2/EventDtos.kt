@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.util.UUID
@@ -96,6 +97,7 @@ data class CheckinCreatedEvent(
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
   override val currentEvent: Long?,
+  val checkinMode: CheckinMode,
 ) : ICheckinEvent,
   ActiveEvent {
   override val outboxItemCoords = OutboxItemType.CHECKIN_CREATED to checkinId
@@ -142,6 +144,7 @@ data class PartialCheckinCreatedEvent(
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
   override val currentEvent: Long?,
+  val checkinMode: CheckinMode,
 ) : ICheckinEventBase,
   IPartialEvent,
   ActiveEvent {
@@ -154,6 +157,7 @@ data class PartialCheckinCreatedEvent(
       checkin = this.checkin,
       offenderContactPreference = offenderContactPreference,
       currentEvent = currentEvent,
+      checkinMode = checkinMode,
     )
   }
 }

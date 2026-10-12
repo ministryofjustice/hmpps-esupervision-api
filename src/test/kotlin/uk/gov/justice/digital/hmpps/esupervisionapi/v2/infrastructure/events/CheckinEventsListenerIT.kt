@@ -76,6 +76,7 @@ class CheckinEventsListenerIT : IntegrationTestBase() {
       checkin = checkin.dto(null, clock = clock),
       offenderContactPreference = ContactPreference.PHONE,
       currentEvent = 1,
+      checkinMode = offender.mode,
     )
 
     checkinEventsListener.processEvent(event).get(2, TimeUnit.SECONDS)

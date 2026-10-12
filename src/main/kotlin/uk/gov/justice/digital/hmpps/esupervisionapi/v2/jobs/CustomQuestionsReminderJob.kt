@@ -18,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import java.time.Clock
 import java.time.Duration
@@ -36,8 +37,9 @@ private data class OffenderInfo(
   val crn: CRN,
   val uuid: UUID,
   val practitioner: ExternalUserId,
-  override val firstCheckin: LocalDate,
-  override val checkinInterval: Duration,
+  override val firstCheckin: LocalDate?,
+  override val checkinInterval: Duration?,
+  val mode: CheckinMode,
 ) : CheckinSchedule
 
 /**
@@ -91,7 +93,7 @@ class CustomQuestionsReminderJob(
           stream.asSequence()
             .chunked(INdiliusApiClient.MAX_BATCH_SIZE)
             .map { batch ->
-              val infosBatch = batch.map { OffenderInfo(it.crn, it.uuid, it.practitionerId, it.firstCheckin, it.checkinInterval) }
+              val infosBatch = batch.map { OffenderInfo(it.crn, it.uuid, it.practitionerId, it.firstCheckin, it.checkinInterval, it.mode) }
               entityManager.flush()
               entityManager.clear()
               infosBatch
@@ -111,10 +113,20 @@ class CustomQuestionsReminderJob(
           continue
         }
         for (info in batch) {
-          val added = crnToDetails[info.crn]?.let {
-            sendable.add(QuestionsReminderInfo(info.uuid, it, info.practitioner, nextCheckinDay(info, today)))
+          val firstCheckin = info.firstCheckin
+          if (firstCheckin == null) {
+            LOGGER.info("Skipping custom questions reminder for CRN={} because no first check-in date is configured", info.crn)
+            continue
           }
-          if (added == null) {
+          val contactDetails = crnToDetails[info.crn]
+          if (contactDetails != null) {
+            val expectedCheckinDate = when (info.mode) {
+              CheckinMode.SCHEDULED -> nextCheckinDay(info, today)
+              CheckinMode.AD_HOC -> firstCheckin
+            }
+            sendable.add(QuestionsReminderInfo(info.uuid, contactDetails, info.practitioner, expectedCheckinDate))
+          }
+          if (contactDetails == null) {
             unsendable.add(info.crn)
           }
         }

@@ -91,3 +91,37 @@ src/main/resources/application-local.yml
 
 # Local volume/cache
 volume/
+
+# Personal-data outputs of scripts/practitioner_contact_list.sql and
+# scripts/fetch_practitioner_details.sh. They are meant to be produced outside
+# the checkout; this is the second line of defence if they are not.
+practitioner_crns.jsonl
+practitioner_usernames.csv
+practitioners.jsonl
+practitioner_export.csv
+practitioners_unmatched.csv
+extract_report.txt
+practitioners.previous.jsonl
+
+# Outputs of scripts/run_tier_counts.sh (CRNs tied to tiers), same reasoning.
+active_crns.txt
+tiers.jsonl
+tier_counts.csv
+
+# Outputs of scripts/run_pop_contact_export.sh (names and phone numbers of
+# people on probation), same reasoning.
+active_crns.txt
+pop_contacts.jsonl
+pop_contacts.csv
+pop_contacts.PARTIAL.csv
+excluded.csv
+unresolved.txt
+
+# Outputs of scripts/run_practitioner_tier_export.sh (staff tied to the CRNs
+# they supervise, with tiers), same reasoning.
+practitioner_rows.jsonl
+tiers.jsonl
+practitioner_tiers.csv
+practitioner_tiers.PARTIAL.csv
+crn_tiers.csv
+crn_tiers.PARTIAL.csv

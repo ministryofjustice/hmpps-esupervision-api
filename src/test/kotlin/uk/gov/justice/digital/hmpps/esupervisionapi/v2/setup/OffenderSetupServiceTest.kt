@@ -3,14 +3,18 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -19,6 +23,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -34,8 +39,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.time.Clock
@@ -60,6 +69,7 @@ class OffenderSetupServiceTest {
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService = mock()
+  private val eligibilityChecker: EligibilityChecker = mock()
 
   private lateinit var service: OffenderSetupService
 
@@ -75,12 +85,22 @@ class OffenderSetupServiceTest {
       transactionTemplate,
       Duration.ofDays(3),
       offenderSetupPersistenceService,
+      eligibilityChecker,
     )
   }
 
   @AfterEach
   fun tearDown() {
-    reset(offenderRepository, offenderSetupRepository, s3UploadService, notificationService, ndiliusApiClient, transactionTemplate, offenderSetupPersistenceService)
+    reset(
+      offenderRepository,
+      offenderSetupRepository,
+      s3UploadService,
+      notificationService,
+      ndiliusApiClient,
+      transactionTemplate,
+      offenderSetupPersistenceService,
+      eligibilityChecker,
+    )
   }
 
   @Test
@@ -144,6 +164,92 @@ class OffenderSetupServiceTest {
   }
 
   @Test
+  fun `startOffenderSetup - allows an ad-hoc offender without a first check-in date`() {
+    val offenderInfo = OffenderInfo(
+      setupUuid = UUID.randomUUID(),
+      practitionerId = "PRACT001",
+      crn = "X123456",
+      firstCheckin = null,
+      checkinInterval = null,
+      mode = CheckinMode.AD_HOC,
+      contactPreference = ContactPreference.EMAIL,
+    )
+    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.arguments[0] }
+
+    service.startOffenderSetup(offenderInfo)
+
+    verify(offenderRepository).save(
+      argThat {
+        mode == CheckinMode.AD_HOC &&
+          firstCheckin == null &&
+          checkinInterval == null
+      },
+    )
+  }
+
+  @Test
+  fun `startOffenderSetup - rejects a scheduled offender without a first check-in date`() {
+    val offenderInfo = OffenderInfo(
+      setupUuid = UUID.randomUUID(),
+      practitionerId = "PRACT001",
+      crn = "X123456",
+      firstCheckin = null,
+      checkinInterval = CheckinInterval.WEEKLY,
+      contactPreference = ContactPreference.EMAIL,
+    )
+
+    assertThrows(BadArgumentException::class.java) {
+      service.startOffenderSetup(offenderInfo)
+    }
+
+    verify(offenderRepository, never()).save(any())
+  }
+
+  @Nested
+  inner class SetupStartedAt {
+    private fun startSetupWith(startedAt: Instant?): Instant? {
+      val offenderInfo = OffenderInfo(
+        setupUuid = UUID.randomUUID(),
+        practitionerId = "PRACT001",
+        crn = "X123456",
+        firstCheckin = LocalDate.now(clock).plusDays(7),
+        checkinInterval = CheckinInterval.WEEKLY,
+        contactPreference = ContactPreference.EMAIL,
+        startedAt = startedAt,
+      )
+      whenever(offenderRepository.findByCrn(offenderInfo.crn)).thenReturn(Optional.empty())
+      whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenAnswer { it.arguments[0] }
+
+      service.startOffenderSetup(offenderInfo)
+
+      val captor = argumentCaptor<OffenderSetup>()
+      verify(offenderSetupRepository).save(captor.capture())
+      return captor.firstValue.startedAt
+    }
+
+    @Test
+    fun `keeps a start time from earlier in the setup journey`() {
+      val startedAt = clock.instant().minus(Duration.ofMinutes(12))
+      assertEquals(startedAt, startSetupWith(startedAt))
+    }
+
+    @Test
+    fun `stores no start time when none is sent`() {
+      assertNull(startSetupWith(null))
+    }
+
+    @Test
+    fun `ignores a start time in the future`() {
+      assertNull(startSetupWith(clock.instant().plusSeconds(1)))
+    }
+
+    @Test
+    fun `ignores a start time older than the maximum setup duration`() {
+      assertNull(startSetupWith(clock.instant().minus(OffenderSetupService.MAX_SETUP_DURATION).minusSeconds(1)))
+    }
+  }
+
+  @Test
   fun `completeOffenderSetup - happy path with photo uploaded - completes setup`() {
     // Given
     val offender = Offender(
@@ -171,7 +277,8 @@ class OffenderSetupServiceTest {
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<Offender, Any?>>(any())).thenAnswer {
-      val callback = it.getArgument<org.springframework.transaction.support.TransactionCallback<Pair<Offender, Any?>>>(0)
+      val callback =
+        it.getArgument<org.springframework.transaction.support.TransactionCallback<Pair<Offender, Any?>>>(0)
       callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())
     }
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
@@ -185,7 +292,11 @@ class OffenderSetupServiceTest {
     assertEquals(offender.uuid, result.uuid)
     assertEquals(1, setup.setupCounter)
     verify(s3UploadService).isSetupPhotoUploaded(setup)
-    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(argThat { status == OffenderStatus.VERIFIED }, anyOrNull(), any())
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(
+      argThat { status == OffenderStatus.VERIFIED },
+      anyOrNull(),
+      any(),
+    )
     verify(notificationService).sendSetupCompletedNotifications(any(), isNull(), argThat { setupId == setup.setupId() })
   }
 
@@ -251,10 +362,18 @@ class OffenderSetupServiceTest {
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     // Suspended even though an active event is present - suspension wins.
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
-      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), contactSuspended = true, dateOfBirth = LocalDate.of(1980, 1, 1)),
+      ContactDetails(
+        crn = offender.crn,
+        name = Name("John", "Doe"),
+        events = listOf(activeEvent),
+        contactSuspended = true,
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
     )
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
-    assertThrows(BadArgumentException::class.java) {
+    assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
     }
     verify(offenderRepository, never()).save(any())
@@ -275,10 +394,17 @@ class OffenderSetupServiceTest {
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
-      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = emptyList(), dateOfBirth = LocalDate.of(1980, 1, 1)),
+      ContactDetails(
+        crn = offender.crn,
+        name = Name("John", "Doe"),
+        events = emptyList(),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
     )
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
-    assertThrows(BadArgumentException::class.java) {
+    assertThrows(ResponseStatusException::class.java) {
       service.completeOffenderSetup(setup.uuid)
     }
     verify(offenderRepository, never()).save(any())
@@ -307,7 +433,11 @@ class OffenderSetupServiceTest {
     val result = service.completeOffenderSetup(setup.uuid)
 
     assertEquals(OffenderStatus.VERIFIED, result.status)
-    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(argThat { status == OffenderStatus.VERIFIED }, anyOrNull(), any())
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(
+      argThat { status == OffenderStatus.VERIFIED },
+      anyOrNull(),
+      any(),
+    )
   }
 
   @Test
@@ -324,15 +454,102 @@ class OffenderSetupServiceTest {
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
-      ContactDetails(crn = offender.crn, name = Name("John", "Doe"), events = listOf(activeEvent), dateOfBirth = LocalDate.of(1980, 1, 1)),
+      ContactDetails(
+        crn = offender.crn,
+        name = Name("John", "Doe"),
+        events = listOf(activeEvent),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
     )
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any()))
       .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = service.completeOffenderSetup(setup.uuid)
 
     assertEquals(OffenderStatus.VERIFIED, result.status)
-    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(argThat { status == OffenderStatus.VERIFIED }, any(), any())
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(
+      argThat { status == OffenderStatus.VERIFIED },
+      any(),
+      any(),
+    )
+  }
+
+  @Test
+  fun `completeOffenderSetup - throws when eligibility engine returns not eligible`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(
+        crn = offender.crn,
+        name = Name("John", "Doe"),
+        events = listOf(activeEvent),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
+    )
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
+
+    assertThrows(ResponseStatusException::class.java) {
+      service.completeOffenderSetup(setup.uuid)
+    }
+    verify(offenderRepository, never()).save(any())
+    verify(notificationService, never()).sendSetupCompletedNotifications(any(), any(), any())
+  }
+
+  @Test
+  fun `completeOffenderSetup - do not block the setup when eligibility engine's source data is unavailable`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(
+        crn = offender.crn,
+        name = Name("John", "Doe"),
+        events = listOf(activeEvent),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
+    )
+    whenever(
+      offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(
+        any(),
+        any(),
+        any(),
+      ),
+    ).thenReturn(
+      OffenderSetupPersistenceService.Result(checkin = null),
+    )
+    whenever(eligibilityChecker.check(any(), any())).doThrow(
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException(
+        "RULE",
+        "NDELIUS",
+        RuntimeException("NDelius down"),
+      ),
+    )
+
+    assertDoesNotThrow {
+      service.completeOffenderSetup(setup.uuid)
+    }
+    verify(offenderRepository, never()).save(any())
+    verify(notificationService, times(1)).sendSetupCompletedNotifications(any(), any(), any())
   }
 
   @Test
