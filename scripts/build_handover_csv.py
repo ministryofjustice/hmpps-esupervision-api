@@ -31,6 +31,7 @@ personal data, keep them outside the git repo, and delete working copies when do
 """
 import csv
 import json
+import os
 import sys
 
 OUT_COLUMNS = [
@@ -133,6 +134,9 @@ def main(argv):
             writer.writerow(out_row)
             written += 1
 
+    # never leave an earlier run's exceptions looking current
+    if os.path.exists(exceptions_path):
+        os.remove(exceptions_path)
     if missing:
         with open(exceptions_path, "w", newline="", encoding="utf-8") as fh:
             w = csv.writer(fh, quoting=csv.QUOTE_ALL, lineterminator="\r\n")

@@ -113,12 +113,16 @@ REPORT="$WORK_DIR/match_report.txt"
 CRN_STATUS="$WORK_DIR/delius_crns.jsonl"
 OUT="$WORK_DIR/delius_note_corrections.csv"
 OUT_EXCEPTIONS="$WORK_DIR/delius_note_corrections.exceptions.csv"
+# Staged first: $CONTACTS may itself be $WORK_DIR/delius_contacts.csv, which the
+# rm below would otherwise delete before it is copied.
+STAGED_CONTACTS="$(mktemp "$WORK_DIR/.delius_contacts.XXXXXX")"
+cp -- "$CONTACTS" "$STAGED_CONTACTS"
 # Every run starts afresh, so a run that stops early never leaves an earlier
 # run's results looking current.
 rm -f "$CONTACTS_JSON" "$MATCHED" "$EXPORT" "$NOTES" "$REPORT" "$CRN_STATUS" "$OUT" "$OUT_EXCEPTIONS" \
   "$WORK_DIR/delius_contacts.csv"
 # Kept alongside the outputs: build_handover_csv.py preserves its rows and columns.
-cp -- "$CONTACTS" "$WORK_DIR/delius_contacts.csv"
+mv -- "$STAGED_CONTACTS" "$WORK_DIR/delius_contacts.csv"
 python3 "$REPO_ROOT/scripts/delius_note_correction.py" prepare "$WORK_DIR/delius_contacts.csv" "$CONTACTS_JSON"
 
 kubectl -n "$NS" auth can-i create pods >/dev/null 2>&1 \

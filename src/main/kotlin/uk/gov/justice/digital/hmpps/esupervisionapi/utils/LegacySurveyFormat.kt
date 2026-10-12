@@ -20,10 +20,19 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
  * special-cased before the snake-case branch ever runs.
  *
  * Source: git show e948cf35^:src/main/kotlin/.../v2/checkin/SurveyDetails.kt
+ *
+ * Two earlier deploys changed what this formatter emitted, and callers select them via the parameters:
+ *  - before 49d8ee1 (prod 2026-04-24T09:17:57Z) the labels were [PRE_RELATIONSHIPS_LEGACY_CUSTOM_LABELS]
+ *  - before f97b38c2 + 4afe6fe6 (prod 2026-04-20T10:24:16Z) the same value formatting lived in
+ *    EventDetailV2Service and custom questions were not rendered at all
  */
-internal fun StringBuilder.appendLegacyQuestionsAndAnswers(survey: Map<String, Any>): StringBuilder {
+internal fun StringBuilder.appendLegacyQuestionsAndAnswers(
+  survey: Map<String, Any>,
+  labels: Map<String, String> = LEGACY_CUSTOM_LABELS,
+  renderCustomQuestions: Boolean = true,
+): StringBuilder {
   appendLine("Check in answers:")
-  legacyFormatSurveyResponse(survey).forEach {
+  legacyFormatSurveyResponse(survey, labels).forEach {
     appendLine(it)
     appendLine()
   }
@@ -31,7 +40,7 @@ internal fun StringBuilder.appendLegacyQuestionsAndAnswers(survey: Map<String, A
   // e948cf35 left this block untouched, but it still has to be rendered here: custom questions
   // shipped 2026-04-17, so check-ins from this era can carry them.
   val version = survey["version"]
-  if (version == "2026-04-16@questions") {
+  if (renderCustomQuestions && version == "2026-04-16@questions") {
     @Suppress("UNCHECKED_CAST")
     val customQuestions = (survey["customQuestions"] as? List<Map<String, Any>>) ?: emptyList()
     customQuestions.forEach { customQuestion ->
@@ -48,7 +57,7 @@ internal fun StringBuilder.appendLegacyQuestionsAndAnswers(survey: Map<String, A
   return this
 }
 
-private val LEGACY_CUSTOM_LABELS = mapOf(
+internal val LEGACY_CUSTOM_LABELS = mapOf(
   "mentalHealth" to "How they have been feeling",
   "mentalHealthComment" to "What they want us to know about how they have been feeling",
   "assistance" to "Anything they need support with or to let us know",
@@ -64,10 +73,26 @@ private val LEGACY_CUSTOM_LABELS = mapOf(
   "callbackDetails" to "What they want to talk about",
 )
 
-private fun legacyFormatSurveyResponse(survey: Map<String, Any>): List<String> {
+/** Labels before 49d8ee1: no employmentEduSupport, and "support system" rather than "relationships". */
+internal val PRE_RELATIONSHIPS_LEGACY_CUSTOM_LABELS = mapOf(
+  "mentalHealth" to "How they have been feeling",
+  "mentalHealthComment" to "What they want us to know about how they have been feeling",
+  "assistance" to "Anything they need support with or to let us know",
+  "mentalHealthSupport" to "What they want us to know about mental health",
+  "alcoholSupport" to "What they want us to know about alcohol",
+  "drugsSupport" to "What they want us to know about drugs",
+  "moneySupport" to "What they want us to know about money",
+  "housingSupport" to "What they want us to know about housing",
+  "supportSystemSupport" to "What they want us to know about their support system",
+  "otherSupport" to "What they want us to know about (something else)",
+  "callback" to "If they need us to contact them before their next appointment",
+  "callbackDetails" to "What they want to talk about",
+)
+
+private fun legacyFormatSurveyResponse(survey: Map<String, Any>, labels: Map<String, String>): List<String> {
   val lines = mutableListOf<String>()
 
-  for ((key, value) in LEGACY_CUSTOM_LABELS) {
+  for ((key, value) in labels) {
     val surveyValue = survey[key]
 
     if (surveyValue == null) continue
