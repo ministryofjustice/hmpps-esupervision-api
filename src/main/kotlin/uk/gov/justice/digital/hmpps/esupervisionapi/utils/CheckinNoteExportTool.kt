@@ -50,8 +50,8 @@ private val JSON = ObjectMapper()
  * date -- prod lagged the merge by hours or days in every case. Anything submitted before a
  * boundary is rendered in the older form, because that is what NDelius would have been sent.
  */
-private val CONFIG_EXPANSIONS_AT = Instant.parse("2026-05-07T10:02:58Z") // e948cf35
-private val OTHER_EXPANSION_AT = Instant.parse("2026-05-18T11:12:37Z") // e801800e
+internal val CONFIG_EXPANSIONS_AT: Instant = Instant.parse("2026-05-07T10:02:58Z") // e948cf35
+internal val OTHER_EXPANSION_AT: Instant = Instant.parse("2026-05-18T11:12:37Z") // e801800e
 
 fun main(args: Array<String>) {
   val positional = args.filter { !it.startsWith("--") }
@@ -61,13 +61,6 @@ fun main(args: Array<String>) {
   if (!inFile.canRead()) fail("cannot read input file: $inFile")
 
   val surveyConfig = loadSurveyConfigFromApplicationYml()
-  // e801800e added the OTHER expansion. Between CONFIG_EXPANSIONS_AT and OTHER_EXPANSION_AT the
-  // config formatter was live but had no OTHER entry, so OTHER fell through to the snake-case
-  // prettifier and rendered as "Other".
-  val surveyConfigWithoutOther = SurveyValueExpansionsConfig(
-    surveyConfig.expansions.filterKeys { it != "OTHER" },
-    surveyConfig.customLabels,
-  )
   System.err.println(
     "Loaded survey config: ${surveyConfig.customLabels.size} labels, " +
       "${surveyConfig.expansions.size} expansions",
@@ -87,7 +80,7 @@ fun main(args: Array<String>) {
 
       val submittedAt = (row["submittedAt"] as? String)
         ?.let { runCatching { Instant.parse(it) }.getOrNull() }
-      val notes = survey?.let { formatAnswers(it, submittedAt, surveyConfig, surveyConfigWithoutOther) } ?: ""
+      val notes = survey?.let { formatAnswers(it, submittedAt, surveyConfig) } ?: ""
 
       val warnings = warningsFor(notes, survey) +
         if (submittedAt == null) listOf("no submittedAt: answers rendered with the CURRENT formatter rather than the era they belong to") else emptyList()
@@ -122,14 +115,18 @@ internal fun formatAnswers(
   survey: Map<String, Any>,
   submittedAt: Instant?,
   surveyConfig: SurveyValueExpansionsConfig,
-  surveyConfigWithoutOther: SurveyValueExpansionsConfig = surveyConfig,
 ): String {
   fun liveAt(boundary: Instant) = submittedAt == null || !submittedAt.isBefore(boundary)
 
   val sb = StringBuilder()
   when {
     !liveAt(CONFIG_EXPANSIONS_AT) -> sb.appendLegacyQuestionsAndAnswers(survey)
-    !liveAt(OTHER_EXPANSION_AT) -> sb.appendQuestionsAndAnswers(survey, surveyConfigWithoutOther)
+    // e801800e added the OTHER expansion. Before it the config formatter was live but had no OTHER
+    // entry, so OTHER fell through to the snake-case prettifier and rendered as "Other".
+    !liveAt(OTHER_EXPANSION_AT) -> sb.appendQuestionsAndAnswers(
+      survey,
+      SurveyValueExpansionsConfig(surveyConfig.expansions.filterKeys { it != "OTHER" }, surveyConfig.customLabels),
+    )
     else -> sb.appendQuestionsAndAnswers(survey, surveyConfig)
   }
   return sb.toString().trimEnd('\n')

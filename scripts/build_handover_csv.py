@@ -7,9 +7,9 @@ the contact list NDelius supplied, preserving their row order and columns so the
 file we return diffs cleanly against the one we were given.
 
 NOTES holds only the "Check in answers:" block of the submitted check-in, which
-is the part missing from the contact note NDelius holds. If notes.jsonl holds
-whole notes (e.g. fetched by fetch_checkin_notes.sh), everything before that
-heading is dropped.
+is the part missing from the contact note NDelius holds. If a note holds more
+than that block, everything before the heading is dropped. Lines carrying an
+"error" field are ignored, so those contacts land in the exceptions file.
 
 Runs entirely offline - no database, no API. Inputs are files already on disk.
 
@@ -64,6 +64,8 @@ def main(argv):
             if not line:
                 continue
             row = json.loads(line)
+            if row.get("error"):
+                continue
             cid = str(row.get("contact_id", "")).strip()
             if not cid:
                 sys.exit(f"ERROR: a line in {notes_path} has no contact_id")

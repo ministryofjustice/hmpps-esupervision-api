@@ -19,7 +19,6 @@ Usage:
         Prints the match report to stdout -- read it before handover -- and
         writes, into out_dir:
           checkin_export.jsonl   feeds CheckinNoteExportTool
-          checkins_to_fetch.csv  only for the API route (fetch_checkin_notes.sh)
         Prints a one-line-per-section summary of anything needing attention
         to stderr.
 
@@ -205,11 +204,6 @@ def report(matched_path, out_dir):
                 "sensitive": r.get("sensitive"),
                 "surveyResponse": r["surveyResponse"],
             }, ensure_ascii=False) + "\n")
-    with open(os.path.join(out_dir, "checkins_to_fetch.csv"), "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh, lineterminator="\n")
-        w.writerow(["row_no", "contact_id", "crn", "checkin_uuid", "sensitive"])
-        for r in export:
-            w.writerow([r["row_no"], r["contact_id"], r["crn"], r["checkinUuid"], str(r.get("sensitive")).lower()])
 
     print(f"\n{len(rows)} contacts, {len(export)} matched check-ins with answers to export")
     print(f"{len(rows)} contacts, {len(export)} with answers to export", file=sys.stderr)

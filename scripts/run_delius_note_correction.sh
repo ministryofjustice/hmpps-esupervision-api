@@ -116,7 +116,7 @@ OUT_EXCEPTIONS="$WORK_DIR/delius_note_corrections.exceptions.csv"
 # Every run starts afresh, so a run that stops early never leaves an earlier
 # run's results looking current.
 rm -f "$CONTACTS_JSON" "$MATCHED" "$EXPORT" "$NOTES" "$REPORT" "$CRN_STATUS" "$OUT" "$OUT_EXCEPTIONS" \
-  "$WORK_DIR/checkins_to_fetch.csv" "$WORK_DIR/delius_contacts.csv"
+  "$WORK_DIR/delius_contacts.csv"
 # Kept alongside the outputs: build_handover_csv.py preserves its rows and columns.
 cp -- "$CONTACTS" "$WORK_DIR/delius_contacts.csv"
 python3 "$REPO_ROOT/scripts/delius_note_correction.py" prepare "$WORK_DIR/delius_contacts.csv" "$CONTACTS_JSON"
