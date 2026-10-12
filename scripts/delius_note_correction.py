@@ -26,13 +26,48 @@ NOTE: the files carry mental-health free text. Treat them as sensitive personal
 data, keep them outside the git repo, and delete working copies when done.
 """
 import csv
+import datetime
 import json
 import os
+import re
 import sys
 from collections import Counter, defaultdict
 
 REQUIRED = ("CRN", "CONTACT_DATE", "START_TIME", "CONTACT_ID")
 CUSTOM_QUESTIONS_VERSION = "2026-04-16@questions"
+
+
+def parse_contact_date(value):
+    """YYYY-MM-DD or DD/MM/YYYY (as supplied, or after a trip through Excel) to
+    ISO, or None for anything else -- including impossible dates like 31/02,
+    which Postgres would either reject, aborting the whole query, or roll over."""
+    if not value:
+        return None
+    if m := re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", value):
+        y, mo, d = m.groups()
+    elif m := re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", value):
+        d, mo, y = m.groups()
+    else:
+        return None
+    try:
+        return datetime.date(int(y), int(mo), int(d)).isoformat()
+    except ValueError:
+        return None
+
+
+def parse_start_time(value):
+    """H:MM, H:MM:SS or H:MM:SS.fff to HH:MM:SS[.ffffff], or None if malformed or
+    out of range (25:00 would otherwise abort the whole query)."""
+    if not value:
+        return None
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?", value)
+    if not m:
+        return None
+    h, mi, sec, frac = m.groups()
+    try:
+        return datetime.time(int(h), int(mi), int(sec or 0), int((frac or "0").ljust(6, "0"))).isoformat()
+    except ValueError:
+        return None
 
 
 def prepare(csv_path, json_path):
@@ -55,6 +90,9 @@ def prepare(csv_path, json_path):
                 "crn": field(row, "CRN"),
                 "contact_date": field(row, "CONTACT_DATE"),
                 "start_time": field(row, "START_TIME"),
+                # validated here, so the SQL only ever casts well-formed values
+                "contact_date_iso": parse_contact_date(field(row, "CONTACT_DATE")),
+                "start_time_iso": parse_start_time(field(row, "START_TIME")),
                 "contact_id": field(row, "CONTACT_ID"),
                 "soft_deleted": field(row, "SOFT_DELETED"),
             }

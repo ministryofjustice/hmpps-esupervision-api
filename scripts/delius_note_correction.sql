@@ -26,6 +26,7 @@
 -- Input:  contacts.json, read by psql on the CLIENT (never sent anywhere but
 --         as a query parameter): [{"row_no":1,"crn":"E659305",
 --         "contact_date":"22/04/2026","start_time":"09:15:25",
+--         "contact_date_iso":"2026-04-22","start_time_iso":"09:15:25",
 --         "contact_id":"1996227159","soft_deleted":"0"}, ...]
 -- Output: matched.jsonl, one line per contact, in row order. Every contact
 --         appears, matched or not.
@@ -51,16 +52,16 @@ WITH input AS (
   SELECT *
   FROM json_to_recordset(:'contacts'::json) AS t(
     row_no bigint, crn text, contact_date text, start_time text,
+    contact_date_iso text, start_time_iso text,
     contact_id text, soft_deleted text
   )
 ),
--- Parsed explicitly: DD/MM/YYYY is ambiguous under the default datestyle, and
--- to_timestamp(text,text) would resolve against the session time zone.
--- date + time -> timestamp -> AT TIME ZONE is deterministic. The list was
--- supplied as DD/MM/YYYY, but a re-export (or a trip through Excel) yields
--- YYYY-MM-DD; anything else -- including a blank or malformed START_TIME --
--- parses to NULL rather than the wrong date or a failed run, and is reported
--- as unparsed.
+-- contact_date_iso / start_time_iso come from delius_note_correction.py
+-- prepare, which accepts DD/MM/YYYY or YYYY-MM-DD and H:MM[:SS] and validates
+-- the ranges, so a cast here can neither fail nor roll 31/02 over into March.
+-- Anything it could not parse -- including a blank START_TIME -- is NULL here
+-- and reported as unparsed. date + time -> timestamp -> AT TIME ZONE is
+-- deterministic, unlike to_timestamp(text,text) under the session time zone.
 contacts AS (
   SELECT
     row_no,
@@ -69,11 +70,7 @@ contacts AS (
     trim(contact_date) AS contact_date_raw,
     trim(start_time)   AS start_time_raw,
     trim(soft_deleted) AS soft_deleted,
-    (CASE
-       WHEN trim(contact_date) ~ '^\d{4}-\d{1,2}-\d{1,2}$' THEN to_date(trim(contact_date), 'YYYY-MM-DD')
-       WHEN trim(contact_date) ~ '^\d{1,2}/\d{1,2}/\d{4}$' THEN to_date(trim(contact_date), 'DD/MM/YYYY')
-     END + CASE WHEN trim(start_time) ~ '^\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?$' THEN trim(start_time)::time END)
-      AT TIME ZONE 'Europe/London' AS contact_at
+    (contact_date_iso::date + start_time_iso::time) AT TIME ZONE 'Europe/London' AS contact_at
   FROM input
 )
 -- The event was published within seconds of submitted_at (publishing before
