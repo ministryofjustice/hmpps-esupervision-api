@@ -19,7 +19,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -138,25 +137,15 @@ class CheckinCreationService(
    * @throws BatchCheckinCreationException
    */
   @Transactional
-  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>): List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>> {
-    if (checkins.isEmpty()) return emptyList()
-    val createdCheckins = mutableListOf<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>()
+  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>) {
+    if (checkins.isEmpty()) return
     try {
       for ((checkin, event) in checkins) {
-        val offender = offenderRepository.findByIdForUpdate(checkin.offender.id).orElse(null) ?: continue
-        if (offender.status != OffenderStatus.VERIFIED || !isCheckinDay(offender, checkin.dueDate)) continue
-        val existingCheckin = checkinRepository.findAllByOffenderAndDueDate(offender, checkin.dueDate)
-          .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
-        if (existingCheckin) continue
-
-        checkin.offender = offender
         checkinPersistenceService.checkinCreation(checkin, event)
-        createdCheckins.add(checkin to event)
       }
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)
     }
-    return createdCheckins
   }
 
   /**
