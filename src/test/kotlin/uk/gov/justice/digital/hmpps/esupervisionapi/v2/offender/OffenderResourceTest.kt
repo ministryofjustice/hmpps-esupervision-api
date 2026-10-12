@@ -884,6 +884,7 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, response.statusCode)
     verify(checkinCreationService).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
     verify(questionService).assignCustomQuestions(offender.crn, questions)
+    verify(notificationService).sendAdHocCheckinScheduledNotification(offender, contactDetails, clock.today())
   }
 
   @Test

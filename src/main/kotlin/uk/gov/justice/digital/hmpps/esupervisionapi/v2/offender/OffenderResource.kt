@@ -731,7 +731,7 @@ is *today*.""",
       }
     }
 
-    val shouldNotifyScheduledDate = offenderDto.firstCheckin != request.firstCheckin && !(request.firstCheckin == today)
+    val shouldNotifyScheduledDate = offenderDto.firstCheckin != request.firstCheckin
     if (shouldNotifyScheduledDate) {
       notificationService.sendAdHocCheckinScheduledNotification(
         offender,
