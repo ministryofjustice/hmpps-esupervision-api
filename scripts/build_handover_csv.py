@@ -2,19 +2,25 @@
 """
 Build the NDelius handover CSV (ESUP-1956 follow-up).
 
-Joins the note text produced by CheckinNoteExportTool back onto the contact list
-NDelius supplied, preserving their row order and columns so the file we return
-diffs cleanly against the one we were given.
+Joins the questions-and-answers text produced by CheckinNoteExportTool back onto
+the contact list NDelius supplied, preserving their row order and columns so the
+file we return diffs cleanly against the one we were given.
+
+NOTES holds only the "Check in answers:" block of the submitted check-in, which
+is the part missing from the contact note NDelius holds. If notes.jsonl holds
+whole notes (e.g. fetched by fetch_checkin_notes.sh), everything before that
+heading is dropped.
 
 Runs entirely offline - no database, no API. Inputs are files already on disk.
 
 Usage:
     ./scripts/build_handover_csv.py delius_contacts.csv notes.jsonl \
-        delius_note_corrections.csv
+        delius_note_corrections.csv [delius_crns.jsonl]
 
-If notes.jsonl came from --full-note, three more columns (REVIEWED,
-SUBMITTED_NOTE, REVIEWED_NOTE) are added automatically and NOTES holds the two
-parts joined.
+delius_crns.jsonl, written by run_delius_note_correction.sh, records whether
+each CRN still exists in NDelius (the last line per CRN wins). When given,
+contacts whose CRN is NOT_IN_DELIUS, or could not be checked, go to the
+exceptions file instead of the handover.
 
 Outputs:
     <output>.csv            one row per contact WITH a note, in their row order
@@ -32,16 +38,23 @@ OUT_COLUMNS = [
     "CHECKIN_UUID", "SENSITIVE", "NOTES",
 ]
 
-# CheckinNoteExportTool --full-note emits "reviewed"/"submittedNote"/"reviewedNote" as well.
-# The extra columns only appear when the notes file actually has them, so the submission-only
-# handover file keeps the exact shape NDelius has already seen.
-FULL_NOTE_COLUMNS = ["REVIEWED", "SUBMITTED_NOTE", "REVIEWED_NOTE"]
+ANSWERS_HEADING = "Check in answers:"
 
 
 def main(argv):
-    if len(argv) != 4:
+    if len(argv) not in (4, 5):
         sys.exit(__doc__)
-    contacts_path, notes_path, out_path = argv[1:]
+    contacts_path, notes_path, out_path = argv[1:4]
+
+    # latest NDelius check per CRN; None means no check was run at all
+    crn_status = None
+    if len(argv) == 5:
+        crn_status = {}
+        with open(argv[4], encoding="utf-8") as fh:
+            for line in fh:
+                if line.strip():
+                    row = json.loads(line)
+                    crn_status[row["crn"]] = row
 
     # note text keyed by contact id
     notes = {}
@@ -58,12 +71,6 @@ def main(argv):
                 sys.exit(f"ERROR: duplicate contact_id {cid} in {notes_path}")
             notes[cid] = row
 
-    full_note = any("reviewed" in row for row in notes.values())
-    columns = OUT_COLUMNS + (FULL_NOTE_COLUMNS if full_note else [])
-    if full_note:
-        print("full-note mode: notes carry review parts, adding "
-              f"{', '.join(FULL_NOTE_COLUMNS)}", file=sys.stderr)
-
     written, missing = 0, []
     exceptions_path = out_path.rsplit(".csv", 1)[0] + ".exceptions.csv"
 
@@ -77,7 +84,7 @@ def main(argv):
                 sys.exit(f"ERROR: {contacts_path} has no {required} column "
                          f"(found: {reader.fieldnames})")
 
-        writer = csv.DictWriter(dst, fieldnames=columns,
+        writer = csv.DictWriter(dst, fieldnames=OUT_COLUMNS,
                                 quoting=csv.QUOTE_ALL, lineterminator="\r\n")
         writer.writeheader()
 
@@ -87,11 +94,25 @@ def main(argv):
             if note is None:
                 missing.append((row, "no note generated (unmatched, or no answers held)"))
                 continue
+            if crn_status is not None:
+                crn = note.get("crn") or (row.get("CRN") or "").strip().upper()
+                check = crn_status.get(crn)
+                if check is None:
+                    missing.append((row, "CRN was not checked against NDelius"))
+                    continue
+                if check.get("status") == "NOT_IN_DELIUS":
+                    missing.append((row, "CRN no longer exists in NDelius"))
+                    continue
+                if check.get("status") != "FOUND":
+                    missing.append((row, "could not confirm the CRN exists in NDelius"
+                                         f" ({check.get('reason') or 'unknown'}) - re-run to retry"))
+                    continue
             text = note.get("notes") or ""
-            if "Check in answers:" not in text:
+            if ANSWERS_HEADING not in text:
                 missing.append((row, "generated note has no answers block"))
                 continue
-            if not text.split("Check in answers:", 1)[1].strip():
+            text = ANSWERS_HEADING + text.split(ANSWERS_HEADING, 1)[1].rstrip("\n")
+            if not text[len(ANSWERS_HEADING):].strip():
                 # heading with nothing under it: no survey key matched custom-labels,
                 # so this note would tell NDelius nothing new
                 missing.append((row, "answers block is empty"))
@@ -107,12 +128,6 @@ def main(argv):
                 "SENSITIVE": str(note.get("sensitive")).lower(),
                 "NOTES": text,
             }
-            if full_note:
-                # NOTES is the two parts joined; these let NDelius take them separately
-                # if they turn out to be able to amend just one.
-                out_row["REVIEWED"] = str(note.get("reviewed", False)).lower()
-                out_row["SUBMITTED_NOTE"] = note.get("submittedNote") or ""
-                out_row["REVIEWED_NOTE"] = note.get("reviewedNote") or ""
             writer.writerow(out_row)
             written += 1
 

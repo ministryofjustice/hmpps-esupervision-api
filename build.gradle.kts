@@ -6,6 +6,11 @@ plugins {
   kotlin("plugin.spring") version "2.3.21"
 }
 
+// utils/CheckinNoteExportTool.kt has its own main(), so Spring Boot cannot infer this one.
+springBoot {
+  mainClass.set("uk.gov.justice.digital.hmpps.esupervisionapi.AppKt")
+}
+
 configurations {
   testImplementation { exclude(group = "org.junit.vintage") }
 }
