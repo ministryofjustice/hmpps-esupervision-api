@@ -26,9 +26,13 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "IS_TIER_PROVISIONAL",
         "IN_FINAL_THIRD",
         "IS_PRACTITIONER_ASSIGNED",
+        "HAS_DEVICE_RESTRICTION",
         "IS_TIER_D_TO_G",
+        "IS_PILOT_USER",
         "IS_TIER_C",
-        "IN_EARLY_ENGAGEMENT",
+        "ON_ACCREDITED_PROGRAMME",
+        "ON_YOUTH_SENTENCE",
+        "IN_EARLY_ENGAGEMENT"
       )
   }
 
@@ -48,12 +52,24 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
           "EARLY_ENGAGEMENT" to false,
         ),
       ),
-      "TIER" to CompletableFuture.completedFuture<Map<String, Any?>>(
+      "TIER" to CompletableFuture.completedFuture(
         mapOf(
           "TIER" to "B",
           "PROVISIONAL" to "false",
         ),
       ),
+      "ESUP" to CompletableFuture.completedFuture(
+        mapOf(
+          "PILOT_USER" to true,
+        ),
+      ),
+      "MANUAL" to CompletableFuture.completedFuture(
+        mapOf(
+          "DEVICE_RESTRICTION" to false,
+          "ACCREDITED_PROGRAMME" to false,
+          "YOUTH_SENTENCE" to false,
+        ),
+      )
     )
 
     val result = eligibilityEvaluationEngine
@@ -61,9 +77,10 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       .join()
 
     assertThat(result.outcome).isEqualTo(EligibilityCheckOutcome.ELIGIBLE)
-    assertThat(result.triggeredRuleCode).isEqualTo("IN_EARLY_ENGAGEMENT")
+    assertThat(result.triggeredRuleCode).isEqualTo("IS_PILOT_USER")
 
     prePopulatedCache["TIER"] = CompletableFuture.completedFuture(mapOf("TIER" to "C", "PROVISIONAL" to "false"))
+    prePopulatedCache["ESUP"] = CompletableFuture.completedFuture(mapOf("PILOT_USER" to false))
     val resultC = eligibilityEvaluationEngine
       .evaluate("X123456", DEFAULT_RULE_SET, prePopulatedCache)
       .join()
