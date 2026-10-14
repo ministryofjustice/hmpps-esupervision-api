@@ -120,6 +120,42 @@ class EligibilityEvaluationEngineTest {
   }
 
   @Test
+  fun `itemize evaluates every rule in order including rules after a terminal outcome`() {
+    val firstRule = rule(
+      "FIRST",
+      1.0,
+      "NDELIUS",
+      "DECEASED_DATE",
+      EligibilityRuleOperator.IS_NULL,
+      outcomeOnMatch = EligibilityRuleOutcome.ELIGIBLE,
+    )
+    val secondRule = rule(
+      "SECOND",
+      2.0,
+      "NOMIS",
+      "RECALL_STATUS",
+      EligibilityRuleOperator.IS_NULL,
+      outcomeOnMatch = EligibilityRuleOutcome.NOT_ELIGIBLE,
+    )
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(firstRule, secondRule))
+    val ndeliusProvider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null))
+    val nomisProvider = mockProvider("NOMIS", mapOf("RECALL_STATUS" to null))
+
+    val result = engine.itemise("X123456", DEFAULT_RULE_SET, emptyMap()).join()
+
+    assertEquals(
+      listOf(
+        firstRule to EligibilityRuleOutcome.ELIGIBLE,
+        secondRule to EligibilityRuleOutcome.NOT_ELIGIBLE,
+      ),
+      result,
+    )
+    verify(ndeliusProvider).fetch("X123456")
+    verify(nomisProvider).fetch("X123456")
+  }
+
+  @Test
   fun `terminal NOT_ELIGIBLE outcome stops evaluation with message`() {
     val rule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
@@ -208,7 +244,8 @@ class EligibilityEvaluationEngineTest {
     val ndeliusRule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
       .thenReturn(listOf(ndeliusRule))
-    val prePopulatedCache = mapOf("NDELIUS" to CompletableFuture.completedFuture(mapOf<String, Any?>("DECEASED_DATE" to null)))
+    val prePopulatedCache =
+      mapOf("NDELIUS" to CompletableFuture.completedFuture(mapOf<String, Any?>("DECEASED_DATE" to null)))
 
     val result = engine.evaluate("X123456", prePopulatedCache = prePopulatedCache, ruleSet = DEFAULT_RULE_SET).join()
 
@@ -231,6 +268,28 @@ class EligibilityEvaluationEngineTest {
   }
 
   @Test
+  fun `evaluate and itemize share source fetches when using one cache`() {
+    val first = rule(
+      "SHORTCUT",
+      1.0,
+      "NDELIUS",
+      "DECEASED_DATE",
+      EligibilityRuleOperator.IS_NULL,
+      outcomeOnMatch = EligibilityRuleOutcome.ELIGIBLE,
+    )
+    val second = rule("SECOND", 2.0, "NDELIUS", "ACTIVE_EVENT", EligibilityRuleOperator.IS_NOT_NULL)
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET))
+      .thenReturn(listOf(first, second))
+    val provider = mockProvider("NDELIUS", mapOf("DECEASED_DATE" to null, "ACTIVE_EVENT" to "ACTIVE"))
+    val fetchCache = engine.newFetchCache()
+
+    engine.evaluate("X123456", DEFAULT_RULE_SET, fetchCache).join()
+    engine.itemise("X123456", DEFAULT_RULE_SET, fetchCache).join()
+
+    verify(provider, times(1)).fetch("X123456")
+  }
+
+  @Test
   fun `ResourceNotFoundException propagates from the provider to engine caller`() {
     val sourceKey = "NDELIUS"
     val first = rule("RECALLED", 1.0, sourceKey, "RECALL_STATUS", EligibilityRuleOperator.IS_NULL)
@@ -239,7 +298,7 @@ class EligibilityEvaluationEngineTest {
 
     val crn = "X000001"
     val apiClient: INdiliusApiClient = mock()
-    whenever(apiClient.getContactDetailsStrict(any(), any())).thenReturn(null)
+    whenever(apiClient.getContactDetailsStrict(any())).thenReturn(null)
     executor = Executors.newSingleThreadExecutor()
     val provider: EligibilityDataProvider = NdeliusEligibilityDataProvider(
       apiClient,

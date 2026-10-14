@@ -75,9 +75,11 @@ fun checkinIneligibilityReason(offender: ActiveEvent, details: ContactDetails): 
  * is on ad-hoc check-ins (e.g. offender.firstCheckin is their closest check-in date).
  */
 fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
-  val intervalDuration = offender.checkinInterval ?: return date == offender.firstCheckin
-  // require(intervalDuration != null) { "Check-in interval is required for scheduled check-ins" }
-  val firstCheckin = offender.firstCheckin
+  val intervalDuration = offender.checkinInterval
+  if (intervalDuration == null) {
+    return date == offender.firstCheckin
+  }
+  val firstCheckin = requireNotNull(offender.firstCheckin) { "First check-in date is required for scheduled check-ins" }
   if (intervalDuration.toDays() > 0) {
     if (date < firstCheckin) {
       return false
@@ -101,9 +103,10 @@ fun isCheckinDay(offender: CheckinSchedule, date: LocalDate): Boolean {
 fun nextCheckinDay(schedule: CheckinSchedule, today: LocalDate): LocalDate {
   val intervalDuration = schedule.checkinInterval
   require(intervalDuration != null) { "Check-in interval is required for scheduled check-ins" }
-  if (today < schedule.firstCheckin) return schedule.firstCheckin
+  val firstCheckin = requireNotNull(schedule.firstCheckin) { "First check-in date is required for scheduled check-ins" }
+  if (today < firstCheckin) return firstCheckin
 
-  val days = schedule.firstCheckin.until(today, ChronoUnit.DAYS)
+  val days = firstCheckin.until(today, ChronoUnit.DAYS)
   val rem = days % intervalDuration.toDays()
   return today.plusDays(intervalDuration.toDays() - rem)
 }

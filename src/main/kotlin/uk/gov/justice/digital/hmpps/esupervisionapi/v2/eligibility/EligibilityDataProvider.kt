@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -20,4 +21,17 @@ interface EligibilityDataProvider {
    * signal that the source does not have data for given [crn].
    */
   fun fetch(crn: CRN): CompletableFuture<Map<String, Any?>>
+}
+
+/**
+ * Utility function for fetching data and surfacing null response as a 404
+ *
+ * @throws ResourceNotFoundException if [fetcher] returns null
+ */
+fun <T> fetchData(sourceKey: String, crn: CRN, fetcher: (crn: CRN) -> T?): T {
+  val data = fetcher(crn)
+  if (data == null) {
+    throw ResourceNotFoundException("Could not fetch eligibility details from $sourceKey for CRN: $crn")
+  }
+  return data
 }

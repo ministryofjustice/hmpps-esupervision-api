@@ -1,10 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier
 
 import org.slf4j.LoggerFactory
-import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
-import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
@@ -24,9 +22,7 @@ interface ITierApiClient {
  * [uk.gov.justice.digital.hmpps.esupervisionapi.config.RefreshTokenOnUnauthorizedFilter], so a 401
  * only reaches the catch below once a freshly minted token has also been rejected.
  */
-@Profile("!stubtier")
-@Service
-class TierApiClient(
+open class TierApiClient(
   private val tierApiWebClient: WebClient,
 ) : ITierApiClient {
 

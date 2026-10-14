@@ -36,7 +36,7 @@ import java.time.Period
 import java.util.UUID
 
 interface CheckinSchedule {
-  val firstCheckin: LocalDate
+  val firstCheckin: LocalDate?
   val checkinInterval: Duration?
 }
 
@@ -73,8 +73,8 @@ open class Offender(
   @Enumerated(EnumType.STRING)
   open var status: OffenderStatus = OffenderStatus.INITIAL,
 
-  @Column(name = "first_checkin", nullable = false)
-  open override var firstCheckin: LocalDate,
+  @Column(name = "first_checkin")
+  open override var firstCheckin: LocalDate?,
 
   @Column(name = "checkin_mode", nullable = false)
   @JdbcTypeCode(SqlTypes.NAMED_ENUM)
@@ -99,6 +99,9 @@ open class Offender(
 
   @Column(name = "current_event", nullable = true)
   open override var currentEvent: Long? = null,
+
+  @Column(name = "in_pilot", nullable = false)
+  open var inPilot: Boolean = false,
 ) : V2BaseEntity(),
   CheckinSchedule,
   ActiveEvent {

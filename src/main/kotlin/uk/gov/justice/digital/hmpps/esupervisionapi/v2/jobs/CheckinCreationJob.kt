@@ -117,7 +117,7 @@ class CheckinCreationJob(
 
           metrics.processed += contactDetailsMap.size
           val batchInsertStart = System.currentTimeMillis()
-          checkinCreationService.createCheckins(checkinsToCreate)
+          val createdCheckins = checkinCreationService.createCheckins(checkinsToCreate)
           logCreatedCheckins(checkinsToCreate, today, batchInsertStart)
           metrics.created += checkinsToCreate.size
           metrics.chunks += 1

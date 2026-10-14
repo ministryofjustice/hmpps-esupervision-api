@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build the practitioner contact export: PDU, region, CRN, POP count, email
-# address -- ONE ROW PER PRACTITIONER, because the file is used as a mailing
+# Build the practitioner contact export: PDU, region, CRN, POP count, first
+# name, email address -- ONE ROW PER PRACTITIONER, because the file is used as a mailing
 # list. The cohort is every CRN that has, or has ever had, an online check-in;
 # those CRNs are collapsed onto the practitioner who holds them.
 #
@@ -25,6 +25,9 @@
 #            after the fetch so it follows the practitioner NDelius reports
 #            today. Historic and deactivated CRNs count: they are part of the
 #            cohort that was asked for.
+#   First name from the endpoint (the allocated practitioner's forename), as
+#            NDelius holds it. Blank where the email is blank for want of a
+#            live, allocated answer.
 #   Email    from the endpoint, lower-cased. Blank where NDelius holds no
 #            address, where the case is unallocated, or where the lookup never
 #            succeeded. Those rows are kept, sorted to the bottom of the file,
@@ -260,6 +263,11 @@ ROWS='
           username: (if ($r.username // "") != "" and $r.unallocated != true
                      then ($r.username | ascii_upcase)
                      else ($g.storedUsername // "") end),
+          # Taken on the same terms as the email, so the two always describe
+          # the same person: from any allocated answer, even one missing a
+          # username, and never from a placeholder or a failed lookup.
+          forename: (if $r.unallocated == true then ""
+                     else ($r.forename // "" | gsub("^\\s+|\\s+$"; "")) end),
           # NDelius unallocated-staff placeholders are not people to write to.
           email:  (if $r.unallocated == true then "" else ($r.email // "" | ascii_downcase) end) } ]'
 
@@ -272,9 +280,38 @@ ROWS='
 # into a single blank-email row. Those rows are kept in the file to be filled
 # in by hand; practitioners_unmatched.csv names them, since the export itself
 # has no column for a username.
+#
+# NDelius holds the same forename in different cases on different records
+# ("BARRY", "Barry", "barry"), so forenames are deduplicated case-insensitively
+# and one spelling kept: mixed case first, then all lower case, then all
+# capitals, and alphabetically among equals so the choice never depends on the
+# order of the CRNs. jq's own ascii_downcase/ascii_upcase leave accented letters
+# alone ("ÉLODIE" and "élodie" would stay apart), so lc/uc below also fold
+# Latin-1 and Latin Extended-A -- enough for European names held in NDelius.
+# Turkish İ and ı are left as they are: they are not each other's case
+# (İ lower-cases to i, ı upper-cases to I), so İpek and ıpek stay apart.
 COLLAPSE='
+  def lc: explode | map(
+      if (. >= 65 and . <= 90) or (. >= 192 and . <= 222 and . != 215) then . + 32
+      elif . == 376 then 255
+      elif . == 304 or . == 305 then .
+      elif ((. >= 256 and . <= 311) or (. >= 330 and . <= 375)) and . % 2 == 0 then . + 1
+      elif ((. >= 313 and . <= 328) or (. >= 377 and . <= 382)) and . % 2 == 1 then . + 1
+      else . end) | implode;
+  def uc: explode | map(
+      if (. >= 97 and . <= 122) or (. >= 224 and . <= 254 and . != 247) then . - 32
+      elif . == 255 then 376
+      elif . == 304 or . == 305 then .
+      elif ((. >= 256 and . <= 311) or (. >= 330 and . <= 375)) and . % 2 == 1 then . - 1
+      elif ((. >= 313 and . <= 328) or (. >= 377 and . <= 382)) and . % 2 == 0 then . - 1
+      else . end) | implode;
+  def spelling_rank: if . != uc and . != lc then 0 elif . == lc and . != uc then 1 else 2 end;
   group_by(.username)
   | map({ username: .[0].username,
+          forename: (map(select(.forename != "") | .forename)
+                     | group_by(lc)
+                     | map(sort_by([spelling_rank, .]) | .[0])
+                     | join("; ")),
           email:  (map(select(.email != "") | .email) | unique | join("; ")),
           pdu:    (map(select(.pdu    != "") | .pdu)    | unique | join("; ")),
           region: (map(select(.region != "") | .region) | unique | join("; ")),
@@ -284,11 +321,11 @@ COLLAPSE='
 # Rows needing a manual address go to the bottom, together, rather than being
 # scattered through the regions.
 {
-  echo "PDU,Region,CRN,POP count,Email address"
+  echo "PDU,Region,CRN,POP count,First name,Email address"
   jq -rn --slurpfile geo "$IN" --slurpfile res "$OUT" \
     "$ROWS | $COLLAPSE
      | sort_by([(.email == \"\"), (.region == \"\"), .region, .pdu, .email]) | .[]
-     | [.pdu, .region, .crn, .pop, .email] | @csv"
+     | [.pdu, .region, .crn, .pop, .forename, .email] | @csv"
 } > "$CSV_OUT"
 
 # ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ class MessageTypeTemplateConfig(
   private val popCheckinsRestartedAdHoc: String,
   private val popAdHocCheckinScheduled: String,
   private val popCheckinCancelled: String,
-  private val popCheckinDateChanges: String,
+  private val popCheckinDateChanged: String,
   private val popCheckinsFrequencyChanged: String,
 ) {
   fun getTemplate(messageType: NotificationType): String = when (messageType) {
@@ -39,7 +39,7 @@ class MessageTypeTemplateConfig(
     NotificationType.OffenderCheckinsRestartedAdHoc -> this.popCheckinsRestartedAdHoc
     NotificationType.OffenderAdHocCheckinScheduled -> this.popAdHocCheckinScheduled
     NotificationType.OffenderCheckinCancelled -> this.popCheckinCancelled
-    NotificationType.OffenderCheckinDateChanged -> this.popCheckinDateChanges
+    NotificationType.OffenderCheckinDateChanged -> this.popCheckinDateChanged
     NotificationType.OffenderCheckinsFrequencyChanged -> this.popCheckinsFrequencyChanged
   }
 }

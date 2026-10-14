@@ -13,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
+import java.time.LocalDate
 
 /**
  * V2 Notification Service
@@ -22,7 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInf
  */
 @Service
 class NotificationService(
-    private val orchestrator: NotificationOrchestratorService,
+  private val orchestrator: NotificationOrchestratorService,
 ) {
   /**
    * Send notifications for setup completed event
@@ -50,6 +51,10 @@ class NotificationService(
    */
   fun sendCheckinCreatedNotifications(event: CheckinCreatedEvent) {
     orchestrator.sendCheckinCreatedNotifications(event)
+  }
+
+  fun sendAdHocCheckinScheduledNotification(offender: Offender, contactDetails: ContactDetails, scheduledDate: LocalDate) {
+    orchestrator.sendAdHocCheckinScheduledNotification(offender, contactDetails, scheduledDate)
   }
 
   /**

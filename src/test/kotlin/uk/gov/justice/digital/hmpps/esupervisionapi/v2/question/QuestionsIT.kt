@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
@@ -51,11 +52,16 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.ScheduleAdHocCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestClockConfiguration::class)
@@ -63,45 +69,67 @@ class QuestionsIT(
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) : IntegrationTestBase() {
 
-  @Autowired lateinit var jdbcTemplate: JdbcTemplate
+  @Autowired
+  lateinit var jdbcTemplate: JdbcTemplate
 
-  @Autowired lateinit var questionRepository: QuestionRepository
+  @Autowired
+  lateinit var questionRepository: QuestionRepository
 
-  @Autowired lateinit var questionListItemRepository: DebugQuestionsRepository
+  @Autowired
+  lateinit var questionListItemRepository: DebugQuestionsRepository
 
-  @Autowired lateinit var questionListAssignmentRepository: QuestionListAssignmentRepository
+  @Autowired
+  lateinit var questionListAssignmentRepository: QuestionListAssignmentRepository
 
-  @Autowired lateinit var questionDefinitionRepository: QuestionDefinitionRepository
+  @Autowired
+  lateinit var questionDefinitionRepository: QuestionDefinitionRepository
 
-  @Autowired lateinit var questionService: QuestionService
+  @Autowired
+  lateinit var questionService: QuestionService
 
-  @Autowired lateinit var offenderRepository: OffenderRepository
+  @Autowired
+  lateinit var offenderRepository: OffenderRepository
 
-  @Autowired lateinit var offenderCheckinRepository: OffenderCheckinRepository
+  @Autowired
+  lateinit var offenderCheckinRepository: OffenderCheckinRepository
 
-  @Autowired lateinit var offenderEventLogRepository: OffenderEventLogRepository
+  @Autowired
+  lateinit var offenderEventLogRepository: OffenderEventLogRepository
 
-  @Autowired lateinit var offenderSetupRepository: OffenderSetupRepository
+  @Autowired
+  lateinit var offenderSetupRepository: OffenderSetupRepository
 
-  @Autowired lateinit var outboxItemRepository: OutboxItemRepository
+  @Autowired
+  lateinit var outboxItemRepository: OutboxItemRepository
 
-  @Autowired lateinit var genericNotificationRepository: GenericNotificationRepository
+  @Autowired
+  lateinit var genericNotificationRepository: GenericNotificationRepository
 
-  @Autowired lateinit var offenderCheckinService: CheckinService
+  @Autowired
+  lateinit var offenderCheckinService: CheckinService
 
-  @Autowired lateinit var clock: Clock
+  @Autowired
+  lateinit var clock: Clock
 
-  @MockitoBean lateinit var s3UploadService: S3UploadService
+  @MockitoBean
+  lateinit var s3UploadService: S3UploadService
 
-  @MockitoBean lateinit var ndiliusApiClient: INdiliusApiClient
+  @MockitoBean
+  lateinit var ndiliusApiClient: INdiliusApiClient
+
+  @MockitoBean
+  lateinit var notificationService: NotificationService
 
   @BeforeEach
   fun setUp() {
     (clock as MutableTestClock).advanceTo(Instant.now())
 
-    reset(s3UploadService, ndiliusApiClient)
+    reset(s3UploadService, ndiliusApiClient, notificationService)
     whenever(s3UploadService.isCheckinVideoUploaded(any())).thenReturn(true)
-    whenever(ndiliusApiClient.getContactDetails(any(), any())).thenAnswer { invocation ->
+    whenever(ndiliusApiClient.getContactDetails(any())).thenAnswer { invocation ->
+      GeneratingStubDataProvider().provideCase(invocation.getArgument<String>(0))
+    }
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenAnswer { invocation ->
       GeneratingStubDataProvider().provideCase(invocation.getArgument<String>(0))
     }
 
@@ -179,6 +207,38 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionService - rejects custom questions without placeholders`() {
+    val offender = offenderTemplate.copy(crn = "A123457").toEntity()
+    offenderRepository.save(offender)
+    val templates = questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val request = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates).copy(
+      questions = templates.map { CustomQuestionItem(id = it.id, params = emptyMap()) },
+    )
+
+    val exception = assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, request)
+    }
+
+    assertEquals("Question ${templates.single().id} is missing placeholders", exception.message)
+  }
+
+  @Test
+  fun `QuestionService - rejects fixed templates as invalid custom questions`() {
+    val templates = questionRepository.getFixedQuestionTemplates(Language.ENGLISH)
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(templates.first().id, mapOf("placeholders" to emptyMap<String, String>()))),
+    )
+
+    val exception = assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions("A123458", request)
+    }
+
+    assertEquals("Question ${templates.first().id} is not customisable", exception.message)
+  }
+
+  @Test
   fun `Checkin status change causes assignment update`() {
     val offender = offenderTemplate.copy(crn = "A123456").toEntity()
     offenderRepository.save(offender)
@@ -194,9 +254,14 @@ class QuestionsIT(
     val qlitems = questionListItemRepository.findAllItems()
     assertTrue(qlitems.size > 1)
 
-    val checkin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnRequest("BARRY.WHITE", offender.crn, clock.today()))
+    val checkin =
+      offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnRequest("BARRY.WHITE", offender.crn, clock.today()))
     val assignment = questionService.upcomingAssignment(offender)
-    assertNotEquals(defaultListId, assignment.questionList, "Upcoming assignment should not flip to default list immediately after a checkin is created")
+    assertNotEquals(
+      defaultListId,
+      assignment.questionList,
+      "Upcoming assignment should not flip to default list immediately after a checkin is created",
+    )
 
     val checkinEntity = offenderCheckinRepository.findByUuid(checkin.uuid)
     val checkinQuestions = questionListAssignmentRepository.checkinAssignment(checkinEntity.get().id)
@@ -209,7 +274,11 @@ class QuestionsIT(
     offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
 
     val assignmentAfterSubmission = questionService.upcomingAssignment(offender)
-    assertEquals(defaultListId, assignmentAfterSubmission.questionList, "Upcoming assignment should flip to default list after a checkin is submitted")
+    assertEquals(
+      defaultListId,
+      assignmentAfterSubmission.questionList,
+      "Upcoming assignment should flip to default list after a checkin is submitted",
+    )
   }
 
   @Test
@@ -226,7 +295,8 @@ class QuestionsIT(
 
     clock.advanceBy(Duration.ofDays(1))
 
-    val moreThan3Questions = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates + templates + templates + templates)
+    val moreThan3Questions =
+      makeAssignCustomQuestionsRequest(Language.ENGLISH, templates + templates + templates + templates)
     assertThrows(jakarta.validation.ConstraintViolationException::class.java) {
       questionService.assignCustomQuestions(offender.crn, moreThan3Questions)
     }
@@ -255,7 +325,12 @@ class QuestionsIT(
     val upcomingAfterSubmission = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), upcomingAfterSubmission.expectedCheckinDate)
 
-    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), dueDate, checkinWindow.toDays())
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
+      offender.id,
+      clock.today(),
+      dueDate,
+      checkinWindow.toDays(),
+    )
     // assertNull(info.dueDate)
     assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), info.dueDate)
 
@@ -269,8 +344,7 @@ class QuestionsIT(
   @Test
   fun `QuestionService - assigning and fetching questions for ad-hoc check-ins`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
-    val dueDate = clock.today().plusDays(-1)
-    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate).toEntity()
+    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = null).toEntity()
     offenderRepository.save(offender)
 
     val assignment = questionService.upcomingAssignment(offender)
@@ -292,10 +366,109 @@ class QuestionsIT(
   }
 
   @Test
+  fun `schedule questions directly onto an existing future checkin - should fail with 4xx`() {
+    // NOTE(rosado): we do not insert check-in records before their due date, so this scenario
+    // tests the behaviour of the app when something went horribly wrong and such check-in was created.
+    val dueDate = clock.today().plusDays(3)
+    val offender = offenderTemplate.copy(
+      crn = "A123467",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = dueDate,
+    ).toEntity()
+    offenderRepository.save(offender)
+    val existingCheckin = offenderCheckinService.createCheckinByCrn(CreateCheckinByCrnRequest("BARRY.WHITE", offender.crn, dueDate))
+    val checkin = offenderCheckinRepository.findByUuid(existingCheckin.uuid).orElseThrow()
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val questions = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+
+    webTestClient.post()
+      .uri("/v2/offenders/crn/${offender.crn}/schedule-ad-hoc-check-in")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(ScheduleAdHocCheckinRequest("BARRY.WHITE", dueDate, questions))
+      .exchange()
+      .expectStatus().is4xxClientError
+
+    val listId = questionListAssignmentRepository.checkinAssignment(checkin.id)
+    assertNull(listId)
+  }
+
+  @Test
+  fun `schedule today's questions before the checkin-created notification runs`() {
+    val offender = offenderTemplate.copy(
+      crn = "A123468",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = null,
+    ).toEntity()
+    offenderRepository.save(offender)
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val questions = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+    val notificationProcessed = CountDownLatch(1)
+    val questionsVisibleToNotification = AtomicBoolean(false)
+    whenever(notificationService.sendCheckinCreatedNotifications(any())).thenAnswer { invocation ->
+      val event = invocation.getArgument<CheckinCreatedEvent>(0)
+      val checkin = offenderCheckinRepository.findByUuid(event.checkin.uuid).orElseThrow()
+      val listId = questionListAssignmentRepository.checkinAssignment(checkin.id)
+      questionsVisibleToNotification.set(
+        listId != null && questionRepository.getListItems(listId, Language.ENGLISH).any { it.params.isNotEmpty() },
+      )
+      notificationProcessed.countDown()
+      null
+    }
+
+    webTestClient.post()
+      .uri("/v2/offenders/crn/${offender.crn}/schedule-ad-hoc-check-in")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(ScheduleAdHocCheckinRequest("BARRY.WHITE", clock.today(), questions))
+      .exchange()
+      .expectStatus().isOk
+
+    assertTrue(notificationProcessed.await(5, TimeUnit.SECONDS), "check-in notification was not processed")
+    assertTrue(questionsVisibleToNotification.get(), "questions must be assigned before notification processing")
+  }
+
+  @Test
+  fun `schedule future questions before the checkin is created`() {
+    val dueDate = clock.today().plusDays(3)
+    val offender = offenderTemplate.copy(
+      crn = "A123469",
+      mode = CheckinMode.AD_HOC,
+      checkinInterval = null,
+      firstCheckin = null,
+    ).toEntity()
+    offenderRepository.save(offender)
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val questions = makeAssignCustomQuestionsRequest(Language.ENGLISH, templates)
+
+    webTestClient.post()
+      .uri("/v2/offenders/crn/${offender.crn}/schedule-ad-hoc-check-in")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .bodyValue(ScheduleAdHocCheckinRequest("BARRY.WHITE", dueDate, questions))
+      .exchange()
+      .expectStatus().isOk
+
+    val pendingAssignment = questionListAssignmentRepository.findAll().single()
+    assertNull(pendingAssignment.checkinId)
+
+    val createdCheckin = offenderCheckinService.createCheckinByCrn(
+      CreateCheckinByCrnRequest("BARRY.WHITE", offender.crn, dueDate),
+    )
+    val storedCheckin = offenderCheckinRepository.findByUuid(createdCheckin.uuid).orElseThrow()
+    assertEquals(pendingAssignment.questionListId, questionListAssignmentRepository.checkinAssignment(storedCheckin.id))
+    assertEquals(
+      questions.questions.map { it.params },
+      questionRepository.getListItems(pendingAssignment.questionListId, Language.ENGLISH).filter { it.params.isNotEmpty() }.map { it.params },
+    )
+  }
+
+  @Test
   fun `QuestionService - upcoming questions for ad-hoc check-ins`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val dueDate = clock.today()
-    val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate).toEntity()
+    val offender =
+      offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate)
+        .toEntity()
     offenderRepository.save(offender)
 
     val assignment1 = questionService.upcomingAssignment(offender)
@@ -370,7 +543,12 @@ class QuestionsIT(
 
     // Day = 2nd due date
     val nextDueDate = nextCheckinDay(offender, clock.today(), CheckinScheduleLowerBound.INCLUDE_TODAY)
-    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextDueDate, checkinWindow.toDays())
+    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
+      offender.id,
+      clock.today(),
+      nextDueDate,
+      checkinWindow.toDays(),
+    )
     assertEquals(nextDueDate, info.dueDate)
 
     val assignment = questionService.upcomingAssignment(offender)
@@ -398,7 +576,12 @@ class QuestionsIT(
     offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
 
     val assignment1 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), clock.today(), checkinWindow.toDays())
+    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
+      offender.id,
+      clock.today(),
+      clock.today(),
+      checkinWindow.toDays(),
+    )
     assertNotNull(upcoming1)
     assertEquals(assignment1.listId, upcoming1.questionListId)
     assertEquals(dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming1.dueDate)
@@ -407,7 +590,12 @@ class QuestionsIT(
     clock.advanceBy(Duration.ofDays(1))
     val checkin2 = offenderCheckinService.debugCreateCheckin(offender, clock)
     // the assignment should have the checkin set
-    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
+    val upcoming2 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
+      offender.id,
+      clock.today(),
+      nextCheckinDay(offender, clock.today()),
+      checkinWindow.toDays(),
+    )
     assertEquals(assignment1.listId, upcoming2.questionListId)
     assertNotEquals(defaultListId, upcoming2.questionListId)
     assertEquals(checkin2.dueDate, upcoming2.dueDate)
@@ -426,7 +614,12 @@ class QuestionsIT(
     assertEquals(checkin1.dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming4.dueDate)
 
     val assignment2 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(offender.id, clock.today(), nextCheckinDay(offender, clock.today()), checkinWindow.toDays())
+    val upcoming5 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
+      offender.id,
+      clock.today(),
+      nextCheckinDay(offender, clock.today()),
+      checkinWindow.toDays(),
+    )
     assertNotEquals(defaultListId, upcoming5.questionListId)
     assertEquals(assignment2.listId, upcoming5.questionListId)
   }

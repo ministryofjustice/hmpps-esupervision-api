@@ -4,8 +4,6 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
-import org.springframework.context.annotation.Profile
-import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
@@ -137,19 +135,22 @@ interface ISupervisionPackagesApiClient {
  * with no active package is a 200 with `currentPhase: null`, which `/case/{crn}/current-phase` would
  * instead report as a 404.
  *
- * The fallback sits on [Retry], not [CircuitBreaker]. Resilience4j wraps as
- * `Retry(CircuitBreaker(call))`, so a circuit-breaker fallback would turn a 5xx into a result before
- * the retry ever saw it, and nothing would be retried.
+ * The fallback sits on [CircuitBreaker]. application.yml nests the aspects as
+ * `CircuitBreaker(Retry(call))`, so it runs once retries are exhausted (or the circuit is open), and
+ * the breaker records one failure per exhausted call. A fallback on [Retry] would sit inside the
+ * breaker and hide every failure from it, so the circuit could never open.
  */
-@Profile("!stubsupervisionpackages")
-@Service
-class SupervisionPackagesApiClient(
+open class SupervisionPackagesApiClient(
   private val supervisionPackagesApiWebClient: WebClient,
 ) : ISupervisionPackagesApiClient {
 
-  @Retry(name = "supervisionPackagesApi", fallbackMethod = "getSupervisionPackageDetailsFallback")
-  @CircuitBreaker(name = "supervisionPackagesApi")
-  @Timed("supervision-packages.get-frontend-context", extraTags = ["method", "GET", "endpoint", "/frontend-context/{crn}"], description = "Time taken to get supervision package details")
+  @CircuitBreaker(name = "supervisionPackagesApi", fallbackMethod = "getSupervisionPackageDetailsFallback")
+  @Retry(name = "supervisionPackagesApi")
+  @Timed(
+    "supervision-packages.get-frontend-context",
+    extraTags = ["method", "GET", "endpoint", "/frontend-context/{crn}"],
+    description = "Time taken to get supervision package details",
+  )
   override fun getSupervisionPackageDetails(crn: CRN): SupervisionPackageDetails? {
     LOGGER.info("Fetching supervision package details for CRN: {}", crn)
 
@@ -168,7 +169,10 @@ class SupervisionPackagesApiClient(
   }
 
   private fun getSupervisionPackageDetailsFallback(crn: CRN, e: Exception): SupervisionPackageDetails? {
-    LOGGER.error("Supervision Packages unavailable: {}", PiiSanitizer.sanitizeForFallback(e, "getSupervisionPackageDetails, crn=$crn"))
+    LOGGER.error(
+      "Supervision Packages unavailable: {}",
+      PiiSanitizer.sanitizeForFallback(e, "getSupervisionPackageDetails, crn=$crn"),
+    )
     throw SupervisionPackagesFetchException(crn, "Could not fetch supervision package details for $crn", e)
   }
 

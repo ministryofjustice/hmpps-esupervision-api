@@ -10,5 +10,8 @@ object EligibilityConditionEvaluator {
     EligibilityRuleOperator.IS_NULL -> value == null
     EligibilityRuleOperator.IS_NOT_NULL -> value != null
     EligibilityRuleOperator.EQUALS -> value != null && value.toString() == comparisonValue
+    EligibilityRuleOperator.IN_SET -> {
+      value != null && comparisonValue?.split(Regex("[, ]"))?.contains(value.toString()) ?: false
+    }
   }
 }

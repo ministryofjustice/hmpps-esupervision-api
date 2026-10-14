@@ -14,6 +14,7 @@ enum class EligibilityRuleOperator {
   IS_NULL,
   IS_NOT_NULL,
   EQUALS,
+  IN_SET,
 }
 
 enum class EligibilityRuleOutcome {

@@ -109,6 +109,8 @@ data class Name(
   @field:Schema(description = "Surname", required = true, example = "Smith") val surname: String,
 )
 
+fun Name.fullName(): String = "$forename $surname"
+
 /** Practitioner details from Ndilius API */
 data class PractitionerDetails(
   @field:Schema(description = "Practitioner's staff code", required = false, example = "N01A001")
@@ -191,9 +193,12 @@ data class PersonalDetails(
   val dateOfBirth: LocalDate,
 )
 
-/** Identity validation response */
+/**
+ * Identity validation response. Only returned when Ndilius gave an answer; if it could not be
+ * reached the endpoint responds 503 instead, so verified=false always means a genuine mismatch.
+ */
 data class IdentityValidationResponse(
-  @Schema(description = "Whether identity was verified", required = true)
+  @Schema(description = "Whether identity was verified. false means Ndilius reported the details do not match", required = true)
   val verified: Boolean,
   @Schema(description = "Error message if validation failed", required = false)
   val error: String? = null,
@@ -250,9 +255,9 @@ data class OffenderDto(
   @field:Schema(description = "Practitioner ID", required = true)
   val practitionerId: ExternalUserId,
   @field:Schema(description = "Offender status", required = true) val status: OffenderStatus,
-  @field:Schema(description = "Date of first checkin", required = true)
+  @field:Schema(description = "Date of first checkin. Null when no AD_HOC date is configured.", required = false)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
+  val firstCheckin: LocalDate?,
   @field:Schema(description = "Interval between checkins", required = false)
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Check-in mode", required = true)
@@ -280,9 +285,9 @@ data class OffenderInfo(
   @field:NotBlank
   @field:Pattern(regexp = "^[A-Z]\\d{6}$", message = "CRN must be in format X123456")
   val crn: String,
-  @field:Schema(description = "Date of first checkin", required = true)
+  @field:Schema(description = "Date of first checkin. Optional for AD_HOC check-ins; scheduled check-ins require a date.", required = false)
   @field:JsonDeserialize(using = LocalDateDeserializer::class)
-  val firstCheckin: LocalDate,
+  val firstCheckin: LocalDate?,
   @field:Schema(description = "Interval between checkins", required = false)
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Check-in mode", required = true)
@@ -775,19 +780,30 @@ fun QuestionTemplateDto.placeholders(): List<String> = questionTemplatePlacehold
  * Specifies parameters for a choice item of a custom question item
  */
 data class CustomQuestionItem(
-  @field:Schema(description = "Question ID", required = true, exclusiveMinimumValue = 0)
+  @field:Schema(
+    description = "Question template ID returned by GET /v2/questions/templates for the selected language.",
+    required = true,
+    exclusiveMinimumValue = 0,
+  )
   val id: Long,
 
-  @field:Schema(description = "Params for the custom question. Depends on question's response format", required = true)
+  @field:Schema(
+    description = "For custom questions, provide a placeholders object whose keys match the selected question template.",
+    required = true,
+    example = """{"placeholders":{"thing":"your course"}}""",
+  )
   val params: Map<String, Any>,
 )
 
 /**
  * Specifies custom questions to be added to a checkin.
  */
+@Schema(
+  description = "Assigns one to three custom questions. Use each question template ID returned by GET /v2/questions/templates for the selected language; placeholder keys must match that template.",
+)
 @ValidQuestionParams
 data class AssignCustomQuestionsRequest(
-  @field:Schema(description = "List of custom questions", required = true)
+  @field:Schema(description = "One to three selected custom questions", required = true)
   val questions: List<CustomQuestionItem>,
 
   @field:Schema(description = "Language (en-GB or cy-GB)", required = true)

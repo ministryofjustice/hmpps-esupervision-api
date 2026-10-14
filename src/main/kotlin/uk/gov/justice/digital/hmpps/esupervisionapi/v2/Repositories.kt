@@ -1,10 +1,12 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import jakarta.persistence.LockModeType
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -41,6 +43,47 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
+  /**
+   * Update an offender based on new due_date and today's date.
+   *
+   * If update didn't happen, we should  not be creating a check-in
+   */
+  @Query(
+    """
+        with update_data as (
+          select
+           id,
+           status,
+           due_date,
+           case 
+              when status = 'CREATED' and due_date <> :newDueDate 
+                then 'An active check-in already exists for a different date'
+              when status in ('SUBMITTED', 'REVIEWED') and :newDueDate = :today and due_date = :today 
+                then 'Questions must be assigned before the check-in due date'
+              when :newDueDate < :today
+                then 'Check-in due date cannot be in the past'
+              when due_date > :today
+                then 'A check-in cannot be created in the future' -- we assume this never happens, but for completeness...
+              else NULL
+           end as hint
+          from offender_checkin_v2
+          where offender_id = :offenderId
+            and due_date > (cast(:today as date) - '3 day'::interval)
+        )
+        update offender_v2 o
+        set first_checkin = :newDueDate,
+            updated_at = now()
+        where o.id = :offenderId
+          and :newDueDate >= :today
+          and not exists (
+            select 1 from update_data u
+            where u.hint is not null
+          )""",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun maybeUpdate(offenderId: Long, newDueDate: LocalDate, today: LocalDate): Int
+
   @Query(
     value = """
     SELECT
@@ -53,9 +96,10 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     WHERE o.status = 'VERIFIED'
       AND (
         (o.checkin_mode = 'SCHEDULED'
+          AND o.first_checkin IS NOT NULL
           AND o.first_checkin <= :lowerBoundInclusive
           AND MOD(CAST(:lowerBoundInclusive - o.first_checkin AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
-        OR (o.checkin_mode = 'AD_HOC' AND o.first_checkin = :lowerBoundInclusive)
+        OR (o.checkin_mode = 'AD_HOC' AND o.first_checkin IS NOT NULL AND o.first_checkin = :lowerBoundInclusive)
       )
       AND NOT EXISTS (
         SELECT 1 FROM offender_checkin_v2 c
@@ -107,9 +151,10 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
           where o.status = 'VERIFIED'
           and (
             (o.checkin_mode = 'SCHEDULED'
+              and o.first_checkin is not null
               and o.first_checkin != :today
               and MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
-            or (o.checkin_mode = 'AD_HOC' and o.first_checkin = (cast(:today as date) + '4 day'::interval)::date)
+            or (o.checkin_mode = 'AD_HOC' and o.first_checkin is not null and o.first_checkin = (cast(:today as date) + '4 day'::interval)::date)
           )
       )
       select * from the_offenders
@@ -184,6 +229,12 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
 interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @EntityGraph(attributePaths = ["offender"])
   fun findByUuid(uuid: UUID): Optional<OffenderCheckin>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @EntityGraph(attributePaths = ["offender"])
+  @Query("select c from OffenderCheckin c where c.id = :checkinId")
+  fun findByIdForUpdate(checkinId: Long): Optional<OffenderCheckin>
+
   fun findAllByOffenderAndStatus(offender: Offender, status: CheckinStatus): List<OffenderCheckin>
 
   @Query("""select c from OffenderCheckin c where c.id in :ids""")
@@ -264,6 +315,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): Optional<OffenderCheckin>
+
+  fun findAllByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
 
   @Query(
     """
@@ -822,6 +875,17 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   @Modifying
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
 
+  @Query(
+    """
+    update question_list_assignment
+    set question_list_id = :listId, updated_at = now()
+    where checkin_id = :checkinId
+    """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun updateCheckinAssignment(checkinId: Long, listId: Long): Int
+
   /**
    * In case of no explicit assignment, question list id will be set to the default list id.
    */
@@ -829,7 +893,7 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
     """select * from get_upcoming_assignment_info_v2(:offenderId, cast(:today as date), cast(:nextCheckinDate as date), :checkinWindowDays)""",
     nativeQuery = true,
   )
-  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate, checkinWindowDays: Long): AssignmentInfo
+  fun upcomingAssignmentAndDueDate(offenderId: Long, today: LocalDate, nextCheckinDate: LocalDate?, checkinWindowDays: Long): AssignmentInfo
 
   /**
    * Returns the question list id for the checkin, if any.

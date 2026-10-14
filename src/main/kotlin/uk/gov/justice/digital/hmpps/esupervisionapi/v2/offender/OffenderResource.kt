@@ -6,12 +6,14 @@ import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.persistence.EntityManager
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -26,6 +28,7 @@ import tools.jackson.databind.annotation.JsonDeserialize
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
@@ -34,7 +37,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INamedPerson
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
@@ -46,20 +48,26 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
@@ -89,6 +97,9 @@ class OffenderResource(
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine,
   private val eligibilityChecker: EligibilityChecker,
   private val supervisionPackageService: SupervisionPackageService,
+  private val questionService: QuestionService,
+  private val transactionTemplate: TransactionTemplate,
+  private val entityManager: EntityManager,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -165,8 +176,57 @@ class OffenderResource(
   @GetMapping("/crn/{crn}/eligibility")
   fun getEligibilityByCrn(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
-  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> = eligibilityEvaluationEngine.evaluate(crn.trim().uppercase(), eligibilityEvaluationEngine.activeRuleSet)
-    .thenApply { result -> ResponseEntity.ok(EligibilityCheckResponse(result.outcome, result.message)) }
+    @Parameter(description = "Should the response contain outcomes for all rules") itemise: Boolean = false,
+  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> {
+    val normalisedCrn = crn.trim().uppercase()
+    val ruleSet = eligibilityEvaluationEngine.activeRuleSet
+
+    val contactDetails = ndiliusApiClient.getContactDetailsStrict(normalisedCrn)
+      ?: return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.NOT_FOUND).build())
+
+    val cacheData = mapOf(
+      "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+    )
+    val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
+
+    if (!itemise) {
+      return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
+        .thenApply { result ->
+          ResponseEntity.ok(
+            EligibilityCheckResponse(
+              outcome = result.outcome,
+              message = result.message?.let { applyTemplate(it, contactDetails.name) },
+            ),
+          )
+        }
+    }
+
+    return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
+      .thenCompose { result ->
+        eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, cache)
+          .thenApply { report ->
+            ResponseEntity.ok(
+              EligibilityCheckResponse(
+                outcome = result.outcome,
+                message = result.message?.let { applyTemplate(it, contactDetails.name) },
+                allRules = report.map { (rule, outcome) ->
+                  EligibilityCheckResponse.RuleResult(
+                    source = rule.source,
+                    code = rule.code,
+                    dataPoint = rule.dataPoint,
+                    outcome = outcome,
+                    message = when (outcome) {
+                      EligibilityRuleOutcome.CONTINUE -> null
+                      EligibilityRuleOutcome.ELIGIBLE -> null // we don't care about the message here
+                      EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
+                    },
+                  )
+                },
+              ),
+            )
+          }
+      }
+  }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
@@ -444,6 +504,7 @@ class OffenderResource(
       This endpoint performs the following actions:
       1. Updates the offender's status to VERIFIED.
       2. Optionally updates the check in schedule (frequency and start date) and contact preferences.
+         The start date is optional for AD_HOC check-ins and required for SCHEDULED check-ins.
       3. Sends a registration notification to the offender
       4. Automatically creates a check in record for the 'firstCheckin' date. 
          - If a check in  for that date already exists, it will skip creation to prevent duplicates.
@@ -493,7 +554,9 @@ class OffenderResource(
 
     request.checkinSchedule?.let { schedule ->
       validate(schedule, offender.mode)
-      offender.mode = schedule.mode ?: offender.mode
+      val mode = schedule.mode ?: offender.mode
+      offender.mode = mode
+      validateFirstCheckin(mode, schedule.firstCheckin)
       offender.firstCheckin = schedule.firstCheckin
       offender.checkinInterval = schedule.checkinInterval?.duration
     }
@@ -513,7 +576,8 @@ class OffenderResource(
       val savedOffender = event.offender
       val today = clock.today()
       // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
-      if (savedOffender.firstCheckin == today) {
+      val firstCheckin = savedOffender.firstCheckin
+      if (firstCheckin == today) {
         val existingCheckin = checkinRepository.findByOffenderAndDueDate(offender.id, today)
         val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
 
@@ -581,6 +645,7 @@ is *today*.""",
       validate(request.checkinSchedule, offender.mode)
       val scheduleUpdate = request.checkinSchedule
       offender.mode = mode
+      validateFirstCheckin(mode, scheduleUpdate.firstCheckin)
       offender.firstCheckin = scheduleUpdate.firstCheckin
       offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
       offender.updatedAt = clock.instant()
@@ -601,13 +666,98 @@ is *today*.""",
       val offenderAfter = saved.toSummaryDto()
       if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
         if (todaysCheckin.isEmpty) {
-          checkinCreationService.createCheckin(offenderAfter.uuid, offenderAfter.firstCheckin, request.checkinSchedule.requestedBy)
+          checkinCreationService.createCheckin(
+            offenderAfter.uuid,
+            requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
+            request.checkinSchedule.requestedBy,
+          )
         }
         LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
       }
       return ResponseEntity.ok(offenderAfter)
     } else {
       return ResponseEntity.noContent().build()
+    }
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Schedule an ad hoc check-in",
+    description = "Schedules an ad hoc check-in and optionally assigns custom questions to it.",
+  )
+  @ApiResponse(responseCode = "200", description = "Ad hoc check-in scheduled")
+  @ApiResponse(responseCode = "400", description = "Offender is not configured for ad hoc check-ins or the date is invalid")
+  @ApiResponse(responseCode = "422", description = "The schedule conflicts with an existing check-in, contact details are unavailable, or custom questions cannot be assigned")
+  @ApiResponse(responseCode = "404", description = "Offender not found")
+  @PostMapping("/crn/{crn}/schedule-ad-hoc-check-in")
+  fun scheduleAdHocCheckin(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+    @Valid @RequestBody request: ScheduleAdHocCheckinRequest,
+  ): ResponseEntity<OffenderSummaryDto> {
+    val normalisedCrn = crn.trim().uppercase()
+    val offender = offenderRepository.findByCrn(normalisedCrn).orElse(null)
+      ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found for CRN: $normalisedCrn")
+    val offenderDto = offender.toSummaryDto()
+    validateAdHocSchedule(offender, request.firstCheckin)
+
+    val contactDetails = ndiliusApiClient.getContactDetailsStrict(offender.crn)
+      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
+    validateSameDayCheckinEligibility(offender, contactDetails)
+
+    val today = clock.today()
+    val checkinsBeforeUpdate = if (request.firstCheckin == today) {
+      checkinRepository.findAllByOffenderAndDueDate(offender, today)
+        .filter { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
+    } else {
+      emptyList()
+    }
+    if (request.questions != null && checkinsBeforeUpdate.isNotEmpty()) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Questions must be assigned before the check-in due date")
+    }
+
+    val offenderId = offender.id
+    transactionTemplate.execute {
+      val updated = offenderRepository.maybeUpdate(offenderId, request.firstCheckin, today) > 0
+      if (updated) {
+        entityManager.refresh(offender)
+        if (request.firstCheckin == today) {
+          request.questions?.let { questionService.assignCustomQuestions(offender.crn, it) }
+          checkinCreationService.createCheckinForOffender(offender, today, request.requestedBy, contactDetails)
+        } else {
+          request.questions?.let { questionService.assignCustomQuestions(offender.crn, it) }
+        }
+      } else {
+        throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Check-in schedule cannot be updated: possibly too late to assign questions")
+      }
+    }
+
+    val shouldNotifyScheduledDate = offenderDto.firstCheckin != request.firstCheckin
+    if (shouldNotifyScheduledDate) {
+      notificationService.sendAdHocCheckinScheduledNotification(
+        offender,
+        contactDetails,
+        request.firstCheckin,
+      )
+    }
+    return ResponseEntity.ok(offender.toSummaryDto())
+  }
+
+  private fun validateAdHocSchedule(offender: Offender, firstCheckin: LocalDate) {
+    if (offender.status != OffenderStatus.VERIFIED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only VERIFIED offenders can be scheduled for an ad hoc check-in.")
+    }
+    if (offender.mode != CheckinMode.AD_HOC) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Only offenders configured for ad hoc check-ins can use this endpoint.")
+    }
+    if (firstCheckin.isBefore(clock.today())) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
+    }
+  }
+
+  private fun validateSameDayCheckinEligibility(offender: Offender, contactDetails: ContactDetails) {
+    val ineligibilityReason = checkinIneligibilityReason(offender, contactDetails)
+    if (ineligibilityReason != null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot create a check-in because ${ineligibilityReason.description}.")
     }
   }
 
@@ -625,17 +775,20 @@ is *today*.""",
   }
 
   private fun validate(scheduleUpdate: CheckinScheduleUpdateRequest, currentMode: CheckinMode) {
-    if (scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
+    val mode = scheduleUpdate.mode ?: currentMode
+    if (scheduleUpdate.firstCheckin != null && scheduleUpdate.firstCheckin.isBefore(LocalDate.now(clock))) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date cannot be in the past")
     }
-    when (scheduleUpdate.mode) {
+    when (mode) {
       CheckinMode.AD_HOC -> if (scheduleUpdate.checkinInterval != null) {
         throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval cannot be specified for ad-hoc check-ins.")
       }
       CheckinMode.SCHEDULED -> if (scheduleUpdate.checkinInterval == null) {
         throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in interval is required for scheduled check-ins.")
       }
-      null -> validateScheduleSettings(currentMode, scheduleUpdate.checkinInterval)
+    }
+    if (scheduleUpdate.firstCheckin == null && mode == CheckinMode.SCHEDULED) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "First check-in date is required for scheduled check-ins.")
     }
   }
 
@@ -651,6 +804,7 @@ is *today*.""",
   }
 
   companion object {
+    private val CHECKIN_STATUSES_OCCUPYING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED)
     private val LOGGER = logger<OffenderResource>()
   }
 }
@@ -679,7 +833,16 @@ data class SupervisionPackageStatus(
 data class EligibilityCheckResponse(
   val outcome: EligibilityCheckOutcome,
   val message: String? = null,
-)
+  val allRules: List<RuleResult>? = null,
+) {
+  data class RuleResult(
+    val source: String,
+    val code: String,
+    val dataPoint: String,
+    val outcome: EligibilityRuleOutcome,
+    val message: String? = null,
+  )
+}
 
 /**
  * Subset of [ContactDetails] that is returned in the summary DTO.
@@ -721,7 +884,7 @@ data class OffenderSummaryDto(
   val uuid: UUID,
   val crn: String,
   val status: OffenderStatus,
-  val firstCheckin: LocalDate,
+  val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval?,
   val mode: CheckinMode,
   val contactPreference: ContactPreference,
@@ -824,10 +987,26 @@ data class ReactivateOffenderRequest(
 data class CheckinScheduleUpdateRequest(
   @field:Schema(description = "Id of the user requesting the change", required = true)
   val requestedBy: ExternalUserId,
-  @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
+  @field:Schema(description = "Date of first check-in. Optional for AD_HOC check-ins; required for SCHEDULED check-ins.", required = false)
+  @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class)
+  val firstCheckin: LocalDate?,
   val checkinInterval: CheckinInterval?,
   @field:Schema(description = "Checkin mode, SCHEDULED or AD_HOC", required = false)
   val mode: CheckinMode? = null,
+)
+
+@Schema(
+  description = "Schedules an ad hoc check-in. Optionally include one to three custom questions, using question template IDs returned by GET /v2/questions/templates for the selected language.",
+)
+/** Request to schedule an ad hoc check-in, optionally including questions. */
+data class ScheduleAdHocCheckinRequest(
+  @field:Schema(description = "Id of the user requesting the change", required = true)
+  @field:NotBlank
+  val requestedBy: ExternalUserId,
+  @field:JsonDeserialize(using = uk.gov.justice.digital.hmpps.esupervisionapi.utils.LocalDateDeserializer::class) val firstCheckin: LocalDate,
+  @field:Schema(description = "Optional complete custom-question assignment; include one to three questions.")
+  @field:Valid
+  val questions: AssignCustomQuestionsRequest? = null,
 )
 
 /** Request to update offender contact details */

@@ -1,6 +1,6 @@
 generic-service:
   nameOverride: hmpps-esupervision-api
-  productId: "HMPPS557" # productId for the product that this belongs too, i.e. DPS001, see README.md for details
+  productId: 'HMPPS561' # productId for online check ins
   serviceAccountName: hmpps-esupervision-api
 
   replicaCount: 4
@@ -65,6 +65,16 @@ generic-service:
   allowlist:
     groups:
       - internal
+
+  # Batch jobs run as one-shot K8s CronJob pods (BATCH_ENABLED=true, BATCH_TYPE=<type>)
+  # instead of @Scheduled in the web pods — see docs/HELM-AND-K8s-CRON-JOBS.
+  # "batch" avoids the 52-char CronJob-name truncation collision the default prefix would hit.
+  cronPrefixName: "batch"
+  batchjobs:
+    - name: eligibility-sync
+      type: OFFENDER_ELIGIBILITY_SYNC
+      schedule: "0 3 * * *"
+      suspend: true # flip to false once real sync logic lands (job body is currently a TODO)
 
 generic-prometheus-alerts:
   targetApplication: hmpps-esupervision-api

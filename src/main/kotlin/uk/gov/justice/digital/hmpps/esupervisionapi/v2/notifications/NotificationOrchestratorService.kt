@@ -32,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.P
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.time.Period
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -53,23 +54,23 @@ class NotificationFailureException(message: String) : RuntimeException(message)
  */
 @Service
 class NotificationOrchestratorService(
-    private val notificationPersistence: NotificationPersistenceService,
-    private val notifyGateway: NotifyGatewayService,
-    private val domainEventService: DomainEventService,
-    private val eventAuditService: EventAuditService,
-    private val eventDetailService: EventDetailService,
-    private val ndiliusApiClient: INdiliusApiClient,
-    private val appConfig: AppConfig,
-    private val clock: Clock,
-    @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  private val notificationPersistence: NotificationPersistenceService,
+  private val notifyGateway: NotifyGatewayService,
+  private val domainEventService: DomainEventService,
+  private val eventAuditService: EventAuditService,
+  private val eventDetailService: EventDetailService,
+  private val ndiliusApiClient: INdiliusApiClient,
+  private val appConfig: AppConfig,
+  private val clock: Clock,
+  @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
 ) {
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
 
   /** Send notifications for setup completed event */
   fun sendSetupCompletedNotifications(
-      offender: Offender,
-      contactDetails: ContactDetails? = null,
-      setup: OffenderSetupDto,
+    offender: Offender,
+    contactDetails: ContactDetails? = null,
+    setup: OffenderSetupDto,
   ) {
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_SETUP_COMPLETED,
@@ -87,16 +88,17 @@ class NotificationOrchestratorService(
     if (contactDetails != null) {
       try {
         val personalisation =
-          if (offender.mode == CheckinMode.SCHEDULED)
+          if (offender.mode == CheckinMode.SCHEDULED) {
             mapOf(
               "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
-              "date" to offender.firstCheckin.format(DATE_FORMATTER),
+              "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
               "frequency" to frequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }),
             )
-          else
+          } else {
             mapOf(
               "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
             )
+          }
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
@@ -126,7 +128,7 @@ class NotificationOrchestratorService(
 
   /** Send notifications for reactivation completed event */
   fun sendReactivationCompletedNotifications(
-      event: OffenderReactivatedEvent,
+    event: OffenderReactivatedEvent,
   ) {
     val offender = event.offender
     domainEventService.publishDomainEvent(
@@ -146,7 +148,7 @@ class NotificationOrchestratorService(
         val personalisation =
           mapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
-            "date" to offender.firstCheckin.format(DATE_FORMATTER),
+            "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
             "frequency" to frequencyText(offender.mode, offender.checkinInterval),
           )
 
@@ -178,7 +180,7 @@ class NotificationOrchestratorService(
 
   /** Send notifications for deactivation completed event */
   fun sendDeactivationCompletedNotifications(
-      event: OffenderDeactivatedEvent,
+    event: OffenderDeactivatedEvent,
   ) {
     val offender = event.offender
     val details = event.offender.personalDetails
@@ -282,10 +284,30 @@ class NotificationOrchestratorService(
     }
   }
 
+  fun sendAdHocCheckinScheduledNotification(offender: Offender, contactDetails: ContactDetails, scheduledDate: LocalDate) {
+    try {
+      val personalisation = mapOf(
+        "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
+        "date" to scheduledDate.format(DATE_FORMATTER),
+      )
+      val notifications = notificationPersistence.buildOffenderNotifications(
+        offenderId = offender.id,
+        crn = offender.crn,
+        contactPreference = offender.contactPreference,
+        contactDetails = contactDetails,
+        notificationType = NotificationType.OffenderAdHocCheckinScheduled,
+      )
+      processAndSendNotifications(notifications, personalisation)
+    } catch (e: Exception) {
+      val sanitized = PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid)
+      LOGGER.warn("Failed to send ad hoc check-in scheduling notification for offender {}: {}", offender.crn, sanitized)
+    }
+  }
+
   /** Send reminder notifications for checkin */
   fun sendReminderCheckinNotifications(
-      checkin: OffenderCheckin,
-      contactDetails: ContactDetails,
+    checkin: OffenderCheckin,
+    contactDetails: ContactDetails,
   ) {
     try {
       val personalisation =
@@ -370,10 +392,10 @@ class NotificationOrchestratorService(
   }
 
   fun checkinSubmittedPersonalisationDetails(
-      details: ContactDetails,
-      checkin: CheckinDto,
-      totalFlags: Int,
-      contactRequestFlag: String,
+    details: ContactDetails,
+    checkin: CheckinDto,
+    totalFlags: Int,
+    contactRequestFlag: String,
   ): Map<String, String> {
     require(contactRequestFlag == "yes" || contactRequestFlag == "no")
 
@@ -394,8 +416,8 @@ class NotificationOrchestratorService(
 
   /** Send notifications for checkin expired event */
   fun sendCheckinExpiredNotifications(
-      checkin: OffenderCheckin,
-      details: ContactDetails,
+    checkin: OffenderCheckin,
+    details: ContactDetails,
   ) {
     val personalisation = checkinExpiredPersonalisationDetails(details, checkin)
 
@@ -420,8 +442,8 @@ class NotificationOrchestratorService(
   }
 
   private fun checkinExpiredPersonalisationDetails(
-      details: ContactDetails,
-      checkin: OffenderCheckin,
+    details: ContactDetails,
+    checkin: OffenderCheckin,
   ): Map<String, String> = mapOf(
     "practitionerName" to (details.practitioner?.name?.forename ?: checkin.offender.practitionerId),
     "name" to "${details.name.forename} ${details.name.surname}",
@@ -459,8 +481,8 @@ class NotificationOrchestratorService(
   fun getEventDetail(detailUrl: String): EventDetailResponse? = eventDetailService.getEventDetail(detailUrl)
 
   private fun processAndSendNotifications(
-      notificationsWithRecipients: List<NotificationWithRecipient>,
-      personalisation: Map<String, String>,
+    notificationsWithRecipients: List<NotificationWithRecipient>,
+    personalisation: Map<String, String>,
   ) {
     if (notificationsWithRecipients.isEmpty()) return
 

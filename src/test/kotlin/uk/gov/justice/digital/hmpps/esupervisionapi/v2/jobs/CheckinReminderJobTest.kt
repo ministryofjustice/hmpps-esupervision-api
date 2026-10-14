@@ -21,7 +21,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
@@ -30,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventT
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Instant
@@ -96,7 +96,13 @@ class CheckinReminderJobTest {
 
     // NB: V2BaseEntity.equals() is id-based and all unsaved test entities share id=0, so eq() cannot
     // tell the instances apart - match by reference identity (same()/===) instead.
-    verify(deactivationService).deactivateOffender(same(ineligible.offender), any(), any(), any(), eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED))
+    verify(deactivationService).deactivateOffender(
+      same(ineligible.offender),
+      any(),
+      any(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+    )
     verify(notificationService).sendCheckinReminderNotifications(same(eligible), eq(eligibleCd))
     verify(notificationService, never()).sendCheckinReminderNotifications(same(ineligible), any())
 
@@ -110,12 +116,32 @@ class CheckinReminderJobTest {
   }
 
   private fun stub(checkins: List<OffenderCheckin>, details: List<ContactDetails>) {
-    whenever(checkinRepository.findEligibleForReminder(any(), any(), any())).thenReturn(Stream.of(*checkins.toTypedArray()))
-    whenever(ndiliusApiClient.getContactDetailsForMultiple(any(), any())).thenReturn(details)
-    whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(
+      checkinRepository.findEligibleForReminder(
+        any(),
+        any(),
+        any(),
+      ),
+    ).thenReturn(Stream.of(*checkins.toTypedArray()))
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(details)
+    whenever(
+      deactivationService.deactivateOffender(
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+      ),
+    ).thenAnswer { it.getArgument<Offender>(0) }
   }
 
-  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(crn = crn, name = Name("John", "Doe"), events = events, contactSuspended = suspended, dateOfBirth = LocalDate.of(1980, 1, 1))
+  private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(
+    crn = crn,
+    name = Name("John", "Doe"),
+    events = events,
+    contactSuspended = suspended,
+    dateOfBirth = LocalDate.of(1980, 1, 1),
+  )
 
   private fun checkin(crn: String) = OffenderCheckin(
     uuid = UUID.randomUUID(),

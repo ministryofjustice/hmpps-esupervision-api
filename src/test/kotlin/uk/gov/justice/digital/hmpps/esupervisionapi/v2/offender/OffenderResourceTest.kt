@@ -1,5 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
+import jakarta.persistence.EntityManager
+import jakarta.validation.Validation
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -15,18 +17,24 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
+import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BeanPropertyBindingResult
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
@@ -44,9 +52,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligibilityRule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
 import java.net.URI
@@ -76,6 +88,9 @@ class OffenderResourceTest {
   private val eligibilityChecker: EligibilityChecker = mock()
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
   private val supervisionPackageService: SupervisionPackageService = mock()
+  private val questionService: QuestionService = mock()
+  private val transactionTemplate: TransactionTemplate = mock()
+  private val entityManager: EntityManager = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -83,6 +98,10 @@ class OffenderResourceTest {
 
   @BeforeEach
   fun setUp() {
+    whenever(transactionTemplate.execute<Any>(any())).thenAnswer {
+      val callback = it.getArgument<TransactionCallback<Any>>(0)
+      callback.doInTransaction(SimpleTransactionStatus())
+    }
     resource = OffenderResource(
       offenderRepository,
       s3UploadService,
@@ -100,12 +119,26 @@ class OffenderResourceTest {
       eligibilityEvaluationEngine,
       eligibilityChecker,
       supervisionPackageService,
+      questionService,
+      transactionTemplate,
+      entityManager,
     )
   }
 
   // ========================================
   // Deactivate Tests
   // ========================================
+
+  @Test
+  fun `scheduleAdHocCheckin - rejects blank requester identifier`() {
+    val request = ScheduleAdHocCheckinRequest("  ", clock.today())
+
+    Validation.buildDefaultValidatorFactory().use { factory ->
+      val violations = factory.validator.validate(request)
+
+      assertTrue(violations.any { it.propertyPath.toString() == "requestedBy" })
+    }
+  }
 
   @Test
   fun `deactivateOffender - happy path - delegates to deactivation service and returns INACTIVE`() {
@@ -825,6 +858,102 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `scheduleAdHocCheckin - creates today's checkin with questions using canonical CRN`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+      firstCheckin = clock.today().minusDays(1)
+    }
+    val questions = mock<AssignCustomQuestionsRequest>()
+    val checkin = mock<OffenderCheckin>()
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(offenderRepository.maybeUpdate(any(), any(), any())).thenReturn(1)
+    whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()))
+      .thenReturn(emptyList())
+      .thenReturn(emptyList())
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+    whenever(checkinCreationService.createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)).thenReturn(checkin)
+
+    val response = resource.scheduleAdHocCheckin(
+      " ${offender.crn.lowercase()} ",
+      ScheduleAdHocCheckinRequest("XYZ0111", clock.today(), questions),
+    )
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(checkinCreationService).createCheckinForOffender(offender, clock.today(), "XYZ0111", contactDetails)
+    verify(questionService).assignCustomQuestions(offender.crn, questions)
+    verify(notificationService).sendAdHocCheckinScheduledNotification(offender, contactDetails, clock.today())
+  }
+
+  @Test
+  fun `scheduleAdHocCheckin - assigns future questions using canonical CRN and sends booking notification`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+      firstCheckin = null
+    }
+    val contactDetails = GeneratingStubDataProvider().provideCase(offender.crn)
+    val scheduledDate = clock.today().plusDays(3)
+    val questions = mock<AssignCustomQuestionsRequest>()
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(offenderRepository.maybeUpdate(any(), any(), any())).thenReturn(1)
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+
+    val response = resource.scheduleAdHocCheckin(
+      " ${offender.crn.lowercase()} ",
+      ScheduleAdHocCheckinRequest("XYZ0111", scheduledDate, questions),
+    )
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    verify(questionService).assignCustomQuestions(offender.crn, questions)
+    verify(notificationService).sendAdHocCheckinScheduledNotification(offender, contactDetails, scheduledDate)
+  }
+
+  @Test
+  fun `scheduleAdHocCheckin - does not create today's checkin for ineligible contact`() {
+    val ineligibleContactDetails = listOf(
+      ContactDetails(
+        crn = "X123456",
+        name = Name("John", "Doe"),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+        events = emptyList(),
+      ),
+      ContactDetails(
+        crn = "X123456",
+        name = Name("John", "Doe"),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+        events = listOf(anEvent),
+        contactSuspended = true,
+      ),
+    )
+
+    for (contactDetails in ineligibleContactDetails) {
+      val uuid = UUID.randomUUID()
+      val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
+        firstCheckin = clock.today().plusDays(1)
+      }
+      whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+      whenever(checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED)).thenReturn(emptyList())
+      whenever(offenderRepository.maybeUpdate(any(), any(), any())).thenReturn(1)
+      whenever(
+        checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()),
+      ).thenReturn(emptyList())
+      whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+
+      val exception = assertThrows(ResponseStatusException::class.java) {
+        resource.scheduleAdHocCheckin(offender.crn, ScheduleAdHocCheckinRequest("XYZ0111", clock.today()))
+      }
+
+      assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    }
+
+    verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+  }
+
+  @Test
   fun `updateDetails - no update`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
@@ -860,6 +989,15 @@ class OffenderResourceTest {
     val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = scheduleUpdate.copy(checkinInterval = null)))
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     assertEquals(HttpStatus.OK, result.statusCode)
+
+    val nullDateResult = resource.updateDetails(
+      uuid,
+      OffenderDetailsUpdateRequest(
+        checkinSchedule = scheduleUpdate.copy(firstCheckin = null, checkinInterval = null),
+      ),
+    )
+    assertEquals(HttpStatus.OK, nullDateResult.statusCode)
+    assertNull(nullDateResult.body?.firstCheckin)
   }
 
   @Test
@@ -1126,10 +1264,12 @@ class OffenderResourceTest {
   @Test
   fun `getEligibilityByCrn - eligible - returns eligible response`() {
     val crn = "x123456"
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.evaluate("X123456", DEFAULT_RULE_SET)).thenReturn(
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
-        uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null),
+        EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null),
       ),
     )
 
@@ -1143,10 +1283,12 @@ class OffenderResourceTest {
   @Test
   fun `getEligibilityByCrn - not eligible - returns reason message`() {
     val crn = "X123456"
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.evaluate(crn, eligibilityEvaluationEngine.activeRuleSet)).thenReturn(
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
-        uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult(
+        EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
           message = "Not eligible: person is recorded as deceased.",
           triggeredRuleCode = "IS_ALIVE",
@@ -1159,6 +1301,53 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, response.statusCode)
     assertEquals(EligibilityCheckOutcome.INELIGIBLE, response.body?.outcome)
     assertEquals("Not eligible: person is recorded as deceased.", response.body?.message)
+  }
+
+  private fun makeContactDetails(crn: String): ContactDetails = ContactDetails(crn = crn, name = Name("John", "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1))
+
+  @Test
+  fun `getEligibilityByCrn - itemise - returns full report using shared cache`() {
+    val crn = "x123456"
+    val fetchCache = mock<EligibilityEvaluationEngine.FetchCache>()
+    val rule = mock<OffenderEligibilityRule>()
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(rule.source).thenReturn("NDELIUS")
+    whenever(rule.code).thenReturn("IS_ALIVE")
+    whenever(rule.dataPoint).thenReturn("DECEASED_DATE")
+    whenever(rule.messageOnMatch).thenReturn(null)
+    whenever(rule.messageOnNoMatch).thenReturn("Person is deceased")
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(fetchCache)
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      java.util.concurrent.CompletableFuture.completedFuture(
+        EligibilityResult(
+          outcome = EligibilityCheckOutcome.INELIGIBLE,
+          message = "Person is deceased",
+          triggeredRuleCode = "IS_ALIVE",
+        ),
+      ),
+    )
+    whenever(eligibilityEvaluationEngine.itemise(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      java.util.concurrent.CompletableFuture.completedFuture(
+        listOf(rule to EligibilityRuleOutcome.NOT_ELIGIBLE),
+      ),
+    )
+
+    val response = resource.getEligibilityByCrn(crn, itemise = true).join()
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    assertEquals(
+      EligibilityCheckResponse.RuleResult(
+        source = "NDELIUS",
+        code = "IS_ALIVE",
+        dataPoint = "DECEASED_DATE",
+        outcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
+        message = "Person is deceased",
+      ),
+      response.body?.allRules?.single(),
+    )
+    verify(eligibilityEvaluationEngine).evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())
+    verify(eligibilityEvaluationEngine).itemise(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())
   }
 
   // ========================================

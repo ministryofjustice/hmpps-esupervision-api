@@ -3,15 +3,16 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.config
 import io.micrometer.core.annotation.Timed
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
 import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.StubDataWatcher
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ApiUseCase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
@@ -31,6 +32,8 @@ class StubServicesConfiguration {
 
   @Bean
   @Profile("local & stubndilius")
+  @Primary
+  @Qualifier("ndeliusEligibilityApiClient")
   fun ndiliusApiClient(): INdiliusApiClient {
     LOG.info("Creating stubbed Ndilius API client")
     return StubNdiliusApiClient()
@@ -38,6 +41,8 @@ class StubServicesConfiguration {
 
   @Bean
   @Profile("local & stubtier")
+  @Primary
+  @Qualifier("tierEligibilityApiClient")
   fun tierApiClient(): ITierApiClient {
     LOG.info("Creating stubbed Tier API client")
     return StubTierApiClient()
@@ -52,6 +57,8 @@ class StubServicesConfiguration {
 
   @Bean
   @Profile("local & stubsupervisionpackages")
+  @Primary
+  @Qualifier("supervisionPackagesEligibilityApiClient")
   fun supervisionPackagesApiClient(): ISupervisionPackagesApiClient {
     LOG.info("Creating stubbed Supervision Packages API client")
     return StubSupervisionPackagesApiClient()
@@ -87,8 +94,12 @@ open class StubNdiliusApiClient(
     return watcher.allowedCrns.contains(personalDetails.crn)
   }
 
-  @Timed("ndelius.get-contact-details", extraTags = ["method", "GET", "endpoint", "/case/{crn}"], description = "Time taken to get contact details (STUB)")
-  override fun getContactDetails(crn: String, useCase: ApiUseCase): ContactDetails? {
+  @Timed(
+    "ndelius.get-contact-details",
+    extraTags = ["method", "GET", "endpoint", "/case/{crn}"],
+    description = "Time taken to get contact details (STUB)",
+  )
+  override fun getContactDetails(crn: String): ContactDetails? {
     LOG.debug("Fetching contact details for CRN: {}", crn)
     if (watcher.allowedCrns.contains(crn)) {
       return dataProvider.provideCase(crn)
@@ -97,13 +108,9 @@ open class StubNdiliusApiClient(
     return null
   }
 
-  override fun getContactDetailsStrict(crn: String, useCase: ApiUseCase): ContactDetails? = getContactDetails(crn, useCase)
+  override fun getContactDetailsStrict(crn: String): ContactDetails? = getContactDetails(crn)
 
-  override fun getContactDetailsStrictGeneral(crn: String): ContactDetails? = getContactDetailsStrict(crn, ApiUseCase.GENERAL)
-
-  override fun getContactDetailsStrictEligibility(crn: String): ContactDetails? = getContactDetailsStrict(crn, ApiUseCase.ELIGIBILITY_CHECK)
-
-  override fun getContactDetailsForMultiple(crns: List<String>, useCase: ApiUseCase): List<ContactDetails> {
+  override fun getContactDetailsForMultiple(crns: List<String>): List<ContactDetails> {
     LOG.debug("Fetching contact details for {} CRNs, starting with {}", crns.size, crns.take(4))
     val incomingCrns = HashSet<String>(crns)
     val allowedCrns = watcher.allowedCrns

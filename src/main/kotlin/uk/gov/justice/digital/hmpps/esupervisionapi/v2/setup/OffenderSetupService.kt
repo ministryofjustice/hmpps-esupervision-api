@@ -11,7 +11,6 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
@@ -21,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDa
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -55,7 +56,12 @@ class OffenderSetupPersistenceService(
 
     offenderRepository.save(offender)
     val checkin = if (createCheckin && contactDetails != null) {
-      checkinCreationService.createCheckinForOffender(offender, offender.firstCheckin, offender.createdBy, contactDetails)
+      checkinCreationService.createCheckinForOffender(
+        offender,
+        requireNotNull(offender.firstCheckin) { "Cannot create a check-in without a first check-in date" },
+        offender.createdBy,
+        contactDetails,
+      )
     } else {
       null
     }
@@ -93,6 +99,7 @@ class OffenderSetupService(
   @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
     validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
+    validateFirstCheckin(offenderInfo.mode, offenderInfo.firstCheckin)
     val now = clock.instant()
 
     val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)

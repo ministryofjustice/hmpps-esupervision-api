@@ -63,6 +63,7 @@ class JobControlResource(
   checkinLegacyAssetCleanupJob: ObjectProvider<CheckinLegacyAssetCleanupJob>,
   migrationEventReplayJob: ObjectProvider<MigrationEventReplayJob>,
   monthlyStatsRefreshJob: ObjectProvider<MonthlyStatsRefreshJob>,
+  offenderEligibilitySyncJob: ObjectProvider<OffenderEligibilitySyncJob>,
 ) {
 
   /**
@@ -79,6 +80,7 @@ class JobControlResource(
     checkinLegacyAssetCleanupJob.ifAvailable { put("checkin-legacy-cleanup", it::process) }
     migrationEventReplayJob.ifAvailable { put("migration-event-replay", it::process) }
     monthlyStatsRefreshJob.ifAvailable { put("monthly-stats-refresh", it::refresh) }
+    offenderEligibilitySyncJob.ifAvailable { put("offender-eligibility-sync", it::process) }
   }
 
   private val running = ConcurrentHashMap<String, AtomicBoolean>()

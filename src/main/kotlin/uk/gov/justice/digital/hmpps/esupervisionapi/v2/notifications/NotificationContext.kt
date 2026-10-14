@@ -12,11 +12,19 @@ object NotificationContext {
     return when (notificationType) {
       // Offender notifications
       NotificationType.OffenderCheckinSubmitted -> "OSUB-$date-$env"
+      NotificationType.OffenderCheckinSubmittedAdHoc -> "OSAD-$date-$env"
       NotificationType.OffenderCheckinsStopped -> "OSTP-$date-$env"
+      NotificationType.OffenderCheckinsStoppedAuto -> "OSTA-$date-$env"
       NotificationType.OffenderCheckinsRestarted -> "ORES-$date-$env"
+      NotificationType.OffenderCheckinsRestartedAdHoc -> "ORAH-$date-$env"
       NotificationType.RegistrationConfirmation -> "OREG-$date-$env"
+      NotificationType.RegistrationConfirmationAdHoc -> "ORAD-$date-$env"
       NotificationType.OffenderCheckinInvite -> "OCHK-$date-$env"
       NotificationType.OffenderCheckinReminder -> "OREM-$date-$env"
+      NotificationType.OffenderAdHocCheckinScheduled -> "OAHC-$date-$env"
+      NotificationType.OffenderCheckinCancelled -> "OCAN-$date-$env"
+      NotificationType.OffenderCheckinDateChanged -> "ODCH-$date-$env"
+      NotificationType.OffenderCheckinsFrequencyChanged -> "OFCH-$date-$env"
 
       // Practitioner notifications
       NotificationType.PractitionerCheckinSubmitted -> "PSUB-$date-$env"

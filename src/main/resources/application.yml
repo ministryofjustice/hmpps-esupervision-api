@@ -11,6 +11,12 @@ api:
       tier-ui: ${TIER_UI_URL:https://tier-dev.hmpps.service.justice.gov.uk}
       arns-api: ${ARNS_API_URL:https://assess-risks-and-needs-dev.hmpps.service.justice.gov.uk}
       supervision-packages-api: ${SUPERVISION_PACKAGES_API_URL:https://supervision-packages-api-dev.hmpps.service.justice.gov.uk}
+  # Shared pool for the authorised outbound WebClients (see WebClientConfiguration.outboundConnectionProvider).
+  # max-idle-time MUST stay below the upstream ingress keep-alive idle timeout (~60s), otherwise we
+  # reuse sockets the upstream has already closed ("Connection reset by peer", error(-104)).
+  connection-pool:
+    max-idle-time: ${API_CONNECTION_POOL_MAX_IDLE_TIME:20s}
+    evict-in-background: ${API_CONNECTION_POOL_EVICT_IN_BACKGROUND:10s}
 
 app:
   env: ${APP_ENV}
@@ -20,6 +26,11 @@ app:
   apiBaseUrl: ${API_BASE_URL}
   # how long should the presigned S3 URLs be valid for?
   upload-ttl-minutes: 10
+  # Set by the K8s CronJob batch-mode pods (see docs/HELM-AND-K8s-CRON-JOBS); jobs on this
+  # path run to completion and exit instead of being @Scheduled in the long-running web pods.
+  batch:
+    enabled: ${BATCH_ENABLED:false}
+    type: ${BATCH_TYPE:}
   scheduling:
     checkin-notification:
       # How long, starting from dueDate, do we accept checkin submissions.
@@ -262,8 +273,8 @@ notify:
     POP_CHECKINS_STOPPED_AUTO: 1ed9d632-d8da-4236-8bfe-127cdf1d5ba2
     POP_CHECKIN_REMINDER: a7040af3-07b5-493b-b409-88daf081d6cb
     POP_CHECKINS_RESTARTED: 575c1311-8179-4910-9d62-3cd1a017b128
-    POP_CHECKINS_RESTARTED_AD_HOC: 
-    POP_AD_HOC_CHECKIN_SCHEDLUED: 7a27171b-a139-48e9-9179-abdf7cd452bc
+    POP_CHECKINS_RESTARTED_AD_HOC: ""
+    POP_AD_HOC_CHECKIN_SCHEDULED: 7a27171b-a139-48e9-9179-abdf7cd452bc
     POP_CHECKIN_CANCELLED: 1357812e-fb3d-4351-809b-65fd8b569a40
     POP_CHECKIN_DATE_CHANGED: aa55e307-0d41-4556-9b54-d9539b7277a3
     POP_CHECKINS_FREQUENCY_CHANGED: ecd147d2-4d9b-48e7-8384-c674e38da531
@@ -281,8 +292,8 @@ notify:
     POP_CHECKINS_STOPPED_AUTO: 1c52e4b6-6dd3-46cd-bd19-86eb58cc301d
     POP_CHECKIN_REMINDER: 0c5a71ef-fb57-4814-a106-1606d831d903
     POP_CHECKINS_RESTARTED: 9f23bd57-9f97-4f3e-a280-294e1c854314
-    POP_CHECKINS_RESTARTED_AD_HOC: 
-    POP_AD_HOC_CHECKIN_SCHEDLUED: be3e48c9-8bbf-4985-87d6-1b238763d037
+    POP_CHECKINS_RESTARTED_AD_HOC: ""
+    POP_AD_HOC_CHECKIN_SCHEDULED: be3e48c9-8bbf-4987-85d7-1b238763d037
     POP_CHECKIN_CANCELLED: 2312df50-470c-45b5-bb4a-de252254acd2
     POP_CHECKIN_DATE_CHANGED: e726e85d-09d4-4ca6-8530-bbbaf721773c
     POP_CHECKINS_FREQUENCY_CHANGED: 91e1e310-0218-4deb-9ec4-d929698bd5d7
@@ -307,7 +318,15 @@ rekognition:
   call-timeout-seconds: 30
 
 resilience4j:
+  # Aspect nesting is CircuitBreaker( Retry( call ) ): a call is retried up to max-attempts, and
+  # only once every attempt has failed does the breaker record ONE failure and invoke the
+  # fallbackMethod. A lower order value is the outer aspect. Resilience4j's default is the reverse
+  # (Retry outermost), under which a fallback that returns a value swallows the exception before
+  # Retry sees it, so nothing is ever retried. Pinned by ResilienceAspectOrderIntegrationTest.
+  # Put fallbackMethod on @CircuitBreaker, never on @Retry: a Retry fallback sits inside the breaker
+  # and hides every failure from it, so the circuit could never open.
   circuitbreaker:
+    circuit-breaker-aspect-order: 1
     instances:
       ndiliusApi:
         register-health-indicator: true
@@ -389,8 +408,8 @@ resilience4j:
         failure-rate-threshold: 50
         slow-call-rate-threshold: 80
         slow-call-duration-threshold: 5s
-        record-exceptions:
-          - uk.gov.service.notify.NotificationClientException
+        # Transient failures only (network, 429, 5xx) - never 4xx. See NotifyTransientFailure.
+        record-failure-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyTransientFailure
 
       awsS3:
         register-health-indicator: true
@@ -424,6 +443,8 @@ resilience4j:
           - software.amazon.awssdk.services.rekognition.model.InvalidParameterException
 
   retry:
+    # Must be higher than circuit-breaker-aspect-order so Retry runs inside the CircuitBreaker.
+    retry-aspect-order: 2
     instances:
       ndiliusApi:
         max-attempts: 3
@@ -459,8 +480,9 @@ resilience4j:
         wait-duration: 1000ms
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
-        retry-exceptions:
-          - uk.gov.service.notify.NotificationClientException
+        # Only failures where Notify cannot have created the notification, to avoid duplicate
+        # sends - narrower than the breaker's predicate. See NotifyRetryableFailure.
+        retry-exception-predicate: uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyRetryableFailure
 
       awsS3:
         max-attempts: 2
