@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.P
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import java.time.Period
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -259,6 +260,26 @@ class NotificationOrchestratorService(
         sanitized,
       )
       throw NotificationFailureException("Failed to send checkin created notification. Checkin uuid=${checkin.uuid}")
+    }
+  }
+
+  fun sendAdHocCheckinScheduledNotification(offender: Offender, contactDetails: ContactDetails, scheduledDate: LocalDate) {
+    try {
+      val personalisation = mapOf(
+        "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
+        "date" to scheduledDate.format(DATE_FORMATTER),
+      )
+      val notifications = notificationPersistence.buildOffenderNotifications(
+        offenderId = offender.id,
+        crn = offender.crn,
+        contactPreference = offender.contactPreference,
+        contactDetails = contactDetails,
+        notificationType = NotificationType.OffenderAdHocCheckinScheduled,
+      )
+      processAndSendNotifications(notifications, personalisation)
+    } catch (e: Exception) {
+      val sanitized = PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid)
+      LOGGER.warn("Failed to send ad hoc check-in scheduling notification for offender {}: {}", offender.crn, sanitized)
     }
   }
 
