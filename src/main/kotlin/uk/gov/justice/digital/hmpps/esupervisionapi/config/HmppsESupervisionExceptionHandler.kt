@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import jakarta.validation.ValidationException
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatus.BAD_REQUEST
 import org.springframework.http.HttpStatus.FORBIDDEN
 import org.springframework.http.HttpStatus.GONE
@@ -162,7 +163,8 @@ class HmppsESupervisionExceptionHandler {
     .status(SERVICE_UNAVAILABLE)
     .body(
       ErrorResponse(
-        status = SERVICE_UNAVAILABLE,
+        // when manual data was expected but not provided, we make it the client's fault
+        status = if (e.source == "MANUAL") HttpStatus.UNPROCESSABLE_CONTENT else SERVICE_UNAVAILABLE,
         userMessage = e.message,
         developerMessage = e.message,
       ),

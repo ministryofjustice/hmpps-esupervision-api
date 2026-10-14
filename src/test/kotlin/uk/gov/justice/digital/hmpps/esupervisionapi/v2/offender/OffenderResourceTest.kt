@@ -308,7 +308,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -356,7 +356,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -451,7 +451,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -478,7 +478,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
@@ -510,7 +510,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
@@ -556,7 +556,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
@@ -600,7 +600,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
@@ -640,7 +640,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -668,7 +668,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Contact suspended", "SUSPENDED_CODE"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
@@ -697,7 +697,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {

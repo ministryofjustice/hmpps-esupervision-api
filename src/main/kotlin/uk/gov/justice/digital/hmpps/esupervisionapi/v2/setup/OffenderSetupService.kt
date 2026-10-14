@@ -9,7 +9,10 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
@@ -17,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupCompletionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
@@ -26,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -89,6 +94,7 @@ class OffenderSetupService(
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService,
   private val eligibilityChecker: EligibilityChecker,
+  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -133,6 +139,12 @@ class OffenderSetupService(
       )
     }
 
+    if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
+      val contactDetails = ndiliusApiClient.getContactDetailsStrict(offenderInfo.crn)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found for CRN ${offenderInfo.crn}")
+      checkEligibility(contactDetails, offenderInfo.eligibilityAnswers, offender)
+    }
+
     raiseOnConstraintViolation("CRN ${offenderInfo.crn} already exists") {
       offenderRepository.save(offender)
     }
@@ -162,6 +174,18 @@ class OffenderSetupService(
     return saved.dto()
   }
 
+  private fun checkEligibility(
+    contactDetails: ContactDetails,
+    eligibility: EligibilityAnswers?,
+    offender: Offender,
+  ) {
+    val cache = makeCache(offender, contactDetails, eligibility)
+    val result = eligibilityChecker.check(offender, contactDetails.name, cache)
+    if (result.outcome != EligibilityCheckOutcome.ELIGIBLE) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, result.message ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"}")
+    }
+  }
+
   /**
    * The UI records when the practitioner started the setup journey. Only keep it if it's plausible,
    * so a skewed clock or a long-abandoned session can't distort setup-duration stats.
@@ -179,7 +203,7 @@ class OffenderSetupService(
    * Complete offender setup Verifies photo, changes status to VERIFIED, sends notifications, and
    * creates first checkin if due
    */
-  fun completeOffenderSetup(uuid: UUID): OffenderDto {
+  fun completeOffenderSetup(uuid: UUID, completion: OffenderSetupCompletionDto): OffenderDto {
     val setup = offenderSetupRepository.findByUuid(uuid).getOrElse {
       throw BadArgumentException("No setup for given uuid=$uuid")
     }
@@ -202,13 +226,7 @@ class OffenderSetupService(
     // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
     if (contactDetails != null) {
       try {
-        val outcome = eligibilityChecker.check(offender, contactDetails)
-        if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
-          throw ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "Offender ${offender.crn} not eligible: ${outcome.message ?: "Eligibility rule ${outcome.triggeredRuleCode ?: "UNKNOWN"} failed"}",
-          )
-        }
+        checkEligibility(contactDetails, completion.eligibilityAnswers, offender)
       } catch (e: EligibilityDataUnavailableException) {
         LOGGER.info("Eligibility data unavailable for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
       } catch (e: ResourceNotFoundException) {

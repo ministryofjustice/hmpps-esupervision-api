@@ -30,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INamedPerson
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -58,6 +59,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEv
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
@@ -178,6 +180,9 @@ class OffenderResource(
 
     val cacheData = mapOf(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+      // this endpoint does not expect the practitioner supplied data, but we also don't want to throw an error
+      // during the rule evaluation, so pre-populate the cache with an empty map
+      "MANUAL" to CompletableFuture.completedFuture(emptyMap()),
     )
     val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
 
@@ -521,7 +526,8 @@ class OffenderResource(
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
-    val outcome = eligibilityChecker.check(offender, contactDetails)
+    val cache = makeCache(offender, contactDetails, request.eligibilityAnswers)
+    val outcome = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
@@ -891,6 +897,9 @@ data class ReactivateOffenderRequest(
 
   val checkinSchedule: CheckinScheduleUpdateRequest? = null,
   val contactPreference: ContactPreferenceUpdateRequest? = null,
+
+  @field:Schema(description = "Eligibility answers", required = false)
+  val eligibilityAnswers: EligibilityAnswers? = null,
 )
 
 /** Request to update offender check in schedule */
