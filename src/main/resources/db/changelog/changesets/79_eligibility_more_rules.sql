@@ -19,7 +19,7 @@ values
      'ESUP', 'PILOT_USER',
      'EQUALS','false',
      'CONTINUE', null,
-     'ELIGIBLE', null,
+     'ELIGIBLE', '{{offender}} is eligible',
      null),
 
     -- NOTE: no ineligibility message in figma
