@@ -32,7 +32,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "IS_TIER_C",
         "ON_ACCREDITED_PROGRAMME",
         "ON_YOUTH_SENTENCE",
-        "IN_EARLY_ENGAGEMENT"
+        "IN_EARLY_ENGAGEMENT",
       )
   }
 
@@ -69,7 +69,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
           "ACCREDITED_PROGRAMME" to false,
           "YOUTH_SENTENCE" to false,
         ),
-      )
+      ),
     )
 
     val result = eligibilityEvaluationEngine
