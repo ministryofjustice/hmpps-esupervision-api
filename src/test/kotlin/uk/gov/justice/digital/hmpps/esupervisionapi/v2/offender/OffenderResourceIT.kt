@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertNotNull
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
@@ -141,6 +142,42 @@ class OffenderResourceIT : IntegrationTestBase() {
             ),
           ),
         )
+      }
+
+    verifySourcesFetchedOnce()
+  }
+
+  @Test
+  fun `getEligibilityByCrn with itemise true preserves ineligible outcome reached before manual rules`() {
+    upstreams.stubFor(
+      get(urlEqualTo("/case/$crn")).atPriority(1).willReturn(
+        json(
+          """
+          {
+            "crn": "$crn",
+            "name": {"forename": "John", "surname": "Doe"},
+            "dateOfBirth": "1980-01-01",
+            "practitioner": {"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}},
+            "events": []
+          }
+          """.trimIndent(),
+        ),
+      ),
+    )
+
+    fetchEligibility(itemise = true)
+      .expectStatus().isOk
+      .expectBody(EligibilityCheckResponse::class.java)
+      .value { response ->
+        assertNotNull(response)
+        assertThat(response.outcome).isEqualTo(EligibilityCheckResponseOutcome.INELIGIBLE)
+        assertThat(response.message).isEqualTo("No active sentence.")
+        assertThat(response.allRules)
+          .hasSize(10)
+          .noneMatch { it.source == "MANUAL" }
+          .first().isEqualTo(
+            RuleResult("NDELIUS", "HAS_ACTIVE_EVENT", "ACTIVE_EVENT", NOT_ELIGIBLE, "No active sentence."),
+          )
       }
 
     verifySourcesFetchedOnce()

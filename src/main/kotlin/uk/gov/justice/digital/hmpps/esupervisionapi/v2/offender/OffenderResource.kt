@@ -255,8 +255,8 @@ class OffenderResource(
             val hasManualRules = report.any { it.first.source == "MANUAL" }
             ResponseEntity.ok(
               EligibilityCheckResponse(
-                outcome = if (hasManualRules) EligibilityCheckResponseOutcome.UNKNOWN else result.outcome.toResponseOutcome(),
-                message = if (hasManualRules) {
+                outcome = if (hasManualRules && result.message == null) EligibilityCheckResponseOutcome.UNKNOWN else result.outcome.toResponseOutcome(),
+                message = if (hasManualRules && result.message == null) {
                   applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name)
                 } else {
                   result.message?.let { applyTemplate(it, contactDetails.name) }
