@@ -240,13 +240,14 @@ class OffenderResource(
       .thenCompose { result ->
         eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, cache)
           .thenApply { report ->
+            val hasManualRules = report.any { it.first.source == "MANUAL" }
             ResponseEntity.ok(
               EligibilityCheckResponse(
-                outcome = if (stubEligibilityData.isEmpty()) result.outcome.toResponseOutcome() else EligibilityCheckResponseOutcome.UNKNOWN,
-                message = if (stubEligibilityData.isEmpty()) {
-                  result.message?.let { applyTemplate(it, contactDetails.name) }
-                } else {
+                outcome = if (hasManualRules) EligibilityCheckResponseOutcome.UNKNOWN else result.outcome.toResponseOutcome(),
+                message = if (hasManualRules) {
                   applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name)
+                } else {
+                  result.message?.let { applyTemplate(it, contactDetails.name) }
                 },
                 allRules = report
                   .filter { (rule, _) -> rule.source != "MANUAL" }
@@ -259,7 +260,14 @@ class OffenderResource(
                       message = when (outcome) {
                         EligibilityRuleOutcome.CONTINUE -> null
                         EligibilityRuleOutcome.ELIGIBLE -> null // we don't care about the message here
-                        EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
+                        // we need to extract the right message from the rule
+                        EligibilityRuleOutcome.NOT_ELIGIBLE -> if (rule.outcomeOnNoMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) {
+                          rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
+                        } else if (rule.outcomeOnMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) {
+                          rule.messageOnMatch?.let { applyTemplate(it, contactDetails.name) }
+                        } else {
+                          null
+                        }
                       },
                     )
                   },
