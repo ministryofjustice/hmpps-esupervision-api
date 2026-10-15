@@ -60,6 +60,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
@@ -227,17 +228,28 @@ class OffenderResource(
         }
     }
 
-    // for `ithis endpoint does not expect the practitioner supplied data, but we also don't want to throw an error
-    // during the rule evaluation, so pre-populate the cache with a stubbed map.
-    // The client is mostly interested in the messages
-    val answers = EligibilityAnswers(false, false, false)
-    val eligibilityData = answers.eligibilityData()
-    val stubEligibilityData = eligibilityData.toMutableMap()
-    eligibilityData.forEach { (string, any) -> stubEligibilityData[string] = "<missing>" }
-    cacheData["MANUAL"] = CompletableFuture.completedFuture(stubEligibilityData)
-
     return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
+      .exceptionallyCompose { throwable ->
+        val cause = generateSequence(throwable) {
+          if (it is CompletionException) it.cause else null
+        }.last()
+        if (cause is EligibilityDataUnavailableException && cause.source == "MANUAL") {
+          CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, null, null))
+        } else {
+          CompletableFuture.failedFuture(throwable)
+        }
+      }
       .thenCompose { result ->
+
+        // this endpoint does not expect the practitioner supplied data, but we also don't want to throw an error
+        // during the rule evaluation, so pre-populate the cache with a stubbed map.
+        // The client is mostly interested in the messages
+        val answers = EligibilityAnswers(false, false, false)
+        val eligibilityData = answers.eligibilityData()
+        val stubEligibilityData = eligibilityData.toMutableMap()
+        eligibilityData.forEach { (string, any) -> stubEligibilityData[string] = "<missing>" }
+        cacheData["MANUAL"] = CompletableFuture.completedFuture(stubEligibilityData)
+
         eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, cache)
           .thenApply { report ->
             val hasManualRules = report.any { it.first.source == "MANUAL" }

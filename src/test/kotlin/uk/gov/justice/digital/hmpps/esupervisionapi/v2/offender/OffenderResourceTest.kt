@@ -1360,22 +1360,6 @@ class OffenderResourceTest {
     assertSame(failure, thrown)
   }
 
-  @Test
-  fun `getEligibilityByCrn - itemise with missing manual data - propagates failure`() {
-    val crn = "X123456"
-    val failure = EligibilityDataUnavailableException("DEVICE_RESTRICTION", "MANUAL", RuntimeException("Missing data"))
-    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
-    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
-    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
-    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
-      CompletableFuture.failedFuture(failure),
-    )
-
-    val thrown = assertThrows(CompletionException::class.java) { resource.getEligibilityByCrn(crn, itemise = true).join() }
-
-    assertSame(failure, thrown.cause)
-  }
-
   private fun makeContactDetails(crn: String): ContactDetails = ContactDetails(crn = crn, name = Name("John", "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1))
 
   @Test
