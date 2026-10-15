@@ -242,8 +242,12 @@ class OffenderResource(
           .thenApply { report ->
             ResponseEntity.ok(
               EligibilityCheckResponse(
-                outcome = result.outcome.toResponseOutcome(),
-                message = result.message?.let { applyTemplate(it, contactDetails.name) },
+                outcome = if (stubEligibilityData.isEmpty()) result.outcome.toResponseOutcome() else EligibilityCheckResponseOutcome.UNKNOWN,
+                message = if (stubEligibilityData.isEmpty()) {
+                  result.message?.let { applyTemplate(it, contactDetails.name) }
+                } else {
+                  applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name)
+                },
                 allRules = report
                   .filter { (rule, _) -> rule.source != "MANUAL" }
                   .map { (rule, outcome) ->
