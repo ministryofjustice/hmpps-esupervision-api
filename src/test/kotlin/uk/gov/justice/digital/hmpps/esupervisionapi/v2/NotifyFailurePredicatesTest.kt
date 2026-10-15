@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyRetryableFailure
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyTransientFailure
 import uk.gov.service.notify.NotificationClientException
 import java.io.IOException
 import java.net.ConnectException

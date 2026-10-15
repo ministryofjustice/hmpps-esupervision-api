@@ -24,7 +24,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotifyGatewayService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
@@ -35,6 +34,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration

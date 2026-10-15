@@ -15,11 +15,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate

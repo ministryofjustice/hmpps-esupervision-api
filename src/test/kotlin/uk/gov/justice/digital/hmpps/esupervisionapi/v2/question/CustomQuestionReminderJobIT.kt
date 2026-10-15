@@ -26,13 +26,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CustomQuestionsReminderJob
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant

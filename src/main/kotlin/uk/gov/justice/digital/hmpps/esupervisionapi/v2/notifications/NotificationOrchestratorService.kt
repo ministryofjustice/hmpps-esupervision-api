@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -6,6 +6,21 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -73,11 +88,17 @@ class NotificationOrchestratorService(
     if (contactDetails != null) {
       try {
         val personalisation =
-          mapOf(
-            "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
-            "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
-            "frequency" to frequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }),
-          )
+          if (offender.mode == CheckinMode.SCHEDULED) {
+            mapOf(
+              "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
+              "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
+              "frequency" to frequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }),
+            )
+          } else {
+            mapOf(
+              "name" to "${contactDetails.name.forename} ${contactDetails.name.surname}",
+            )
+          }
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
@@ -85,7 +106,7 @@ class NotificationOrchestratorService(
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = contactDetails,
-            notificationType = NotificationType.RegistrationConfirmation,
+            notificationType = if (offender.mode == CheckinMode.SCHEDULED) NotificationType.RegistrationConfirmation else NotificationType.RegistrationConfirmationAdHoc,
           )
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)

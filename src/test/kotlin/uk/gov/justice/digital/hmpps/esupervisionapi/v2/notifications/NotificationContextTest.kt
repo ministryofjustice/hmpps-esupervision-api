@@ -15,10 +15,17 @@ class NotificationContextTest {
   @Test
   fun `generateReference returns correct format`() {
     assertEquals("OSUB-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinSubmitted, clock, env))
+    assertEquals("OSAD-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinSubmittedAdHoc, clock, env))
     assertEquals("OSTP-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinsStopped, clock, env))
+    assertEquals("OSTA-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinsStoppedAuto, clock, env))
     assertEquals("OREG-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.RegistrationConfirmation, clock, env))
+    assertEquals("ORAD-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.RegistrationConfirmationAdHoc, clock, env))
     assertEquals("OCHK-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinInvite, clock, env))
     assertEquals("OREM-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinReminder, clock, env))
+    assertEquals("OAHC-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderAdHocCheckinScheduled, clock, env))
+    assertEquals("OCAN-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinCancelled, clock, env))
+    assertEquals("ODCH-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinDateChanged, clock, env))
+    assertEquals("OFCH-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinsFrequencyChanged, clock, env))
     assertEquals("PSUB-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.PractitionerCheckinSubmitted, clock, env))
     assertEquals("PEXP-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.PractitionerCheckinMissed, clock, env))
     assertEquals("PING-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.PractitionerInviteIssueGeneric, clock, env))

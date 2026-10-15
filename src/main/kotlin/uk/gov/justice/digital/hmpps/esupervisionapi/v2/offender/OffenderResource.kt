@@ -37,7 +37,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INamedPerson
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
@@ -67,6 +66,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService

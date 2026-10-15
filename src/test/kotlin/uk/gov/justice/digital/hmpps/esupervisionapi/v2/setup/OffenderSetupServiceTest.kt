@@ -31,7 +31,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityChoice
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
@@ -47,6 +46,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant

@@ -11,7 +11,6 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
@@ -29,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDa
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant

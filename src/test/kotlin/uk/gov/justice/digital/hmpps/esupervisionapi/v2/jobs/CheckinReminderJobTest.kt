@@ -21,7 +21,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
@@ -30,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventT
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Instant

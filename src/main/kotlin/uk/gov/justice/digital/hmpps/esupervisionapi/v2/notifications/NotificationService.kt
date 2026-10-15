@@ -1,6 +1,17 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications
 
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.QuestionsReminderInfo
 import java.time.LocalDate
 
