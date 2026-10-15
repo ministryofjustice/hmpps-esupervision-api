@@ -12,7 +12,7 @@ values
      'MANUAL', 'DEVICE_RESTRICTION',
      'EQUALS','false',
      'CONTINUE', null,
-     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in Tier A or B, and are not in an accredited programme.',
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they have sentence conditions that mean they can''t use a device or internet.',
      null),
 
     -- eventual source: NDELIUS
@@ -36,7 +36,7 @@ values
      'MANUAL', 'ACCREDITED_PROGRAMME',
      'EQUALS','true',
      'CONTINUE', null,
-     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in Tier A or B, but have sentence conditions that mean they can''t use a device or the internet.',
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in Tier A or B, and are not on accredited programme.',
      null),
 
     -- eventual source: NDELIUS
