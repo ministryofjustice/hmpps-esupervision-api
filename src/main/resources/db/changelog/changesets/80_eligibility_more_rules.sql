@@ -15,6 +15,14 @@ values
      'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in Tier A or B, and are not in an accredited programme.',
      null),
 
+    -- eventual source: NDELIUS
+    (10.5, 'TIER_MISSING', 'Do they have a Tier score?',
+     'TIER', 'TIER',
+     'EQUALS','MISSING',
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they have not been assigned a tier yet.',
+     'CONTINUE', null,
+     null),
+
     (12, 'IS_PILOT_USER', 'Are they a pilot user?',
      'ESUP', 'PILOT_USER',
      'EQUALS','false',

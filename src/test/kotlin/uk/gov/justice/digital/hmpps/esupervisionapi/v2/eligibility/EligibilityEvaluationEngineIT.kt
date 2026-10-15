@@ -27,6 +27,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "IN_FINAL_THIRD",
         "IS_PRACTITIONER_ASSIGNED",
         "HAS_DEVICE_RESTRICTION",
+        "TIER_MISSING",
         "IS_TIER_D_TO_G",
         "IS_PILOT_USER",
         "IS_TIER_C",
