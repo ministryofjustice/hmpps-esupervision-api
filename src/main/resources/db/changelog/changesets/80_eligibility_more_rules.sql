@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:79_eligibility_more_rules-1 splitStatements:false
+--changeset hmpps:80_eligibility_more_rules-1 splitStatements:false
 
 insert into offender_eligibility_rule
 (rule_order, code, question, source, data_point, operator, comparison_value,
@@ -41,7 +41,7 @@ values
 ;
 -- no rollback for this one
 
---changeset hmpps:79_eligibility_more_rules-2 splitStatements:false
+--changeset hmpps:80_eligibility_more_rules-2 splitStatements:false
 
 -- update the message and position of existing rule
 update offender_eligibility_rule

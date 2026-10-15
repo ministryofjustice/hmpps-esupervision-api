@@ -165,6 +165,7 @@ class CheckinCreationService(
   )
 
   companion object {
+    private val CHECKIN_STATUSES_OCCUPYING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED)
     private val LOGGER = LoggerFactory.getLogger(CheckinCreationService::class.java)
   }
 }
