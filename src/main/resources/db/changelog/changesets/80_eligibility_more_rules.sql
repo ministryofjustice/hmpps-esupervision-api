@@ -58,4 +58,4 @@ set
     message_on_no_match = '{{offender}} is not eligible for online check ins because they have been recalled.'
 where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'IS_RECALLED' and source = 'SUP-PACK';
 
---rollback update offender_eligibility_rule set source = 'SUP-PACK' where code = 'IS_RECALLED' and source = 'MANUAL';
+--rollback update offender_eligibility_rule set rule_order = 2 where code = 'IS_RECALLED' and source = 'SUP-PACK';
