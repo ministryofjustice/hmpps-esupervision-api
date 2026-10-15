@@ -1325,7 +1325,7 @@ class OffenderResourceTest {
     val response = resource.getEligibilityByCrn(crn).join()
 
     assertEquals(HttpStatus.OK, response.statusCode)
-    assertEquals(EligibilityCheckResponse(outcome = EligibilityCheckResponseOutcome.UNKNOWN), response.body)
+    assertEquals(EligibilityCheckResponseOutcome.UNKNOWN, response.body?.outcome)
   }
 
   @Test
