@@ -5,10 +5,13 @@ import jakarta.validation.Validation
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -50,6 +53,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
@@ -69,6 +73,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 
 class OffenderResourceTest {
 
@@ -1276,7 +1282,7 @@ class OffenderResourceTest {
     val response = resource.getEligibilityByCrn(crn).join()
 
     assertEquals(HttpStatus.OK, response.statusCode)
-    assertEquals(EligibilityCheckOutcome.ELIGIBLE, response.body?.outcome)
+    assertEquals(EligibilityCheckResponseOutcome.ELIGIBLE, response.body?.outcome)
     assertNull(response.body?.message)
   }
 
@@ -1299,8 +1305,75 @@ class OffenderResourceTest {
     val response = resource.getEligibilityByCrn(crn).join()
 
     assertEquals(HttpStatus.OK, response.statusCode)
-    assertEquals(EligibilityCheckOutcome.INELIGIBLE, response.body?.outcome)
+    assertEquals(EligibilityCheckResponseOutcome.INELIGIBLE, response.body?.outcome)
     assertEquals("Not eligible: person is recorded as deceased.", response.body?.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = [0, 1, 2])
+  fun `getEligibilityByCrn - missing manual data - returns unknown`(wrapperCount: Int) {
+    val crn = "X123456"
+    var failure: Throwable = EligibilityDataUnavailableException("DEVICE_RESTRICTION", "MANUAL", RuntimeException("Missing data"))
+    repeat(wrapperCount) { failure = CompletionException(failure) }
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      CompletableFuture.failedFuture(failure),
+    )
+
+    val response = resource.getEligibilityByCrn(crn).join()
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    assertEquals(EligibilityCheckResponse(outcome = EligibilityCheckResponseOutcome.UNKNOWN), response.body)
+  }
+
+  @Test
+  fun `getEligibilityByCrn - missing upstream data - propagates failure`() {
+    val crn = "X123456"
+    val failure = EligibilityDataUnavailableException("IS_ALIVE", "NDELIUS", RuntimeException("Source unavailable"))
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      CompletableFuture.failedFuture(failure),
+    )
+
+    val thrown = assertThrows(CompletionException::class.java) { resource.getEligibilityByCrn(crn).join() }
+
+    assertSame(failure, thrown.cause)
+  }
+
+  @Test
+  fun `getEligibilityByCrn - unrelated failure - propagates original wrapper`() {
+    val crn = "X123456"
+    val failure = CompletionException(IllegalStateException("Evaluation failed"))
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      CompletableFuture.failedFuture(failure),
+    )
+
+    val thrown = assertThrows(CompletionException::class.java) { resource.getEligibilityByCrn(crn).join() }
+
+    assertSame(failure, thrown)
+  }
+
+  @Test
+  fun `getEligibilityByCrn - itemise with missing manual data - propagates failure`() {
+    val crn = "X123456"
+    val failure = EligibilityDataUnavailableException("DEVICE_RESTRICTION", "MANUAL", RuntimeException("Missing data"))
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      CompletableFuture.failedFuture(failure),
+    )
+
+    val thrown = assertThrows(CompletionException::class.java) { resource.getEligibilityByCrn(crn, itemise = true).join() }
+
+    assertSame(failure, thrown.cause)
   }
 
   private fun makeContactDetails(crn: String): ContactDetails = ContactDetails(crn = crn, name = Name("John", "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1))

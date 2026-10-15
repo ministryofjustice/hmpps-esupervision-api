@@ -59,11 +59,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.toResponseOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
@@ -78,6 +80,8 @@ import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
+import kotlin.collections.map
 
 @RestController
 @RequestMapping("/v2/offenders", produces = ["application/json"])
@@ -171,9 +175,9 @@ class OffenderResource(
     summary = "Check eligibility by CRN",
     description = """Evaluates the offender eligibility rule set against NDelius/Nomis for the given CRN,
       without requiring the person to already be registered for e-supervision. Used to pre-check
-      eligibility before starting setup.""",
+      eligibility before starting setup. When itemise=false, unavailable MANUAL data produces an UNKNOWN outcome.""",
   )
-  @ApiResponse(responseCode = "200", description = "Eligibility evaluated")
+  @ApiResponse(responseCode = "200", description = "Eligibility evaluated, or UNKNOWN when itemise=false and MANUAL data is unavailable")
   @ApiResponse(responseCode = "503", description = "A required data source could not be fetched")
   @GetMapping("/crn/{crn}/eligibility")
   fun getEligibilityByCrn(
@@ -186,11 +190,10 @@ class OffenderResource(
     val contactDetails = ndiliusApiClient.getContactDetailsStrict(normalisedCrn)
       ?: return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.NOT_FOUND).build())
 
-    val cacheData = mapOf(
+    // If clients wants only the YES/NO eligibility answer, we can't do it without missing data points;
+    // the MANUAL data provider will throw
+    val cacheData = mutableMapOf(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
-      // this endpoint does not expect the practitioner supplied data, but we also don't want to throw an error
-      // during the rule evaluation, so pre-populate the cache with an empty map
-      "MANUAL" to CompletableFuture.completedFuture(emptyMap()),
     )
     val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
 
@@ -199,12 +202,39 @@ class OffenderResource(
         .thenApply { result ->
           ResponseEntity.ok(
             EligibilityCheckResponse(
-              outcome = result.outcome,
+              outcome = result.outcome.toResponseOutcome(),
               message = result.message?.let { applyTemplate(it, contactDetails.name) },
             ),
           )
         }
+        // for missing MANUAL data, we want to return UNKNOWN and not error
+        .exceptionallyCompose { throwable ->
+          val cause = generateSequence(throwable) {
+            if (it is CompletionException) it.cause else null
+          }.last()
+          if (cause is EligibilityDataUnavailableException && cause.source == "MANUAL") {
+            CompletableFuture.completedFuture(
+              ResponseEntity.ok(
+                EligibilityCheckResponse(
+                  outcome = EligibilityCheckResponseOutcome.UNKNOWN,
+                  message = applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name),
+                ),
+              ),
+            )
+          } else {
+            CompletableFuture.failedFuture(throwable)
+          }
+        }
     }
+
+    // for `ithis endpoint does not expect the practitioner supplied data, but we also don't want to throw an error
+    // during the rule evaluation, so pre-populate the cache with a stubbed map.
+    // The client is mostly interested in the messages
+    val answers = EligibilityAnswers(false, false, false)
+    val eligibilityData = answers.eligibilityData()
+    val stubEligibilityData = eligibilityData.toMutableMap()
+    eligibilityData.forEach { (string, any) -> stubEligibilityData[string] = "<missing>" }
+    cacheData["MANUAL"] = CompletableFuture.completedFuture(stubEligibilityData)
 
     return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
       .thenCompose { result ->
@@ -212,21 +242,23 @@ class OffenderResource(
           .thenApply { report ->
             ResponseEntity.ok(
               EligibilityCheckResponse(
-                outcome = result.outcome,
+                outcome = result.outcome.toResponseOutcome(),
                 message = result.message?.let { applyTemplate(it, contactDetails.name) },
-                allRules = report.map { (rule, outcome) ->
-                  EligibilityCheckResponse.RuleResult(
-                    source = rule.source,
-                    code = rule.code,
-                    dataPoint = rule.dataPoint,
-                    outcome = outcome,
-                    message = when (outcome) {
-                      EligibilityRuleOutcome.CONTINUE -> null
-                      EligibilityRuleOutcome.ELIGIBLE -> null // we don't care about the message here
-                      EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
-                    },
-                  )
-                },
+                allRules = report
+                  .filter { (rule, _) -> rule.source != "MANUAL" }
+                  .map { (rule, outcome) ->
+                    EligibilityCheckResponse.RuleResult(
+                      source = rule.source,
+                      code = rule.code,
+                      dataPoint = rule.dataPoint,
+                      outcome = outcome,
+                      message = when (outcome) {
+                        EligibilityRuleOutcome.CONTINUE -> null
+                        EligibilityRuleOutcome.ELIGIBLE -> null // we don't care about the message here
+                        EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
+                      },
+                    )
+                  },
               ),
             )
           }
@@ -835,9 +867,19 @@ data class SupervisionPackageStatus(
   val inEarlyEngagement: Boolean,
 )
 
+enum class EligibilityCheckResponseOutcome {
+  ELIGIBLE,
+  INELIGIBLE,
+
+  /**
+   * We're potentially missing data
+   */
+  UNKNOWN,
+}
+
 /** Result of evaluating the offender eligibility rule set for a CRN. */
 data class EligibilityCheckResponse(
-  val outcome: EligibilityCheckOutcome,
+  val outcome: EligibilityCheckResponseOutcome,
   val message: String? = null,
   val allRules: List<RuleResult>? = null,
 ) {
