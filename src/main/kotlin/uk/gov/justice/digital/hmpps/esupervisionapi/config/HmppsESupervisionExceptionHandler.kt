@@ -160,7 +160,7 @@ class HmppsESupervisionExceptionHandler {
 
   @ExceptionHandler(EligibilityDataUnavailableException::class)
   fun handleEligibilityDataUnavailableException(e: EligibilityDataUnavailableException): ResponseEntity<ErrorResponse> = ResponseEntity
-    .status(SERVICE_UNAVAILABLE)
+    .status(if (e.source == "MANUAL") HttpStatus.UNPROCESSABLE_CONTENT else SERVICE_UNAVAILABLE)
     .body(
       ErrorResponse(
         // when manual data was expected but not provided, we make it the client's fault
