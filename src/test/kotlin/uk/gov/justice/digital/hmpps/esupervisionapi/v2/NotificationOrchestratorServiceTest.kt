@@ -16,10 +16,16 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationTy
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.AssociatedOffenderInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationPersistenceService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationWithRecipient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -80,6 +86,94 @@ class NotificationOrchestratorServiceTest {
     service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
 
     verify(domainEventService).publishDomainEvent(any(), eq(offender.uuid), eq(offender.crn), any(), eq(null), any())
+  }
+
+  @Test
+  fun `sendSetupCompletedNotifications - ad hoc uses ad hoc signup template and name only`() {
+    val offender = createOffender().apply {
+      mode = CheckinMode.AD_HOC
+      firstCheckin = null
+      checkinInterval = null
+    }
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.RegistrationConfirmationAdHoc.name,
+      recipientType = "OFFENDER",
+      channel = "SMS",
+      offenderId = offender.id,
+      reference = "ADHOC-SIGNUP-001",
+      templateId = "ad-hoc-registration-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "07700900123"
+    val notifyId = UUID.randomUUID()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(notifyId)
+
+    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.RegistrationConfirmationAdHoc),
+    )
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("ad-hoc-registration-template"),
+      eq(recipient),
+      eq(mapOf("name" to "John Smith")),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
+  fun `sendSetupCompletedNotifications - scheduled uses recurring signup template and personalisation`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.RegistrationConfirmation.name,
+      recipientType = "OFFENDER",
+      channel = "SMS",
+      offenderId = offender.id,
+      reference = "SCHEDULED-SIGNUP-001",
+      templateId = "scheduled-registration-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "07700900123"
+    val notifyId = UUID.randomUUID()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(notifyId)
+
+    service.sendSetupCompletedNotifications(offender, contactDetails, offender.asSetupDto(clock))
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.RegistrationConfirmation),
+    )
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("scheduled-registration-template"),
+      eq(recipient),
+      eq(
+        mapOf(
+          "name" to "John Smith",
+          "date" to "Wednesday 3 December 2025",
+          "frequency" to "week",
+        ),
+      ),
+      eq(notification.reference),
+    )
   }
 
   @Test

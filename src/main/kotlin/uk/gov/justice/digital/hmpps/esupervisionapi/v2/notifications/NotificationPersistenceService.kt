@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.hmpps.esupervisionapi.v2
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -12,9 +12,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationMe
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.PhoneNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotification
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationContext
 import java.time.Clock
 import java.util.UUID
 
