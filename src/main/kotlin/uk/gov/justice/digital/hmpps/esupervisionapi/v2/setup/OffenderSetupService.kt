@@ -228,6 +228,7 @@ class OffenderSetupService(
       try {
         checkEligibility(contactDetails, completion.eligibilityAnswers, offender)
       } catch (e: EligibilityDataUnavailableException) {
+        if (e.source == "MANUAL") throw e
         LOGGER.info("Eligibility data unavailable for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
       } catch (e: ResourceNotFoundException) {
         LOGGER.info("Eligibility data not found for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
