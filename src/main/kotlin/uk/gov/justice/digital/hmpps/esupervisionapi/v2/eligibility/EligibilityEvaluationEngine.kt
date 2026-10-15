@@ -22,7 +22,7 @@ data class EligibilityResult(
 
 /** Thrown when a rule's source data can't be fetched or is missing - the engine throws rather than
  *  silently treating the offender as eligible/ineligible from a data gap. */
-class EligibilityDataUnavailableException(ruleCode: String, source: String, cause: Throwable) : RuntimeException("Could not evaluate eligibility rule '$ruleCode': source '$source' unavailable", cause)
+class EligibilityDataUnavailableException(val ruleCode: String, val source: String, cause: Throwable) : RuntimeException("Could not evaluate eligibility rule: '$ruleCode', source: '$source'", cause)
 
 /**
  * Evaluates the ordered offender eligibility rule set against one CRN, fetching each rule's
