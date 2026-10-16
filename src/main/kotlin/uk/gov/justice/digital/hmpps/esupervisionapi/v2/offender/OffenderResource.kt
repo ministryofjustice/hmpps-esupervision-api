@@ -578,8 +578,8 @@ class OffenderResource(
       // only create a check in if the first check in date is set to today, otherwise cron job will handle creation
       val firstCheckin = savedOffender.firstCheckin
       if (firstCheckin == today) {
-        val existingCheckin = checkinRepository.findByOffenderAndDueDate(offender.id, today)
-        val checkinExists = existingCheckin.isPresent && existingCheckin.get().status == CheckinStatus.CREATED
+        val checkinExists = checkinRepository.findAllByOffenderIdAndDueDate(offender.id, today)
+          .any { it.status == CheckinStatus.CREATED }
 
         if (!checkinExists) {
           checkinCreationService.createCheckin(
@@ -659,20 +659,23 @@ is *today*.""",
       }
     }
 
-    val todaysCheckin = checkinRepository.findByOffenderAndDueDate(offender, clock.today())
+    // Stopping check-ins cancels the day's check-in but keeps the row, so only a check-in that is
+    // still open or completed counts as occupying today; a cancelled or expired one does not.
+    val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())
+      .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null || request.contactPreference != null) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
       if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
-        if (todaysCheckin.isEmpty) {
+        if (!todayIsOccupied) {
           checkinCreationService.createCheckin(
             offenderAfter.uuid,
             requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
             request.checkinSchedule.requestedBy,
           )
         }
-        LOGGER.debug("{} check-in for offender {}", if (todaysCheckin.isPresent) "skipped" else "created", offenderAfter.uuid)
+        LOGGER.debug("{} check-in for offender {}", if (todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
       }
       return ResponseEntity.ok(offenderAfter)
     } else {
