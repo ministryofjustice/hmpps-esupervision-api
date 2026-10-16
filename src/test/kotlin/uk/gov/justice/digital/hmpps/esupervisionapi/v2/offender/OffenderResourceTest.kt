@@ -18,6 +18,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.transaction.support.SimpleTransactionStatus
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
@@ -1003,27 +1004,46 @@ class OffenderResourceTest {
     verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
   }
 
+  private fun checkinWithStatus(status: CheckinStatus) = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>().also {
+    whenever(it.status).thenReturn(status)
+  }
+
+  private fun updateFirstCheckinToToday(offender: Offender): ResponseEntity<OffenderSummaryDto> {
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
+    return resource.updateDetails(offender.uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
+  }
+
   // A stop then a restart on the same day leaves a person with several check-in rows for today. The
   // update must still go through; the single-row lookup it used to make failed with a 500 instead.
   @Test
-  fun `updateDetails - several check ins already exist today - updates without creating another`() {
-    val uuid = UUID.randomUUID()
-    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+  fun `updateDetails - a cancelled and an open check in exist today - updates without creating another`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
     offender.firstCheckin = LocalDate.now(clock).minusDays(3)
-    val cancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
-    val anotherCancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
+    val todaysCheckins = listOf(checkinWithStatus(CheckinStatus.CANCELLED), checkinWithStatus(CheckinStatus.CREATED))
+    whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())).thenReturn(todaysCheckins)
 
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(offenderRepository.save(offender)).thenReturn(offender)
-    whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today()))
-      .thenReturn(listOf(cancelledCheckin, anotherCancelledCheckin))
-
-    val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
-    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
+    val result = updateFirstCheckinToToday(offender)
 
     verify(checkinCreationService, never()).createCheckin(any(), any(), any())
     assertEquals(HttpStatus.OK, result.statusCode)
-    assertEquals(scheduleUpdate.checkinInterval, result.body?.checkinInterval)
+    assertEquals(CheckinInterval.FOUR_WEEKS, result.body?.checkinInterval)
+  }
+
+  // Stopping check-ins leaves today's as a cancelled row. That is not a check-in the person can
+  // complete, so moving their first check-in to today must still create one.
+  @Test
+  fun `updateDetails - only cancelled check ins exist today - creates today's check in`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    offender.firstCheckin = LocalDate.now(clock).minusDays(3)
+    val todaysCheckins = listOf(checkinWithStatus(CheckinStatus.CANCELLED), checkinWithStatus(CheckinStatus.EXPIRED))
+    whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())).thenReturn(todaysCheckins)
+
+    val result = updateFirstCheckinToToday(offender)
+
+    verify(checkinCreationService, times(1)).createCheckin(eq(offender.uuid), eq(clock.today()), eq("XYZ0111"))
+    assertEquals(HttpStatus.OK, result.statusCode)
   }
 
   @Test
