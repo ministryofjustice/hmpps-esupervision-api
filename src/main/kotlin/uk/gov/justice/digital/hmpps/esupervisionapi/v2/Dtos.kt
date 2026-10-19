@@ -282,9 +282,9 @@ data class OffenderDto(
  * so needs to be supplied manually.
  */
 data class EligibilityAnswers(
-  val accreditedProgramme: Boolean,
+  val accreditedProgramme: Boolean?,
   val deviceRestriction: Boolean,
-  val youthSentence: Boolean,
+  val youthSentence: Boolean?,
 )
 
 /** V2 Offender information for starting setup V2 does not store PII - only CRN */
