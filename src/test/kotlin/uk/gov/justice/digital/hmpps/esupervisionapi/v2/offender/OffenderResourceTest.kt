@@ -686,7 +686,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any(),any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)

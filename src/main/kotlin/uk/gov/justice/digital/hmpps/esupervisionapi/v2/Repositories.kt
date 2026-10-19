@@ -212,14 +212,14 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
             where status = 'INACTIVE' and id = :#{#offender.id}
             returning id, practitioner_id
         )
-        insert into offender_setup_v2 (uuid, offender_id, practitioner_id, created_at, started_at)
-        select uuid_generate_v4(), id, practitioner_id, now(), now()
+        insert into offender_setup_v2 (uuid, offender_id, practitioner_id, rationale, created_at, started_at)
+        select uuid_generate_v4(), id, practitioner_id, :rationale, now(), now()
         from updated_offender
         returning *
   """,
     nativeQuery = true,
   )
-  fun reactivateOffenderAndCreateSetup(offender: Offender): Optional<OffenderSetup>
+  fun reactivateOffenderAndCreateSetup(offender: Offender, rationale: String?): Optional<OffenderSetup>
 }
 
 /**
