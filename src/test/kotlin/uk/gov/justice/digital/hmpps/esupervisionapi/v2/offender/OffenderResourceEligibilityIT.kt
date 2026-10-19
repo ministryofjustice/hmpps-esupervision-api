@@ -27,7 +27,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.EligibilityCheck
 import java.util.UUID
 
 @TestPropertySource(properties = ["app.offender-eligibility.rule-set=OFFENDER_ELIGIBILITY"])
-class OffenderResourceIT : IntegrationTestBase() {
+class OffenderResourceEligibilityIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var offenderRepository: OffenderRepository
