@@ -1058,6 +1058,7 @@ data class ReactivateOffenderRequest(
   val contactPreference: ContactPreferenceUpdateRequest? = null,
 
   @field:Schema(description = "Eligibility answers", required = false)
+  @field:Valid
   val eligibilityAnswers: EligibilityAnswers? = null,
 )
 
