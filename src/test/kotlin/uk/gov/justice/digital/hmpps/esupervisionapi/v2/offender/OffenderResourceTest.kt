@@ -15,11 +15,13 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.transaction.support.SimpleTransactionStatus
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
@@ -578,7 +580,7 @@ class OffenderResourceTest {
     whenever(completedCheckin.status).thenReturn(CheckinStatus.SUBMITTED)
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
-    whenever(checkinRepository.findByOffenderAndDueDate(offender.id, today)).thenReturn(Optional.of(completedCheckin))
+    whenever(checkinRepository.findAllByOffenderIdAndDueDate(offender.id, today)).thenReturn(listOf(completedCheckin))
     val setupId = UUID.randomUUID()
     val setupInfo = mockSetupInfo(104L, setupId)
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
@@ -624,7 +626,7 @@ class OffenderResourceTest {
     val setupInfo = mockSetupInfo(105L, setupId)
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
-    whenever(checkinRepository.findByOffenderAndDueDate(offender.id, today)).thenReturn(Optional.of(cancelledCheckin))
+    whenever(checkinRepository.findAllByOffenderIdAndDueDate(offender.id, today)).thenReturn(listOf(cancelledCheckin))
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
       offender.status = OffenderStatus.VERIFIED
       OffenderReactivatedEvent(
@@ -641,6 +643,55 @@ class OffenderResourceTest {
     resource.reactivateOffender(uuid, request)
 
     verify(checkinCreationService).createCheckin(eq(uuid), eq(today), eq("PRACT001"))
+  }
+
+  // Stopping check-ins cancels the day's check-in but keeps the row, and restarting creates another,
+  // so one day can hold several rows. Only a check-in still in CREATED counts as already existing.
+  @Test
+  fun `reactivateOffender - several check ins today, one still CREATED - does NOT create another`() {
+    val uuid = UUID.randomUUID()
+    val today = LocalDate.now(clock)
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      firstCheckin = today
+      contactPreference = ContactPreference.PHONE
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Reactivating")
+
+    val myContactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      offender.crn,
+      uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("Jane", "Smith"),
+      mobile = "07700900123",
+      events = listOf(anEvent),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+
+    val cancelledCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
+    whenever(cancelledCheckin.status).thenReturn(CheckinStatus.CANCELLED)
+    val pendingCheckin = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>()
+    whenever(pendingCheckin.status).thenReturn(CheckinStatus.CREATED)
+
+    val setupId = UUID.randomUUID()
+    val setupInfo = mockSetupInfo(106L, setupId)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(myContactDetails)
+    whenever(checkinRepository.findAllByOffenderIdAndDueDate(offender.id, today))
+      .thenReturn(listOf(cancelledCheckin, pendingCheckin))
+    whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
+      offender.status = OffenderStatus.VERIFIED
+      OffenderReactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(myContactDetails),
+        currentEvent = anEvent.number,
+        setup = setupInfo,
+        reason = request.reason,
+      )
+    }
+    whenever(eligibilityChecker.check(any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+
+    resource.reactivateOffender(uuid, request)
+
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
   }
 
   @Test
@@ -957,6 +1008,48 @@ class OffenderResourceTest {
     }
 
     verify(checkinCreationService, times(0)).createCheckinForOffender(any(), any(), any(), any())
+  }
+
+  private fun checkinWithStatus(status: CheckinStatus) = mock<uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin>().also {
+    whenever(it.status).thenReturn(status)
+  }
+
+  private fun updateFirstCheckinToToday(offender: Offender): ResponseEntity<OffenderSummaryDto> {
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
+    return resource.updateDetails(offender.uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
+  }
+
+  // A stop then a restart on the same day leaves a person with several check-in rows for today. The
+  // update must still go through; the single-row lookup it used to make failed with a 500 instead.
+  @Test
+  fun `updateDetails - a cancelled and an open check in exist today - updates without creating another`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    offender.firstCheckin = LocalDate.now(clock).minusDays(3)
+    val todaysCheckins = listOf(checkinWithStatus(CheckinStatus.CANCELLED), checkinWithStatus(CheckinStatus.CREATED))
+    whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())).thenReturn(todaysCheckins)
+
+    val result = updateFirstCheckinToToday(offender)
+
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(CheckinInterval.FOUR_WEEKS, result.body?.checkinInterval)
+  }
+
+  // Stopping check-ins leaves today's as a cancelled row. That is not a check-in the person can
+  // complete, so moving their first check-in to today must still create one.
+  @Test
+  fun `updateDetails - only cancelled check ins exist today - creates today's check in`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    offender.firstCheckin = LocalDate.now(clock).minusDays(3)
+    val todaysCheckins = listOf(checkinWithStatus(CheckinStatus.CANCELLED), checkinWithStatus(CheckinStatus.EXPIRED))
+    whenever(checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())).thenReturn(todaysCheckins)
+
+    val result = updateFirstCheckinToToday(offender)
+
+    verify(checkinCreationService, times(1)).createCheckin(eq(offender.uuid), eq(clock.today()), eq("XYZ0111"))
+    assertEquals(HttpStatus.OK, result.statusCode)
   }
 
   @Test

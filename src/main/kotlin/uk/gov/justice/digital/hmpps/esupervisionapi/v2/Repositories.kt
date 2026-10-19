@@ -307,15 +307,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   )
   fun findEligibleForImageDeletion(criteria: Set<ManualIdVerificationResult>, cutoff: Instant, afterId: Long, pageable: Pageable): List<OffenderCheckin>
 
-  @Query(
-    """
-    SELECT c FROM OffenderCheckin c
-    WHERE c.offender = :offender
-      AND c.dueDate = :dueDate
-    """,
-  )
-  fun findByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): Optional<OffenderCheckin>
-
+  // A person can have several check-in rows for one day, for example one cancelled by stopping
+  // their check-ins and another created by restarting them, so lookups by day never assume one row.
   fun findAllByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
 
   @Query(
@@ -325,7 +318,7 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
       AND c.dueDate = :dueDate
     """,
   )
-  fun findByOffenderAndDueDate(offenderId: Long, dueDate: LocalDate): Optional<OffenderCheckin>
+  fun findAllByOffenderIdAndDueDate(offenderId: Long, dueDate: LocalDate): List<OffenderCheckin>
 
   /** Find all checkins by practitioner (created by) */
   @Query(
