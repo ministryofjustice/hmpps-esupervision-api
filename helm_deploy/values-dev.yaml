@@ -36,7 +36,7 @@ generic-service:
     #APP_OFFENDER_ELIGIBILITY_RULE_SET: "OFFENDER_ELIGIBILITY"
     APP_FEATURES_ESUP_1239: "true"
     APP_FEATURES_ESUP_1763: "true"
-    APP_FEATURES_ESUP_2082: "true"
+    #APP_FEATURES_ESUP_2082: "true"
     APP_FEATURES_ESUP_2186_TIER_V3_FROM: "2026-09-18T00:00:00+01:00"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
