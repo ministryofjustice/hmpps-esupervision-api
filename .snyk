@@ -9,8 +9,9 @@ ignore:
     - '*':
         reason: >-
           CVE-2026-92877 XXE in jaxb-core XmlFactory; no fixed release yet (fix on master only). Pulled in
-          transitively by hibernate-core for its own trusted XML mapping files; this service never unmarshals
-          untrusted XML (JSON-only API, no JAXB usage). Remove once a fixed jaxb-runtime is published.
+          transitively by hibernate-core for its own trusted XML mapping files. This service never unmarshals
+          untrusted XML: there are no @XmlRootElement/@XmlType types, so Spring's JAXB message converter never
+          binds request bodies, and nothing else uses JAXB. Remove once a fixed jaxb-runtime is published.
         expires: 2026-11-20T00:00:00.000Z
         created: 2026-10-20T13:00:00.000Z
 patch: {}
