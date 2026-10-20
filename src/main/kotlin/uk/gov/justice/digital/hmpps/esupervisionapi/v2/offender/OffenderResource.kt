@@ -65,6 +65,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRu
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.nonOnboardedEligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.toResponseOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
@@ -83,6 +84,7 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import kotlin.collections.map
+import kotlin.jvm.optionals.getOrNull
 
 @RestController
 @RequestMapping("/v2/offenders", produces = ["application/json"])
@@ -191,10 +193,13 @@ class OffenderResource(
     val contactDetails = ndiliusApiClient.getContactDetailsStrict(normalisedCrn)
       ?: return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.NOT_FOUND).build())
 
+    val offender = offenderRepository.findByCrn(normalisedCrn).getOrNull()
+
     // If clients wants only the YES/NO eligibility answer, we can't do it without missing data points;
     // the MANUAL data provider will throw
     val cacheData = mutableMapOf(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+      "ESUP" to CompletableFuture.completedFuture(offender?.eligibilityData() ?: nonOnboardedEligibilityData)
     )
     val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
 
