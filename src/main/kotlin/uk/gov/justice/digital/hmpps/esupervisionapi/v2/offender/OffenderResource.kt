@@ -206,7 +206,6 @@ class OffenderResource(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
       "ESUP" to CompletableFuture.completedFuture(offender?.eligibilityData() ?: nonOnboardedEligibilityData),
     )
-    val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
 
     fun <R> handleMissingManualData(throwable: Throwable, body: () -> CompletableFuture<R>): CompletableFuture<R> {
       val cause = findLastCompletionException(throwable)
@@ -217,6 +216,7 @@ class OffenderResource(
     }
 
     if (!itemise) {
+      val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
       return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
         .thenApply { result ->
           ResponseEntity.ok(
@@ -241,6 +241,7 @@ class OffenderResource(
         }
     }
 
+    val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
     return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
       .thenCompose { evalResult -> CompletableFuture.completedFuture(Pair(evalResult, EvalIssue.NONE)) }
       .exceptionallyCompose { throwable ->
@@ -256,12 +257,11 @@ class OffenderResource(
         // during the rule evaluation, so pre-populate the cache with a stubbed map.
         // The client is mostly interested in the messages
         val answers = EligibilityAnswers(false, false, false)
-        val eligibilityData = answers.eligibilityData()
-        val stubEligibilityData = eligibilityData.toMutableMap()
-        eligibilityData.forEach { (string, any) -> stubEligibilityData[string] = "<missing>" }
-        cacheData["MANUAL"] = CompletableFuture.completedFuture(stubEligibilityData)
+        val stubEligibilityData = answers.eligibilityData().mapValues { "<missing>" }
+        val itemiseCacheData = cache.entries.map { Pair(it.key, it.value) } + Pair("MANUAL", CompletableFuture.completedFuture<Map<String, Any?>>(stubEligibilityData))
+        val itemiseCache = eligibilityEvaluationEngine.newFetchCache(itemiseCacheData.toMap())
 
-        eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, cache)
+        eligibilityEvaluationEngine.itemise(normalisedCrn, ruleSet, itemiseCache)
           .thenApply { report ->
             ResponseEntity.ok(
               EligibilityCheckResponse(

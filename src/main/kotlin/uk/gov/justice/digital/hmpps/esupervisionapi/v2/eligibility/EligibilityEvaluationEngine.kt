@@ -41,12 +41,15 @@ class EligibilityEvaluationEngine(
 
   /** We use get-or-fetch to hide whether sources are resolved lazily or supplied up front. */
   interface FetchCache {
+    val entries: Set<Map.Entry<DataSource, CompletableFuture<Map<String, Any?>>>>
     fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>>
   }
 
   /** Starts empty; fetches each source on demand. */
   private class LazyFetchCache(private val providerRegistry: EligibilityDataProviderRegistry) : FetchCache {
     private val cache = ConcurrentHashMap<DataSource, CompletableFuture<Map<String, Any?>>>()
+    override val entries: Set<Map.Entry<DataSource, CompletableFuture<Map<String, Any?>>>>
+      get() = cache.entries
 
     override fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>> = cache.computeIfAbsent(source) { providerRegistry.get(source).fetch(crn) }
   }
@@ -61,6 +64,8 @@ class EligibilityEvaluationEngine(
     private val providerRegistry: EligibilityDataProviderRegistry,
   ) : FetchCache {
     private val fallback = ConcurrentHashMap<DataSource, CompletableFuture<Map<String, Any?>>>()
+    override val entries: Set<Map.Entry<DataSource, CompletableFuture<Map<String, Any?>>>>
+      get() = supplied.entries + fallback.entries
 
     override fun getOrFetch(source: DataSource, crn: CRN): CompletableFuture<Map<String, Any?>> = supplied[source] ?: fallback.computeIfAbsent(source) { providerRegistry.get(source).fetch(crn) }
   }
