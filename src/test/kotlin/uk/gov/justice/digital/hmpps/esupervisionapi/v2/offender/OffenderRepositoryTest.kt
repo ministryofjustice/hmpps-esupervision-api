@@ -2,8 +2,13 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.annotation.Transactional
@@ -273,6 +278,177 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     assertThrows<DataIntegrityViolationException> {
       offenderRepository.saveAndFlush(offender)
     }
+  }
+
+  @Test
+  @Transactional
+  fun `maybeInsert should insert checkin when none exists for offender and dueDate`() {
+    val offender = offenderRepository.save(
+      createOffenderV2(
+        crn = "V200020",
+        firstCheckin = LocalDate.now(),
+      ),
+    )
+
+    val checkinUuid = UUID.randomUUID()
+    val dueDate = LocalDate.now()
+    val checkin = OffenderCheckin(
+      uuid = checkinUuid,
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = dueDate,
+      createdAt = Instant.now(),
+      createdBy = "TEST_USER",
+    )
+
+    val inserted = checkinV2Repository.maybeInsert(checkin)
+
+    assertNotNull(inserted)
+    assertTrue(inserted!!.id > 0)
+    assertEquals(checkinUuid, inserted.uuid)
+    assertEquals(offender.id, inserted.offender.id)
+    assertEquals(dueDate, inserted.dueDate)
+    assertEquals(CheckinStatus.CREATED, inserted.status)
+    assertEquals("TEST_USER", inserted.createdBy)
+    val persisted = checkinV2Repository.findByUuid(checkinUuid)
+    assertTrue(persisted.isPresent)
+    assertEquals(inserted.id, persisted.get().id)
+    assertEquals(checkinUuid, persisted.get().uuid)
+    assertEquals(offender.id, persisted.get().offender.id)
+    assertEquals(dueDate, persisted.get().dueDate)
+    assertEquals(CheckinStatus.CREATED, persisted.get().status)
+    assertEquals("TEST_USER", persisted.get().createdBy)
+  }
+
+  @Test
+  @Transactional
+  fun `maybeInsert should return null and not insert when CREATED checkin already exists for offender and dueDate`() {
+    val offender = offenderRepository.save(
+      createOffenderV2(
+        crn = "V200021",
+        firstCheckin = LocalDate.now(),
+      ),
+    )
+
+    val existingCheckinUuid = UUID.randomUUID()
+    val dueDate = LocalDate.now()
+    val existingCheckin = OffenderCheckin(
+      uuid = existingCheckinUuid,
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = dueDate,
+      createdAt = Instant.now(),
+      createdBy = "SYSTEM",
+    )
+    checkinV2Repository.saveAndFlush(existingCheckin)
+
+    val duplicateCheckinUuid = UUID.randomUUID()
+    val duplicateCheckin = OffenderCheckin(
+      uuid = duplicateCheckinUuid,
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = dueDate,
+      createdAt = Instant.now(),
+      createdBy = "ANOTHER_USER",
+    )
+
+    val inserted = checkinV2Repository.maybeInsert(duplicateCheckin)
+
+    assertNull(inserted)
+    assertTrue(checkinV2Repository.findByUuid(duplicateCheckinUuid).isEmpty)
+    val checkins = checkinV2Repository.findAllByOffenderAndDueDate(offender, dueDate)
+    assertEquals(1, checkins.size)
+    assertEquals(existingCheckinUuid, checkins[0].uuid)
+  }
+
+  @ParameterizedTest
+  @EnumSource(CheckinStatus::class, names = ["CREATED"], mode = EnumSource.Mode.EXCLUDE)
+  @Transactional
+  fun `maybeInsert should allow historical duplicates in other statuses`(status: CheckinStatus) {
+    val dueDate = LocalDate.now()
+    val offender = offenderRepository.save(createOffenderV2(crn = "V200022", firstCheckin = dueDate))
+
+    repeat(2) {
+      checkinV2Repository.saveAndFlush(
+        OffenderCheckin(
+          uuid = UUID.randomUUID(),
+          offender = offender,
+          status = status,
+          dueDate = dueDate,
+          createdAt = Instant.now(),
+          createdBy = "SYSTEM",
+        ),
+      )
+    }
+
+    val inserted = checkinV2Repository.maybeInsert(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.CREATED,
+        dueDate = dueDate,
+        createdAt = Instant.now(),
+        createdBy = "TEST_USER",
+      ),
+    )
+
+    assertNotNull(inserted)
+    assertEquals(CheckinStatus.CREATED, inserted!!.status)
+    assertEquals(3, checkinV2Repository.findAllByOffenderAndDueDate(offender, dueDate).size)
+  }
+
+  @Test
+  fun `unique index should reject duplicate CREATED checkins inserted directly`() {
+    val dueDate = LocalDate.now()
+    val offender = offenderRepository.save(createOffenderV2(crn = "V200023", firstCheckin = dueDate))
+
+    fun newCheckin() = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = dueDate,
+      createdAt = Instant.now(),
+      createdBy = "TEST_USER",
+    )
+
+    checkinV2Repository.saveAndFlush(newCheckin())
+
+    assertThrows<DataIntegrityViolationException> {
+      checkinV2Repository.saveAndFlush(newCheckin())
+    }
+  }
+
+  @Test
+  @Transactional
+  fun `maybeInsert should allow another CREATED checkin after the previous one changes status`() {
+    val dueDate = LocalDate.now()
+    val offender = offenderRepository.save(createOffenderV2(crn = "V200024", firstCheckin = dueDate))
+    val checkin = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = dueDate,
+      createdAt = Instant.now(),
+      createdBy = "TEST_USER",
+    )
+    checkinV2Repository.saveAndFlush(checkin)
+    checkin.status = CheckinStatus.SUBMITTED
+    checkinV2Repository.saveAndFlush(checkin)
+
+    val inserted = checkinV2Repository.maybeInsert(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.CREATED,
+        dueDate = dueDate,
+        createdAt = Instant.now(),
+        createdBy = "TEST_USER",
+      ),
+    )
+
+    assertNotNull(inserted)
+    assertEquals(CheckinStatus.CREATED, inserted!!.status)
+    assertEquals(2, checkinV2Repository.findAllByOffenderAndDueDate(offender, dueDate).size)
   }
 
   private fun createOffenderV2(
