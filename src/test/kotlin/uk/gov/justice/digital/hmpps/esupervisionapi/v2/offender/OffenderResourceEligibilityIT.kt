@@ -144,10 +144,10 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
             allRules = listOf(
               RuleResult("NDELIUS", "HAS_ACTIVE_EVENT", "ACTIVE_EVENT", CONTINUE),
               RuleResult("SUP-PACK", "IS_RECALLED", "RECALLED", CONTINUE),
+              RuleResult("TIER", "IS_TIER_MISSING", "TIER", CONTINUE),
               RuleResult("TIER", "IS_TIER_PROVISIONAL", "PROVISIONAL", CONTINUE),
               RuleResult("SUP-PACK", "IN_FINAL_THIRD", "FINAL_THIRD", CONTINUE),
               RuleResult("NDELIUS", "IS_PRACTITIONER_ASSIGNED", "PRACTITIONER_ASSIGNED", CONTINUE),
-              RuleResult("TIER", "IS_TIER_MISSING", "TIER", CONTINUE),
               RuleResult("TIER", "IS_TIER_D_TO_G", "TIER", CONTINUE),
               RuleResult("ESUP", "IS_PILOT_USER", "PILOT_USER", CONTINUE),
               RuleResult("TIER", "IS_TIER_C", "TIER", CONTINUE),
