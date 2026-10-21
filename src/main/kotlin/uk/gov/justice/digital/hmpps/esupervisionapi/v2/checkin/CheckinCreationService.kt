@@ -129,7 +129,7 @@ class CheckinCreationService(
       createdBy,
     )
 
-    return if (finalisedEvent != null) checkin else null
+    return finalisedEvent?.let { checkinRepository.findById(it.checkinId).orElseThrow() }
   }
 
   /**
