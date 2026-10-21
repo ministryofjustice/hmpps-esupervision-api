@@ -58,7 +58,7 @@ class CheckinCreationService(
     offenderUuid: UUID,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val offender =
       offenderRepository.findByUuid(offenderUuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $offenderUuid")
@@ -79,7 +79,7 @@ class CheckinCreationService(
     offender: Offender,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
     return createCheckinForOffender(offender, dueDate, createdBy, contactDetails)
@@ -98,7 +98,7 @@ class CheckinCreationService(
     dueDate: LocalDate,
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val checkin =
       OffenderCheckin(
         uuid = UUID.randomUUID(),
@@ -118,17 +118,17 @@ class CheckinCreationService(
       checkinMode = offender.mode,
     )
 
-    checkinPersistenceService.checkinCreation(checkin, event)
-
+    val finalisedEvent = checkinPersistenceService.checkinCreation(checkin, event)
     LOGGER.info(
-      "Created checkin {} for offender CRN={} with due date {} by {}",
+      "{} checkin {} for offender CRN={} with due date {} by {}",
+      if (finalisedEvent != null) "Created" else "Did not create",
       checkin.uuid,
       offender.crn,
       dueDate,
       createdBy,
     )
 
-    return checkin
+    return if (finalisedEvent != null) checkin else null
   }
 
   /**
