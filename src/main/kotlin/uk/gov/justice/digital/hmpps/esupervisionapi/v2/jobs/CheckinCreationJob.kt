@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHint
@@ -117,8 +118,8 @@ class CheckinCreationJob(
 
           metrics.processed += contactDetailsMap.size
           val batchInsertStart = System.currentTimeMillis()
-          val createdCheckins = checkinCreationService.createCheckins(checkinsToCreate)
-          logCreatedCheckins(checkinsToCreate, today, batchInsertStart)
+          val created = checkinCreationService.createCheckins(checkinsToCreate)
+          logCreatedCheckins(created, today, batchInsertStart)
           metrics.created += checkinsToCreate.size
           metrics.chunks += 1
         } catch (e: NdiliusBatchFetchException) {
@@ -203,12 +204,12 @@ class CheckinCreationJob(
     }
   }
 
-  private fun logCreatedCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>, dueDate: LocalDate, start: Long) {
+  private fun logCreatedCheckins(checkins: List<CheckinCreatedEvent>, dueDate: LocalDate, start: Long) {
     val sb = StringBuilder()
-    for ((checkin, event) in checkins) {
+    for (event in checkins) {
       sb.append("(CRN=").append(event.checkin.crn)
       sb.append(", eventNumber=").append(event.currentEvent ?: "NULL")
-      sb.append(", checkin=").append(checkin.uuid).append(")")
+      sb.append(", checkin=").append(event.checkin.uuid).append(")")
     }
     LOGGER.info(
       "Checkins created: {}, with due date {}, took {}, (CRN,eventNumber,uuid): {}",

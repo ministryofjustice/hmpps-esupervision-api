@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -137,15 +138,20 @@ class CheckinCreationService(
    * @throws BatchCheckinCreationException
    */
   @Transactional
-  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>) {
-    if (checkins.isEmpty()) return
+  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>): List<CheckinCreatedEvent> {
+    if (checkins.isEmpty()) return listOf()
+    val created = mutableListOf<CheckinCreatedEvent>()
     try {
       for ((checkin, event) in checkins) {
-        checkinPersistenceService.checkinCreation(checkin, event)
+        val event = checkinPersistenceService.checkinCreation(checkin, event)
+        if (event != null) {
+          created.add(event)
+        }
       }
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)
     }
+    return created
   }
 
   /**
