@@ -7,6 +7,13 @@ insert into offender_eligibility_rule
  outcome_on_match, message_on_match, outcome_on_no_match, message_on_no_match, comment)
 values
 
+    (6.5, 'IS_TIER_MISSING', 'Do they have a Tier score?',
+     'TIER', 'TIER',
+     'EQUALS','MISSING',
+     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they have not been assigned a tier yet.',
+     'CONTINUE', null,
+     null),
+
     -- eventual source: NDELIUS
     (10, 'HAS_DEVICE_RESTRICTION', 'Do they have sentence conditions that mean they can''t use a device or the internet?',
      'MANUAL', 'DEVICE_RESTRICTION',
@@ -15,13 +22,6 @@ values
      'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they have sentence conditions that mean they can''t use a device or internet.',
      null),
 
-    -- eventual source: NDELIUS
-    (10.5, 'TIER_MISSING', 'Do they have a Tier score?',
-     'TIER', 'TIER',
-     'EQUALS','MISSING',
-     'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they have not been assigned a tier yet.',
-     'CONTINUE', null,
-     null),
 
     (12, 'IS_PILOT_USER', 'Are they a pilot user?',
      'ESUP', 'PILOT_USER',
@@ -47,7 +47,8 @@ values
      'NOT_ELIGIBLE', '{{offender}} is not eligible for online check ins because they are in Tier A or B, on an accredited programme, but are on a youth sentence.',
      null)
 ;
--- no rollback for this one
+
+--rollback delete from offender_eligibility_rule where rule_set = 'OFFENDER_ELIGIBILITY' and code in ('HAS_DEVICE_RESTRICTION','IS_TIER_MISSING','IS_PILOT_USER','ON_ACCREDITED_PROGRAMME','ON_YOUTH_SENTENCE');
 
 --changeset hmpps:80_eligibility_more_rules-2 splitStatements:false
 
