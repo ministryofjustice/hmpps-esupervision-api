@@ -120,7 +120,7 @@ class CheckinCreationJob(
           val batchInsertStart = System.currentTimeMillis()
           val created = checkinCreationService.createCheckins(checkinsToCreate)
           logCreatedCheckins(created, today, batchInsertStart)
-          metrics.created += checkinsToCreate.size
+          metrics.created += created.size
           metrics.chunks += 1
         } catch (e: NdiliusBatchFetchException) {
           metrics.errors += e.crns.size // already logged elsewhere
