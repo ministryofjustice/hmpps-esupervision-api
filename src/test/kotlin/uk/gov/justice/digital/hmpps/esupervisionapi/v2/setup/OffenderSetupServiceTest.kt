@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityChoice
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -129,6 +130,11 @@ class OffenderSetupServiceTest {
       contactPreference = ContactPreference.EMAIL,
       eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
       rationale = "it's fine",
+      eligibilityAnswers = EligibilityAnswers(
+        accreditedProgramme = null,
+        youthSentence = null,
+        deviceRestriction = false,
+      ),
     )
 
     val savedOffender = Offender(
@@ -170,6 +176,7 @@ class OffenderSetupServiceTest {
     assertEquals(practitionerId, result.practitionerId)
     assertEquals(savedOffender.uuid, result.offenderUuid)
 
+    verify(eligibilityChecker).check(any(), any(), argThat { cache -> cache.contains("MANUAL") })
     verify(offenderRepository).save(argThat { this.status != OffenderStatus.VERIFIED })
     verify(offenderSetupRepository).save(
       argThat {
