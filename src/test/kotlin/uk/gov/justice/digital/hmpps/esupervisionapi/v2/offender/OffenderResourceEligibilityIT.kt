@@ -9,9 +9,12 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
@@ -20,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome.CONTINUE
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome.NOT_ELIGIBLE
@@ -97,7 +101,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
 
   @Test
   fun `getEligibilityByCrn with itemise false returns unknown without a report when manual answers are missing`() {
-    fetchEligibility(itemise = false)
+    fetchEligibility(crn, itemise = false)
       .expectStatus().isOk
       .expectBody(EligibilityCheckResponse::class.java)
       .value { response ->
@@ -112,9 +116,24 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
     verifySourcesFetchedOnce()
   }
 
+  @ParameterizedTest
+  @ValueSource(booleans = [true, false])
+  fun `getEligibilityByCrn with itemise false for non-onboarded CRN`(itemise: Boolean) {
+    offenderRepository.deleteAll()
+
+    fetchEligibility(crn, itemise = itemise)
+      .expectStatus().isOk
+      .expectBody(EligibilityCheckResponse::class.java)
+      .value { response ->
+        assertEquals(EligibilityCheckResponseOutcome.UNKNOWN, response?.outcome)
+      }
+
+    verifySourcesFetchedOnce()
+  }
+
   @Test
   fun `getEligibilityByCrn with itemise true returns unknown with all non manual rule results`() {
-    fetchEligibility(itemise = true)
+    fetchEligibility(crn, itemise = true)
       .expectStatus().isOk
       .expectBody(EligibilityCheckResponse::class.java)
       .value { response ->
@@ -125,10 +144,10 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
             allRules = listOf(
               RuleResult("NDELIUS", "HAS_ACTIVE_EVENT", "ACTIVE_EVENT", CONTINUE),
               RuleResult("SUP-PACK", "IS_RECALLED", "RECALLED", CONTINUE),
+              RuleResult("TIER", "IS_TIER_MISSING", "TIER", CONTINUE),
               RuleResult("TIER", "IS_TIER_PROVISIONAL", "PROVISIONAL", CONTINUE),
               RuleResult("SUP-PACK", "IN_FINAL_THIRD", "FINAL_THIRD", CONTINUE),
               RuleResult("NDELIUS", "IS_PRACTITIONER_ASSIGNED", "PRACTITIONER_ASSIGNED", CONTINUE),
-              RuleResult("TIER", "TIER_MISSING", "TIER", CONTINUE),
               RuleResult("TIER", "IS_TIER_D_TO_G", "TIER", CONTINUE),
               RuleResult("ESUP", "IS_PILOT_USER", "PILOT_USER", CONTINUE),
               RuleResult("TIER", "IS_TIER_C", "TIER", CONTINUE),
@@ -165,7 +184,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
       ),
     )
 
-    fetchEligibility(itemise = true)
+    fetchEligibility(crn, itemise = true)
       .expectStatus().isOk
       .expectBody(EligibilityCheckResponse::class.java)
       .value { response ->
@@ -183,7 +202,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
     verifySourcesFetchedOnce()
   }
 
-  private fun fetchEligibility(itemise: Boolean) = webTestClient.get()
+  private fun fetchEligibility(crn: CRN, itemise: Boolean) = webTestClient.get()
     .uri("/v2/offenders/crn/$crn/eligibility?itemise=$itemise")
     .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
     .exchange()

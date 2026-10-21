@@ -583,6 +583,68 @@ class NotificationOrchestratorServiceTest {
   }
 
   @Test
+  fun `sendReactivationCompletedNotifications - ad hoc uses ad hoc restart template and name only`() {
+    val offender = createOffender().apply {
+      mode = CheckinMode.AD_HOC
+      firstCheckin = null
+      checkinInterval = null
+    }
+    val contactDetails = createContactDetailsWithEvents()
+    val notification = reactivationNotification(offender, NotificationType.OffenderCheckinsRestartedAdHoc, "ad-hoc-restart-template", "ADHOC-RESTART-001")
+    val recipient = "07700900123"
+    stubReactivationSending(offender, notification, recipient)
+
+    service.sendReactivationCompletedNotifications(reactivatedEvent(offender, contactDetails))
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsRestartedAdHoc),
+    )
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("ad-hoc-restart-template"),
+      eq(recipient),
+      eq(mapOf("name" to "John Smith")),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
+  fun `sendReactivationCompletedNotifications - scheduled uses recurring restart template and personalisation`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+    val notification = reactivationNotification(offender, NotificationType.OffenderCheckinsRestarted, "scheduled-restart-template", "SCHEDULED-RESTART-001")
+    val recipient = "07700900123"
+    stubReactivationSending(offender, notification, recipient)
+
+    service.sendReactivationCompletedNotifications(reactivatedEvent(offender, contactDetails))
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsRestarted),
+    )
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("scheduled-restart-template"),
+      eq(recipient),
+      eq(
+        mapOf(
+          "name" to "John Smith",
+          "date" to "Wednesday 3 December 2025",
+          "frequency" to "week",
+        ),
+      ),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
   fun `sendDeactivationCompletedNotifications - publishes setup removed domain event`() {
     val offender = createOffender()
     val contactDetails = createContactDetailsWithEvents()
@@ -719,6 +781,42 @@ class NotificationOrchestratorServiceTest {
     updatedAt = clock.instant(),
     contactPreference = ContactPreference.PHONE,
   )
+
+  private fun reactivationNotification(
+    offender: Offender,
+    type: NotificationType,
+    templateId: String,
+    reference: String,
+  ) = GenericNotification(
+    notificationId = UUID.randomUUID(),
+    eventType = type.name,
+    recipientType = "OFFENDER",
+    channel = "SMS",
+    offenderId = offender.id,
+    reference = reference,
+    templateId = templateId,
+    createdAt = clock.instant(),
+  )
+
+  private fun stubReactivationSending(offender: Offender, notification: GenericNotification, recipient: String) {
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+  }
+
+  private fun reactivatedEvent(offender: Offender, contactDetails: ContactDetails): OffenderReactivatedEvent {
+    val setupInfo = mock<SetupInfo>()
+    whenever(setupInfo.setupId).thenReturn(UUID.randomUUID())
+    whenever(setupInfo.primaryKey).thenReturn(1L)
+    return OffenderReactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      currentEvent = 12345L,
+      setup = setupInfo,
+      reason = "whatever",
+    )
+  }
 
   private fun createCheckin(
     offender: Offender,

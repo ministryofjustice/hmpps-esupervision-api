@@ -23,11 +23,11 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       .containsExactly(
         "HAS_ACTIVE_EVENT",
         "IS_RECALLED",
+        "IS_TIER_MISSING",
         "IS_TIER_PROVISIONAL",
         "IN_FINAL_THIRD",
         "IS_PRACTITIONER_ASSIGNED",
         "HAS_DEVICE_RESTRICTION",
-        "TIER_MISSING",
         "IS_TIER_D_TO_G",
         "IS_PILOT_USER",
         "IS_TIER_C",

@@ -145,12 +145,17 @@ class NotificationOrchestratorService(
     if (offender.personalDetails != null) {
       val details = offender.personalDetails
       try {
+        val name = "${details.name.forename} ${details.name.surname}"
         val personalisation =
-          mapOf(
-            "name" to "${details.name.forename} ${details.name.surname}",
-            "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
-            "frequency" to frequencyText(offender.mode, offender.checkinInterval),
-          )
+          if (offender.mode == CheckinMode.AD_HOC) {
+            mapOf("name" to name)
+          } else {
+            mapOf(
+              "name" to name,
+              "date" to (offender.firstCheckin?.format(DATE_FORMATTER) ?: "some day in the future"),
+              "frequency" to frequencyText(offender.mode, offender.checkinInterval),
+            )
+          }
 
         val notificationsWithRecipients =
           notificationPersistence.buildOffenderNotifications(
@@ -158,7 +163,7 @@ class NotificationOrchestratorService(
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,
-            notificationType = NotificationType.OffenderCheckinsRestarted,
+            notificationType = if (offender.mode == CheckinMode.AD_HOC) NotificationType.OffenderCheckinsRestartedAdHoc else NotificationType.OffenderCheckinsRestarted,
           )
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)

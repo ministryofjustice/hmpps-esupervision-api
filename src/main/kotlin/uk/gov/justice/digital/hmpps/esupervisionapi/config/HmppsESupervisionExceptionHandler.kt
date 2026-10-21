@@ -159,16 +159,19 @@ class HmppsESupervisionExceptionHandler {
     ).also { log.info("V2 Invalid offender setup state: {}", e.message) }
 
   @ExceptionHandler(EligibilityDataUnavailableException::class)
-  fun handleEligibilityDataUnavailableException(e: EligibilityDataUnavailableException): ResponseEntity<ErrorResponse> = ResponseEntity
-    .status(if (e.source == "MANUAL") HttpStatus.UNPROCESSABLE_CONTENT else SERVICE_UNAVAILABLE)
-    .body(
-      ErrorResponse(
-        // when manual data was expected but not provided, we make it the client's fault
-        status = if (e.source == "MANUAL") HttpStatus.UNPROCESSABLE_CONTENT else SERVICE_UNAVAILABLE,
-        userMessage = e.message,
-        developerMessage = e.message,
-      ),
-    ).also { log.warn("Eligibility data unavailable: {}", e.message) }
+  fun handleEligibilityDataUnavailableException(e: EligibilityDataUnavailableException): ResponseEntity<ErrorResponse> {
+    val status = if (e.source == "MANUAL") HttpStatus.UNPROCESSABLE_CONTENT else SERVICE_UNAVAILABLE
+    return ResponseEntity
+      .status(status)
+      .body(
+        ErrorResponse(
+          // when manual data was expected but not provided, we make it the client's fault
+          status = status,
+          userMessage = e.message,
+          developerMessage = e.message,
+        ),
+      ).also { log.warn("Eligibility data unavailable: {}", e.message) }
+  }
 
   // The client has already logged the sanitised cause at ERROR.
   @ExceptionHandler(PersonalDetailsVerificationUnavailableException::class)

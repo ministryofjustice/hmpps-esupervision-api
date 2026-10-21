@@ -761,7 +761,7 @@ class OffenderResourceTest {
       resource.reactivateOffender(uuid, request)
     }
 
-    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, exception.statusCode)
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
   }
@@ -790,7 +790,7 @@ class OffenderResourceTest {
       resource.reactivateOffender(uuid, request)
     }
 
-    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, exception.statusCode)
     verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
   }
 
