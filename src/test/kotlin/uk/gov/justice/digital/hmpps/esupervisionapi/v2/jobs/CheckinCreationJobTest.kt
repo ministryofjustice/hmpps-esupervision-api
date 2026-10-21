@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -80,6 +81,24 @@ class CheckinCreationJobTest {
     verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any())
     verify(checkinCreationService).createCheckins(any())
     verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+  }
+
+  @Test
+  fun `creating checkins for a full page does not abort processing the next page`() {
+    val offenders = (1..101).map { offender("X${it.toString().padStart(6, '0')}") }
+    stubEligible(
+      offenders,
+      offenders.associate { it.crn to details(it.crn, events = listOf(anEvent)) },
+    )
+
+    job.process()
+
+    verify(offenderRepository).findEligibleForCheckinCreation(any(), any(), eq(100), eq(99L))
+    verify(ndiliusApiClient).getContactDetailsForMultiple(listOf(offenders.last().crn))
+    verify(checkinCreationService, times(2)).createCheckins(any())
+    verify(checkinCreationService).createCheckins(
+      argThat { size == 1 && single().second.checkin.crn == offenders.last().crn },
+    )
   }
 
   @Test
@@ -169,8 +188,10 @@ class CheckinCreationJobTest {
       override val currentEvent: Long?,
     ) : OffenderRepository.IOffenderCheckinCreationInfo
     whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), anyOrNull()))
-      .thenReturn(
-        offenders.map {
+      .thenAnswer { invocation ->
+        val limit = invocation.getArgument<Int>(2)
+        val lastOffenderId = invocation.getArgument<Long?>(3)
+        offenders.filter { lastOffenderId == null || it.id > lastOffenderId }.take(limit).map {
           CheckinCreationInfo(
             it.id,
             it.crn,
@@ -179,10 +200,12 @@ class CheckinCreationJobTest {
             it.mode,
             it.currentEvent,
           )
-        },
-      )
+        }
+      }
     whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<Offender>())
-    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenAnswer {
+      it.getArgument<List<String>>(0).mapNotNull(detailsByCrn::get)
+    }
     whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenAnswer { arg ->
       val offender = arg.getArgument<Offender>(0)
       OffenderCheckin(
@@ -197,7 +220,10 @@ class CheckinCreationJobTest {
     whenever(checkinCreationService.createCheckins(any())).thenAnswer {
       it.getArgument<List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>>(
         0,
-      )
+      ).mapIndexed { index, (checkin, event) ->
+        ReflectionTestUtils.setField(checkin, "id", index + 1L)
+        event.finalise(checkin)
+      }
     }
     whenever(
       deactivationService.deactivateOffender(

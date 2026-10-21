@@ -27,12 +27,16 @@ class CheckinPersistenceService(
   fun findCheckin(uuid: UUID): OffenderCheckin? = checkinRepository.findByUuid(uuid).orElse(null)
 
   @Transactional
-  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent) {
-    val savedCheckin = checkinRepository.saveAndFlush(checkin)
-    val finalisedEvent = event.finalise(savedCheckin)
-    eventAuditService.recordCheckinCreated(savedCheckin, finalisedEvent)
+  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
+    val inserted = checkinRepository.maybeInsert(checkin)
+    if (inserted != null) {
+      val finalisedEvent = event.finalise(inserted)
+      eventAuditService.recordCheckinCreated(inserted, finalisedEvent)
 
-    appEventPublisher.publishEvent(finalisedEvent)
+      appEventPublisher.publishEvent(finalisedEvent)
+      return finalisedEvent
+    }
+    return null
   }
 
   @Transactional
