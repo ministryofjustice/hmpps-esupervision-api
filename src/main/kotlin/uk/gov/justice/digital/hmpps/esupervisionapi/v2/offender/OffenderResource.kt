@@ -604,7 +604,7 @@ class OffenderResource(
     val outcome = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.UNPROCESSABLE_CONTENT,
         "Cannot reactivate ${offender.crn}: ${outcome.message ?: "ineligible for online check-ins."}",
       )
     }
