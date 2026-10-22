@@ -54,7 +54,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       )
 
     val pilotRules = eligibilityRuleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc("PILOT_2026_08")
-    assertThat(pilotRules.map { it.deliusOutcomeCode }).containsExactly(null, null)
+    assertThat(pilotRules.filter { it.deliusOutcomeCode == null }).isEmpty()
   }
 
   @Test

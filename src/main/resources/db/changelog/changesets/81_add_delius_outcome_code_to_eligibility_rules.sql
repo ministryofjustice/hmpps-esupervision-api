@@ -32,4 +32,15 @@ where rule_set = 'OFFENDER_ELIGIBILITY'
     'IN_EARLY_ENGAGEMENT'
   );
 
+update offender_eligibility_rule
+set delius_outcome_code = case code
+    when 'HAS_ACTIVE_EVENT' then 'ESPNA'
+    when 'IS_CONTACT_SUSPENDED' then 'ESPRS'
+end
+where rule_set = 'PILOT_2026_08'
+  and code in (
+      'HAS_ACTIVE_EVENT',
+      'IS_CONTACT_SUSPENDED'
+);
+
 --rollback alter table offender_eligibility_rule drop column delius_outcome_code;
