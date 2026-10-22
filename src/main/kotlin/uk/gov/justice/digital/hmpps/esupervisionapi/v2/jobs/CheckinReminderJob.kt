@@ -118,10 +118,7 @@ class CheckinReminderJob(
                 notSentNotifications.add(index)
                 "not sent (missing details)"
               }
-              newEligibilityRulesEnabled -> {
-                "Skipping deactivation (new eligibility rules enabled)"
-              }
-              ineligibility != null -> {
+              ineligibility != null && !newEligibilityRulesEnabled -> {
                 // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
                 // Deactivation cancels this check-in, so it is NOT recorded as a reminder (notSent) below.
                 offenderDeactivationService.deactivateOffender(
