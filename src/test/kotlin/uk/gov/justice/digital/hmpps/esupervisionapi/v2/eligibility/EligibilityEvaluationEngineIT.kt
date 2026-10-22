@@ -35,6 +35,26 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "ON_YOUTH_SENTENCE",
         "IN_EARLY_ENGAGEMENT",
       )
+
+    assertThat(rules.map { it.deliusOutcomeCode })
+      .containsExactly(
+        "ESPNA",
+        "ESPRC",
+        "ESPME",
+        "ESPIT",
+        "ESPFT",
+        "ESPNP",
+        "ESPDI",
+        null,
+        null,
+        "ESPIT",
+        "ESPAP",
+        null,
+        "ESPEE",
+      )
+
+    val pilotRules = eligibilityRuleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc("PILOT_2026_08")
+    assertThat(pilotRules.map { it.deliusOutcomeCode }).containsExactly(null, null)
   }
 
   @Test
