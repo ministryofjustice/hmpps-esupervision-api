@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -164,7 +165,7 @@ class OffenderResourceTest {
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
+    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.INACTIVE
       o
@@ -181,6 +182,7 @@ class OffenderResourceTest {
       eq(contactDetails),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED.deliusOutcomeCode),
     )
   }
 
@@ -202,7 +204,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
+    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())).thenAnswer {
       it.getArgument<Offender>(0)
     }
 
@@ -214,6 +216,7 @@ class OffenderResourceTest {
       eq(contactDetails),
       eq(true),
       eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
+      eq(OffenderAuditEventType.OFFENDER_DEACTIVATED.deliusOutcomeCode),
     )
   }
 
@@ -288,7 +291,7 @@ class OffenderResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
+    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.INACTIVE
       o

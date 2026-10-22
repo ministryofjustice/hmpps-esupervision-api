@@ -102,6 +102,7 @@ class OffenderEligibilitySyncJob(
                 reason = reason,
                 contactDetails = contactDetails,
                 auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
+                deliusOutcomeCode = result.deliusOutcomeCode,
               )
               deactivated += 1
               LOGGER.info("Stopped online check-ins for CRN {}: {}", offender.crn, reason)

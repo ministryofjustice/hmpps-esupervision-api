@@ -720,6 +720,7 @@ class NotificationOrchestratorServiceTest {
       eventNumber,
       null,
       false,
+      deliusOutcomeCode = "ESPRC",
     )
     service.sendDeactivationCompletedNotifications(event)
 
@@ -729,7 +730,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = "ESPRS")),
+      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = "ESPRC")),
     )
   }
 

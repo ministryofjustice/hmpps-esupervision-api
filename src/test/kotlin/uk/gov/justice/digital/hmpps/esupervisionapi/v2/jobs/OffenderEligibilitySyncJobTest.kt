@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
@@ -83,7 +84,7 @@ class OffenderEligibilitySyncJobTest {
     givenPage(listOf(offender), listOf(details))
     val reason = "John Doe is not eligible for online check ins because they have been recalled."
     whenever(eligibilityChecker.check(same(offender), eq(details.name), any()))
-      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, reason, "IS_RECALLED"))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, reason, "IS_RECALLED", "ESPRC"))
 
     job.process()
 
@@ -106,6 +107,7 @@ class OffenderEligibilitySyncJobTest {
       same(details),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
+      eq("ESPRC"),
     )
   }
 
@@ -141,6 +143,7 @@ class OffenderEligibilitySyncJobTest {
       same(ineligibleDetails),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
+      anyOrNull(),
     )
   }
 
@@ -162,6 +165,7 @@ class OffenderEligibilitySyncJobTest {
       same(details),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
+      anyOrNull(),
     )
   }
 

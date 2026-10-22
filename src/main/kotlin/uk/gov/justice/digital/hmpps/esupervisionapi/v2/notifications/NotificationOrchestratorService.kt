@@ -198,7 +198,7 @@ class NotificationOrchestratorService(
       additionalInformation = AdditionalInformation(
         eventNumber = event.activeEventNumber,
         setupId = event.setup?.setupId,
-        outcomeCode = event.auditEventType.deliusOutcomeCode,
+        outcomeCode = event.deliusOutcomeCode ?: event.auditEventType.deliusOutcomeCode,
       ),
     )
 
