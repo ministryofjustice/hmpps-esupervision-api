@@ -157,3 +157,5 @@ databaseChangeLog:
       file: db/changelog/changesets/78_allow_null_first_checkin_for_ad_hoc.sql
   - include:
       file: db/changelog/changesets/79_update_provisional_tier_wording.sql
+  - include:
+      file: db/changelog/changesets/80_add_additional_feedback_questions.sql
