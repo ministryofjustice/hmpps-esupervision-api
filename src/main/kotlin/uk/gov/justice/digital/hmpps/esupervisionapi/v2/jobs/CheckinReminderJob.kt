@@ -6,6 +6,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -40,6 +42,7 @@ class CheckinReminderJob(
   private val transactionTemplate: TransactionTemplate,
   private val eventAuditService: EventAuditService,
   private val genericNotificationRepository: GenericNotificationRepository,
+  private val appConfig: AppConfig,
 ) {
 
   @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
@@ -105,6 +108,7 @@ class CheckinReminderJob(
         // Send notifications with pre-fetched contact details - NO transaction
         val sentNotifications = mutableListOf<Pair<OffenderCheckin, ContactDetails>>()
         val notSentNotifications = mutableSetOf<Int>()
+        val newEligibilityRulesEnabled = appConfig.enabledFeatures.contains(Feature.ESUP_2082)
         checkins.forEachIndexed { index, checkin ->
           try {
             val contactDetails = contactDetailsMap[checkin.offender.crn]
@@ -113,6 +117,9 @@ class CheckinReminderJob(
               contactDetails == null -> {
                 notSentNotifications.add(index)
                 "not sent (missing details)"
+              }
+              newEligibilityRulesEnabled -> {
+                "Skipping deactivation (new eligibility rules enabled)"
               }
               ineligibility != null -> {
                 // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.

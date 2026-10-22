@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
@@ -66,6 +67,7 @@ class CheckinReminderJobTest {
     transactionTemplate,
     eventAuditService,
     genericNotificationRepository,
+    appConfig = mock(),
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -79,7 +81,7 @@ class CheckinReminderJobTest {
     job.process()
 
     verify(notificationService).sendCheckinReminderNotifications(same(checkin), eq(cd))
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())
   }
 
   @Test
@@ -102,6 +104,7 @@ class CheckinReminderJobTest {
       any(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
     verify(notificationService).sendCheckinReminderNotifications(same(eligible), eq(eligibleCd))
     verify(notificationService, never()).sendCheckinReminderNotifications(same(ineligible), any())
@@ -131,6 +134,7 @@ class CheckinReminderJobTest {
         any(),
         any(),
         any(),
+        anyOrNull(),
       ),
     ).thenAnswer { it.getArgument<Offender>(0) }
   }

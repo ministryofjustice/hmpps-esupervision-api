@@ -34,6 +34,7 @@ data class OffenderDeactivatedEvent(
   val activeEventNumber: Long?,
   val reason: String? = null,
   val sensitive: Boolean = false,
+  val deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
 ) : IOffenderEvent {
   override val outboxItemCoords = setup?.let { OutboxItemType.OFFENDER_DEACTIVATED to setup.primaryKey }
 }

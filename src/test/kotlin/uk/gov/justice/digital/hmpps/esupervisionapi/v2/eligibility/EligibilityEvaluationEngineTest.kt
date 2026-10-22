@@ -46,10 +46,12 @@ class EligibilityEvaluationEngineTest {
     messageOnMatch: String? = null,
     outcomeOnNoMatch: EligibilityRuleOutcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
     messageOnNoMatch: String? = "not eligible: $code",
+    deliusOutcomeCode: String? = null,
   ) = OffenderEligibilityRule(
     ruleSet = EligibilityEvaluationEngine.DEFAULT_RULE_SET,
     ruleOrder = order,
     code = code,
+    deliusOutcomeCode = deliusOutcomeCode,
     question = code,
     source = source,
     dataPoint = dataPoint,
@@ -157,7 +159,14 @@ class EligibilityEvaluationEngineTest {
 
   @Test
   fun `terminal NOT_ELIGIBLE outcome stops evaluation with message`() {
-    val rule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
+    val rule = rule(
+      "IS_ALIVE",
+      1.0,
+      "NDELIUS",
+      "DECEASED_DATE",
+      EligibilityRuleOperator.IS_NULL,
+      deliusOutcomeCode = "ESPRC",
+    )
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
       .thenReturn(listOf(rule))
     mockProvider("NDELIUS", mapOf("DECEASED_DATE" to "2020-01-01"))
@@ -167,6 +176,7 @@ class EligibilityEvaluationEngineTest {
     assertEquals(EligibilityCheckOutcome.INELIGIBLE, result.outcome)
     assertEquals("not eligible: IS_ALIVE", result.message)
     assertEquals("IS_ALIVE", result.triggeredRuleCode)
+    assertEquals("ESPRC", result.deliusOutcomeCode)
   }
 
   @Test

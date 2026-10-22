@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.SubmitTimeDistributionDto
@@ -42,6 +43,8 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
 
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
+
+  fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
 
   /**
    * Update an offender based on new due_date and today's date.

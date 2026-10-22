@@ -57,6 +57,7 @@ class OffenderDeactivationService(
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+    deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
   ): Offender {
     if (offender.status != OffenderStatus.VERIFIED) {
       LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
@@ -75,6 +76,7 @@ class OffenderDeactivationService(
       activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
       reason = reason,
       sensitive = sensitive,
+      deliusOutcomeCode = deliusOutcomeCode ?: auditEventType.deliusOutcomeCode,
     )
 
     offenderPersistenceService.offenderDeactivation(offender, event)

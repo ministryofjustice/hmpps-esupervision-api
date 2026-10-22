@@ -40,6 +40,9 @@ open class OffenderEligibilityRule(
   @Column(name = "code", nullable = false, columnDefinition = "varchar(64)")
   open var code: String,
 
+  @Column(name = "delius_outcome_code", columnDefinition = "varchar(5)")
+  open var deliusOutcomeCode: String? = null,
+
   @Column(name = "question", nullable = false, columnDefinition = "text")
   open var question: String,
 

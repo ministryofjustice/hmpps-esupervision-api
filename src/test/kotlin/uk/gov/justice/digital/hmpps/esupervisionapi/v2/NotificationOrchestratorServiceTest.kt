@@ -672,6 +672,13 @@ class NotificationOrchestratorServiceTest {
     )
     service.sendDeactivationCompletedNotifications(event)
 
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_REMOVED),
       eq(offender.uuid),
@@ -713,6 +720,7 @@ class NotificationOrchestratorServiceTest {
       eventNumber,
       null,
       false,
+      deliusOutcomeCode = "ESPRC",
     )
     service.sendDeactivationCompletedNotifications(event)
 
@@ -722,7 +730,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = "ESPRS")),
+      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = "ESPRC")),
     )
   }
 

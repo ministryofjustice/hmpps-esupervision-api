@@ -18,6 +18,8 @@ data class EligibilityResult(
   val message: String?,
   /** Code of the rule that produced a terminal outcome, or null if every rule passed. */
   val triggeredRuleCode: String?,
+  /** NDelius outcome code for the rule that produced the terminal decision, when available. */
+  val deliusOutcomeCode: String? = null,
 )
 
 /** Thrown when a rule's source data can't be fetched or is missing - the engine throws rather than
@@ -118,14 +120,14 @@ class EligibilityEvaluationEngine(
   ): CompletableFuture<EligibilityResult> {
     require(rules.isNotEmpty()) { "No rules found for ruleSet $ruleSet" }
     if (index >= rules.size) {
-      return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null))
+      return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null, deliusOutcomeCode = null))
     }
     val rule = rules[index]
     return evaluateRule(rule, crn, fetchCache).thenCompose { (outcome, message) ->
       when (outcome) {
         EligibilityRuleOutcome.CONTINUE -> evaluateFrom(ruleSet, rules, index + 1, crn, fetchCache)
-        EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code))
-        EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code))
+        EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code, rule.deliusOutcomeCode))
+        EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code, rule.deliusOutcomeCode))
       }
     }
   }
