@@ -215,7 +215,11 @@ class NotificationOrchestratorService(
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,
-            notificationType = NotificationType.OffenderCheckinsStopped,
+            notificationType = if (event.auditEventType.automated) {
+              NotificationType.OffenderCheckinsStoppedAuto
+            } else {
+              NotificationType.OffenderCheckinsStopped
+            },
           )
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)

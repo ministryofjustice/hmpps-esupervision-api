@@ -40,6 +40,9 @@ app:
       cron: "0 0 9 * * *"  # Every day at 9 AM (matches V1 timing)
       # we process offender records in chunks
       chunk-size: 100
+    v2-offender-eligibility-sync:
+      # The NDelius batch endpoint supports at most 500 CRNs per request.
+      chunk-size: 100
     v2-checkin-reminder:
       cron: "0 0 9 * * *"  # Same time as initial checkin notification
       chunk-size: 100
