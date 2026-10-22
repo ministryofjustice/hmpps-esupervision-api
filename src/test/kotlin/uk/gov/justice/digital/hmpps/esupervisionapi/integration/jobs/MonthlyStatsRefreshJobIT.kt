@@ -112,7 +112,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       VALUES
         ('{"version":1,"howEasy":"veryEasy","gettingSupport":"yes","helpsFeelSupported":"yes","lessContactNeeded":"no"}'::jsonb, '2026-01-08T10:00:00Z'),
         ('{"version":1,"gettingSupport":"no","helpsFeelSupported":"no"}'::jsonb, '2026-01-11T10:00:00Z'),
-        ('{"version":1,"gettingSupport":"no","helpsFeelSupported":"yes"}'::jsonb, '2026-02-01T10:00:00Z')
+        ('{"version":1,"gettingSupport":"no","helpsFeelSupported":"yes","lessContactNeeded":"maybe"}'::jsonb, '2026-02-01T10:00:00Z')
       """,
     )
 
@@ -218,6 +218,9 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(2L, extendedFeedbackSummary.helpsFeelSupportedCounts["yes"])
     assertEquals(1L, extendedFeedbackSummary.helpsFeelSupportedCounts["no"])
     assertEquals(BigDecimal("0.6667"), extendedFeedbackSummary.helpsFeelSupportedPct["yes"])
+    // an unexpected value is not an answer
+    assertEquals(null, extendedFeedbackSummary.lessContactNeededCounts["maybe"])
+    assertEquals(2L, extendedFeedbackSummary.lessContactNeededCounts["notAnswered"])
   }
 
   @Test

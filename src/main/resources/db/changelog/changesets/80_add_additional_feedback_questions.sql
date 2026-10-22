@@ -225,6 +225,7 @@ helps_feel_supported_answered AS (
     FROM feedback_in_month
     WHERE feedback ? 'helpsFeelSupported'
       AND NULLIF(feedback->>'helpsFeelSupported', '') IS NOT NULL
+      AND feedback->>'helpsFeelSupported' IN ('yes', 'no')
     GROUP BY version
 ),
 
@@ -240,6 +241,7 @@ helps_feel_supported_counts_answered AS (
         FROM feedback_in_month
         WHERE feedback ? 'helpsFeelSupported'
           AND NULLIF(feedback->>'helpsFeelSupported', '') IS NOT NULL
+          AND feedback->>'helpsFeelSupported' IN ('yes', 'no')
         GROUP BY version, answer
     ) x
     GROUP BY version
@@ -286,6 +288,7 @@ less_contact_needed_answered AS (
     FROM feedback_in_month
     WHERE feedback ? 'lessContactNeeded'
       AND NULLIF(feedback->>'lessContactNeeded', '') IS NOT NULL
+      AND feedback->>'lessContactNeeded' IN ('yes', 'no')
     GROUP BY version
 ),
 
@@ -301,6 +304,7 @@ less_contact_needed_counts_answered AS (
         FROM feedback_in_month
         WHERE feedback ? 'lessContactNeeded'
           AND NULLIF(feedback->>'lessContactNeeded', '') IS NOT NULL
+          AND feedback->>'lessContactNeeded' IN ('yes', 'no')
         GROUP BY version, answer
     ) x
     GROUP BY version
