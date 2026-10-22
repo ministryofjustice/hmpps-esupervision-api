@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHint
@@ -69,6 +71,7 @@ class CheckinCreationJob(
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -185,6 +188,9 @@ class CheckinCreationJob(
     contactDetails: ContactDetails,
     metrics: JobMetrics,
   ) {
+    // we have a separate deactivation job for that feature
+    if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) return
+
     // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
     // Isolate failures per-offender so one bad deactivation doesn't abort the whole run.
     LOGGER.info("Deactivating CRN {} instead of creating checkin: {}", offenderInfo.crn, ineligibility.name)
