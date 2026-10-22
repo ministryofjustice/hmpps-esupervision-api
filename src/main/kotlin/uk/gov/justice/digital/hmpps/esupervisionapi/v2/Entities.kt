@@ -581,6 +581,22 @@ open class TotalFeedbackMonthly(
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "improvements_pct", nullable = false, columnDefinition = "jsonb")
   open val improvementsPct: Map<String, BigDecimal>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "helps_feel_supported_counts", nullable = false, columnDefinition = "jsonb")
+  open val helpsFeelSupportedCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "helps_feel_supported_pct", nullable = false, columnDefinition = "jsonb")
+  open val helpsFeelSupportedPct: Map<String, BigDecimal>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "less_contact_needed_counts", nullable = false, columnDefinition = "jsonb")
+  open val lessContactNeededCounts: Map<String, Long>,
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "less_contact_needed_pct", nullable = false, columnDefinition = "jsonb")
+  open val lessContactNeededPct: Map<String, BigDecimal>,
 )
 
 data class TotalFeedbackSummary(
@@ -591,6 +607,10 @@ data class TotalFeedbackSummary(
   val gettingSupportPct: Map<String, BigDecimal>,
   val improvementsCounts: Map<String, Long>,
   val improvementsPct: Map<String, BigDecimal>,
+  val helpsFeelSupportedCounts: Map<String, Long> = emptyMap(),
+  val helpsFeelSupportedPct: Map<String, BigDecimal> = emptyMap(),
+  val lessContactNeededCounts: Map<String, Long> = emptyMap(),
+  val lessContactNeededPct: Map<String, BigDecimal> = emptyMap(),
 )
 
 @Embeddable
