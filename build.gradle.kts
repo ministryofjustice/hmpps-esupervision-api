@@ -1,9 +1,9 @@
 import org.gradle.kotlin.dsl.implementation
 
 plugins {
-  id("uk.gov.justice.hmpps.gradle-spring-boot") version "11.0.7"
-  kotlin("plugin.jpa") version "2.3.21"
-  kotlin("plugin.spring") version "2.3.21"
+  id("uk.gov.justice.hmpps.gradle-spring-boot") version "11.0.12"
+  kotlin("plugin.jpa") version "2.4.20"
+  kotlin("plugin.spring") version "2.4.20"
 }
 
 // utils/CheckinNoteExportTool.kt has its own main(), so Spring Boot cannot infer this one.
@@ -26,9 +26,10 @@ dependencies {
   // 3.0.x is the Spring Framework 7 / Boot 4 line; 2.8.x is Spring 6 and is binary-incompatible here.
   implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
   // springdoc pulls the swagger-ui webjar, whose bundled DOMPurify carries its own CVEs.
-  // The Boot BOM manages 5.32.11 (DOMPurify 3.4.12); 5.32.14 ships 3.4.13, which is what
-  // CVE-2026-75838 requires. Keep ahead of the BOM until it catches up.
-  implementation("org.webjars:swagger-ui:5.32.14")
+  // The Boot BOM lags behind; 5.33.2 ships DOMPurify 3.4.16, which fixes CVE-2026-109344 and
+  // CVE-2026-109345. Keep ahead of the BOM until it catches up, and keep
+  // springdoc.swagger-ui.version in application.yml in lockstep with this pin.
+  implementation("org.webjars:swagger-ui:5.33.2")
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
   implementation("net.javacrumbs.shedlock:shedlock-spring:7.7.0")
   implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.7.0")
@@ -50,15 +51,15 @@ dependencies {
   implementation("org.jetbrains.kotlin:kotlin-reflect")
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")
   implementation("uk.gov.service.notify:notifications-java-client:5.2.1-RELEASE")
-  // Version managed by the Spring Boot BOM. The former 42.7.12 pin for CVE-2026-54291
-  // (channel-binding downgrade) now *downgrades* us — Boot 4.1 ships 42.7.13.
-  implementation("org.postgresql:postgresql")
+  // Boot 4.1 manages 42.7.13, which is vulnerable to CVE-2026-107314 (failing open).
+  // Drop this pin once the Boot BOM ships >= 42.7.14.
+  implementation("org.postgresql:postgresql:42.7.14")
   runtimeOnly("org.liquibase:liquibase-core")
   // Boot 4 extracted LiquibaseAutoConfiguration out of spring-boot-autoconfigure into this dedicated
   // module; without it migrations never run and Hibernate validates against an empty schema.
   runtimeOnly("org.springframework.boot:spring-boot-liquibase")
   implementation("com.googlecode.libphonenumber:libphonenumber:9.0.7")
-  implementation("com.google.guava:guava:33.0.0-jre")
+  implementation("com.google.guava:guava:33.7.2-jre")
 
   developmentOnly("org.springframework.boot:spring-boot-devtools")
 
