@@ -57,7 +57,8 @@
 #   practitioner_export.csv      the deliverable: PDU, Region, CRN, POP count,
 #                                First name, Email address -- one row per
 #                                practitioner
-#   practitioners_unmatched.csv  worksheet for the rows with no email
+#   practitioners_unmatched.csv  worksheet for the practitioners left out of
+#                                the export for want of a name or email
 #   extract_report.txt           summary of what was extracted: CRNs by status
 #                                and by region/PDU, usernames not on record for any CRN,
 #                                usernames that look like service accounts
@@ -393,7 +394,7 @@ date -u +%Y-%m-%dT%H:%M:%SZ > "$COMPLETE_MARKER"
 step "Done"
 cat >&2 <<EOF
   Mailing list: $WORK_DIR/practitioner_export.csv
-  Worksheet:    $WORK_DIR/practitioners_unmatched.csv  (usernames for the blank rows)
+  Worksheet:    $WORK_DIR/practitioners_unmatched.csv  (practitioners left out: no name or email)
   Summary:      $WORK_DIR/extract_report.txt
 
   These files are personal data. Delete $WORK_DIR once the export is handed over.
