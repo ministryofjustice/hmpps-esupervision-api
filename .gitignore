@@ -125,3 +125,6 @@ practitioner_tiers.csv
 practitioner_tiers.PARTIAL.csv
 crn_tiers.csv
 crn_tiers.PARTIAL.csv
+
+# Jars copied to the repo root for local docker builds
+/*.jar
