@@ -55,7 +55,7 @@ class OffenderSetupPersistenceService(
   /**
    * @throws ConstraintViolationException if the offender or setup already exists
    */
-  @Transactional()
+  @Transactional
   fun startOffenderSetup(setup: OffenderSetup) {
     raiseOnConstraintViolation("CRN ${setup.offender.crn} already exists") {
       offenderRepository.save(setup.offender)
@@ -116,7 +116,6 @@ class OffenderSetupService(
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetup> = offenderSetupRepository.findByUuid(uuid)
 
   /** Start offender setup (registration) Creates OffenderV2 and OffenderSetupV2 records */
-  @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
     validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
     validateFirstCheckin(offenderInfo.mode, offenderInfo.firstCheckin)
