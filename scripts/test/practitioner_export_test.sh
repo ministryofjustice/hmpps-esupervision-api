@@ -93,17 +93,20 @@ CASES = {
   "X000007": {"name": {"forename": "Sam", "surname": "Patel"}, "email": "sam.patel@justice.gov.uk",
               "username": "SAM.PATEL", "unallocated": False},
   # forename spellings for one practitioner, used only by the spelling test
-  "C000001": {"name": {"forename": "barry"}, "username": "CASE.TEST", "unallocated": False},
-  "C000002": {"name": {"forename": "BARRY"}, "username": "CASE.TEST", "unallocated": False},
-  "C000003": {"name": {"forename": "Barry"}, "username": "CASE.TEST", "unallocated": False},
-  "C000004": {"name": {"forename": "ÉLODIE"}, "username": "CASE.TEST", "unallocated": False},
-  "C000005": {"name": {"forename": "élodie"}, "username": "CASE.TEST", "unallocated": False},
-  "C000006": {"name": {"forename": "ŁUKASZ"}, "username": "CASE.TEST", "unallocated": False},
-  "C000007": {"name": {"forename": "Łukasz"}, "username": "CASE.TEST", "unallocated": False},
-  "C000008": {"name": {"forename": "JO"}, "username": "CASE.TEST", "unallocated": False},
-  "C000009": {"name": {"forename": "jo"}, "username": "CASE.TEST", "unallocated": False},
-  "C000010": {"name": {"forename": "İpek"}, "username": "CASE.TEST", "unallocated": False},
-  "C000011": {"name": {"forename": "ıpek"}, "username": "CASE.TEST", "unallocated": False},
+  "C000001": {"name": {"forename": "barry"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000002": {"name": {"forename": "BARRY"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000003": {"name": {"forename": "Barry"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000004": {"name": {"forename": "ÉLODIE"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000005": {"name": {"forename": "élodie"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000006": {"name": {"forename": "ŁUKASZ"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000007": {"name": {"forename": "Łukasz"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000008": {"name": {"forename": "JO"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000009": {"name": {"forename": "jo"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000010": {"name": {"forename": "İpek"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  "C000011": {"name": {"forename": "ıpek"}, "email": "case.test@justice.gov.uk", "username": "CASE.TEST", "unallocated": False},
+  # allocated, with an email but no forename
+  "N000002": {"name": {"surname": "Nameless"}, "email": "no.name@justice.gov.uk",
+              "username": "NO.NAME", "unallocated": False},
   # allocated, but NDelius sent no username
   "N000001": {"name": {"forename": "Priya", "surname": "Shah"}, "email": "priya.shah@justice.gov.uk",
               "unallocated": False},
@@ -219,10 +222,7 @@ EOF
 EXPECTED_EXPORT='PDU,Region,CRN,POP count,First name,Email address
 "Lambeth PDU","London","X000007",1,"Sam","sam.patel@justice.gov.uk"
 "Cumbria, and Lancashire PDU; Salford PDU","North West","X000001; X000002",2,"Barry","barry.white@justice.gov.uk"
-"Salford PDU","North West","X000003",1,"Anne","anne.obrien@justice.gov.uk"
-"Cumbria, and Lancashire PDU","North West","X000004",1,"Jo",""
-"Wigan PDU","North West","X000006",1,"",""
-"","","X000005",1,"",""'
+"Salford PDU","North West","X000003",1,"Anne","anne.obrien@justice.gov.uk"'
 
 EXPECTED_WORKSHEET='username,PDU,Region,CRN,POP count
 "GONE.AWAY","","","X000005",1
@@ -258,7 +258,8 @@ test_export_has_one_row_per_practitioner_with_the_requested_columns() {
   # deduplicated case-insensitively (BARRY/Barry), none for the unallocated
   # placeholder or a failed lookup; live PDU
   # preferred, snapshot used when the live one is missing (X000007); commas in
-  # a PDU name surviving CSV quoting; blank-email rows kept and sorted last.
+  # a PDU name surviving CSV quoting; practitioners with no email (X000004),
+  # an unallocated placeholder (X000006) or a failed lookup (X000005) left out.
   assert_file_eq "$EXPECTED_EXPORT" "$T/f1/practitioner_export.csv" "export content"
 }
 
@@ -286,6 +287,36 @@ test_forename_is_kept_when_ndelius_sends_no_username() {
   # the row falls back to the stored username, and keeps the name that goes
   # with the email from the same answer
   assert_contains "$(cat "$T/n3/practitioner_export.csv")" '"Priya","priya.shah@justice.gov.uk"' "forename with email"
+}
+
+test_leaves_out_a_practitioner_with_an_email_but_no_name() {
+  mkdir -p "$T/n4"
+  printf '%s\n' '{"crn":"N000002","storedUsername":"NO.NAME","pdu":"Salford PDU","region":"North West"}' \
+    '{"crn":"X000007","storedUsername":"SAM.PATEL"}' > "$T/n4/crns.jsonl"
+  local out; out="$(fetch "$T/n4")"
+  [[ "$(cat "$T/n4/practitioner_export.csv")" != *"no.name@"* ]] || fail "nameless practitioner exported"
+  assert_contains "$(cat "$T/n4/practitioners_unmatched.csv")" '"NO.NAME","Salford PDU","North West","N000002",1' "on the worksheet"
+  assert_contains "$out" "practitioners_exported=1 practitioners_excluded=1 crns=2 crns_exported=1 crns_excluded=1" "summary counts"
+}
+
+test_leaves_out_crns_in_the_test_region() {
+  mkdir -p "$T/r1" "$T/r2"
+  printf '%s\n' '{"crn":"X000001","storedUsername":"BARRY.WHITE","pdu":"Test PDU","region":"ZZ BAST Public Provider 1"}' \
+    '{"crn":"X000007","storedUsername":"SAM.PATEL","pdu":"Lambeth PDU","region":"London"}' > "$T/r1/crns.jsonl"
+  cp "$T/r1/crns.jsonl" "$T/r2/crns.jsonl"
+  local out; out="$(fetch "$T/r1" USERNAMES="$T/usernames.csv")"
+  [[ "$(jq -r .crn "$T/r1/results.jsonl")" == "X000007" ]] || fail "test-region CRN was fetched"
+  assert_file_eq 'PDU,Region,CRN,POP count,First name,Email address
+"Lambeth PDU","London","X000007",1,"Sam","sam.patel@justice.gov.uk"' "$T/r1/practitioner_export.csv" "export content"
+  # BARRY.WHITE holds only the test-region CRN, so is a test account here, even
+  # though the wider usernames list names him; a real reviewer stays.
+  assert_file_eq 'username,PDU,Region,CRN,POP count
+"REVIEWER.ONLY","","","",0
+"SVC-CLIENT","","","",0' "$T/r1/practitioners_unmatched.csv" "worksheet content"
+  assert_contains "$out" "crns_excluded_region=1" "summary count"
+  # EXCLUDE_REGIONS= keeps every region
+  fetch "$T/r2" EXCLUDE_REGIONS= >/dev/null
+  assert_contains "$(cat "$T/r2/practitioner_export.csv")" '"X000001"' "kept when not excluded"
 }
 
 test_worksheet_names_every_practitioner_without_an_email() {
@@ -382,6 +413,44 @@ test_records_a_transport_failure_as_http_000() {
   # Port 1: nothing listens, so the connection is refused.
   (cd "$T" && TOKEN=tok API_BASE="http://127.0.0.1:1" RATE_SLEEP=0 "$FETCH" "$T/f8/crns.jsonl" "$T/f8/results.jsonl" >/dev/null 2>&1)
   assert_eq '"HTTP 000"' "$(jq -c .error "$T/f8/results.jsonl")" "error recorded"
+}
+
+# The fetch script run with no TOKEN, so it has to get its own via kubectl.
+fetch_no_token() {  # dir [extra env...]
+  local dir="$1"; shift
+  mkdir -p "$dir"; cp "$T/crns.jsonl" "$dir/crns.jsonl"
+  : > "$T/fake.log"
+  (cd "$T" && env -u TOKEN PATH="$T/bin:$PATH" FAKE_LOG="$T/fake.log" FAKE_AUTH="$STUB/auth" \
+     API_BASE="$STUB" RATE_SLEEP=0 "$@" "$FETCH" "$dir/crns.jsonl" "$dir/results.jsonl" 2>&1)
+}
+
+test_gets_its_own_token_from_the_ui_pod_when_token_is_unset() {
+  local out; out="$(fetch_no_token "$T/a1" ENV=dev)"
+  assert_file_eq "$EXPECTED_EXPORT" "$T/a1/practitioner_export.csv" "export content"
+  assert_contains "$(cat "$T/fake.log")" "kubectl -n hmpps-esupervision-dev exec deploy/hmpps-esupervision-ui" "token from the dev UI pod"
+  [[ "$(cat "$T/fake.log")" != *"ui-client-creds"* ]] || fail "read the UI client secret"
+}
+
+test_stops_clearly_when_the_pod_cannot_get_a_token() {
+  local out rc; out="$(fetch_no_token "$T/a2" FAKE_SECRET=wrong)"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "could not get a token" "message"
+  [[ ! -s "$T/a2/results.jsonl" ]] || fail "fetched without a token"
+}
+
+test_refreshes_its_own_token_on_a_401_and_retries_the_crn() {
+  # A kubectl whose first token has expired and whose second is good.
+  mkdir -p "$T/bin401"
+  cat > "$T/bin401/kubectl" <<'EOF'
+#!/usr/bin/env bash
+n=$(( $(cat "$FAKE_COUNT" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE_COUNT"
+if (( n == 1 )); then printf expired; else printf tok; fi
+EOF
+  chmod +x "$T/bin401/kubectl"
+  local out; out="$(fetch_no_token "$T/a3" PATH="$T/bin401:$PATH" FAKE_COUNT="$T/a3.count")"
+  assert_contains "$out" "getting a new token and retrying" "refresh announced"
+  assert_eq 2 "$(cat "$T/a3.count")" "token requests"
+  assert_file_eq "$EXPECTED_EXPORT" "$T/a3/practitioner_export.csv" "export content"
 }
 
 # ---------------------------------------------------------------------------
