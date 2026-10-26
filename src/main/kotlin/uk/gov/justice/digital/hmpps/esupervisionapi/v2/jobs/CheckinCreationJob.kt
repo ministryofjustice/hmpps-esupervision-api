@@ -112,7 +112,9 @@ class CheckinCreationJob(
             val contactDetails = contactDetailsMap[crn]!!
             val ineligibility = checkinIneligibilityReason(info, contactDetails)
             if (ineligibility != null) {
-              deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
+              if (!appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
+                deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
+              }
             } else {
               prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
             }
@@ -188,9 +190,6 @@ class CheckinCreationJob(
     contactDetails: ContactDetails,
     metrics: JobMetrics,
   ) {
-    // we have a separate deactivation job for that feature
-    if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) return
-
     // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
     // Isolate failures per-offender so one bad deactivation doesn't abort the whole run.
     LOGGER.info("Deactivating CRN {} instead of creating checkin: {}", offenderInfo.crn, ineligibility.name)
