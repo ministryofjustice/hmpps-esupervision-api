@@ -211,6 +211,69 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `refresh counts automated deactivations as deactivations`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES
+        (1, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
+        (2, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000002', 'P1', 'N03', 'Wales'),
+        (3, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales'),
+        (4, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000004', 'P1', 'N03', 'Wales'),
+        (5, 'OFFENDER_DEACTIVATED', '2026-01-10T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
+        (6, 'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED', '2026-01-11T10:00:00Z', 'X000002', 'P1', 'N03', 'Wales'),
+        (7, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-12T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales')
+      """,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh(LocalDate.of(2026, 1, 1))
+
+    val summary = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "ALL").first()
+    assertEquals(4, summary.totalSignedUp)
+    assertEquals(3, summary.totalInactiveUsers)
+    assertEquals(1, summary.totalActiveUsers)
+  }
+
+  @Test
+  fun `refresh attributes a deactivation without a provider to the CRN's previous provider`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES
+        (1, 'SETUP_COMPLETED', '2025-12-05T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
+        (2, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000002', 'P1', 'N04', 'Midlands'),
+        (3, 'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED', '2026-01-11T10:00:00Z', 'X000001', 'P1', NULL, NULL)
+      """,
+    )
+
+    val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
+    job.refresh(LocalDate.of(2025, 12, 1), LocalDate.of(2026, 1, 1))
+
+    val wales = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "PROVIDER")
+      .single { it.providerCode == "N03" }
+    assertEquals(1, wales.totalInactiveUsers)
+    assertEquals(0, wales.totalActiveUsers)
+  }
+
+  @Test
+  fun `scheduled refresh also refreshes the previous month`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES (1, 'SETUP_COMPLETED', '2026-01-31T23:00:00Z', 'X000001', 'P1', 'N03', 'Wales')
+      """,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh()
+
+    val activated = jdbcTemplate.queryForObject(
+      "SELECT users_activated FROM monthly_stats WHERE month = '2026-01-01' AND provider_code = 'N03'",
+      Long::class.java,
+    )
+    assertEquals(1L, activated)
+  }
+
+  @Test
   fun `refresh ignores excluded 'XXX' provider code`() {
     // This provider should be excluded by the refresh_monthly_stats function filter
     jdbcTemplate.update(
