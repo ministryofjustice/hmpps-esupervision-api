@@ -113,9 +113,9 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       """
       INSERT INTO feedback (feedback, created_at)
       VALUES
-        ('{"version":1,"howEasy":"veryEasy","gettingSupport":"yes"}'::jsonb, '2026-01-08T10:00:00Z'),
-        ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-01-11T10:00:00Z'),
-        ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-02-01T10:00:00Z')
+        ('{"version":1,"howEasy":"veryEasy","gettingSupport":"yes","helpsFeelSupported":"yes","lessContactNeeded":"no"}'::jsonb, '2026-01-08T10:00:00Z'),
+        ('{"version":1,"gettingSupport":"no","helpsFeelSupported":"no"}'::jsonb, '2026-01-11T10:00:00Z'),
+        ('{"version":1,"gettingSupport":"no","helpsFeelSupported":"yes","lessContactNeeded":"maybe"}'::jsonb, '2026-02-01T10:00:00Z')
       """,
     )
 
@@ -157,6 +157,13 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(0, BigDecimal("0.5000").compareTo(feedbackSummary.gettingSupportPct["no"]))
     assertEquals(2L, feedbackSummary.improvementsCounts["notAnswered"])
     assertEquals(0, feedbackSummary.improvementsPct.size)
+    assertEquals(1L, feedbackSummary.helpsFeelSupportedCounts["yes"])
+    assertEquals(1L, feedbackSummary.helpsFeelSupportedCounts["no"])
+    assertEquals(0L, feedbackSummary.helpsFeelSupportedCounts["notAnswered"])
+    assertEquals(0, BigDecimal("0.5000").compareTo(feedbackSummary.helpsFeelSupportedPct["yes"]))
+    assertEquals(1L, feedbackSummary.lessContactNeededCounts["no"])
+    assertEquals(1L, feedbackSummary.lessContactNeededCounts["notAnswered"])
+    assertEquals(0, BigDecimal("1.0000").compareTo(feedbackSummary.lessContactNeededPct["no"]))
 
     val feedbackRows =
       jdbcTemplate.queryForObject(
@@ -168,7 +175,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         """,
         Long::class.java,
       )!!
-    assertEquals(3L, feedbackRows) // still 3 rows for January, even though improvements has no answers
+    assertEquals(5L, feedbackRows) // 3 original questions + 2 yes/no questions, even where improvements has no answers
 
     val allRow =
       jdbcTemplate.queryForList(
@@ -211,6 +218,12 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(1L, extendedFeedbackSummary.gettingSupportCounts["yes"])
     assertEquals(2L, extendedFeedbackSummary.gettingSupportCounts["no"])
     assertEquals(BigDecimal("0.6667"), extendedFeedbackSummary.gettingSupportPct["no"])
+    assertEquals(2L, extendedFeedbackSummary.helpsFeelSupportedCounts["yes"])
+    assertEquals(1L, extendedFeedbackSummary.helpsFeelSupportedCounts["no"])
+    assertEquals(BigDecimal("0.6667"), extendedFeedbackSummary.helpsFeelSupportedPct["yes"])
+    // an unexpected value is not an answer
+    assertEquals(null, extendedFeedbackSummary.lessContactNeededCounts["maybe"])
+    assertEquals(2L, extendedFeedbackSummary.lessContactNeededCounts["notAnswered"])
   }
 
   @Test

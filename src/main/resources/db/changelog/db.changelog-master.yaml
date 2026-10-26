@@ -158,4 +158,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/79_update_provisional_tier_wording.sql
   - include:
-      file: db/changelog/changesets/80_fix_monthly_stats_counts.sql
+      file: db/changelog/changesets/80_add_additional_feedback_questions.sql
+  - include:
+      file: db/changelog/changesets/81_fix_monthly_stats_counts.sql
