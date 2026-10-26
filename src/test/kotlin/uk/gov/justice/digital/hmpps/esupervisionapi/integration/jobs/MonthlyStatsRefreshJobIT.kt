@@ -4,10 +4,13 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.MonthlyStatsRefreshJob
 import java.math.BigDecimal
 import java.time.Clock
@@ -232,6 +235,23 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(4, summary.totalSignedUp)
     assertEquals(3, summary.totalInactiveUsers)
     assertEquals(1, summary.totalActiveUsers)
+  }
+
+  @ParameterizedTest
+  @EnumSource(OffenderAuditEventType::class)
+  fun `refresh applies each offender audit event type's change to the active count`(eventType: OffenderAuditEventType) {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES (1, ?, '2026-01-05T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales')
+      """,
+      eventType.name,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh(LocalDate.of(2026, 1, 1))
+
+    val summary = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "ALL").first()
+    assertEquals(eventType.activeCountChange.toLong(), summary.totalActiveUsers)
   }
 
   @Test
