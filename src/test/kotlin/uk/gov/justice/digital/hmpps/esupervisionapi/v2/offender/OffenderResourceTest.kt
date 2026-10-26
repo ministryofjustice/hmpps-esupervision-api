@@ -915,6 +915,28 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - saves a selected event after validating it against NDelius`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(anEvent, anEvent.copy(number = 2L)),
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+
+    val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(currentEvent = 2L))
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(2L, result.body?.currentEvent)
+    assertEquals(2L, offender.currentEvent)
+    verify(offenderRepository).save(offender)
+  }
+
+  @Test
   fun `scheduleAdHocCheckin - creates today's checkin with questions using canonical CRN`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
@@ -1188,12 +1210,24 @@ class OffenderResourceTest {
   @Test
   fun `getPersonalDetailsByCrn - happy path - returns details without requiring local offender`() {
     val crn = "x123456"
+    val event = Event(
+      number = 2L,
+      mainOffence = CodedDescription("04300", "Abstracting electricity - 04300"),
+      sentence = Event.Sentence(
+        date = LocalDate.of(2026, 10, 26),
+        description = "Adult Custody < 12m",
+        expectedEndDate = LocalDate.of(2027, 9, 25),
+        length = 11,
+        lengthUnit = "Months",
+      ),
+    )
     val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
       crn = "X123456",
       name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
       dateOfBirth = LocalDate.of(1980, 1, 1),
       mobile = "07700900123",
       email = "john.doe@example.com",
+      events = listOf(event),
     )
     whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(contactDetails)
 
@@ -1204,6 +1238,7 @@ class OffenderResourceTest {
     assertEquals("John", result.body?.name?.forename)
     assertEquals("07700900123", result.body?.mobile)
     assertEquals("john.doe@example.com", result.body?.email)
+    assertEquals(listOf(event), result.body?.events)
     verify(offenderRepository, times(0)).findByCrn(any())
   }
 

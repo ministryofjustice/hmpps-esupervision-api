@@ -19,11 +19,11 @@ import java.time.temporal.ChronoUnit
  * @see uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
  */
 fun activeEventNumber(offender: ActiveEvent, details: ContactDetails): Long? {
-  if (offender.currentEvent != null) {
-    return offender.currentEvent
+  return if (offender.currentEvent != null) {
+    details.events.firstOrNull { it.number == offender.currentEvent }?.number
+  } else {
+    details.events.singleOrNull()?.number
   }
-
-  return details.events.firstOrNull()?.number
 }
 
 /**

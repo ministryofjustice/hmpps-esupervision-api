@@ -168,6 +168,7 @@ class OffenderResource(
         dateOfBirth = contactDetails.dateOfBirth,
         mobile = contactDetails.mobile,
         email = contactDetails.email,
+        events = contactDetails.events,
       ),
     )
   }
@@ -731,12 +732,26 @@ is *today*.""",
       }
     }
 
+    var currentEventUpdated = false
+    if (request.currentEvent != null && offender.currentEvent != request.currentEvent) {
+      val contactDetails = ndiliusApiClient.getContactDetailsStrict(offender.crn)
+      if (contactDetails?.events?.none { it.number == request.currentEvent } != false) {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Selected event ${request.currentEvent} is not active for offender ${offender.crn}",
+        )
+      }
+      offender.currentEvent = request.currentEvent
+      offender.updatedAt = clock.instant()
+      currentEventUpdated = true
+    }
+
     // Stopping check-ins cancels the day's check-in but keeps the row, so only a check-in that is
     // still open or completed counts as occupying today; a cancelled or expired one does not.
     val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())
       .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
-    if (request.checkinSchedule != null || request.contactPreference != null) {
+    if (request.checkinSchedule != null || request.contactPreference != null || currentEventUpdated) {
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
       if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
@@ -893,6 +908,7 @@ data class PersonalDetailsSummary(
   val dateOfBirth: LocalDate,
   val mobile: String? = null,
   val email: String? = null,
+  val events: List<Event> = emptyList(),
 ) : INamedPerson
 
 data class SupervisionPackageStatus(
@@ -973,6 +989,7 @@ data class OffenderSummaryDto(
   val checkinInterval: CheckinInterval?,
   val mode: CheckinMode,
   val contactPreference: ContactPreference,
+  val currentEvent: Long? = null,
   val photoUrl: String? = null,
   val details: OffenderSummaryDetails? = null,
 )
@@ -985,6 +1002,7 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   checkinInterval = checkinInterval?.let { CheckinInterval.fromDuration(it) },
   mode = mode,
   contactPreference = contactPreference,
+  currentEvent = currentEvent,
   photoUrl = photoUrl,
   details = contactDetails?.let {
     OffenderSummaryDetails(
@@ -1115,6 +1133,7 @@ data class ContactPreferenceUpdateRequest(
 data class OffenderDetailsUpdateRequest(
   val checkinSchedule: CheckinScheduleUpdateRequest? = null,
   val contactPreference: ContactPreferenceUpdateRequest? = null,
+  val currentEvent: Long? = null,
 )
 
 private fun newFirstCheckinDateIsToday(

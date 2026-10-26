@@ -117,6 +117,7 @@ open class Offender(
     createdBy = createdBy,
     updatedAt = updatedAt,
     contactPreference = contactPreference,
+    currentEvent = currentEvent,
     personalDetails = personalDetails,
   )
 }
@@ -179,6 +180,7 @@ open class OffenderSetup(
     eligibilityChoice = eligibilityChoice,
     rationale = rationale,
     setupId = setupId(),
+    currentEvent = offender.currentEvent,
   )
 }
 

@@ -31,10 +31,21 @@ class UtilsTest {
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
+  private val today = LocalDate.of(2026, 10, 26)
+
+  private fun eventEnding(number: Long, expectedEndDate: LocalDate) = Event(
+    number = number,
+    mainOffence = CodedDescription("X", "An offence"),
+    sentence = Event.Sentence(
+      date = LocalDate.of(2026, 1, 1),
+      description = "Sentence",
+      expectedEndDate = expectedEndDate,
+    ),
+  )
 
   @Test
   fun `checkinIneligibilityReason - contact suspended takes priority even with active events`() {
-    val offender = offenderTemplate.toEntity()
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
     assertEquals(
       CheckinIneligibilityReason.CONTACT_SUSPENDED,
       checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent), contactSuspended = true)),
@@ -43,32 +54,89 @@ class UtilsTest {
 
   @Test
   fun `checkinIneligibilityReason - no active events when events list is explicitly empty`() {
-    val offender = offenderTemplate.toEntity()
     assertEquals(
       CheckinIneligibilityReason.NO_ACTIVE_EVENTS,
-      checkinIneligibilityReason(offender, contactDetails(events = emptyList())),
+      checkinIneligibilityReason(offenderTemplate.toEntity(), contactDetails(events = emptyList())),
     )
   }
 
   @Test
   fun `checkinIneligibilityReason - no active events takes priority over contact suspended`() {
-    val offender = offenderTemplate.toEntity()
     assertEquals(
       CheckinIneligibilityReason.NO_ACTIVE_EVENTS,
-      checkinIneligibilityReason(offender, contactDetails(events = emptyList(), contactSuspended = true)),
+      checkinIneligibilityReason(offenderTemplate.toEntity(), contactDetails(events = emptyList(), contactSuspended = true)),
     )
   }
 
   @Test
   fun `checkinIneligibilityReason - eligible when an active event exists and not suspended`() {
-    val offender = offenderTemplate.toEntity()
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
     assertNull(checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent))))
   }
 
   @Test
-  fun `checkinIneligibilityReason - eligible when offender has a cached current event`() {
-    val offender = offenderTemplate.toEntity().apply { currentEvent = 7L }
+  fun `checkinIneligibilityReason - cached selection does not deactivate when Delius events are missing`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
     assertNull(checkinIneligibilityReason(offender, contactDetails(events = emptyList())))
+  }
+
+  @Test
+  fun `checkinIneligibilityReason - does not deactivate when selected event is missing but another is active`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+
+    assertNull(checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent.copy(number = 2L)))))
+  }
+
+  @Test
+  fun `checkinIneligibilityReason - does not handle selection when multiple events exist`() {
+    val offender = offenderTemplate.toEntity()
+
+    assertNull(checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
+  }
+
+  @Test
+  fun `active event number - uses the only event when no selection is saved`() {
+    val offender = offenderTemplate.toEntity()
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(anEvent))))
+  }
+
+  @Test
+  fun `active event number - does not choose when multiple events have no selection`() {
+    val offender = offenderTemplate.toEntity()
+
+    assertNull(activeEventNumber(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
+  }
+
+  @Test
+  fun `active event number - uses the saved selection when multiple events exist`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 2L }
+
+    assertEquals(2L, activeEventNumber(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
+  }
+
+  @Test
+  fun `active event number - expected end date does not override Delius active event status`() {
+    val offender = offenderTemplate.toEntity()
+    val completed = eventEnding(1L, today.minusDays(1))
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(completed))))
+  }
+
+  @Test
+  fun `active event number - preserves a saved selection returned by Delius`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+    val completed = eventEnding(1L, today.minusDays(1))
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(completed))))
+  }
+
+  @Test
+  fun `checkinIneligibilityReason - expected end date does not override Delius active event status`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+    assertNull(
+      checkinIneligibilityReason(offender, contactDetails(events = listOf(eventEnding(1L, today.minusDays(1))))),
+    )
   }
 
   @Test
