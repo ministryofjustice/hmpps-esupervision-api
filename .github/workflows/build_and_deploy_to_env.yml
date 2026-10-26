@@ -23,20 +23,39 @@ jobs:
     secrets: inherit
     with:
       environment: ${{ inputs.environment }}
-  kotlin_validate:
+  app_version:
+    name: Create app version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.app_version.outputs.version }}
+    steps:
+      - id: app_version
+        name: Application version creators
+        uses: ministryofjustice/hmpps-github-shared-actions/.github/actions/build-test-and-deploy/create_app_version@cd6fbead3223fc36e047987f45af2ffacfd41c70 # v1.1.6
+  gradle_verify:
     name: Validate the kotlin
-    uses: ministryofjustice/hmpps-github-actions/.github/workflows/kotlin_validate.yml@v2 # WORKFLOW_VERSION
+    uses: ministryofjustice/hmpps-github-actions/.github/workflows/gradle_verify.yml@v2 # WORKFLOW_VERSION
     secrets: inherit
+    needs:
+      - app_version
+    with:
+      gradle-command: 'BUILD_NUMBER=${{ needs.app_version.outputs.version }} ./gradlew assemble check'
+      upload-build-artifacts: true
+      java-version: "21"
   build:
     name: Build docker image
     uses: ministryofjustice/hmpps-github-actions/.github/workflows/docker_build.yml@v2 # WORKFLOW_VERSION
     needs:
-      - kotlin_validate
+      - app_version
+      - gradle_verify
     with:
       docker_registry: 'ghcr.io'
       registry_org: 'ministryofjustice'
       push: true
       docker_multiplatform: false
+      # Must match the BUILD_NUMBER used to build the jar
+      image_version: ${{ needs.app_version.outputs.version }}
+      download_build_artifacts: true
   deploy:
     name: Deploy to ${{ inputs.environment }}
     needs:

@@ -1,8 +1,7 @@
 version: "3"
 services:
   hmpps-esupervision-api:
-    build:
-      context: .
+    image: ghcr.io/ministryofjustice/hmpps-esupervision-api:latest
     networks:
       - hmpps
     container_name: hmpps-template-kotlin

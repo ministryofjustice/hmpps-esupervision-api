@@ -137,33 +137,10 @@ class OffenderSetupServiceTest {
       ),
     )
 
-    val savedOffender = Offender(
-      uuid = UUID.randomUUID(),
-      crn = crn,
-      practitionerId = practitionerId,
-      status = OffenderStatus.INITIAL,
-      firstCheckin = firstCheckin,
-      checkinInterval = CheckinInterval.WEEKLY.duration,
-      createdAt = clock.instant(),
-      createdBy = practitionerId,
-      updatedAt = clock.instant(),
-      contactPreference = ContactPreference.EMAIL,
-    )
-
-    val expectedSetup = OffenderSetup(
-      uuid = offenderInfo.setupUuid,
-      offender = savedOffender,
-      practitionerId = practitionerId,
-      createdAt = clock.instant(),
-      startedAt = offenderInfo.startedAt,
-      eligibilityChoice = offenderInfo.eligibilityChoice,
-      rationale = offenderInfo.rationale,
-    )
-
     val contactDetails = mock<ContactDetails>()
     whenever(contactDetails.name).thenReturn(mock())
     whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(contactDetails)
-    whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenReturn(expectedSetup)
+    // whenever(offenderSetupRepository.save(any<OffenderSetup>())).thenReturn(expectedSetup)
     whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
@@ -174,13 +151,11 @@ class OffenderSetupServiceTest {
     assertNotNull(result)
     assertEquals(offenderInfo.setupUuid, result.uuid)
     assertEquals(practitionerId, result.practitionerId)
-    assertEquals(savedOffender.uuid, result.offenderUuid)
 
     verify(eligibilityChecker).check(any(), any(), argThat { cache -> cache.contains("MANUAL") })
-    verify(offenderRepository).save(argThat { this.status != OffenderStatus.VERIFIED })
-    verify(offenderSetupRepository).save(
+    verify(offenderSetupPersistenceService).startOffenderSetup(
       argThat {
-        this.uuid == expectedSetup.uuid && rationale == expectedSetup.rationale && eligibilityChoice == expectedSetup.eligibilityChoice
+        this.uuid == offenderInfo.setupUuid && rationale == offenderInfo.rationale && eligibilityChoice == offenderInfo.eligibilityChoice
       },
     )
   }
@@ -205,11 +180,11 @@ class OffenderSetupServiceTest {
 
     service.startOffenderSetup(offenderInfo)
 
-    verify(offenderRepository).save(
+    verify(offenderSetupPersistenceService).startOffenderSetup(
       argThat {
-        mode == CheckinMode.AD_HOC &&
-          firstCheckin == null &&
-          checkinInterval == null
+        offender.mode == CheckinMode.AD_HOC &&
+          offender.firstCheckin == null &&
+          offender.checkinInterval == null
       },
     )
   }
@@ -255,7 +230,7 @@ class OffenderSetupServiceTest {
       service.startOffenderSetup(offenderInfo)
 
       val captor = argumentCaptor<OffenderSetup>()
-      verify(offenderSetupRepository).save(captor.capture())
+      verify(offenderSetupPersistenceService).startOffenderSetup(captor.capture())
       return captor.firstValue.startedAt
     }
 
@@ -314,7 +289,7 @@ class OffenderSetupServiceTest {
       callback.doInTransaction(org.springframework.transaction.support.SimpleTransactionStatus())
     }
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
-      .thenReturn(OffenderSetupPersistenceService.Result(checkin = null)) // because no contact info
+      .thenReturn(OffenderSetupPersistenceService.CompletionResult(checkin = null)) // because no contact info
 
     // When
     val result = service.completeOffenderSetup(setup.uuid, OffenderSetupCompletionDto())
@@ -460,7 +435,7 @@ class OffenderSetupServiceTest {
     whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
-      .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))
+      .thenReturn(OffenderSetupPersistenceService.CompletionResult(checkin = UUID.randomUUID()))
 
     val result = service.completeOffenderSetup(setup.uuid, OffenderSetupCompletionDto())
 
@@ -494,7 +469,7 @@ class OffenderSetupServiceTest {
       ),
     )
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), any(), any()))
-      .thenReturn(OffenderSetupPersistenceService.Result(checkin = UUID.randomUUID()))
+      .thenReturn(OffenderSetupPersistenceService.CompletionResult(checkin = UUID.randomUUID()))
     whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
@@ -567,7 +542,7 @@ class OffenderSetupServiceTest {
         any(),
       ),
     ).thenReturn(
-      OffenderSetupPersistenceService.Result(checkin = null),
+      OffenderSetupPersistenceService.CompletionResult(checkin = null),
     )
     whenever(eligibilityChecker.check(any(), any(), any())).doThrow(
       uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException(
@@ -696,11 +671,32 @@ class OffenderSetupServiceTest {
     }
 
     @Test
+    fun `start setup - basic test`() {
+      val checkinCreationService = mock<CheckinCreationService>()
+      val (offender, _) = makeData()
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock)
+      val setup = OffenderSetup(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        practitionerId = "SOME_PRACT",
+        createdAt = clock.instant(),
+        startedAt = clock.instant(),
+        eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
+        rationale = "some rationale goes here",
+      )
+      service.startOffenderSetup(setup)
+
+      verify(offenderRepository).save(offender)
+      verify(offenderSetupRepository).save(any())
+      verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), any())
+    }
+
+    @Test
     fun `do not create checkin when contact info is missing`() {
       val (offender, _) = makeData()
 
       val checkinCreationService = mock<CheckinCreationService>()
-      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock)
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, null, true)
 
@@ -712,7 +708,7 @@ class OffenderSetupServiceTest {
     fun `create checkin when contact info is passed in`() {
       val (offender, contactDetails) = makeData()
       val checkinCreationService = mock<CheckinCreationService>()
-      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock)
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, true)
 
@@ -724,7 +720,7 @@ class OffenderSetupServiceTest {
     fun `do not create checkin when contact info passed, but flag is false`() {
       val (offender, contactDetails) = makeData()
       val checkinCreationService = mock<CheckinCreationService>()
-      val service = OffenderSetupPersistenceService(offenderRepository, checkinCreationService, clock)
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock)
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, false)
       verify(offenderRepository, times(1)).save(offender)

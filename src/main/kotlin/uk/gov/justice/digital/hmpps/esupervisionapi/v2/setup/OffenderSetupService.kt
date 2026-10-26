@@ -46,16 +46,30 @@ import kotlin.jvm.optionals.getOrElse
 @Service
 class OffenderSetupPersistenceService(
   private val offenderRepository: OffenderRepository,
+  private val offenderSetupRepository: OffenderSetupRepository,
   private val checkinCreationService: CheckinCreationService,
   private val clock: Clock,
 ) {
-  data class Result(val checkin: UUID?)
+  data class CompletionResult(val checkin: UUID?)
+
+  /**
+   * @throws ConstraintViolationException if the offender or setup already exists
+   */
+  @Transactional
+  fun startOffenderSetup(setup: OffenderSetup) {
+    raiseOnConstraintViolation("CRN ${setup.offender.crn} already exists") {
+      offenderRepository.save(setup.offender)
+    }
+    raiseOnConstraintViolation("Setup with UUID ${setup.uuid} already exists") {
+      offenderSetupRepository.save(setup)
+    }
+  }
 
   /**
    * Saves the updated offender record and optionally creates a checkin.
    */
   @Transactional
-  fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): Result {
+  fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): CompletionResult {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender must be in VERIFIED status" }
     require(!createCheckin || offender.firstCheckin == LocalDate.now(clock)) { "createCheckin=true requires offender.firstCheckin to be today" }
 
@@ -70,7 +84,7 @@ class OffenderSetupPersistenceService(
     } else {
       null
     }
-    return Result(checkin = checkin?.uuid)
+    return CompletionResult(checkin = checkin?.uuid)
   }
 }
 
@@ -102,13 +116,13 @@ class OffenderSetupService(
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetup> = offenderSetupRepository.findByUuid(uuid)
 
   /** Start offender setup (registration) Creates OffenderV2 and OffenderSetupV2 records */
-  @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
     validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
     validateFirstCheckin(offenderInfo.mode, offenderInfo.firstCheckin)
     val now = clock.instant()
 
-    val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)
+    val crn = offenderInfo.crn.trim().uppercase()
+    val offenderByCrn = offenderRepository.findByCrn(crn)
     val offender = if (offenderByCrn.isPresent) {
       // somebody tried to onboard this CRN in the past, update the record with submitted options
       val existing = offenderByCrn.get()
@@ -126,7 +140,7 @@ class OffenderSetupService(
     } else {
       Offender(
         uuid = UUID.randomUUID(),
-        crn = offenderInfo.crn.trim().uppercase(),
+        crn = crn,
         practitionerId = offenderInfo.practitionerId,
         status = OffenderStatus.INITIAL,
         firstCheckin = offenderInfo.firstCheckin,
@@ -140,13 +154,9 @@ class OffenderSetupService(
     }
 
     if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
-      val contactDetails = ndiliusApiClient.getContactDetailsStrict(offenderInfo.crn)
-        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found for CRN ${offenderInfo.crn}")
+      val contactDetails = ndiliusApiClient.getContactDetailsStrict(crn)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found for CRN $crn")
       checkEligibility(contactDetails, offenderInfo.eligibilityAnswers, offender)
-    }
-
-    raiseOnConstraintViolation("CRN ${offenderInfo.crn} already exists") {
-      offenderRepository.save(offender)
     }
 
     val setup = OffenderSetup(
@@ -158,20 +168,16 @@ class OffenderSetupService(
       eligibilityChoice = offenderInfo.eligibilityChoice,
       rationale = offenderInfo.rationale,
     )
-
-    val saved =
-      raiseOnConstraintViolation("Setup with UUID ${offenderInfo.setupUuid} already exists") {
-        offenderSetupRepository.save(setup)
-      }
+    offenderSetupPersistenceService.startOffenderSetup(setup)
 
     LOGGER.info(
       "Started V2 offender setup: offender={}, crn={}, setup={}",
       offender.uuid,
-      offender.crn,
-      saved.uuid,
+      crn,
+      setup.uuid,
     )
 
-    return saved.dto()
+    return setup.dto()
   }
 
   private fun checkEligibility(
