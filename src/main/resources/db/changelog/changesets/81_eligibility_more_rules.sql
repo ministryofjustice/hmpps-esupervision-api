@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:80_eligibility_more_rules-1 splitStatements:false
+--changeset hmpps:81_eligibility_more_rules-1 splitStatements:false
 
 insert into offender_eligibility_rule
 (rule_order, code, question, source, data_point, operator, comparison_value,
@@ -50,7 +50,7 @@ values
 
 --rollback delete from offender_eligibility_rule where rule_set = 'OFFENDER_ELIGIBILITY' and code in ('HAS_DEVICE_RESTRICTION','IS_TIER_MISSING','IS_PILOT_USER','ON_ACCREDITED_PROGRAMME','ON_YOUTH_SENTENCE');
 
---changeset hmpps:80_eligibility_more_rules-2 splitStatements:false
+--changeset hmpps:81_eligibility_more_rules-2 splitStatements:false
 
 -- update the message and position of existing rule
 update offender_eligibility_rule
