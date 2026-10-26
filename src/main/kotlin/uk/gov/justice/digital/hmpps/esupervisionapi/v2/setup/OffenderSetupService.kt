@@ -9,13 +9,17 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupCompletionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
@@ -25,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -41,16 +46,30 @@ import kotlin.jvm.optionals.getOrElse
 @Service
 class OffenderSetupPersistenceService(
   private val offenderRepository: OffenderRepository,
+  private val offenderSetupRepository: OffenderSetupRepository,
   private val checkinCreationService: CheckinCreationService,
   private val clock: Clock,
 ) {
-  data class Result(val checkin: UUID?)
+  data class CompletionResult(val checkin: UUID?)
+
+  /**
+   * @throws ConstraintViolationException if the offender or setup already exists
+   */
+  @Transactional
+  fun startOffenderSetup(setup: OffenderSetup) {
+    raiseOnConstraintViolation("CRN ${setup.offender.crn} already exists") {
+      offenderRepository.save(setup.offender)
+    }
+    raiseOnConstraintViolation("Setup with UUID ${setup.uuid} already exists") {
+      offenderSetupRepository.save(setup)
+    }
+  }
 
   /**
    * Saves the updated offender record and optionally creates a checkin.
    */
   @Transactional
-  fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): Result {
+  fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): CompletionResult {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender must be in VERIFIED status" }
     require(!createCheckin || offender.firstCheckin == LocalDate.now(clock)) { "createCheckin=true requires offender.firstCheckin to be today" }
 
@@ -65,7 +84,7 @@ class OffenderSetupPersistenceService(
     } else {
       null
     }
-    return Result(checkin = checkin?.uuid)
+    return CompletionResult(checkin = checkin?.uuid)
   }
 }
 
@@ -89,6 +108,7 @@ class OffenderSetupService(
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService,
   private val eligibilityChecker: EligibilityChecker,
+  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -96,13 +116,13 @@ class OffenderSetupService(
   fun findSetupByUuid(uuid: UUID): Optional<OffenderSetup> = offenderSetupRepository.findByUuid(uuid)
 
   /** Start offender setup (registration) Creates OffenderV2 and OffenderSetupV2 records */
-  @Transactional
   internal fun startOffenderSetup(offenderInfo: OffenderInfo): OffenderSetupDto {
     validateScheduleSettings(offenderInfo.mode, offenderInfo.checkinInterval)
     validateFirstCheckin(offenderInfo.mode, offenderInfo.firstCheckin)
     val now = clock.instant()
 
-    val offenderByCrn = offenderRepository.findByCrn(offenderInfo.crn)
+    val crn = offenderInfo.crn.trim().uppercase()
+    val offenderByCrn = offenderRepository.findByCrn(crn)
     val offender = if (offenderByCrn.isPresent) {
       // somebody tried to onboard this CRN in the past, update the record with submitted options
       val existing = offenderByCrn.get()
@@ -120,7 +140,7 @@ class OffenderSetupService(
     } else {
       Offender(
         uuid = UUID.randomUUID(),
-        crn = offenderInfo.crn.trim().uppercase(),
+        crn = crn,
         practitionerId = offenderInfo.practitionerId,
         status = OffenderStatus.INITIAL,
         firstCheckin = offenderInfo.firstCheckin,
@@ -133,8 +153,10 @@ class OffenderSetupService(
       )
     }
 
-    raiseOnConstraintViolation("CRN ${offenderInfo.crn} already exists") {
-      offenderRepository.save(offender)
+    if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
+      val contactDetails = ndiliusApiClient.getContactDetailsStrict(crn)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Contact details not found for CRN $crn")
+      checkEligibility(contactDetails, offenderInfo.eligibilityAnswers, offender)
     }
 
     val setup = OffenderSetup(
@@ -146,20 +168,28 @@ class OffenderSetupService(
       eligibilityChoice = offenderInfo.eligibilityChoice,
       rationale = offenderInfo.rationale,
     )
-
-    val saved =
-      raiseOnConstraintViolation("Setup with UUID ${offenderInfo.setupUuid} already exists") {
-        offenderSetupRepository.save(setup)
-      }
+    offenderSetupPersistenceService.startOffenderSetup(setup)
 
     LOGGER.info(
       "Started V2 offender setup: offender={}, crn={}, setup={}",
       offender.uuid,
-      offender.crn,
-      saved.uuid,
+      crn,
+      setup.uuid,
     )
 
-    return saved.dto()
+    return setup.dto()
+  }
+
+  private fun checkEligibility(
+    contactDetails: ContactDetails,
+    eligibility: EligibilityAnswers?,
+    offender: Offender,
+  ) {
+    val cache = makeCache(offender, contactDetails, eligibility)
+    val result = eligibilityChecker.check(offender, contactDetails.name, cache)
+    if (result.outcome != EligibilityCheckOutcome.ELIGIBLE) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, result.message ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"}")
+    }
   }
 
   /**
@@ -179,7 +209,7 @@ class OffenderSetupService(
    * Complete offender setup Verifies photo, changes status to VERIFIED, sends notifications, and
    * creates first checkin if due
    */
-  fun completeOffenderSetup(uuid: UUID): OffenderDto {
+  fun completeOffenderSetup(uuid: UUID, completion: OffenderSetupCompletionDto): OffenderDto {
     val setup = offenderSetupRepository.findByUuid(uuid).getOrElse {
       throw BadArgumentException("No setup for given uuid=$uuid")
     }
@@ -202,14 +232,9 @@ class OffenderSetupService(
     // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
     if (contactDetails != null) {
       try {
-        val outcome = eligibilityChecker.check(offender, contactDetails)
-        if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
-          throw ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "Offender ${offender.crn} not eligible: ${outcome.message ?: "Eligibility rule ${outcome.triggeredRuleCode ?: "UNKNOWN"} failed"}",
-          )
-        }
+        checkEligibility(contactDetails, completion.eligibilityAnswers, offender)
       } catch (e: EligibilityDataUnavailableException) {
+        if (e.source == "MANUAL") throw e
         LOGGER.info("Eligibility data unavailable for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
       } catch (e: ResourceNotFoundException) {
         LOGGER.info("Eligibility data not found for CRN {}, continuing with setup completion: {}", offender.crn, e.message)
