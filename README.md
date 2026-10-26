@@ -217,7 +217,18 @@ Run services with:
 docker compose pull && docker compose up
 ```
 
-will build the application and run it and HMPPS Auth within a local docker instance.
+will pull the latest published image of the application and run it and HMPPS Auth within a local docker instance.
+
+The docker image is based on the HMPPS base image
+([hmpps-eclipse-temurin](https://github.com/ministryofjustice/hmpps-base-container-images)) and expects the jar to
+be built outside of docker. To build an image from local changes:
+
+```bash
+BUILD_NUMBER=local ./gradlew clean assemble
+cp build/libs/*.jar .
+docker build --build-arg BUILD_NUMBER=local -t hmpps-esupervision-api:local .
+rm ./*.jar
+```
 
 ### Running the application in Intellij
 

@@ -527,4 +527,4 @@ springdoc:
     # webjar resource path (META-INF/resources/webjars/swagger-ui/<version>/). Any bump of the
     # swagger-ui webjar without this property makes /swagger-ui/index.html 404 in the running
     # app. Keep in lockstep with the org.webjars:swagger-ui pin in build.gradle.kts.
-    version: 5.32.14
+    version: 5.33.2
