@@ -41,13 +41,14 @@ WITH month_events AS (
     AND e.occurred_at <  p_end
 ),
 
+-- Provider descriptions are optional, so fall back to the code rather than dropping
+-- the provider (and its events) when none is recorded this month.
 providers_in_month AS (
   SELECT
     provider_code,
-    MAX(provider_description) AS provider_description
+    COALESCE(MAX(provider_description), provider_code) AS provider_description
   FROM month_events
   WHERE provider_code IS NOT NULL
-    AND provider_description IS NOT NULL
     AND provider_code <> excluded_provider_code
   GROUP BY provider_code
 ),
@@ -165,5 +166,5 @@ BEGIN
 END;
 $$;
 
-REFRESH MATERIALIZED VIEW stats_summary_provider_month;
-REFRESH MATERIALIZED VIEW total_feedback_monthly;
+REFRESH MATERIALIZED VIEW CONCURRENTLY stats_summary_provider_month;
+REFRESH MATERIALIZED VIEW CONCURRENTLY total_feedback_monthly;

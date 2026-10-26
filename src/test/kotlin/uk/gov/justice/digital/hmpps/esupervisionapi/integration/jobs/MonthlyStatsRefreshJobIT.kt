@@ -276,6 +276,26 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `refresh keeps a provider that has no description`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES
+        (1, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000001', 'P1', 'N03', NULL),
+        (2, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000002', 'P1', 'N03', NULL),
+        (3, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-11T10:00:00Z', 'X000001', 'P1', NULL, NULL)
+      """,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh(LocalDate.of(2026, 1, 1))
+
+    val provider = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "PROVIDER")
+      .single { it.providerCode == "N03" }
+    assertEquals(2, provider.totalSignedUp)
+    assertEquals(1, provider.totalActiveUsers)
+  }
+
+  @Test
   fun `scheduled refresh also refreshes the previous month`() {
     jdbcTemplate.update(
       """
