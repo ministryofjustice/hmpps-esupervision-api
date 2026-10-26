@@ -158,6 +158,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/79_update_provisional_tier_wording.sql
   - include:
-      file: db/changelog/changesets/80_eligibility_more_rules.sql
+      file: db/changelog/changesets/80_add_additional_feedback_questions.sql
   - include:
-      file: db/changelog/changesets/81_add_delius_outcome_code_to_eligibility_rules.sql
+      file: db/changelog/changesets/81_eligibility_more_rules.sql
+  - include:
+      file: db/changelog/changesets/82_add_delius_outcome_code_to_eligibility_rules.sql

@@ -36,6 +36,8 @@ class FeedbackTest : IntegrationTestBase() {
             "version": 1,
             "howEasy": "veryEasy",
             "gettingSupport": "yes",
+            "helpsFeelSupported": "yes",
+            "lessContactNeeded": "no",
             "improvements": [
               "findingOutAboutCheckIns",
               "textOrEmailNotifications",
@@ -57,6 +59,8 @@ class FeedbackTest : IntegrationTestBase() {
       .jsonPath("$.content.length()").isEqualTo(1)
       .jsonPath("$.content[0].feedback.howEasy").isEqualTo("veryEasy")
       .jsonPath("$.content[0].feedback.gettingSupport").isEqualTo("yes")
+      .jsonPath("$.content[0].feedback.helpsFeelSupported").isEqualTo("yes")
+      .jsonPath("$.content[0].feedback.lessContactNeeded").isEqualTo("no")
       .jsonPath("$.content[0].feedback.improvements[0]").isEqualTo("findingOutAboutCheckIns")
       .jsonPath("$.content[0].feedback.improvements[1]").isEqualTo("textOrEmailNotifications")
       .jsonPath("$.content[0].feedback.improvements[2]").isEqualTo("somethingElse")

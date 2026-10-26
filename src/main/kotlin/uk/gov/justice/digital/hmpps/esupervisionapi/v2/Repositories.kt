@@ -537,6 +537,10 @@ class StatsSummaryRepository(
           gettingSupportPct = parseJsonBigDecimalMap(rs.getString("getting_support_pct")),
           improvementsCounts = parseJsonMap(rs.getString("improvements_counts")),
           improvementsPct = parseJsonBigDecimalMap(rs.getString("improvements_pct")),
+          helpsFeelSupportedCounts = parseJsonMap(rs.getString("helps_feel_supported_counts")),
+          helpsFeelSupportedPct = parseJsonBigDecimalMap(rs.getString("helps_feel_supported_pct")),
+          lessContactNeededCounts = parseJsonMap(rs.getString("less_contact_needed_counts")),
+          lessContactNeededPct = parseJsonBigDecimalMap(rs.getString("less_contact_needed_pct")),
         )
       },
       fromMonth,
