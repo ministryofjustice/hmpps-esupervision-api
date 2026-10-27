@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:82_add_delius_outcome_code_to_eligibility_rules-1
+--changeset hmpps:83_add_delius_outcome_code_to_eligibility_rules-1
 
 alter table offender_eligibility_rule
     add column delius_outcome_code varchar(5);
