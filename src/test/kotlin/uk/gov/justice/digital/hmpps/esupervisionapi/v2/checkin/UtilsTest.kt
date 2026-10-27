@@ -102,10 +102,10 @@ class UtilsTest {
   }
 
   @Test
-  fun `active event number - does not choose when multiple events have no selection`() {
+  fun `active event number - preserves first-event fallback when no selection is saved`() {
     val offender = offenderTemplate.toEntity()
 
-    assertNull(activeEventNumber(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
   }
 
   @Test

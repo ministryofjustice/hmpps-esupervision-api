@@ -21,7 +21,7 @@ import java.time.temporal.ChronoUnit
 fun activeEventNumber(offender: ActiveEvent, details: ContactDetails): Long? = if (offender.currentEvent != null) {
   details.events.firstOrNull { it.number == offender.currentEvent }?.number
 } else {
-  details.events.singleOrNull()?.number
+  details.events.firstOrNull()?.number
 }
 
 /**
