@@ -37,15 +37,27 @@ class MonthlyStatsRefreshJob(
           .withDayOfMonth(1)
           .toLocalDate()
 
-      refresh(monthStart)
+      // The job runs once a day, so the previous month is refreshed too: otherwise events
+      // after the last run on a month's final day would never be counted.
+      refresh(monthStart.minusMonths(1), monthStart)
     } catch (e: Exception) {
       LOGGER.error("Stats Refresh Job failed", e)
     }
   }
 
-  fun refresh(monthStart: LocalDate) {
+  fun refresh(vararg monthStarts: LocalDate) {
     val overallStart = clock.instant()
+    monthStarts.forEach { refreshMonth(it) }
+    refreshViews()
 
+    LOGGER.info(
+      "Stats Refresh Job completed successfully, months={}, total duration={}",
+      monthStarts.toList(),
+      Duration.between(overallStart, clock.instant()),
+    )
+  }
+
+  private fun refreshMonth(monthStart: LocalDate) {
     val rangeStart =
       monthStart
         .atStartOfDay(clock.zone)
@@ -84,7 +96,9 @@ class MonthlyStatsRefreshJob(
       "Monthly feedback stats table refreshed successfully, took={}",
       Duration.between(monthlyFeedbackStart, monthlyFeedbackEnd),
     )
+  }
 
+  private fun refreshViews() {
     val feedbackMvStart = clock.instant()
     jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY $FEEDBACK_MONTHLY_VIEW_NAME")
     val feedbackMvEnd = clock.instant()
@@ -103,11 +117,6 @@ class MonthlyStatsRefreshJob(
       "Materialized view refreshed successfully: view={}, took={}",
       PROVIDER_MONTHLY_VIEW_NAME,
       Duration.between(monthlyMvStart, monthlyMvEnd),
-    )
-
-    LOGGER.info(
-      "Stats Refresh Job completed successfully, total duration={}",
-      Duration.between(overallStart, clock.instant()),
     )
   }
 
