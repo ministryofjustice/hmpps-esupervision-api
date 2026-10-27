@@ -48,7 +48,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
@@ -575,7 +574,7 @@ class OffenderResource(
       Only INACTIVE offenders can be reactivated.
       This endpoint performs the following actions:
       1. Updates the offender's status to VERIFIED.
-      2. Optionally updates the check in schedule (frequency and start date) and contact preferences.
+      2. Selects the active NDelius event and optionally updates the check in schedule (frequency and start date) and contact preferences.
          The start date is optional for AD_HOC check-ins and required for SCHEDULED check-ins.
       3. Sends a registration notification to the offender
       4. Automatically creates a check in record for the 'firstCheckin' date. 
@@ -610,6 +609,28 @@ class OffenderResource(
       )
     }
 
+    val selectedEventNumber = when {
+      request.currentEvent != null -> {
+        if (contactDetails.events.none { it.number == request.currentEvent }) {
+          throw ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Selected event ${request.currentEvent} is not active for offender ${offender.crn}",
+          )
+        }
+        request.currentEvent
+      }
+      offender.currentEvent != null && contactDetails.events.any { it.number == offender.currentEvent } -> offender.currentEvent
+      contactDetails.events.size == 1 -> contactDetails.events.single().number
+      contactDetails.events.isEmpty() -> throw ResponseStatusException(
+        HttpStatus.UNPROCESSABLE_CONTENT,
+        "Cannot reactivate ${offender.crn}: no active events in NDelius.",
+      )
+      else -> throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "A current event must be selected for offender ${offender.crn}",
+      )
+    }
+
     val requestedPreference = request.contactPreference?.contactPreference ?: offender.contactPreference
 
     when (requestedPreference) {
@@ -640,7 +661,7 @@ class OffenderResource(
     val partialEvent = PartialOffenderReactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(contactDetails),
-      currentEvent = activeEventNumber(offender, contactDetails),
+      currentEvent = selectedEventNumber,
       reason = request.reason,
     )
     offender.updatedAt = clock.instant()
@@ -1088,6 +1109,9 @@ data class ReactivateOffenderRequest(
   @field:Schema(description = "Eligibility answers", required = false)
   @field:Valid
   val eligibilityAnswers: EligibilityAnswers? = null,
+
+  @field:Schema(description = "Selected active NDelius event number. Required when multiple events are active and no existing selection remains active.")
+  val currentEvent: Long? = null,
 )
 
 /** Request to update offender check in schedule */

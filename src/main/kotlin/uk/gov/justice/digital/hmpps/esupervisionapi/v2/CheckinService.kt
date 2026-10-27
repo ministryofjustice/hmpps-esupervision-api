@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
@@ -32,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -59,6 +61,7 @@ class CheckinService(
   private val livenessSessionService: LivenessSessionService,
   private val livenessCredentialsService: LivenessCredentialsProvider,
   private val checkinPersistenceService: CheckinPersistenceService,
+  private val offenderDeactivationService: OffenderDeactivationService,
   @param:Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
   @param:Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
@@ -222,9 +225,22 @@ class CheckinService(
   fun submitCheckin(uuid: UUID, request: SubmitCheckinRequest): CheckinDto {
     val maybeCheckin = checkinPersistenceService.findCheckin(uuid)
     val checkin = validateCheckinForSubmission(uuid, maybeCheckin)
-    checkin.applyRequest(request, clock)
-
     val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val ineligibility = contactDetails?.let { checkinIneligibilityReason(checkin.offender, it) }
+    if (ineligibility != null) {
+      offenderDeactivationService.deactivateOffender(
+        offender = checkin.offender,
+        reason = ineligibility.auditNote,
+        contactDetails = contactDetails,
+        auditEventType = ineligibility.auditEventType,
+      )
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot submit check-in because ${ineligibility.description}.",
+      )
+    }
+
+    checkin.applyRequest(request, clock)
     val event = checkin.toCheckinSubmittedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
     checkinPersistenceService.checkinSubmission(checkin, event)
 

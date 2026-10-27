@@ -36,6 +36,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
@@ -54,6 +55,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetailsVerificationUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -70,6 +72,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -95,6 +98,7 @@ class CheckinServiceTest {
   private val livenessSessionService: LivenessSessionService = mock()
   private val livenessCredentialsProvider: LivenessCredentialsProvider = mock()
   private val checkinPersistenceService: CheckinPersistenceService = mock()
+  private val offenderDeactivationService: OffenderDeactivationService = mock()
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
@@ -127,6 +131,7 @@ class CheckinServiceTest {
     livenessSessionService,
     livenessCredentialsProvider,
     checkinPersistenceService,
+    offenderDeactivationService,
     uploadTtlMinutes,
     faceSimilarityThreshold,
     livenessConfidenceThreshold,
@@ -239,6 +244,45 @@ class CheckinServiceTest {
     assertNull(result.videoUrl, "Submission result should not contain media URLs")
     assertNull(result.snapshotUrl, "Submission result should not contain media URLs")
     verify(checkinPersistenceService).checkinSubmission(any(), any())
+  }
+
+  @Test
+  fun `submitCheckin - deactivates and rejects when selected event is no longer active`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender().apply { currentEvent = 1L }
+    val checkin = OffenderCheckin(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      checkinStartedAt = clock.instant(),
+    )
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(Event(2L, CodedDescription("X", "Another offence"), sentence = null)),
+    )
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
+    whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.submitCheckin(uuid, SubmitCheckinRequest(survey = emptyMap()))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertEquals(CheckinStatus.CREATED, checkin.status)
+    verify(offenderDeactivationService).deactivateOffender(
+      offender = eq(offender),
+      reason = eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      contactDetails = eq(contactDetails),
+      sensitive = eq(false),
+      auditEventType = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+    )
+    verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
   }
 
   @Test

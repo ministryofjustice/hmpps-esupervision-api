@@ -170,6 +170,45 @@ on this path; its body is currently a `TODO` and its CronJob is deployed `suspen
   including `JobLogV2` bookkeeping), add a constructor param + `when` branch to
   `BatchManager`, add a `BatchType` entry, and register it in `values.yaml`'s `batchjobs[]`.
 
+### Current Event Backfill
+
+`CurrentEventBackfillJob` is a one-off migration for verified offenders whose `current_event`
+is null. It fetches active events from NDelius and assigns the event with the latest known
+`expectedEndDate`. If no active sentenced event is returned, apply mode deactivates the offender
+through the existing no-active-events flow. Missing contact details or ambiguous end dates are
+reported as failures and left unchanged.
+
+The CronJob is suspended and the job defaults to dry-run. First trigger a dry run and review the
+logs, which list each proposed event assignment or deactivation:
+
+In the local NDelius stub, CRNs ending in `0` return two active sentences; `X000010` is a sample
+where event 2 has the later expected end date.
+
+```bash
+# Locally, using the stub profile:
+SPRING_PROFILES_ACTIVE=dev,stubrekog,local,stubndilius,stubtier,stubarns \
+BATCH_ENABLED=true \
+BATCH_TYPE=CURRENT_EVENT_BACKFILL \
+CURRENT_EVENT_BACKFILL_DRY_RUN=true \
+./gradlew bootRun
+
+# In a deployed namespace:
+kubectl create job --from=cronjob/batch-current-event-backfill current-event-backfill-dry-run-$(date +%s) -n <namespace>
+kubectl logs -f job/current-event-backfill-dry-run-<timestamp> -n <namespace>
+```
+
+After reviewing the output, enable apply mode only on the suspended CronJob and trigger one manual
+job. Restore dry-run mode afterward; do not unsuspend the CronJob:
+
+```bash
+kubectl set env cronjob/batch-current-event-backfill CURRENT_EVENT_BACKFILL_DRY_RUN=false -n <namespace>
+kubectl create job --from=cronjob/batch-current-event-backfill current-event-backfill-apply-$(date +%s) -n <namespace>
+kubectl set env cronjob/batch-current-event-backfill CURRENT_EVENT_BACKFILL_DRY_RUN=true -n <namespace>
+```
+
+The job only selects rows with a null `current_event`, so rerunning it does not overwrite existing
+selections. Any unresolved CRNs make the batch exit non-zero and can be reviewed before retrying.
+
 ---
 
 ## Job Logging

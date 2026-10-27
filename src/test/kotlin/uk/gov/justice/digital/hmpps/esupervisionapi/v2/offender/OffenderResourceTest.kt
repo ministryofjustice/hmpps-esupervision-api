@@ -44,6 +44,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
@@ -352,6 +353,75 @@ class OffenderResourceTest {
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
+  }
+
+  @Test
+  fun `reactivateOffender - persists the requested event when multiple events are active`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      currentEvent = anEvent.number
+      firstCheckin = LocalDate.now(clock).plusDays(3)
+    }
+    val request = ReactivateOffenderRequest(
+      requestedBy = "PRACT001",
+      reason = "Back on supervision",
+      currentEvent = 2L,
+    )
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      mobile = "07700900123",
+      events = listOf(anEvent, anEvent.copy(number = 2L)),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+    whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer { invocation ->
+      val partialEvent = invocation.getArgument<PartialOffenderReactivatedEvent>(1)
+      assertEquals(2L, partialEvent.currentEvent)
+      offender.status = OffenderStatus.VERIFIED
+      offender.currentEvent = partialEvent.currentEvent
+      OffenderReactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        currentEvent = partialEvent.currentEvent,
+        setup = mockSetupInfo(103L, UUID.randomUUID()),
+        reason = request.reason,
+      )
+    }
+
+    val result = resource.reactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(2L, offender.currentEvent)
+    assertEquals(2L, result.body?.currentEvent)
+  }
+
+  @Test
+  fun `reactivateOffender - requires an event choice when saved event is no longer active and multiple events remain`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply { currentEvent = 1L }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Back on supervision")
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      mobile = "07700900123",
+      events = listOf(anEvent.copy(number = 2L), anEvent.copy(number = 3L)),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.reactivateOffender(uuid, request)
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
   }
 
   @Test

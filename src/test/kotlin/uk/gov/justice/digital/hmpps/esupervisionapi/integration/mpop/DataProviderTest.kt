@@ -14,10 +14,25 @@ class DataProviderTest {
 
     Assertions.assertEquals(case1.practitioner, case2.practitioner)
     Assertions.assertNotEquals(case1.name, case2.name)
+    val sentence = case1.events.single().sentence
+    Assertions.assertNotNull(sentence)
+    Assertions.assertEquals(12, sentence?.length)
+    Assertions.assertEquals("Months", sentence?.lengthUnit)
+    Assertions.assertEquals(sentence?.date?.plusMonths(12), sentence?.expectedEndDate)
 
     val case3 = provider.provideCase("X002201")
     Assertions.assertEquals(case2.practitioner?.name, case3.practitioner?.name)
     Assertions.assertNotEquals(case2.practitioner?.localAdminUnit, case3.practitioner?.localAdminUnit)
+  }
+
+  @Test
+  fun `CRN ending in zero has two active sentences with different end dates`() {
+    val events = GeneratingStubDataProvider().provideCase("X000010").events
+
+    Assertions.assertEquals(listOf(2L, 1L), events.map { it.number })
+    Assertions.assertEquals(12, events[0].sentence?.length)
+    Assertions.assertEquals("Months", events[0].sentence?.lengthUnit)
+    Assertions.assertTrue(events[0].sentence!!.expectedEndDate!!.isAfter(events[1].sentence!!.expectedEndDate))
   }
 
   @Test

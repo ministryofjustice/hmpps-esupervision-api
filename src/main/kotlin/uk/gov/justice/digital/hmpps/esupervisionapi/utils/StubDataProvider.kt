@@ -105,10 +105,52 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
  *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
  *   request, "7" recalled and unlawfully at large, anything else standard supervision
+ * - CRNs ending in "0" return two active events; event 2 has the later expected sentence end date
  */
 class GeneratingStubDataProvider : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
     val parsed = parseCrn(crn)
+    val today = LocalDate.now(ZoneId.of("Europe/London"))
+    val events = if (crn.last() == '0') {
+      listOf(
+        Event(
+          2,
+          CodedDescription("04300", "Abstracting electricity - 04300"),
+          Event.Sentence(
+            date = today.minusMonths(6),
+            description = "Adult Custody < 12m",
+            expectedEndDate = today.plusMonths(6),
+            length = 12,
+            lengthUnit = "Months",
+          ),
+        ),
+        Event(
+          1,
+          CodedDescription("11800", "Night poaching - 11800"),
+          Event.Sentence(
+            date = today.minusMonths(3),
+            description = "SA2020 Community Order",
+            expectedEndDate = today.plusMonths(3),
+            length = 6,
+            lengthUnit = "Months",
+          ),
+        ),
+      )
+    } else {
+      listOf(
+        Event(
+          1,
+          CodedDescription("0001", "stealing candy"),
+          Event.Sentence(
+            date = today.minusMonths(6),
+            description = "Sentence description here",
+            expectedEndDate = today.plusMonths(6),
+            length = 12,
+            lengthUnit = "Months",
+          ),
+        ),
+      )
+    }
     return ContactDetails(
       crn = crn,
       name = Name(
@@ -140,16 +182,7 @@ class GeneratingStubDataProvider : StubDataProvider {
         unallocated = false,
         username = "practitioner.number${parsed.practitioner}",
       ),
-      events = listOf(
-        Event(
-          1,
-          CodedDescription("0001", "stealing candy"),
-          Event.Sentence(
-            LocalDate.now(ZoneId.of("Europe/London")).minusWeeks(90),
-            "Sentence description here",
-          ),
-        ),
-      ),
+      events = events,
     )
   }
 

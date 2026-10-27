@@ -39,6 +39,9 @@ enum class OffenderAuditEventType(val deliusOutcomeCode: String? = null) {
 
   /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
   OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA"),
+
+  /** Automated deactivation by a scheduled job because the POP's selected event is no longer active in NDelius. */
+  OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE("ESPNA"),
 }
 
 enum class CheckinAuditEventType {
@@ -223,6 +226,7 @@ class EventAuditService(
       OffenderAuditEventType.OFFENDER_DEACTIVATED,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
       -> buildAudit(
         eventType.name,
         offender.crn,

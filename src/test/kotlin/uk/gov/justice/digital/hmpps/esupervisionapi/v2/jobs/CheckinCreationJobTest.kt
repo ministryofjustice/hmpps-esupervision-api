@@ -120,6 +120,23 @@ class CheckinCreationJobTest {
   }
 
   @Test
+  fun `ineligible (selected event no longer active) - deactivates even when another event is active`() {
+    val offender = offender("X000004").apply { currentEvent = 1L }
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent.copy(number = 2L)))))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
+  }
+
+  @Test
   fun `a deactivation failure for one offender does not abort the rest of the run`() {
     val ineligible = offender("X000005")
     val eligible = offender("X000006")

@@ -54,6 +54,7 @@ class OffenderPersistenceService(
       offender.firstCheckin = event.offender.firstCheckin
       offender.checkinInterval = event.offender.checkinInterval?.duration
       offender.contactPreference = event.offender.contactPreference
+      offender.currentEvent = event.currentEvent
       offenderRepository.save(offender)
 
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)

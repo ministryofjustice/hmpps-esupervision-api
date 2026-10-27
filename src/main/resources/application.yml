@@ -54,6 +54,9 @@ app:
     migration-event-replay:
       cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
       batch-size: 50
+    current-event-backfill:
+      chunk-size: ${CURRENT_EVENT_BACKFILL_CHUNK_SIZE:100}
+      dry-run: ${CURRENT_EVENT_BACKFILL_DRY_RUN:true}
     # Resend check-in answers to NDelius for check-ins whose contact note was created
     # without them (ESUP-1956, pre-commit event publish bug). The work list is seeded
     # manually into the checkin_note_resend table. Disabled by default; enable per env

@@ -53,6 +53,16 @@ class UtilsTest {
   }
 
   @Test
+  fun `checkinIneligibilityReason - contact suspended takes priority over a missing saved selection`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+
+    assertEquals(
+      CheckinIneligibilityReason.CONTACT_SUSPENDED,
+      checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent.copy(number = 2L)), contactSuspended = true)),
+    )
+  }
+
+  @Test
   fun `checkinIneligibilityReason - no active events when events list is explicitly empty`() {
     assertEquals(
       CheckinIneligibilityReason.NO_ACTIVE_EVENTS,
@@ -75,16 +85,23 @@ class UtilsTest {
   }
 
   @Test
-  fun `checkinIneligibilityReason - cached selection does not deactivate when Delius events are missing`() {
+  fun `checkinIneligibilityReason - saved selection is ineligible when Delius returns no events`() {
     val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
-    assertNull(checkinIneligibilityReason(offender, contactDetails(events = emptyList())))
+
+    assertEquals(
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE,
+      checkinIneligibilityReason(offender, contactDetails(events = emptyList())),
+    )
   }
 
   @Test
-  fun `checkinIneligibilityReason - does not deactivate when selected event is missing but another is active`() {
+  fun `checkinIneligibilityReason - saved selection is ineligible when another event is active`() {
     val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
 
-    assertNull(checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent.copy(number = 2L)))))
+    assertEquals(
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE,
+      checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent.copy(number = 2L)))),
+    )
   }
 
   @Test
@@ -102,7 +119,30 @@ class UtilsTest {
   }
 
   @Test
-  fun `active event number - preserves first-event fallback when no selection is saved`() {
+  fun `active event number - selects event with latest expected end date when no selection is saved`() {
+    val offender = offenderTemplate.toEntity()
+    val earlierEndingEvent = eventEnding(1L, today.plusMonths(3))
+    val laterEndingEvent = eventEnding(2L, today.plusMonths(6))
+
+    assertEquals(2L, activeEventNumber(offender, contactDetails(events = listOf(earlierEndingEvent, laterEndingEvent))))
+  }
+
+  @Test
+  fun `active event number - does not guess when multiple sentences include an undated event`() {
+    val offender = offenderTemplate.toEntity()
+    val undatedEvent = eventEnding(2L, today.plusMonths(6)).copy(
+      sentence = Event.Sentence(
+        date = LocalDate.of(2026, 1, 1),
+        description = "Sentence without expected end date",
+        expectedEndDate = null,
+      ),
+    )
+
+    assertNull(activeEventNumber(offender, contactDetails(events = listOf(eventEnding(1L, today.plusMonths(3)), undatedEvent))))
+  }
+
+  @Test
+  fun `active event number - falls back to first event when no expected end dates are available`() {
     val offender = offenderTemplate.toEntity()
 
     assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
@@ -148,6 +188,14 @@ class UtilsTest {
     assertEquals(
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       CheckinIneligibilityReason.NO_ACTIVE_EVENTS.auditEventType,
+    )
+    assertEquals(
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditEventType,
+    )
+    assertEquals(
+      "ESPNA",
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditEventType.deliusOutcomeCode,
     )
   }
 

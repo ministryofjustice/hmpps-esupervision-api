@@ -131,6 +131,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
     assertNotNull(result)
     assertEquals(OffenderStatus.VERIFIED, result.offender.status)
+    assertEquals(1002L, offenderRepository.findById(offender.id).orElseThrow().currentEvent)
 
     val outboxItems = outboxItemRepository.findAll()
     assertEquals(1, outboxItems.size)

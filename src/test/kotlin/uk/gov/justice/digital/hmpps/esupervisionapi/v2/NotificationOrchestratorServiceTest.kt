@@ -686,6 +686,79 @@ class NotificationOrchestratorServiceTest {
         ),
       ),
     )
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - selected event no longer active uses automatic stopped template`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendDeactivationCompletedNotifications(
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+        setup = null,
+        activeEventNumber = null,
+      ),
+    )
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_REMOVED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      isNull(),
+      eq(
+        AdditionalInformation(
+          eventNumber = null,
+          setupId = null,
+          outcomeCode = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode,
+        ),
+      ),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - practitioner deactivation uses manual stopped template`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendDeactivationCompletedNotifications(
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+        setup = null,
+        activeEventNumber = null,
+      ),
+    )
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStopped),
+    )
   }
 
   @Test
