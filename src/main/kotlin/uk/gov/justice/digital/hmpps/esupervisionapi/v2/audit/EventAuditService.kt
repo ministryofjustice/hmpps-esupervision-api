@@ -39,6 +39,21 @@ enum class OffenderAuditEventType(val deliusOutcomeCode: String? = null) {
 
   /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
   OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA"),
+  ;
+
+  /**
+   * How this event changes the dashboard's active PoP count. Deliberately exhaustive, so a new
+   * event type must be classified here, and must also be added to the event type lists in the
+   * refresh_monthly_stats database function (MonthlyStatsRefreshJobIT checks they agree).
+   */
+  val activeCountChange: Int
+    get() = when (this) {
+      SETUP_COMPLETED, OFFENDER_REACTIVATED -> 1
+      OFFENDER_DEACTIVATED,
+      OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      -> -1
+    }
 }
 
 enum class CheckinAuditEventType {

@@ -4,10 +4,13 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.StatsSummaryRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.MonthlyStatsRefreshJob
 import java.math.BigDecimal
 import java.time.Clock
@@ -110,9 +113,9 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
       """
       INSERT INTO feedback (feedback, created_at)
       VALUES
-        ('{"version":1,"howEasy":"veryEasy","gettingSupport":"yes"}'::jsonb, '2026-01-08T10:00:00Z'),
-        ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-01-11T10:00:00Z'),
-        ('{"version":1,"gettingSupport":"no"}'::jsonb, '2026-02-01T10:00:00Z')
+        ('{"version":1,"howEasy":"veryEasy","gettingSupport":"yes","helpsFeelSupported":"yes","lessContactNeeded":"no"}'::jsonb, '2026-01-08T10:00:00Z'),
+        ('{"version":1,"gettingSupport":"no","helpsFeelSupported":"no"}'::jsonb, '2026-01-11T10:00:00Z'),
+        ('{"version":1,"gettingSupport":"no","helpsFeelSupported":"yes","lessContactNeeded":"maybe"}'::jsonb, '2026-02-01T10:00:00Z')
       """,
     )
 
@@ -154,6 +157,13 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(0, BigDecimal("0.5000").compareTo(feedbackSummary.gettingSupportPct["no"]))
     assertEquals(2L, feedbackSummary.improvementsCounts["notAnswered"])
     assertEquals(0, feedbackSummary.improvementsPct.size)
+    assertEquals(1L, feedbackSummary.helpsFeelSupportedCounts["yes"])
+    assertEquals(1L, feedbackSummary.helpsFeelSupportedCounts["no"])
+    assertEquals(0L, feedbackSummary.helpsFeelSupportedCounts["notAnswered"])
+    assertEquals(0, BigDecimal("0.5000").compareTo(feedbackSummary.helpsFeelSupportedPct["yes"]))
+    assertEquals(1L, feedbackSummary.lessContactNeededCounts["no"])
+    assertEquals(1L, feedbackSummary.lessContactNeededCounts["notAnswered"])
+    assertEquals(0, BigDecimal("1.0000").compareTo(feedbackSummary.lessContactNeededPct["no"]))
 
     val feedbackRows =
       jdbcTemplate.queryForObject(
@@ -165,7 +175,7 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         """,
         Long::class.java,
       )!!
-    assertEquals(3L, feedbackRows) // still 3 rows for January, even though improvements has no answers
+    assertEquals(5L, feedbackRows) // 3 original questions + 2 yes/no questions, even where improvements has no answers
 
     val allRow =
       jdbcTemplate.queryForList(
@@ -208,6 +218,112 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(1L, extendedFeedbackSummary.gettingSupportCounts["yes"])
     assertEquals(2L, extendedFeedbackSummary.gettingSupportCounts["no"])
     assertEquals(BigDecimal("0.6667"), extendedFeedbackSummary.gettingSupportPct["no"])
+    assertEquals(2L, extendedFeedbackSummary.helpsFeelSupportedCounts["yes"])
+    assertEquals(1L, extendedFeedbackSummary.helpsFeelSupportedCounts["no"])
+    assertEquals(BigDecimal("0.6667"), extendedFeedbackSummary.helpsFeelSupportedPct["yes"])
+    // an unexpected value is not an answer
+    assertEquals(null, extendedFeedbackSummary.lessContactNeededCounts["maybe"])
+    assertEquals(2L, extendedFeedbackSummary.lessContactNeededCounts["notAnswered"])
+  }
+
+  @Test
+  fun `refresh counts automated deactivations as deactivations`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES
+        (1, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
+        (2, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000002', 'P1', 'N03', 'Wales'),
+        (3, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales'),
+        (4, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000004', 'P1', 'N03', 'Wales'),
+        (5, 'OFFENDER_DEACTIVATED', '2026-01-10T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
+        (6, 'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED', '2026-01-11T10:00:00Z', 'X000002', 'P1', 'N03', 'Wales'),
+        (7, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-12T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales')
+      """,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh(LocalDate.of(2026, 1, 1))
+
+    val summary = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "ALL").first()
+    assertEquals(4, summary.totalSignedUp)
+    assertEquals(3, summary.totalInactiveUsers)
+    assertEquals(1, summary.totalActiveUsers)
+  }
+
+  @ParameterizedTest
+  @EnumSource(OffenderAuditEventType::class)
+  fun `refresh applies each offender audit event type's change to the active count`(eventType: OffenderAuditEventType) {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES (1, ?, '2026-01-05T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales')
+      """,
+      eventType.name,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh(LocalDate.of(2026, 1, 1))
+
+    val summary = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "ALL").first()
+    assertEquals(eventType.activeCountChange.toLong(), summary.totalActiveUsers)
+  }
+
+  @Test
+  fun `refresh attributes a deactivation without a provider to the CRN's previous provider`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES
+        (1, 'SETUP_COMPLETED', '2025-12-05T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
+        (2, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000002', 'P1', 'N04', 'Midlands'),
+        (3, 'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED', '2026-01-11T10:00:00Z', 'X000001', 'P1', NULL, NULL)
+      """,
+    )
+
+    val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
+    job.refresh(LocalDate.of(2025, 12, 1), LocalDate.of(2026, 1, 1))
+
+    val wales = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "PROVIDER")
+      .single { it.providerCode == "N03" }
+    assertEquals(1, wales.totalInactiveUsers)
+    assertEquals(0, wales.totalActiveUsers)
+  }
+
+  @Test
+  fun `refresh keeps a provider that has no description`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES
+        (1, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000001', 'P1', 'N03', NULL),
+        (2, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000002', 'P1', 'N03', NULL),
+        (3, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-11T10:00:00Z', 'X000001', 'P1', NULL, NULL)
+      """,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh(LocalDate.of(2026, 1, 1))
+
+    val provider = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "PROVIDER")
+      .single { it.providerCode == "N03" }
+    assertEquals(2, provider.totalSignedUp)
+    assertEquals(1, provider.totalActiveUsers)
+  }
+
+  @Test
+  fun `scheduled refresh also refreshes the previous month`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO event_audit_log_v2 (id, event_type, occurred_at, crn, practitioner_id, provider_code, provider_description)
+      VALUES (1, 'SETUP_COMPLETED', '2026-01-31T23:00:00Z', 'X000001', 'P1', 'N03', 'Wales')
+      """,
+    )
+
+    MonthlyStatsRefreshJob(jdbcTemplate, fixedClock).refresh()
+
+    val activated = jdbcTemplate.queryForObject(
+      "SELECT users_activated FROM monthly_stats WHERE month = '2026-01-01' AND provider_code = 'N03'",
+      Long::class.java,
+    )
+    assertEquals(1L, activated)
   }
 
   @Test

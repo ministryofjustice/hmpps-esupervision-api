@@ -158,6 +158,10 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/79_update_provisional_tier_wording.sql
   - include:
-      file: db/changelog/changesets/80_eligibility_more_rules.sql
+      file: db/changelog/changesets/80_add_additional_feedback_questions.sql
   - include:
-      file: db/changelog/changesets/81_one_created_checkin_per_day.sql
+      file: db/changelog/changesets/81_eligibility_more_rules.sql
+  - include:
+      file: db/changelog/changesets/82_fix_monthly_stats_counts.sql
+  - include:
+      file: db/changelog/changesets/83_one_created_checkin_per_day.sql
