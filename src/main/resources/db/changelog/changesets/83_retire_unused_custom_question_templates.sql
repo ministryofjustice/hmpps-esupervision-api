@@ -4,7 +4,7 @@
 -- The other fifteen SYSTEM templates are retired rather than deleted: question_list_item rows from
 -- previously assigned check ins still reference them, and historic check ins must keep rendering.
 
---changeset james.king:80_retire_unused_custom_question_templates-1 splitStatements:false
+--changeset james.king:83_retire_unused_custom_question_templates-1 splitStatements:false
 
 alter table question
     add column display_order integer null,
@@ -15,7 +15,7 @@ comment on column question.retired_at is 'When set, the template is no longer of
 
 --rollback alter table question drop column display_order, drop column retired_at;
 
---changeset james.king:80_retire_unused_custom_question_templates-2 splitStatements:false
+--changeset james.king:83_retire_unused_custom_question_templates-2 splitStatements:false
 
 create or replace function get_question_templates(p_lang text_language, p_author varchar(255), p_policy question_policy default 'CUSTOMISABLE'::question_policy)
     returns table(question_id bigint, policy question_policy, question_template text, response_format response_format, response_spec jsonb, example text)
@@ -64,7 +64,7 @@ $$;
 --rollback end;
 --rollback $$;
 
---changeset james.king:80_retire_unused_custom_question_templates-3 splitStatements:false
+--changeset james.king:83_retire_unused_custom_question_templates-3 splitStatements:false
 
 -- The five templates that stay, in the order they are offered.
 update question q
