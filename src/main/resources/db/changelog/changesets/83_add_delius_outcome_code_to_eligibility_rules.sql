@@ -56,9 +56,11 @@ end;
 
 alter table offender_eligibility_rule
     drop constraint offender_eligibility_rule_match_message_check,
-    drop constraint offender_eligibility_rule_no_match_message_check,
-    drop column message_on_match,
-    drop column message_on_no_match;
+    drop constraint offender_eligibility_rule_no_match_message_check
+-- the columns will be dropped in a separate PR
+--     drop column message_on_match,
+--     drop column message_on_no_match
+;
 
 -- the messages should fit the wording of the email message:
 update offender_eligibility_rule
