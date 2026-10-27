@@ -233,6 +233,57 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionService - identical bespoke text from two authors creates two questions`() {
+    val first = offenderTemplate.copy(crn = "A123460").toEntity()
+    val second = offenderTemplate.copy(uuid = UUID.randomUUID(), crn = "A123461").toEntity()
+    offenderRepository.saveAll(listOf(first, second))
+    val text = "Have you managed to speak to your landlord?"
+
+    val firstResp = questionService.assignCustomQuestions(
+      first.crn,
+      AssignCustomQuestionsRequest(author = "BARRY.WHITE", language = Language.ENGLISH, questions = listOf(CustomQuestionItem(text = text))),
+    )
+    val secondResp = questionService.assignCustomQuestions(
+      second.crn,
+      AssignCustomQuestionsRequest(author = "KENNY.POWERS", language = Language.ENGLISH, questions = listOf(CustomQuestionItem(text = text))),
+    )
+
+    for (listId in listOf(firstResp.listId, secondResp.listId)) {
+      val questions = questionService.offenderQuestionList(listId, Language.ENGLISH).questions
+      assertEquals(2 + 1, questions.size)
+      assertEquals(text, questions.last().question)
+    }
+    val barry = questionRepository.defineBespokeQuestion("BARRY.WHITE", text)
+    val kenny = questionRepository.defineBespokeQuestion("KENNY.POWERS", text)
+    assertNotEquals(barry, kenny)
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE").count { it.template == text })
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "KENNY.POWERS").count { it.template == text })
+  }
+
+  @Test
+  fun `QuestionService - bespoke text matching a SYSTEM template does not collide with it`() {
+    val offender = offenderTemplate.copy(crn = "A123462").toEntity()
+    offenderRepository.save(offender)
+    val systemTemplate = questionRepository.getQuestionTemplates(Language.ENGLISH).first()
+    // Bespoke text is trimmed before it is stored; some seeded templates carry trailing whitespace
+    val text = systemTemplate.template.trim()
+
+    val resp = questionService.assignCustomQuestions(
+      offender.crn,
+      AssignCustomQuestionsRequest(
+        author = "BARRY.WHITE",
+        language = Language.ENGLISH,
+        questions = listOf(CustomQuestionItem(text = text)),
+      ),
+    )
+
+    val questions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH).questions
+    assertEquals(text, questions.last().question)
+    val bespokeId = questionRepository.defineBespokeQuestion("BARRY.WHITE", text)
+    assertNotEquals(systemTemplate.id, bespokeId)
+  }
+
+  @Test
   fun `QuestionService - rejects custom questions without placeholders`() {
     val offender = offenderTemplate.copy(crn = "A123457").toEntity()
     offenderRepository.save(offender)

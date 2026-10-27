@@ -773,36 +773,18 @@ class QuestionRepository(
   /**
    * Stores a bespoke question written by a practitioner as a CUSTOMISABLE question they author,
    * so it never appears among the SYSTEM templates. Both language rows carry the text as written.
-   * Re-sending the same text for the same author reuses the existing row rather than adding one.
+   *
+   * The question's identity is derived from the author and the text together (see changeset 84),
+   * so the same text from two practitioners yields two questions, text matching a SYSTEM template
+   * does not collide with it, and re-sending the same text for the same author reuses the row.
    */
   fun defineBespokeQuestion(author: ExternalUserId, text: String): Long {
-    val existing = jdbcTemplate.query(
-      """
-      select q.id
-      from question q
-      join question_info qi on qi.question_id = q.id and qi.lang = 'en-GB'
-      where q.author = ?
-        and q.policy = 'CUSTOMISABLE'::question_policy
-        and q.retired_at is null
-        and qi.question_template = ?
-      order by q.id desc
-      limit 1
-      """,
-      { rs, _ -> rs.getLong("id") },
-      author,
-      text,
-    ).firstOrNull()
-    if (existing != null) {
-      return existing
-    }
     val spec = objectMapper.writeValueAsString(mapOf("hint" to BESPOKE_QUESTION_HINT, "placeholders" to emptyList<String>()))
     return requireNotNull(
       jdbcTemplate.queryForObject(
-        "select define_custom_question(?, ?, ?::jsonb, null, ?, ?::jsonb, null)",
+        "select define_bespoke_question(?, ?, ?::jsonb)",
         { rs, _ -> rs.getLong(1) },
         author,
-        text,
-        spec,
         text,
         spec,
       ),

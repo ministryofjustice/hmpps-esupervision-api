@@ -57,6 +57,26 @@ class ValidatorTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `AssignCustomQuestionsRequest validator - fail, bespoke question authored by SYSTEM`() {
+    val req = assignCustomQuestionsRequest.copy(
+      author = "SYSTEM",
+      questions = listOf(CustomQuestionItem(text = "Have you managed to speak to your landlord?")),
+    )
+    val result = validator.validate(req)
+    assertEquals(1, result.size)
+    assertEquals("Bespoke questions cannot be authored by SYSTEM", result.first().message)
+  }
+
+  @Test
+  fun `AssignCustomQuestionsRequest validator - pass, template question authored by SYSTEM`() {
+    val req = assignCustomQuestionsRequest.copy(
+      author = "SYSTEM",
+      questions = listOf(CustomQuestionItem(1, mapOf("placeholders" to mapOf("thing" to "school")))),
+    )
+    assertTrue(validator.validate(req).isEmpty())
+  }
+
+  @Test
   fun `AssignCustomQuestionsRequest validator - fail, text too long`() {
     val req = assignCustomQuestionsRequest.copy(questions = listOf(CustomQuestionItem(text = "a".repeat(1001))))
     assertTrue(validator.validate(req).isNotEmpty())

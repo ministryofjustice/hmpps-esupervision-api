@@ -25,6 +25,11 @@ class QuestionParamsValidator : ConstraintValidator<ValidQuestionParams, AssignC
       context.constraint("Up to three question allowed")
       return false
     }
+    if (value.author.equals(SYSTEM_AUTHOR, ignoreCase = true) && value.questions.any { it.hasBespokeText() }) {
+      // A SYSTEM-authored CUSTOMISABLE question would be offered to every practitioner as a template
+      context.constraint("Bespoke questions cannot be authored by $SYSTEM_AUTHOR")
+      return false
+    }
 
     val questions = value.questions
     var valid = true
@@ -34,6 +39,9 @@ class QuestionParamsValidator : ConstraintValidator<ValidQuestionParams, AssignC
     return valid
   }
 }
+
+/** The author of the shared question templates. Practitioner-written questions must never use it. */
+const val SYSTEM_AUTHOR = "SYSTEM"
 
 internal fun ConstraintValidatorContext.constraint(message: String) {
   this.disableDefaultConstraintViolation()
