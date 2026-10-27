@@ -697,10 +697,24 @@ class NotificationOrchestratorServiceTest {
 
   @Test
   fun `sendDeactivationCompletedNotifications - selected event no longer active uses automatic stopped template`() {
-    val offender = createOffender()
+    val offender = createOffender().apply { contactPreference = ContactPreference.EMAIL }
     val contactDetails = createContactDetailsWithEvents()
-    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
-    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinsStoppedAuto.name,
+      recipientType = "OFFENDER",
+      channel = "EMAIL",
+      offenderId = offender.id,
+      reference = "AUTO-STOP-001",
+      templateId = "automatic-stopped-email-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "test@test.com"
+    val notifyId = UUID.randomUUID()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(notifyId)
 
     service.sendDeactivationCompletedNotifications(
       OffenderDeactivatedEvent(
@@ -718,6 +732,19 @@ class NotificationOrchestratorServiceTest {
       eq(offender.contactPreference),
       eq(contactDetails),
       eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
+    verify(notifyGateway).send(
+      eq("EMAIL"),
+      eq("automatic-stopped-email-template"),
+      eq(recipient),
+      eq(mapOf("name" to "John Smith")),
+      eq(notification.reference),
+    )
+    verify(notificationPersistence).updateSingleNotificationStatus(
+      notification = eq(notification),
+      success = eq(true),
+      notifyId = eq(notifyId),
+      error = isNull(),
     )
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_REMOVED),

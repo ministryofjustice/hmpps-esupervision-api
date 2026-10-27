@@ -5,15 +5,19 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatcher
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -101,6 +105,30 @@ class OffenderDeactivationServiceTest {
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED, "contact suspended")
     verify(offenderPersistenceService).offenderDeactivation(any(), argThat(matcher))
+  }
+
+  @Test
+  fun `stale selected event deactivation publishes setup id and omits the inactive event number`() {
+    val offender = offender(OffenderStatus.VERIFIED).apply { currentEvent = 1L }
+    val setup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, clock.instant())
+    val details = contactDetails.copy(
+      events = listOf(Event(2L, CodedDescription("X", "Another offence"), sentence = null)),
+    )
+    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.of(setup))
+
+    service.deactivateOffender(
+      offender = offender,
+      reason = "Automatically deactivated: the selected probation event is no longer active in NDelius",
+      contactDetails = details,
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+    )
+
+    val eventCaptor = argumentCaptor<OffenderDeactivatedEvent>()
+    verify(offenderPersistenceService).offenderDeactivation(any(), eventCaptor.capture())
+    assertEquals(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE, eventCaptor.firstValue.auditEventType)
+    assertEquals("Automatically deactivated: the selected probation event is no longer active in NDelius", eventCaptor.firstValue.reason)
+    assertEquals(setup.setupId(), eventCaptor.firstValue.setup?.setupId)
+    assertEquals(null, eventCaptor.firstValue.activeEventNumber)
   }
 
   @Test
