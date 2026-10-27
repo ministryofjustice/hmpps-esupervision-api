@@ -35,11 +35,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
@@ -1365,6 +1367,11 @@ class CheckinServiceTest {
     name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
     email = "john@example.com",
     dateOfBirth = LocalDate.of(1980, 1, 1),
+    events = listOfNotNull(
+      offender.currentEvent?.let { eventNumber ->
+        Event(eventNumber, CodedDescription("X", "An offence"), sentence = null)
+      },
+    ),
   )
 
   private fun createdCheckin(offender: Offender, dueDate: LocalDate) = OffenderCheckin(
