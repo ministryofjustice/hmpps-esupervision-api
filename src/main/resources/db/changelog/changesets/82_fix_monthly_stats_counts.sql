@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:81_fix_monthly_stats_counts splitStatements:false
+--changeset hmpps:82_fix_monthly_stats_counts splitStatements:false
 -- Automated deactivations (contact suspended, no active events) were not subtracted
 -- from the active user count, so the dashboard over-reported active PoPs. Audit rows
 -- without a provider were also dropped; see month_events.

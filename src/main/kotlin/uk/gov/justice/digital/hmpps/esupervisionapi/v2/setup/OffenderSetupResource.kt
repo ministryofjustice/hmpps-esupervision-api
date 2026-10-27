@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupCompletionDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.LocationInfo
@@ -129,13 +130,16 @@ class OffenderSetupResource(
       sends notifications, and creates first check-in if due today.""",
   )
   @PostMapping("/{uuid}/complete")
-  fun completeSetup(@PathVariable uuid: UUID): ResponseEntity<OffenderDto> {
+  fun completeSetup(
+    @PathVariable uuid: UUID,
+    @RequestBody(required = false) @Valid completionInfo: OffenderSetupCompletionDto?,
+  ): ResponseEntity<OffenderDto> {
     val setup = offenderSetupService.findSetupByUuid(uuid)
     if (setup.isEmpty) {
       throw BadArgumentException("No setup found for uuid=$uuid")
     }
 
-    val offender = offenderSetupService.completeOffenderSetup(uuid)
+    val offender = offenderSetupService.completeOffenderSetup(uuid, completionInfo ?: OffenderSetupCompletionDto())
     LOGGER.info(
       "Completed V2 setup: setupUuid={}, offenderUuid={}, crn={}",
       uuid,

@@ -31,3 +31,7 @@ class EsupervisionEligibilityDataProvider(
 fun Offender.eligibilityData(): Map<String, Any?> = mapOf(
   "PILOT_USER" to this.inPilot,
 )
+
+val nonOnboardedEligibilityData: Map<String, Any?> = mapOf(
+  "PILOT_USER" to false,
+)
