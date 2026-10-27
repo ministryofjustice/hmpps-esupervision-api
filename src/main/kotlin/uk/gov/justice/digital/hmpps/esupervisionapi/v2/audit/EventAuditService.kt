@@ -44,7 +44,7 @@ enum class OffenderAuditEventType(
   OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA", automated = true),
 
   /** Automated deactivation because an eligibility rule no longer passes. */
-  OFFENDER_AUTO_DEACTIVATED_INELIGIBLE(automated = true)
+  OFFENDER_AUTO_DEACTIVATED_INELIGIBLE(automated = true),
   ;
 
   /**
@@ -58,8 +58,8 @@ enum class OffenderAuditEventType(
       OFFENDER_DEACTIVATED,
       OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
       OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
-      OFFENDER_AUTO_DEACTIVATED_INELIGIBLE
-        -> -1
+      OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
+      -> -1
     }
 }
 
