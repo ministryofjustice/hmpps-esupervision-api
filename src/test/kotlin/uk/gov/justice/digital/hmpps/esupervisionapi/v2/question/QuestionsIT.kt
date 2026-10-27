@@ -365,6 +365,51 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionService - bespoke questions are defined in sorted order and listed in request order`() {
+    val offender = offenderTemplate.copy(crn = "A123463").toEntity()
+    offenderRepository.save(offender)
+    val later = "Were you able to get to the gym this week?"
+    val earlier = "Have you managed to speak to your landlord?"
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(text = later), CustomQuestionItem(text = earlier)),
+    )
+
+    val resp = questionService.assignCustomQuestions(offender.crn, request)
+
+    // The list keeps the order the practitioner asked for
+    val questions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH).questions
+    assertEquals(2 + 2, questions.size)
+    assertEquals(listOf(later, earlier), questions.takeLast(2).map { it.question })
+    // Rows are created in text order regardless of request order, so concurrent assignments cannot deadlock
+    val laterId = questionRepository.defineBespokeQuestion("BARRY.WHITE", later)
+    val earlierId = questionRepository.defineBespokeQuestion("BARRY.WHITE", earlier)
+    assertTrue(earlierId < laterId, "expected '$earlier' (id=$earlierId) to be created before '$later' (id=$laterId)")
+  }
+
+  @Test
+  fun `QuestionService - rejects a retired template`() {
+    val offender = offenderTemplate.copy(crn = "A123464").toEntity()
+    offenderRepository.save(offender)
+    val retiredId = jdbcTemplate.queryForObject(
+      "select min(id) from question where author = 'SYSTEM' and policy = 'CUSTOMISABLE' and retired_at is not null",
+      Long::class.java,
+    )
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(id = retiredId, params = mapOf("placeholders" to mapOf("thing" to "school")))),
+    )
+
+    val exception = assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, request)
+    }
+
+    assertEquals("Question $retiredId has been retired", exception.message)
+  }
+
+  @Test
   fun `QuestionService - rejects custom questions without placeholders`() {
     val offender = offenderTemplate.copy(crn = "A123457").toEntity()
     offenderRepository.save(offender)

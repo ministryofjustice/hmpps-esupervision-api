@@ -167,17 +167,29 @@ class QuestionService(
    * A bespoke question has no template to point at, so a question row is created for the author
    * (or an identical earlier one reused) before the list is built. The returned request references
    * every question by id.
+   *
+   * Distinct texts are defined in sorted order. The whole assignment is one transaction, and an insert
+   * on uk_question_uuid waits for an uncommitted row with the same uuid, so two concurrent assignments
+   * that introduced the same new texts in different orders could otherwise deadlock.
    */
-  private fun materialiseBespokeQuestions(request: AssignCustomQuestionsRequest): AssignCustomQuestionsRequest = request.copy(
-    questions = request.questions.map { item ->
-      if (item.hasBespokeText()) {
-        val questionId = questionsRepository.defineBespokeQuestion(request.author, requireNotNull(item.text).trim())
-        CustomQuestionItem(id = questionId, params = mapOf("placeholders" to emptyMap<String, String>()))
-      } else {
-        item
-      }
-    },
-  )
+  private fun materialiseBespokeQuestions(request: AssignCustomQuestionsRequest): AssignCustomQuestionsRequest {
+    val idsByText = request.questions
+      .filter { it.hasBespokeText() }
+      .map { requireNotNull(it.text).trim() }
+      .distinct()
+      .sorted()
+      .associateWith { questionsRepository.defineBespokeQuestion(request.author, it) }
+    return request.copy(
+      questions = request.questions.map { item ->
+        if (item.hasBespokeText()) {
+          val questionId = idsByText.getValue(requireNotNull(item.text).trim())
+          CustomQuestionItem(id = questionId, params = mapOf("placeholders" to emptyMap<String, String>()))
+        } else {
+          item
+        }
+      },
+    )
+  }
 
   /**
    * Checks template questions against their templates. Bespoke questions have no template; the
@@ -188,13 +200,19 @@ class QuestionService(
     if (templateQuestions.isEmpty()) {
       return
     }
+    val templateIds = templateQuestions.map { requireNotNull(it.id) }
     val questionsById = questionsRepository
-      .getQuestionTemplates(templateQuestions.map { requireNotNull(it.id) }, request.language)
+      .getQuestionTemplates(templateIds, request.language)
       .associateBy { it.id }
+    // Retired templates stay resolvable for lists assigned before retirement but are no longer offered
+    val retiredIds = questionsRepository.findRetiredQuestionIds(templateIds)
     templateQuestions.forEach {
       val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
       if (template.policy != QuestionPolicy.CUSTOMISABLE) {
         throw BadArgumentException("Question ${it.id} is not customisable")
+      }
+      if (it.id in retiredIds) {
+        throw BadArgumentException("Question ${it.id} has been retired")
       }
       validateAgainstTemplates(it, template)
     }

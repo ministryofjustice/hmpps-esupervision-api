@@ -771,6 +771,20 @@ class QuestionRepository(
   }
 
   /**
+   * The subset of the given question ids whose template has been retired (see changeset 83).
+   */
+  fun findRetiredQuestionIds(questionIds: List<Long>): Set<Long> {
+    if (questionIds.isEmpty()) {
+      return emptySet()
+    }
+    return jdbcTemplate.queryForList(
+      "select id from question where id = any(?) and retired_at is not null",
+      Long::class.java,
+      questionIds.toTypedArray(),
+    ).filterNotNull().toSet()
+  }
+
+  /**
    * Stores a bespoke question written by a practitioner as a CUSTOMISABLE question they author,
    * so it never appears among the SYSTEM templates. Both language rows carry the text as written.
    *
