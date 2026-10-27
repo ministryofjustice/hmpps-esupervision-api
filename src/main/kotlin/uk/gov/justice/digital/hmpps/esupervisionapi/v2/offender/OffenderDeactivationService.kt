@@ -54,6 +54,7 @@ class OffenderDeactivationService(
   fun deactivateOffender(
     offender: Offender,
     reason: String,
+    practitionerMessageFragment: String?,
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,

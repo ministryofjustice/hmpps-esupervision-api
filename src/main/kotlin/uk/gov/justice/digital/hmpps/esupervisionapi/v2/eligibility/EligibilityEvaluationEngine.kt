@@ -20,6 +20,10 @@ data class EligibilityResult(
   val triggeredRuleCode: String?,
   /** NDelius outcome code for the rule that produced the terminal decision, when available. */
   val deliusOutcomeCode: String? = null,
+  /**
+   * A fragment of the message to be included in the notification for the practitioner.
+   */
+  val messageFragment: String? = null,
 )
 
 /** Thrown when a rule's source data can't be fetched or is missing - the engine throws rather than
@@ -126,8 +130,8 @@ class EligibilityEvaluationEngine(
     return evaluateRule(rule, crn, fetchCache).thenCompose { (outcome, message) ->
       when (outcome) {
         EligibilityRuleOutcome.CONTINUE -> evaluateFrom(ruleSet, rules, index + 1, crn, fetchCache)
-        EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code, rule.deliusOutcomeCode))
-        EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code, rule.deliusOutcomeCode))
+        EligibilityRuleOutcome.ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, message, rule.code, rule.deliusOutcomeCode, rule.ineligibilityAutoMessage))
+        EligibilityRuleOutcome.NOT_ELIGIBLE -> CompletableFuture.completedFuture(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, message, rule.code, rule.deliusOutcomeCode, rule.ineligibilityAutoMessage))
       }
     }
   }
@@ -159,7 +163,8 @@ class EligibilityEvaluationEngine(
           throw EligibilityDataUnavailableException(rule.code, rule.source, RuntimeException("Data point ${rule.dataPoint} missing for source=${rule.source}, rule=${rule.code}"))
         }
         val matched = EligibilityConditionEvaluator.evaluate(rule.operator, sourceData[rule.dataPoint], rule.comparisonValue)
-        if (matched) rule.outcomeOnMatch to rule.messageOnMatch else rule.outcomeOnNoMatch to rule.messageOnNoMatch
+        val outcome = if (matched) rule.outcomeOnMatch else rule.outcomeOnNoMatch
+        outcome to rule.ineligibilityMessage.takeIf { outcome == EligibilityRuleOutcome.NOT_ELIGIBLE }
       }
   }
 

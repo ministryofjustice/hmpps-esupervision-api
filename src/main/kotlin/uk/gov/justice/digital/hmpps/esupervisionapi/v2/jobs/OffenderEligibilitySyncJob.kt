@@ -100,6 +100,7 @@ class OffenderEligibilitySyncJob(
               offenderDeactivationService.deactivateOffender(
                 offender = offender,
                 reason = reason,
+                practitionerMessageFragment = result.messageFragment,
                 contactDetails = contactDetails,
                 auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
                 deliusOutcomeCode = result.deliusOutcomeCode,

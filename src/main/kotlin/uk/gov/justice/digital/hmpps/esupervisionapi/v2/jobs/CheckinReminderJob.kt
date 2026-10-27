@@ -122,9 +122,13 @@ class CheckinReminderJob(
                 // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
                 // Deactivation cancels this check-in, so it is NOT recorded as a reminder (notSent) below.
                 offenderDeactivationService.deactivateOffender(
-                  checkin.offender,
-                  ineligibility.auditNote,
-                  contactDetails,
+                  offender = checkin.offender,
+                  reason = ineligibility.auditNote,
+                  // "old" rules are a special case, so we massage the the wording a bit so it fits
+                  // '..., because ((name)) ((reason))', `practitionerMessageFragment` is used as ((reason))
+                  // Ugly, but once eligibility is live, we will remove the deactivation call from here.
+                  practitionerMessageFragment = "triggered the following rule: ${ineligibility.auditNote}",
+                  contactDetails = contactDetails,
                   auditEventType = ineligibility.auditEventType,
                 )
                 totalDeactivated += 1

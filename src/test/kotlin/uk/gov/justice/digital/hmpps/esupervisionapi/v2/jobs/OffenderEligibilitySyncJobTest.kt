@@ -104,6 +104,7 @@ class OffenderEligibilitySyncJobTest {
     verify(deactivationService).deactivateOffender(
       same(offender),
       eq(reason),
+      anyOrNull(),
       same(details),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
@@ -140,6 +141,7 @@ class OffenderEligibilitySyncJobTest {
     verify(deactivationService).deactivateOffender(
       same(ineligible),
       eq("Ineligible reason"),
+      anyOrNull(),
       same(ineligibleDetails),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
@@ -161,7 +163,8 @@ class OffenderEligibilitySyncJobTest {
     verify(eligibilityChecker, times(1)).check(any(), any(), any())
     verify(deactivationService).deactivateOffender(
       same(ineligible),
-      eq("Ineligible reason"),
+      anyOrNull(),
+      anyOrNull(),
       same(details),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),

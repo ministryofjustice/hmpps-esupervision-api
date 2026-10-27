@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
@@ -205,11 +206,16 @@ class NotificationOrchestratorService(
     if (details != null) {
       try {
         val personalisation =
-          mapOf(
+          mutableMapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
+            "practitionerName" to (details.practitioner?.name?.forename ?: "Practitioner"),
           )
+        if (event.auditEventType.automated) {
+          personalisation["reason"] = event.practitionerMessageFragment ?: event.reason ?: "eligibility rules"
+        }
 
-        val notificationsWithRecipients =
+        val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
+        notificationsWithRecipients.addAll(
           notificationPersistence.buildOffenderNotifications(
             offenderId = event.offenderId,
             crn = offender.crn,
@@ -220,7 +226,23 @@ class NotificationOrchestratorService(
             } else {
               NotificationType.OffenderCheckinsStopped
             },
-          )
+          ),
+        )
+
+        if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
+          if (event.auditEventType.automated) {
+            notificationsWithRecipients.addAll(
+              notificationPersistence.buildPractitionerNotifications(
+                offenderId = event.offenderId,
+                crn = offender.crn,
+                contactDetails = details.practitioner,
+                checkin = null,
+                notificationType = NotificationType.PractitionerCheckinsStoppedAuto,
+                practitionerId = offender.practitionerId,
+              ),
+            )
+          }
+        }
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)
       } catch (e: Exception) {

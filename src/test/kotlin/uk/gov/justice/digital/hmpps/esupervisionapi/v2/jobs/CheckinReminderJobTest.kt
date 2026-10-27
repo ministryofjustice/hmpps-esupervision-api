@@ -81,7 +81,7 @@ class CheckinReminderJobTest {
     job.process()
 
     verify(notificationService).sendCheckinReminderNotifications(same(checkin), eq(cd))
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
   }
 
   @Test
@@ -101,6 +101,7 @@ class CheckinReminderJobTest {
     verify(deactivationService).deactivateOffender(
       same(ineligible.offender),
       any(),
+      anyOrNull(),
       any(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
@@ -131,10 +132,11 @@ class CheckinReminderJobTest {
       deactivationService.deactivateOffender(
         any(),
         any(),
-        any(),
+        anyOrNull(),
         any(),
         any(),
         anyOrNull(),
+        anyOrNull<String>(),
       ),
     ).thenAnswer { it.getArgument<Offender>(0) }
   }

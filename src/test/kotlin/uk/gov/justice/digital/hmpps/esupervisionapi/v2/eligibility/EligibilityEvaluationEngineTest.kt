@@ -43,9 +43,8 @@ class EligibilityEvaluationEngineTest {
     dataPoint: String,
     operator: EligibilityRuleOperator,
     outcomeOnMatch: EligibilityRuleOutcome = EligibilityRuleOutcome.CONTINUE,
-    messageOnMatch: String? = null,
     outcomeOnNoMatch: EligibilityRuleOutcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
-    messageOnNoMatch: String? = "not eligible: $code",
+    ineligibilityMessage: String? = "not eligible: $code",
     deliusOutcomeCode: String? = null,
   ) = OffenderEligibilityRule(
     ruleSet = EligibilityEvaluationEngine.DEFAULT_RULE_SET,
@@ -57,9 +56,8 @@ class EligibilityEvaluationEngineTest {
     dataPoint = dataPoint,
     operator = operator,
     outcomeOnMatch = outcomeOnMatch,
-    messageOnMatch = messageOnMatch,
     outcomeOnNoMatch = outcomeOnNoMatch,
-    messageOnNoMatch = messageOnNoMatch,
+    ineligibilityMessage = ineligibilityMessage,
     createdAt = Instant.EPOCH,
     updatedAt = Instant.EPOCH,
   )
@@ -104,8 +102,6 @@ class EligibilityEvaluationEngineTest {
       "DECEASED_DATE",
       EligibilityRuleOperator.IS_NULL,
       outcomeOnMatch = EligibilityRuleOutcome.ELIGIBLE,
-      messageOnMatch = "eligible early",
-      messageOnNoMatch = null,
     )
     val secondRule = rule("NEVER_REACHED", 2.0, "NOMIS", "RECALL_STATUS", EligibilityRuleOperator.IS_NULL)
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
@@ -116,7 +112,7 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
-    assertEquals("eligible early", result.message)
+    assertNull(result.message)
     assertEquals("SHORTCUT", result.triggeredRuleCode)
     verify(nomisProvider, never()).fetch(org.mockito.kotlin.any())
   }

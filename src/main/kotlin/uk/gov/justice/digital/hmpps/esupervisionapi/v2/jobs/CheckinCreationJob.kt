@@ -196,9 +196,13 @@ class CheckinCreationJob(
     val offender = offenderRepository.findById(offenderInfo.id).getOrNull() ?: return
     try {
       offenderDeactivationService.deactivateOffender(
-        offender,
-        ineligibility.auditNote,
-        contactDetails,
+        offender = offender,
+        reason = ineligibility.auditNote,
+        // "old" rules are a special case, so we massage the the wording a bit so it fits
+        // '..., because ((name)) ((reason))', `practitionerMessageFragment` is used as ((reason))
+        // Ugly, but once eligibility is live, we will can delete this whole method.
+        practitionerMessageFragment = "triggered the following rule: ${ineligibility.auditNote}",
+        contactDetails = contactDetails,
         auditEventType = ineligibility.auditEventType,
       )
       metrics.deactivated += 1

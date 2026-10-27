@@ -62,7 +62,7 @@ class OffenderDeactivationServiceTest {
     whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
-    val result = service.deactivateOffender(offender, "no active events", contactDetails, sensitive = true)
+    val result = service.deactivateOffender(offender, "no active events", null, contactDetails, sensitive = true)
 
     assertEquals(OffenderStatus.INACTIVE, result.status)
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
@@ -78,6 +78,7 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender,
       "no active events",
+      null,
       contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
     )
@@ -95,6 +96,7 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender,
       "contact suspended",
+      null,
       contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
     )
@@ -106,7 +108,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `is a no-op when offender is not VERIFIED`() {
     val offender = offender(OffenderStatus.INACTIVE)
-    val result = service.deactivateOffender(offender, "in reset", contactDetails)
+    val result = service.deactivateOffender(offender, "in reset", null, contactDetails)
     assertEquals(OffenderStatus.INACTIVE, result.status)
   }
 
@@ -116,7 +118,7 @@ class OffenderDeactivationServiceTest {
     whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
-    service.deactivateOffender(offender, "no active events")
+    service.deactivateOffender(offender, "no active events", null)
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
     verify(offenderPersistenceService).offenderDeactivation(any(), argThat(matcher))

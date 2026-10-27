@@ -165,7 +165,17 @@ class OffenderResourceTest {
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())).thenAnswer {
+    whenever(
+      offenderDeactivationService.deactivateOffender(
+        any(),
+        any(),
+        anyOrNull(),
+        any(),
+        any(),
+        any(),
+        anyOrNull<String>(),
+      ),
+    ).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.INACTIVE
       o
@@ -179,6 +189,7 @@ class OffenderResourceTest {
     verify(offenderDeactivationService).deactivateOffender(
       eq(offender),
       eq("No longer on supervision"),
+      anyOrNull(),
       eq(contactDetails),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
@@ -204,15 +215,27 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())).thenAnswer {
-      it.getArgument<Offender>(0)
-    }
+    whenever(
+      offenderDeactivationService.deactivateOffender(
+        any(),
+        any(),
+        anyOrNull(),
+        any(),
+        any(),
+        anyOrNull(),
+        anyOrNull<String>(),
+      ),
+    )
+      .thenAnswer {
+        it.getArgument<Offender>(0)
+      }
 
     resource.deactivateOffender(uuid, request)
 
     verify(offenderDeactivationService).deactivateOffender(
       eq(offender),
       eq("Safety concerns disclosed"),
+      anyOrNull(),
       eq(contactDetails),
       eq(true),
       eq(OffenderAuditEventType.OFFENDER_DEACTIVATED),
@@ -291,7 +314,17 @@ class OffenderResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any(), anyOrNull())).thenAnswer {
+    whenever(
+      offenderDeactivationService.deactivateOffender(
+        any(),
+        any(),
+        anyOrNull(),
+        any(),
+        any(),
+        any(),
+        anyOrNull<String>(),
+      ),
+    ).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.INACTIVE
       o
@@ -1467,8 +1500,7 @@ class OffenderResourceTest {
     whenever(rule.source).thenReturn("NDELIUS")
     whenever(rule.code).thenReturn("IS_ALIVE")
     whenever(rule.dataPoint).thenReturn("DECEASED_DATE")
-    whenever(rule.messageOnMatch).thenReturn(null)
-    whenever(rule.messageOnNoMatch).thenReturn("Person is deceased")
+    whenever(rule.ineligibilityMessage).thenReturn("Person is deceased")
     whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
     whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(fetchCache)
     whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
@@ -1495,7 +1527,7 @@ class OffenderResourceTest {
         code = "IS_ALIVE",
         dataPoint = "DECEASED_DATE",
         outcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
-        message = null,
+        message = "Person is deceased",
       ),
       response.body?.allRules?.single(),
     )
