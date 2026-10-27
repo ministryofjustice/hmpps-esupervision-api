@@ -26,11 +26,20 @@ begin
         return v_question_id;
     end if;
 
+    -- Two transactions can both miss the lookup above. The insert is atomic on uk_question_uuid:
+    -- the loser waits for the winner to commit, inserts nothing, and returns the winner's row.
     insert into question (author, policy, uuid)
     values (p_author, 'CUSTOMISABLE'::question_policy, v_uuid)
+    on conflict (uuid) do nothing
     returning id into v_question_id;
 
+    if v_question_id is null then
+        select id into v_question_id from question where uuid = v_uuid;
+        return v_question_id;
+    end if;
+
     -- Both language rows carry the text as written: a bespoke question is asked verbatim.
+    -- Only the transaction that created the question writes them.
     insert into question_info (question_id, lang, question_template, response_format, response_spec, example)
     values
         (v_question_id, 'en-GB'::text_language, p_text, 'TEXT'::response_format, p_spec, null),

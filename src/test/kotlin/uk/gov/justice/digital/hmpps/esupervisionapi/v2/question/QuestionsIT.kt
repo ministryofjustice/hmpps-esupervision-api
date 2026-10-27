@@ -284,6 +284,87 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionRepository - concurrent definitions of the same bespoke question resolve to one row`() {
+    val text = "Have you managed to speak to your landlord?"
+    val threads = 8
+    val start = CountDownLatch(1)
+    val ids = java.util.concurrent.ConcurrentLinkedQueue<Long>()
+    val errors = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+    val workers = (1..threads).map {
+      Thread {
+        start.await()
+        try {
+          ids.add(questionRepository.defineBespokeQuestion("BARRY.WHITE", text))
+        } catch (e: Throwable) {
+          errors.add(e)
+        }
+      }.apply { start() }
+    }
+    start.countDown()
+    workers.forEach { it.join(TimeUnit.SECONDS.toMillis(30)) }
+
+    assertTrue(errors.isEmpty(), "concurrent bespoke definitions failed: $errors")
+    assertEquals(threads, ids.size)
+    assertEquals(1, ids.toSet().size, "expected one question id, got $ids")
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE").count { it.template == text })
+    assertEquals(2, jdbcTemplate.queryForObject("select count(*) from question_info where question_id = ?", Int::class.java, ids.first()))
+  }
+
+  @Test
+  fun `SYSTEM customisable templates - only the five retained are offered, in display order (English)`() {
+    val templates = questionRepository.getQuestionTemplates(Language.ENGLISH)
+    assertEquals(RETAINED_SYSTEM_TEMPLATES, templates.map { it.template.trim() })
+  }
+
+  @Test
+  fun `SYSTEM customisable templates - only the five retained are offered, in display order (Welsh)`() {
+    val english = questionRepository.getQuestionTemplates(Language.ENGLISH)
+    val welsh = questionRepository.getQuestionTemplates(Language.WELSH)
+    assertEquals(RETAINED_SYSTEM_TEMPLATES.size, welsh.size)
+    assertEquals(english.map { it.id }, welsh.map { it.id })
+  }
+
+  @Test
+  fun `SYSTEM customisable templates - fifteen are retired and none of them is offered`() {
+    val retiredIds = jdbcTemplate.queryForList(
+      "select id from question where author = 'SYSTEM' and policy = 'CUSTOMISABLE' and retired_at is not null",
+      Long::class.java,
+    )
+    assertEquals(15, retiredIds.size)
+    val offered = questionRepository.getQuestionTemplates(Language.ENGLISH).map { it.id }.toSet()
+    assertTrue(retiredIds.none { it in offered })
+  }
+
+  @Test
+  fun `QuestionService - an existing list referencing a retired template still renders`() {
+    val retired = jdbcTemplate.queryForMap(
+      """
+      select q.id, qi.question_template
+      from question q join question_info qi on qi.question_id = q.id and qi.lang = 'en-GB'
+      where q.author = 'SYSTEM' and q.policy = 'CUSTOMISABLE' and q.retired_at is not null
+      order by q.id limit 1
+      """,
+    )
+    val retiredId = (retired["id"] as Number).toLong()
+    val retiredTemplate = retired["question_template"] as String
+    assertTrue(retiredTemplate.contains("{{thing}}"))
+
+    // Assigned before the template was retired; the list row is still there
+    val listId = requireNotNull(
+      questionRepository.upsertQuestionList(
+        null,
+        "BARRY.WHITE",
+        listOf(mapOf("id" to retiredId, "params" to mapOf("placeholders" to mapOf("thing" to "school")))),
+      ),
+    )
+
+    val questions = questionService.offenderQuestionList(listId, Language.ENGLISH).questions
+    assertEquals(2 + 1, questions.size)
+    assertEquals(retiredTemplate.replace("{{thing}}", "school"), questions.last().question)
+    assertEquals(retiredTemplate, questionRepository.getListItems(listId, Language.ENGLISH).last().template.template)
+  }
+
+  @Test
   fun `QuestionService - rejects custom questions without placeholders`() {
     val offender = offenderTemplate.copy(crn = "A123457").toEntity()
     offenderRepository.save(offender)
@@ -728,6 +809,15 @@ class QuestionsIT(
     assertTrue(candidates.containsKey("A000003"))
   }
 }
+
+/** Changeset 83: the SYSTEM customisable templates still offered to practitioners, in display order. */
+private val RETAINED_SYSTEM_TEMPLATES = listOf(
+  "How is {{thing}}?",
+  "How has {{thing}} been going recently?",
+  "Have you been able to {{thing}}?",
+  "How have things been feeling {{thing}} recently?",
+  "Has anything changed with {{thing}} recently?",
+)
 
 private fun Clock.advanceBy(duration: Duration) = (this as MutableTestClock).advanceBy(duration)
 private fun Clock.advanceTo(instant: Instant) = (this as MutableTestClock).advanceTo(instant)
