@@ -162,4 +162,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/81_eligibility_more_rules.sql
   - include:
-      file: db/changelog/changesets/82_add_delius_outcome_code_to_eligibility_rules.sql
+      file: db/changelog/changesets/82_fix_monthly_stats_counts.sql
+  - include:
+      file: db/changelog/changesets/83_add_delius_outcome_code_to_eligibility_rules.sql

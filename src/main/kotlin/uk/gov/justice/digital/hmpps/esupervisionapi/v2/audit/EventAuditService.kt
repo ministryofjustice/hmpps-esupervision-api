@@ -44,7 +44,23 @@ enum class OffenderAuditEventType(
   OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA", automated = true),
 
   /** Automated deactivation because an eligibility rule no longer passes. */
-  OFFENDER_AUTO_DEACTIVATED_INELIGIBLE(automated = true),
+  OFFENDER_AUTO_DEACTIVATED_INELIGIBLE(automated = true)
+  ;
+
+  /**
+   * How this event changes the dashboard's active PoP count. Deliberately exhaustive, so a new
+   * event type must be classified here, and must also be added to the event type lists in the
+   * refresh_monthly_stats database function (MonthlyStatsRefreshJobIT checks they agree).
+   */
+  val activeCountChange: Int
+    get() = when (this) {
+      SETUP_COMPLETED, OFFENDER_REACTIVATED -> 1
+      OFFENDER_DEACTIVATED,
+      OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+      OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OFFENDER_AUTO_DEACTIVATED_INELIGIBLE
+        -> -1
+    }
 }
 
 enum class CheckinAuditEventType {
