@@ -703,6 +703,9 @@ interface CheckinNoteResendRepository : JpaRepository<CheckinNoteResend, Long> {
   fun findBySentAtIsNull(pageable: Pageable): List<CheckinNoteResend>
 }
 
+/** A template fetched by id for validation, with whether it has been retired from the offered list. */
+data class QuestionTemplateLookup(val template: QuestionTemplateDto, val retired: Boolean)
+
 /** Hint shown under a bespoke question, the same one the SYSTEM customisable templates carry. */
 const val BESPOKE_QUESTION_HINT = "Add as much detail as you feel comfortable with, so we can support you in the best way."
 
@@ -760,29 +763,16 @@ class QuestionRepository(
     return result
   }
 
-  fun getQuestionTemplates(questionIds: List<Long>, language: Language): List<QuestionTemplateDto> {
-    val result = jdbcTemplate.query(
-      "select * from get_question_templates_by_ids(?, ?::text_language)",
-      { rs, idx -> questionTemplateRowMapper(rs, idx) },
-      questionIds.toTypedArray(),
-      language.dbString,
-    )
-    return result
-  }
-
   /**
-   * The subset of the given question ids whose template has been retired (see changeset 83).
+   * Looks up templates by id for validating an assignment. Unlike the listings, this includes
+   * retired templates (see changeset 83) and says which they are, so the caller can reject them.
    */
-  fun findRetiredQuestionIds(questionIds: List<Long>): Set<Long> {
-    if (questionIds.isEmpty()) {
-      return emptySet()
-    }
-    return jdbcTemplate.queryForList(
-      "select id from question where id = any(?) and retired_at is not null",
-      Long::class.java,
-      questionIds.toTypedArray(),
-    ).filterNotNull().toSet()
-  }
+  fun getQuestionTemplates(questionIds: List<Long>, language: Language): List<QuestionTemplateLookup> = jdbcTemplate.query(
+    "select * from get_question_templates_by_ids(?, ?::text_language)",
+    { rs, idx -> QuestionTemplateLookup(toQuestionTemplate(rs, idx), retired = rs.getTimestamp("retired_at") != null) },
+    questionIds.toTypedArray(),
+    language.dbString,
+  )
 
   /**
    * Stores a bespoke question written by a practitioner as a CUSTOMISABLE question they author,

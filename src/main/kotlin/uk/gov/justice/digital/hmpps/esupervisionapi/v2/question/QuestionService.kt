@@ -194,27 +194,31 @@ class QuestionService(
   /**
    * Checks template questions against their templates. Bespoke questions have no template; the
    * request validator has already checked they carry text.
+   *
+   * Any CUSTOMISABLE question that has not been retired is accepted by id, whoever authored it. That
+   * includes a bespoke question another practitioner wrote: a client reusing ids it was given from
+   * an existing list must keep working when a colleague takes over, and the text is already visible
+   * to practitioners. The UI re-sends earlier bespoke questions as text, so they are redefined for
+   * the new author rather than shared.
    */
   private fun validateQuestionRequest(request: AssignCustomQuestionsRequest) {
     val templateQuestions = request.questions.filter { !it.hasBespokeText() }
     if (templateQuestions.isEmpty()) {
       return
     }
-    val templateIds = templateQuestions.map { requireNotNull(it.id) }
-    val questionsById = questionsRepository
-      .getQuestionTemplates(templateIds, request.language)
-      .associateBy { it.id }
-    // Retired templates stay resolvable for lists assigned before retirement but are no longer offered
-    val retiredIds = questionsRepository.findRetiredQuestionIds(templateIds)
+    val lookupsById = questionsRepository
+      .getQuestionTemplates(templateQuestions.map { requireNotNull(it.id) }, request.language)
+      .associateBy { it.template.id }
     templateQuestions.forEach {
-      val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
-      if (template.policy != QuestionPolicy.CUSTOMISABLE) {
+      val lookup = lookupsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
+      if (lookup.template.policy != QuestionPolicy.CUSTOMISABLE) {
         throw BadArgumentException("Question ${it.id} is not customisable")
       }
-      if (it.id in retiredIds) {
+      // Retired templates stay resolvable for lists assigned before retirement but are no longer offered
+      if (lookup.retired) {
         throw BadArgumentException("Question ${it.id} has been retired")
       }
-      validateAgainstTemplates(it, template)
+      validateAgainstTemplates(it, lookup.template)
     }
   }
 

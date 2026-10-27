@@ -392,9 +392,11 @@ class QuestionsIT(
   fun `QuestionService - rejects a retired template`() {
     val offender = offenderTemplate.copy(crn = "A123464").toEntity()
     offenderRepository.save(offender)
-    val retiredId = jdbcTemplate.queryForObject(
-      "select min(id) from question where author = 'SYSTEM' and policy = 'CUSTOMISABLE' and retired_at is not null",
-      Long::class.java,
+    val retiredId = requireNotNull(
+      jdbcTemplate.queryForObject(
+        "select min(id) from question where author = 'SYSTEM' and policy = 'CUSTOMISABLE' and retired_at is not null",
+        Long::class.java,
+      ),
     )
     val request = AssignCustomQuestionsRequest(
       author = "BARRY.WHITE",
@@ -407,6 +409,12 @@ class QuestionsIT(
     }
 
     assertEquals("Question $retiredId has been retired", exception.message)
+    // The by-ids lookup still resolves the retired template, it just flags it
+    val lookup = questionRepository.getQuestionTemplates(listOf(retiredId), Language.ENGLISH).single()
+    assertEquals(retiredId, lookup.template.id)
+    assertTrue(lookup.retired)
+    val offered = questionRepository.getQuestionTemplates(Language.ENGLISH).first()
+    assertFalse(questionRepository.getQuestionTemplates(listOf(offered.id), Language.ENGLISH).single().retired)
   }
 
   @Test
