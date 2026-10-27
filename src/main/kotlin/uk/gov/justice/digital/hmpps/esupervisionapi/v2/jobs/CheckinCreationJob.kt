@@ -110,13 +110,15 @@ class CheckinCreationJob(
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!
-            val ineligibility = checkinIneligibilityReason(info, contactDetails)
-            if (ineligibility != null) {
-              if (!appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
-                deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
-              }
-            } else {
+            if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
               prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
+            } else {
+              val ineligibility = checkinIneligibilityReason(info, contactDetails)
+              if (ineligibility != null) {
+                deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
+              } else {
+                prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
+              }
             }
           }
 
