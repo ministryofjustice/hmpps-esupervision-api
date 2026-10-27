@@ -1527,7 +1527,7 @@ class OffenderResourceTest {
         code = "IS_ALIVE",
         dataPoint = "DECEASED_DATE",
         outcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
-        message = null,
+        message = "Person is deceased",
       ),
       response.body?.allRules?.single(),
     )
