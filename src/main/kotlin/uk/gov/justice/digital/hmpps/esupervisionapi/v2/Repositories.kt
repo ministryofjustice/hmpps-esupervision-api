@@ -212,14 +212,14 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
             where status = 'INACTIVE' and id = :#{#offender.id}
             returning id, practitioner_id
         )
-        insert into offender_setup_v2 (uuid, offender_id, practitioner_id, created_at, started_at)
-        select uuid_generate_v4(), id, practitioner_id, now(), now()
+        insert into offender_setup_v2 (uuid, offender_id, practitioner_id, rationale, created_at, started_at)
+        select uuid_generate_v4(), id, practitioner_id, :rationale, now(), now()
         from updated_offender
         returning *
   """,
     nativeQuery = true,
   )
-  fun reactivateOffenderAndCreateSetup(offender: Offender): Optional<OffenderSetup>
+  fun reactivateOffenderAndCreateSetup(offender: Offender, rationale: String?): Optional<OffenderSetup>
 }
 
 /**
@@ -534,6 +534,10 @@ class StatsSummaryRepository(
           gettingSupportPct = parseJsonBigDecimalMap(rs.getString("getting_support_pct")),
           improvementsCounts = parseJsonMap(rs.getString("improvements_counts")),
           improvementsPct = parseJsonBigDecimalMap(rs.getString("improvements_pct")),
+          helpsFeelSupportedCounts = parseJsonMap(rs.getString("helps_feel_supported_counts")),
+          helpsFeelSupportedPct = parseJsonBigDecimalMap(rs.getString("helps_feel_supported_pct")),
+          lessContactNeededCounts = parseJsonMap(rs.getString("less_contact_needed_counts")),
+          lessContactNeededPct = parseJsonBigDecimalMap(rs.getString("less_contact_needed_pct")),
         )
       },
       fromMonth,

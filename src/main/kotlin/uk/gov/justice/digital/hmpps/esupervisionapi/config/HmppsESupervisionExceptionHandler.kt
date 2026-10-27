@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.config
 
 import jakarta.validation.ValidationException
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatus.BAD_REQUEST
 import org.springframework.http.HttpStatus.FORBIDDEN
 import org.springframework.http.HttpStatus.GONE
@@ -158,15 +159,19 @@ class HmppsESupervisionExceptionHandler {
     ).also { log.info("V2 Invalid offender setup state: {}", e.message) }
 
   @ExceptionHandler(EligibilityDataUnavailableException::class)
-  fun handleEligibilityDataUnavailableException(e: EligibilityDataUnavailableException): ResponseEntity<ErrorResponse> = ResponseEntity
-    .status(SERVICE_UNAVAILABLE)
-    .body(
-      ErrorResponse(
-        status = SERVICE_UNAVAILABLE,
-        userMessage = e.message,
-        developerMessage = e.message,
-      ),
-    ).also { log.warn("Eligibility data unavailable: {}", e.message) }
+  fun handleEligibilityDataUnavailableException(e: EligibilityDataUnavailableException): ResponseEntity<ErrorResponse> {
+    val status = if (e.source == "MANUAL") HttpStatus.UNPROCESSABLE_CONTENT else SERVICE_UNAVAILABLE
+    return ResponseEntity
+      .status(status)
+      .body(
+        ErrorResponse(
+          // when manual data was expected but not provided, we make it the client's fault
+          status = status,
+          userMessage = e.message,
+          developerMessage = e.message,
+        ),
+      ).also { log.warn("Eligibility data unavailable: {}", e.message) }
+  }
 
   // The client has already logged the sanitised cause at ERROR.
   @ExceptionHandler(PersonalDetailsVerificationUnavailableException::class)

@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
@@ -15,6 +16,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.ValidEligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.serialization.LocalDateDeserializer
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidQuestionParams
@@ -275,6 +277,22 @@ data class OffenderDto(
 // V2 Offender Setup DTOs
 // ========================================
 
+/**
+ * Eligibility information supplied by the practitioner.
+ *
+ * Information contained here is not yet available in a convenient API,
+ * so needs to be supplied manually.
+ *
+ * A null value means the practitioner was not asked this question.
+ * accreditedProgramme and youthSentence must either both be null or both be non-null.
+ */
+@ValidEligibilityAnswers
+data class EligibilityAnswers(
+  val accreditedProgramme: Boolean?,
+  val deviceRestriction: Boolean,
+  val youthSentence: Boolean?,
+)
+
 /** V2 Offender information for starting setup V2 does not store PII - only CRN */
 data class OffenderInfo(
   @field:Schema(description = "Setup UUID", required = true) val setupUuid: UUID,
@@ -300,6 +318,15 @@ data class OffenderInfo(
   val eligibilityChoice: EligibilityChoice? = null,
   @field:Schema(description = "Rationale for decision to sign up a POP for checkins", required = false)
   val rationale: String? = null,
+  @field:Schema(description = "Eligibility answers", required = false)
+  @field:Valid
+  val eligibilityAnswers: EligibilityAnswers? = null,
+)
+
+data class OffenderSetupCompletionDto(
+  @field:Schema(description = "Eligibility answers", required = false)
+  @field:Valid
+  val eligibilityAnswers: EligibilityAnswers? = null,
 )
 
 /** V2 Offender setup DTO (response) */

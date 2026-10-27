@@ -5,10 +5,13 @@ import jakarta.validation.Validation
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -51,6 +54,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine.Companion.DEFAULT_RULE_SET
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
@@ -71,6 +75,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 
 class OffenderResourceTest {
 
@@ -339,7 +345,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -387,7 +393,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -482,7 +488,7 @@ class OffenderResourceTest {
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -509,7 +515,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
@@ -541,7 +547,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
@@ -587,7 +593,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
@@ -631,7 +637,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
@@ -680,7 +686,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     resource.reactivateOffender(uuid, request)
@@ -720,7 +726,7 @@ class OffenderResourceTest {
         reason = request.reason,
       )
     }
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
     val result = resource.reactivateOffender(uuid, request)
@@ -748,14 +754,14 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Contact suspended", "SUSPENDED_CODE"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
     }
 
-    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, exception.statusCode)
     verify(checkinCreationService, times(0)).createCheckin(any(), any(), any())
     verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
   }
@@ -777,14 +783,14 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(eligibilityChecker.check(any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "No active events", "NO_EVENTS"))
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.reactivateOffender(uuid, request)
     }
 
-    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, exception.statusCode)
     verify(offenderPersistenceService, times(0)).offenderReactivation(any(), any())
   }
 
@@ -1369,7 +1375,7 @@ class OffenderResourceTest {
     val response = resource.getEligibilityByCrn(crn).join()
 
     assertEquals(HttpStatus.OK, response.statusCode)
-    assertEquals(EligibilityCheckOutcome.ELIGIBLE, response.body?.outcome)
+    assertEquals(EligibilityCheckResponseOutcome.ELIGIBLE, response.body?.outcome)
     assertNull(response.body?.message)
   }
 
@@ -1392,8 +1398,59 @@ class OffenderResourceTest {
     val response = resource.getEligibilityByCrn(crn).join()
 
     assertEquals(HttpStatus.OK, response.statusCode)
-    assertEquals(EligibilityCheckOutcome.INELIGIBLE, response.body?.outcome)
+    assertEquals(EligibilityCheckResponseOutcome.INELIGIBLE, response.body?.outcome)
     assertEquals("Not eligible: person is recorded as deceased.", response.body?.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = [0, 1, 2])
+  fun `getEligibilityByCrn - missing manual data - returns unknown`(wrapperCount: Int) {
+    val crn = "X123456"
+    var failure: Throwable = EligibilityDataUnavailableException("DEVICE_RESTRICTION", "MANUAL", RuntimeException("Missing data"))
+    repeat(wrapperCount) { failure = CompletionException(failure) }
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      CompletableFuture.failedFuture(failure),
+    )
+
+    val response = resource.getEligibilityByCrn(crn).join()
+
+    assertEquals(HttpStatus.OK, response.statusCode)
+    assertEquals(EligibilityCheckResponseOutcome.UNKNOWN, response.body?.outcome)
+  }
+
+  @Test
+  fun `getEligibilityByCrn - missing upstream data - propagates failure`() {
+    val crn = "X123456"
+    val failure = EligibilityDataUnavailableException("IS_ALIVE", "NDELIUS", RuntimeException("Source unavailable"))
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      CompletableFuture.failedFuture(failure),
+    )
+
+    val thrown = assertThrows(CompletionException::class.java) { resource.getEligibilityByCrn(crn).join() }
+
+    assertSame(failure, thrown.cause)
+  }
+
+  @Test
+  fun `getEligibilityByCrn - unrelated failure - propagates original wrapper`() {
+    val crn = "X123456"
+    val failure = CompletionException(IllegalStateException("Evaluation failed"))
+    whenever(ndiliusApiClient.getContactDetailsStrict(any())).thenReturn(makeContactDetails(crn))
+    whenever(eligibilityEvaluationEngine.activeRuleSet).thenReturn(DEFAULT_RULE_SET)
+    whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
+    whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
+      CompletableFuture.failedFuture(failure),
+    )
+
+    val thrown = assertThrows(CompletionException::class.java) { resource.getEligibilityByCrn(crn).join() }
+
+    assertSame(failure, thrown)
   }
 
   private fun makeContactDetails(crn: String): ContactDetails = ContactDetails(crn = crn, name = Name("John", "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1))
@@ -1435,7 +1492,7 @@ class OffenderResourceTest {
         code = "IS_ALIVE",
         dataPoint = "DECEASED_DATE",
         outcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
-        message = "Person is deceased",
+        message = null,
       ),
       response.body?.allRules?.single(),
     )

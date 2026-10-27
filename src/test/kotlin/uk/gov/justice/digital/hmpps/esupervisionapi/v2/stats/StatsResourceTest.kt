@@ -61,6 +61,11 @@ class StatsResourceTest {
     val totalsUpdatedAt = Instant.parse("2026-01-28T12:02:00.020175Z")
     val providerUpdatedAt = Instant.parse("2026-01-28T12:02:00.000000Z")
 
+    val helpsFeelSupportedCounts = mapOf("yes" to 3L, "no" to 1L, "notAnswered" to 2L)
+    val helpsFeelSupportedPct = mapOf("yes" to BigDecimal("0.7500"), "no" to BigDecimal("0.2500"))
+    val lessContactNeededCounts = mapOf("yes" to 1L, "no" to 1L, "notAnswered" to 4L)
+    val lessContactNeededPct = mapOf("yes" to BigDecimal("0.5000"), "no" to BigDecimal("0.5000"))
+
     val totals =
       StatsTotalsDto(
         totalSignedUp = 10,
@@ -86,6 +91,10 @@ class StatsResourceTest {
         gettingSupportPct = gettingSupportPct,
         improvementsCounts = improvementsCounts,
         improvementsPct = improvementsPct,
+        helpsFeelSupportedCounts = helpsFeelSupportedCounts,
+        helpsFeelSupportedPct = helpsFeelSupportedPct,
+        lessContactNeededCounts = lessContactNeededCounts,
+        lessContactNeededPct = lessContactNeededPct,
         pctSignedUpOfTotal = 1.0,
         updatedAt = totalsUpdatedAt,
         medianHoursToComplete = 0.02,
@@ -191,6 +200,10 @@ class StatsResourceTest {
     assertEquals(gettingSupportPct, total.gettingSupportPct)
     assertEquals(improvementsCounts, total.improvementsCounts)
     assertEquals(improvementsPct, total.improvementsPct)
+    assertEquals(helpsFeelSupportedCounts, total.helpsFeelSupportedCounts)
+    assertEquals(helpsFeelSupportedPct, total.helpsFeelSupportedPct)
+    assertEquals(lessContactNeededCounts, total.lessContactNeededCounts)
+    assertEquals(lessContactNeededPct, total.lessContactNeededPct)
 
     // providers mapping
     assertEquals(2, body.providers.size)
