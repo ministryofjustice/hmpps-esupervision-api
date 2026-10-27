@@ -78,6 +78,7 @@ class OffenderDeactivationService(
       reason = reason,
       sensitive = sensitive,
       deliusOutcomeCode = deliusOutcomeCode ?: auditEventType.deliusOutcomeCode,
+      practitionerMessageFragment = practitionerMessageFragment,
     )
 
     offenderPersistenceService.offenderDeactivation(offender, event)
