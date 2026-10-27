@@ -11,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequ
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
@@ -130,7 +131,7 @@ class QuestionService(
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
-    val listId = createQuestionList(request)
+    val listId = createQuestionList(materialiseBespokeQuestions(request))
 
     val assigned = questionListAssignmentRepository.createAssignment(offender.id, listId) == 1
     LOG.info("Question list assignment for offender={}, listId={} assigned?={}", crn, listId, assigned)
@@ -158,15 +159,39 @@ class QuestionService(
       if (!item.params.containsKey("placeholders")) {
         throw BadArgumentException("Question ${item.id} is missing placeholders")
       }
-      mapOf("id" to item.id, "params" to item.params)
+      mapOf("id" to requireNotNull(item.id), "params" to item.params)
     },
   ) ?: throw RuntimeException("Failed to create question list.")
 
+  /**
+   * A bespoke question has no template to point at, so a question row is created for the author
+   * (or an identical earlier one reused) before the list is built. The returned request references
+   * every question by id.
+   */
+  private fun materialiseBespokeQuestions(request: AssignCustomQuestionsRequest): AssignCustomQuestionsRequest = request.copy(
+    questions = request.questions.map { item ->
+      if (item.hasBespokeText()) {
+        val questionId = questionsRepository.defineBespokeQuestion(request.author, requireNotNull(item.text).trim())
+        CustomQuestionItem(id = questionId, params = mapOf("placeholders" to emptyMap<String, String>()))
+      } else {
+        item
+      }
+    },
+  )
+
+  /**
+   * Checks template questions against their templates. Bespoke questions have no template; the
+   * request validator has already checked they carry text.
+   */
   private fun validateQuestionRequest(request: AssignCustomQuestionsRequest) {
+    val templateQuestions = request.questions.filter { !it.hasBespokeText() }
+    if (templateQuestions.isEmpty()) {
+      return
+    }
     val questionsById = questionsRepository
-      .getQuestionTemplates(request.questions.map { it.id }, request.language)
+      .getQuestionTemplates(templateQuestions.map { requireNotNull(it.id) }, request.language)
       .associateBy { it.id }
-    request.questions.forEach {
+    templateQuestions.forEach {
       val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
       if (template.policy != QuestionPolicy.CUSTOMISABLE) {
         throw BadArgumentException("Question ${it.id} is not customisable")

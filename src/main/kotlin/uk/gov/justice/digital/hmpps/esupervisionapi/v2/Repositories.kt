@@ -699,6 +699,9 @@ interface CheckinNoteResendRepository : JpaRepository<CheckinNoteResend, Long> {
   fun findBySentAtIsNull(pageable: Pageable): List<CheckinNoteResend>
 }
 
+/** Hint shown under a bespoke question, the same one the SYSTEM customisable templates carry. */
+const val BESPOKE_QUESTION_HINT = "Add as much detail as you feel comfortable with, so we can support you in the best way."
+
 @Repository
 class QuestionRepository(
   private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
@@ -732,7 +735,7 @@ class QuestionRepository(
    */
   fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
-      "select * from get_question_templates(?::text_language, ?) order by question_id",
+      "select * from get_question_templates(?::text_language, ?)",
       { rs, idx -> questionTemplateRowMapper(rs, idx) },
       language.dbString,
       author,
@@ -761,6 +764,45 @@ class QuestionRepository(
       language.dbString,
     )
     return result
+  }
+
+  /**
+   * Stores a bespoke question written by a practitioner as a CUSTOMISABLE question they author,
+   * so it never appears among the SYSTEM templates. Both language rows carry the text as written.
+   * Re-sending the same text for the same author reuses the existing row rather than adding one.
+   */
+  fun defineBespokeQuestion(author: ExternalUserId, text: String): Long {
+    val existing = jdbcTemplate.query(
+      """
+      select q.id
+      from question q
+      join question_info qi on qi.question_id = q.id and qi.lang = 'en-GB'
+      where q.author = ?
+        and q.policy = 'CUSTOMISABLE'::question_policy
+        and q.retired_at is null
+        and qi.question_template = ?
+      order by q.id desc
+      limit 1
+      """,
+      { rs, _ -> rs.getLong("id") },
+      author,
+      text,
+    ).firstOrNull()
+    if (existing != null) {
+      return existing
+    }
+    val spec = objectMapper.writeValueAsString(mapOf("hint" to BESPOKE_QUESTION_HINT, "placeholders" to emptyList<String>()))
+    return requireNotNull(
+      jdbcTemplate.queryForObject(
+        "select define_custom_question(?, ?, ?::jsonb, null, ?, ?::jsonb, null)",
+        { rs, _ -> rs.getLong(1) },
+        author,
+        text,
+        spec,
+        text,
+        spec,
+      ),
+    )
   }
 
   /**

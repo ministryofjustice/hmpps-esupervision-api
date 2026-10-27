@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.BESPOKE_QUESTION_HINT
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
@@ -204,6 +205,31 @@ class QuestionsIT(
 
     val offenderQuestions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH)
     assertEquals(2 + 1, offenderQuestions.questions.size)
+  }
+
+  @Test
+  fun `QuestionService - assign bespoke question - success`() {
+    val offender = offenderTemplate.copy(crn = "A123459").toEntity()
+    offenderRepository.save(offender)
+    val text = "Have you managed to speak to your landlord?"
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(text = text)),
+    )
+
+    val resp = questionService.assignCustomQuestions(offender.crn, request)
+
+    val offenderQuestions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH)
+    assertEquals(2 + 1, offenderQuestions.questions.size)
+    assertEquals(text, offenderQuestions.questions.last().question)
+    assertEquals(BESPOKE_QUESTION_HINT, offenderQuestions.questions.last().spec["hint"])
+
+    // Authored by the practitioner, so it is not offered as a SYSTEM template
+    assertTrue(questionRepository.getQuestionTemplates(Language.ENGLISH).none { it.template == text })
+    // Sending the same text again reuses the question rather than adding another
+    val reused = questionRepository.defineBespokeQuestion("BARRY.WHITE", text)
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE").count { it.id == reused })
   }
 
   @Test
