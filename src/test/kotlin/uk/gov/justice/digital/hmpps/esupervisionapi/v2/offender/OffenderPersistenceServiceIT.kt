@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
@@ -27,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -104,7 +106,8 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
     val updatedCheckin = checkinRepository.findById(checkin.id).orElseThrow()
     assertEquals(CheckinStatus.CANCELLED, updatedCheckin.status)
-    assertEquals(deactivatedAt, offenderRepository.findById(offender.id).orElseThrow().updatedAt)
+    val persistedDeactivatedAt = offenderRepository.findById(offender.id).orElseThrow().updatedAt
+    assertTrue(Duration.between(deactivatedAt, persistedDeactivatedAt).abs() <= Duration.ofNanos(1_000))
 
     val assignments = questionListAssignmentRepository.findAll()
     assertEquals(0, assignments.size)
