@@ -121,7 +121,9 @@ class QuestionService(
       CheckinMode.SCHEDULED -> null
     }
 
+    // an upcoming check-in isn't a check-in yet: until it is activated, treat today as if it didn't exist
     val checkins = checkinRepository.findAllByOffenderAndDueDate(offender, today)
+      .filter { it.status != CheckinStatus.SCHEDULED }
     val isDueToday = when (offender.mode) {
       CheckinMode.SCHEDULED -> isCheckinDay(offender, today)
       CheckinMode.AD_HOC -> offender.firstCheckin == today

@@ -169,3 +169,5 @@ databaseChangeLog:
       file: db/changelog/changesets/85_scheduled_checkin_activation.sql
   - include:
       file: db/changelog/changesets/86_checkin_delius_events.sql
+  - include:
+      file: db/changelog/changesets/87_one_scheduled_checkin_per_offender.sql

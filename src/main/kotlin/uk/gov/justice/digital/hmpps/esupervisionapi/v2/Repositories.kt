@@ -69,6 +69,9 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
           from offender_checkin_v2
           where offender_id = :offenderId
             and due_date > (cast(:today as date) - '3 day'::interval)
+            -- an upcoming check-in moves with the schedule, and a cancelled one (possibly
+            -- future-dated, if it was upcoming) is gone, so neither blocks a change
+            and status not in ('SCHEDULED', 'CANCELLED')
         )
         update offender_v2 o
         set first_checkin = :newDueDate,
@@ -319,6 +322,17 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findAllByOffenderIdAndDueDate(offenderId: Long, dueDate: LocalDate): List<OffenderCheckin>
+
+  /** The offenders' upcoming (SCHEDULED) check-ins due on [dueDate]. */
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    WHERE c.offender.id IN :offenderIds
+      AND c.dueDate = :dueDate
+      AND c.status = 'SCHEDULED'
+    """,
+  )
+  fun findScheduledForOffenders(offenderIds: Collection<Long>, dueDate: LocalDate): List<OffenderCheckin>
 
   /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(
