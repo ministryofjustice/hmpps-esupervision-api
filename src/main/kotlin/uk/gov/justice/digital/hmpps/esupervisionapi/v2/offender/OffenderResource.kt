@@ -628,7 +628,7 @@ class OffenderResource(
         request.currentEvent
       }
       offender.currentEvent != null && contactDetails.events.any { it.number == offender.currentEvent } -> offender.currentEvent
-      offender.currentEvent != null -> throw ResponseStatusException(
+      offender.currentEvent != null && !eventSelectionEnabled -> throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "Selected event ${offender.currentEvent} is not active for offender ${offender.crn}",
       )
@@ -746,31 +746,10 @@ is *today*.""",
       )
     }
 
-    val offenderBefore = offender.toSummaryDto()
-    if (request.checkinSchedule != null) {
-      val mode = request.checkinSchedule.mode ?: offender.mode
-      validate(request.checkinSchedule, offender.mode)
-      val scheduleUpdate = request.checkinSchedule
-      offender.mode = mode
-      validateFirstCheckin(mode, scheduleUpdate.firstCheckin)
-      offender.firstCheckin = scheduleUpdate.firstCheckin
-      offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
-      offender.updatedAt = clock.instant()
-    }
-
-    if (request.contactPreference != null) {
-      val preferenceUpdate = request.contactPreference
-      if (offender.contactPreference != preferenceUpdate.contactPreference) {
-        offender.contactPreference = preferenceUpdate.contactPreference
-        offender.updatedAt = clock.instant()
-      }
-    }
-
-    var currentEventUpdated = false
     if (request.currentEvent != null && !appConfig.esup2305DeliusEventSelection) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Delius event selection is not enabled")
     }
-    if (request.currentEvent != null && offender.currentEvent != request.currentEvent) {
+    if (request.currentEvent != null) {
       val contactDetails = ndiliusApiClient.getContactDetailsStrict(offender.crn)
       if (contactDetails?.events?.none { it.number == request.currentEvent } != false) {
         throw ResponseStatusException(
@@ -778,33 +757,68 @@ is *today*.""",
           "Selected event ${request.currentEvent} is not active for offender ${offender.crn}",
         )
       }
-      offender.currentEvent = request.currentEvent
-      offender.updatedAt = clock.instant()
-      currentEventUpdated = true
     }
 
-    // Stopping check-ins cancels the day's check-in but keeps the row, so only a check-in that is
-    // still open or completed counts as occupying today; a cancelled or expired one does not.
-    val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())
-      .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
-    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
-    if (request.checkinSchedule != null || request.contactPreference != null || currentEventUpdated) {
-      val saved = offenderRepository.save(offender)
-      val offenderAfter = saved.toSummaryDto()
-      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
-        if (!todayIsOccupied) {
-          checkinCreationService.createCheckin(
-            offenderAfter.uuid,
-            requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
-            request.checkinSchedule.requestedBy,
-          )
-        }
-        LOGGER.debug("{} check-in for offender {}", if (todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
+    val updateResult = transactionTemplate.execute<UpdatedOffenderDetails?> {
+      val lockedOffender = offenderRepository.findByIdForUpdate(offender.id).orElse(null)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+      entityManager.refresh(lockedOffender)
+      if (lockedOffender.status == OffenderStatus.INACTIVE) {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Cannot update offender with status ${lockedOffender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+        )
       }
-      return ResponseEntity.ok(offenderAfter)
-    } else {
-      return ResponseEntity.noContent().build()
+
+      val offenderBefore = lockedOffender.toSummaryDto()
+      var changed = false
+      request.checkinSchedule?.let { schedule ->
+        val mode = schedule.mode ?: lockedOffender.mode
+        validate(schedule, lockedOffender.mode)
+        lockedOffender.mode = mode
+        validateFirstCheckin(mode, schedule.firstCheckin)
+        lockedOffender.firstCheckin = schedule.firstCheckin
+        lockedOffender.checkinInterval = schedule.checkinInterval?.duration
+        changed = true
+      }
+
+      request.contactPreference?.let { preferenceUpdate ->
+        if (lockedOffender.contactPreference != preferenceUpdate.contactPreference) {
+          lockedOffender.contactPreference = preferenceUpdate.contactPreference
+          changed = true
+        }
+      }
+
+      if (request.currentEvent != null && lockedOffender.currentEvent != request.currentEvent) {
+        lockedOffender.currentEvent = request.currentEvent
+        changed = true
+      }
+
+      if (!changed) return@execute null
+
+      lockedOffender.updatedAt = clock.instant()
+      val saved = offenderRepository.save(lockedOffender)
+      // Stopping check-ins cancels today's row but leaves it in the database, so only open or
+      // completed check-ins occupy today.
+      val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(saved, clock.today())
+        .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
+      UpdatedOffenderDetails(offenderBefore, saved.toSummaryDto(), todayIsOccupied)
     }
+
+    val result = updateResult ?: return ResponseEntity.noContent().build()
+    val offenderAfter = result.offenderAfter
+    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
+    if (request.checkinSchedule != null && newFirstCheckinDateIsToday(result.offenderBefore, offenderAfter, clock.today())) {
+      if (!result.todayIsOccupied) {
+        checkinCreationService.createCheckin(
+          offenderAfter.uuid,
+          requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
+          request.checkinSchedule.requestedBy,
+        )
+      }
+      LOGGER.debug("{} check-in for offender {}", if (result.todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
+    }
+    return ResponseEntity.ok(offenderAfter)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -1174,6 +1188,12 @@ data class OffenderDetailsUpdateRequest(
   val checkinSchedule: CheckinScheduleUpdateRequest? = null,
   val contactPreference: ContactPreferenceUpdateRequest? = null,
   val currentEvent: Long? = null,
+)
+
+private data class UpdatedOffenderDetails(
+  val offenderBefore: OffenderSummaryDto,
+  val offenderAfter: OffenderSummaryDto,
+  val todayIsOccupied: Boolean,
 )
 
 private fun newFirstCheckinDateIsToday(

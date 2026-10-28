@@ -56,7 +56,9 @@ class OffenderPersistenceService(
     val persistedEvent = event.copy(
       offender = currentOffender.dto(event.offender.personalDetails),
       setup = setup,
-      activeEventNumber = event.activeEventNumber,
+      activeEventNumber = event.offender.personalDetails?.let {
+        activeEventNumber(currentOffender, it, appConfig.esup2305DeliusEventSelection)
+      },
     )
     offenderRepository.save(currentOffender)
     if (setup != null) {

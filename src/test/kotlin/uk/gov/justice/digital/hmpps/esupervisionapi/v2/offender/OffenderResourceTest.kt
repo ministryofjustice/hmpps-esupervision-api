@@ -429,6 +429,46 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `reactivateOffender - selects the sole active event when the saved event is stale`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
+      currentEvent = 1L
+      firstCheckin = LocalDate.now(clock).plusDays(1)
+    }
+    val request = ReactivateOffenderRequest(requestedBy = "PRACT001", reason = "Back on supervision")
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      mobile = "07700900123",
+      events = listOf(anEvent.copy(number = 2L)),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+    whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer { invocation ->
+      val partialEvent = invocation.getArgument<PartialOffenderReactivatedEvent>(1)
+      assertEquals(2L, partialEvent.currentEvent)
+      offender.status = OffenderStatus.VERIFIED
+      offender.currentEvent = partialEvent.currentEvent
+      OffenderReactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        currentEvent = partialEvent.currentEvent,
+        setup = mockSetupInfo(104L, UUID.randomUUID()),
+        reason = request.reason,
+      )
+    }
+
+    val result = resource.reactivateOffender(uuid, request)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(2L, result.body?.currentEvent)
+    assertEquals(2L, offender.currentEvent)
+  }
+
+  @Test
   fun `reactivateOffender - with schedule update - applies new schedule but does not create check in`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.INACTIVE).apply {
@@ -977,6 +1017,7 @@ class OffenderResourceTest {
     offender.firstCheckin = LocalDate.now(clock).minusDays(3)
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
     val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
@@ -999,6 +1040,7 @@ class OffenderResourceTest {
       events = listOf(anEvent, anEvent.copy(number = 2L)),
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
     whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
 
@@ -1008,6 +1050,30 @@ class OffenderResourceTest {
     assertEquals(2L, result.body?.currentEvent)
     assertEquals(2L, offender.currentEvent)
     verify(offenderRepository).save(offender)
+  }
+
+  @Test
+  fun `updateDetails - does not save stale offender after deactivation during Delius lookup`() {
+    val uuid = UUID.randomUUID()
+    val loadedOffender = createOffender(uuid, OffenderStatus.VERIFIED).apply { currentEvent = 1L }
+    val deactivatedOffender = createOffender(uuid, OffenderStatus.INACTIVE).apply { currentEvent = 1L }
+    val contactDetails = ContactDetails(
+      crn = loadedOffender.crn,
+      name = Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(anEvent, anEvent.copy(number = 2L)),
+    )
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(loadedOffender))
+    whenever(offenderRepository.findByIdForUpdate(loadedOffender.id)).thenReturn(Optional.of(deactivatedOffender))
+    whenever(ndiliusApiClient.getContactDetailsStrict(loadedOffender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(uuid, OffenderDetailsUpdateRequest(currentEvent = 2L))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderRepository, never()).save(any())
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
   }
 
   @Test
@@ -1128,6 +1194,7 @@ class OffenderResourceTest {
 
   private fun updateFirstCheckinToToday(offender: Offender): ResponseEntity<OffenderSummaryDto> {
     whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
     val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
     return resource.updateDetails(offender.uuid, OffenderDetailsUpdateRequest(scheduleUpdate))
@@ -1170,6 +1237,7 @@ class OffenderResourceTest {
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
     val result = resource.updateDetails(uuid, OffenderDetailsUpdateRequest(checkinSchedule = null))
@@ -1184,6 +1252,7 @@ class OffenderResourceTest {
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
     val scheduleUpdate = CheckinScheduleUpdateRequest(
@@ -1219,6 +1288,7 @@ class OffenderResourceTest {
     }
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
     val preferenceUpdate = ContactPreferenceUpdateRequest("XYZ0111", ContactPreference.EMAIL)
