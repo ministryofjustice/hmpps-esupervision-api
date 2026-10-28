@@ -16,9 +16,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -27,19 +24,15 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.Optional
 import java.util.UUID
 
 class OffenderDeactivationServiceTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-10T10:00:00Z"), ZoneId.of("UTC"))
-  private val offenderRepository: OffenderRepository = mock()
-  private val offenderSetupRepository: OffenderSetupRepository = mock()
   private val offenderPersistenceService: OffenderPersistenceService = mock()
 
   private val service = OffenderDeactivationService(
     clock,
-    offenderSetupRepository,
     offenderPersistenceService,
   )
 
@@ -63,8 +56,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `deactivates a VERIFIED offender - status, audit and notification`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
-    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+    stubSuccessfulPersistence()
 
     val result = service.deactivateOffender(offender, "no active events", contactDetails, sensitive = true)
 
@@ -76,8 +68,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `records the supplied audit event type (automated deactivation)`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
-    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+    stubSuccessfulPersistence()
 
     service.deactivateOffender(
       offender,
@@ -93,8 +84,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `propagates the contact-suspended outcome code (automated deactivation)`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
-    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+    stubSuccessfulPersistence()
 
     service.deactivateOffender(
       offender,
@@ -108,13 +98,12 @@ class OffenderDeactivationServiceTest {
   }
 
   @Test
-  fun `stale selected event deactivation publishes setup id and omits the inactive event number`() {
+  fun `stale selected event deactivation records its reason and omits the inactive event number`() {
     val offender = offender(OffenderStatus.VERIFIED).apply { currentEvent = 1L }
-    val setup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, clock.instant())
     val details = contactDetails.copy(
       events = listOf(Event(2L, CodedDescription("X", "Another offence"), sentence = null)),
     )
-    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.of(setup))
+    stubSuccessfulPersistence()
 
     service.deactivateOffender(
       offender = offender,
@@ -127,7 +116,7 @@ class OffenderDeactivationServiceTest {
     verify(offenderPersistenceService).offenderDeactivation(any(), eventCaptor.capture())
     assertEquals(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE, eventCaptor.firstValue.auditEventType)
     assertEquals("Automatically deactivated: the selected probation event is no longer active in NDelius", eventCaptor.firstValue.reason)
-    assertEquals(setup.setupId(), eventCaptor.firstValue.setup?.setupId)
+    assertEquals(null, eventCaptor.firstValue.setup)
     assertEquals(null, eventCaptor.firstValue.activeEventNumber)
   }
 
@@ -141,8 +130,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `passes null contact details through when not supplied by caller`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
-    whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+    stubSuccessfulPersistence()
 
     service.deactivateOffender(offender, "no active events")
 
@@ -163,4 +151,10 @@ class OffenderDeactivationServiceTest {
     updatedAt = clock.instant(),
     contactPreference = ContactPreference.PHONE,
   )
+
+  private fun stubSuccessfulPersistence() {
+    whenever(offenderPersistenceService.offenderDeactivation(any(), any())).thenAnswer {
+      it.getArgument<Offender>(0).apply { status = OffenderStatus.INACTIVE }
+    }
+  }
 }

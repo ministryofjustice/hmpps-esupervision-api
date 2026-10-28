@@ -1181,6 +1181,7 @@ private fun OffenderCheckin.toCheckinSubmittedEvent(
   checkin = this.dto(contactDetails, clock = clock, checkinWindow = checkinWindow, videoUrl = videoUrl, snapshotUrl = snapshotUrl),
   practitionerId = this.offender.practitionerId,
   offenderContactPreference = this.offender.contactPreference,
+  currentEvent = contactDetails?.let { activeEventNumber(this.offender, it) } ?: this.offender.currentEvent,
 )
 
 private fun OffenderCheckin.toCheckinReviewedEvent(

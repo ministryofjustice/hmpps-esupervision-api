@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
 
 class DataProviderTest {
   @Test
@@ -23,6 +26,14 @@ class DataProviderTest {
     val case3 = provider.provideCase("X002201")
     Assertions.assertEquals(case2.practitioner?.name, case3.practitioner?.name)
     Assertions.assertNotEquals(case2.practitioner?.localAdminUnit, case3.practitioner?.localAdminUnit)
+  }
+
+  @Test
+  fun `generated sentence end date is derived from its start date across leap years`() {
+    val clock = Clock.fixed(Instant.parse("2027-08-31T10:00:00Z"), ZoneId.of("Europe/London"))
+    val sentence = GeneratingStubDataProvider(clock).provideCase("X001101").events.single().sentence!!
+
+    Assertions.assertEquals(sentence.date.plusMonths(12), sentence.expectedEndDate)
   }
 
   @Test

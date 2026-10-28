@@ -6,8 +6,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -29,7 +27,6 @@ import java.time.Clock
 @Service
 class OffenderDeactivationService(
   private val clock: Clock,
-  private val offenderSetupRepository: OffenderSetupRepository,
   private val offenderPersistenceService: OffenderPersistenceService,
 ) {
 
@@ -63,15 +60,12 @@ class OffenderDeactivationService(
       return offender
     }
 
-    offender.status = OffenderStatus.INACTIVE
-    offender.updatedAt = clock.instant()
-
-    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+    val updatedAt = clock.instant()
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(contactDetails),
+      offender = offender.dto(contactDetails).copy(status = OffenderStatus.INACTIVE, updatedAt = updatedAt),
       auditEventType = auditEventType,
-      setup = setup?.let { SetupInfo.from(it) },
+      setup = null,
       activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
       reason = reason,
       sensitive = sensitive,

@@ -255,7 +255,7 @@ class NotificationOrchestratorService(
       return
     }
 
-    event.publish(domainEventService)
+    event.copy(currentEvent = activeEventNumber).publish(domainEventService)
 
     if (event.checkin.personalDetails == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: personal details not found", checkin.uuid, checkin.crn)
@@ -351,9 +351,14 @@ class NotificationOrchestratorService(
 
   /** Send notifications for checkin submitted event */
   fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
-    event.publish(domainEventService)
-
     val checkin = event.checkin
+    val eventNumber = if (checkin.personalDetails == null) {
+      event.currentEvent
+    } else {
+      activeEventNumber(event, checkin.personalDetails)
+    }
+    event.copy(currentEvent = eventNumber).publish(domainEventService)
+
     if (event.checkin.personalDetails == null) {
       LOGGER.debug("Skipping checkin submitted notifications for checkin {}: personal details not found", event.checkin.uuid)
       return
@@ -445,11 +450,13 @@ class NotificationOrchestratorService(
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
 
+    val eventNumber = activeEventNumber(checkin.offender, details)
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_EXPIRED,
       uuid = checkin.uuid,
       crn = checkin.offender.crn,
       description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
+      additionalInformation = AdditionalInformation(eventNumber = eventNumber),
     )
   }
 
@@ -578,6 +585,7 @@ fun CheckinCreatedEvent.publish(domainEventService: DomainEventService) {
     uuid = checkin.uuid,
     crn = checkin.crn,
     description = "Check-in created for ${checkin.crn} with due date ${checkin.dueDate}",
+    additionalInformation = AdditionalInformation(eventNumber = currentEvent),
   )
 }
 
@@ -587,6 +595,7 @@ fun CheckinSubmittedEvent.publish(domainEventService: DomainEventService) {
     uuid = checkin.uuid,
     crn = checkin.crn,
     description = "Check-in submitted for ${checkin.crn}",
+    additionalInformation = AdditionalInformation(eventNumber = currentEvent),
   )
 }
 

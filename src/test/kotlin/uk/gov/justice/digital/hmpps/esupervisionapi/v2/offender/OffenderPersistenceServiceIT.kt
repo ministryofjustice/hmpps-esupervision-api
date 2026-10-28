@@ -89,10 +89,9 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     )
     assignment = questionListAssignmentRepository.save(assignment)
 
-    offender.status = OffenderStatus.INACTIVE
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(),
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
       setup = null,
       activeEventNumber = null,
@@ -105,6 +104,50 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
     val assignments = questionListAssignmentRepository.findAll()
     assertEquals(0, assignments.size)
+  }
+
+  @Test
+  fun `stale backfill deactivation does not deactivate an offender whose event was selected concurrently`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity().apply {
+      currentEvent = 202L
+    }
+    offenderRepository.save(offender)
+    val staleEvent = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, currentEvent = null),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      setup = null,
+      activeEventNumber = null,
+      reason = "Automatically deactivated: no active sentence in NDelius",
+    )
+
+    offenderPersistenceService.offenderDeactivation(offender, staleEvent)
+
+    val persisted = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(OffenderStatus.VERIFIED, persisted.status)
+    assertEquals(202L, persisted.currentEvent)
+  }
+
+  @Test
+  fun `manual deactivation still applies when the selected event changes concurrently`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity().apply {
+      currentEvent = 202L
+    }
+    offenderRepository.save(offender)
+    val staleEvent = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, currentEvent = 101L),
+      auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+      setup = null,
+      activeEventNumber = 101L,
+      reason = "Practitioner requested deactivation",
+    )
+
+    offenderPersistenceService.offenderDeactivation(offender, staleEvent)
+
+    val persisted = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(OffenderStatus.INACTIVE, persisted.status)
+    assertEquals(202L, persisted.currentEvent)
   }
 
   @Test
@@ -146,10 +189,9 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     val setup = OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant())
     offenderSetupRepository.save(setup)
 
-    offender.status = OffenderStatus.INACTIVE
     val deactivationEvent = OffenderDeactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(),
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
       setup = SetupInfo.from(setup),
       activeEventNumber = 101L,
@@ -173,11 +215,10 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     assertEquals(OffenderStatus.VERIFIED, offenderAfterReactivation.status)
 
     val setup2 = offenderSetupRepository.findByOffender(offender).get()
-    offenderAfterReactivation.status = OffenderStatus.INACTIVE
     offenderPersistenceService.offenderDeactivation(
       offenderAfterReactivation,
       deactivationEvent.copy(
-        offender = offenderAfterReactivation.dto(),
+        offender = offenderAfterReactivation.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
         setup = SetupInfo.from(setup2),
         reason = "deactivate 2",
       ),

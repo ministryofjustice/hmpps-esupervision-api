@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.Custo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
+import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -107,19 +108,23 @@ class DefaultStubDataProvider : StubDataProvider {
  *   request, "7" recalled and unlawfully at large, anything else standard supervision
  * - CRNs ending in "0" return two active events; event 2 has the later expected sentence end date
  */
-class GeneratingStubDataProvider : StubDataProvider {
+class GeneratingStubDataProvider(
+  private val clock: Clock = Clock.system(ZoneId.of("Europe/London")),
+) : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
     val parsed = parseCrn(crn)
-    val today = LocalDate.now(ZoneId.of("Europe/London"))
+    val today = LocalDate.now(clock)
+    val sentenceStart = today.minusMonths(6)
+    val shorterSentenceStart = today.minusMonths(3)
     val events = if (crn.last() == '0') {
       listOf(
         Event(
           2,
           CodedDescription("04300", "Abstracting electricity - 04300"),
           Event.Sentence(
-            date = today.minusMonths(6),
+            date = sentenceStart,
             description = "Adult Custody < 12m",
-            expectedEndDate = today.plusMonths(6),
+            expectedEndDate = sentenceStart.plusMonths(12),
             length = 12,
             lengthUnit = "Months",
           ),
@@ -128,9 +133,9 @@ class GeneratingStubDataProvider : StubDataProvider {
           1,
           CodedDescription("11800", "Night poaching - 11800"),
           Event.Sentence(
-            date = today.minusMonths(3),
+            date = shorterSentenceStart,
             description = "SA2020 Community Order",
-            expectedEndDate = today.plusMonths(3),
+            expectedEndDate = shorterSentenceStart.plusMonths(6),
             length = 6,
             lengthUnit = "Months",
           ),
@@ -142,9 +147,9 @@ class GeneratingStubDataProvider : StubDataProvider {
           1,
           CodedDescription("0001", "stealing candy"),
           Event.Sentence(
-            date = today.minusMonths(6),
+            date = sentenceStart,
             description = "Sentence description here",
-            expectedEndDate = today.plusMonths(6),
+            expectedEndDate = sentenceStart.plusMonths(12),
             length = 12,
             lengthUnit = "Months",
           ),

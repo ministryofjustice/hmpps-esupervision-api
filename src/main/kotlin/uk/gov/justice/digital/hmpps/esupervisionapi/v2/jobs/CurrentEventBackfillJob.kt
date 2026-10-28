@@ -40,6 +40,7 @@ class CurrentEventBackfillJob(
     var plannedSelections = 0
     var plannedDeactivations = 0
     var failed = 0
+    var skipped = 0
     var lastOffenderId = 0L
 
     LOGGER.info("Current event backfill started: dryRun={}, chunkSize={}", dryRun, pageSize)
@@ -74,8 +75,11 @@ class CurrentEventBackfillJob(
           try {
             val sentenceEvents = details.events.filter { it.sentence != null }
             if (sentenceEvents.isEmpty()) {
-              backfillWithoutActiveSentence(offender, details)
-              plannedDeactivations++
+              if (backfillWithoutActiveSentence(offender, details)) {
+                plannedDeactivations++
+              } else {
+                skipped++
+              }
               continue
             }
 
@@ -92,8 +96,11 @@ class CurrentEventBackfillJob(
                 compareBy<Event> { requireNotNull(it.sentence?.expectedEndDate) }.thenBy { it.number },
               )!!
             }
-            backfillEvent(offender, selectedEvent)
-            plannedSelections++
+            if (backfillEvent(offender, selectedEvent)) {
+              plannedSelections++
+            } else {
+              skipped++
+            }
           } catch (e: Exception) {
             LOGGER.warn("Failed current event backfill for CRN {} on page {}", offender.crn, pages, e)
             failed += 1
@@ -104,11 +111,12 @@ class CurrentEventBackfillJob(
       jobLog.endedAt = clock.instant()
       jobLogRepository.saveAndFlush(jobLog)
       LOGGER.info(
-        "Current event backfill completed: dryRun={}, processed={}, plannedSelections={}, plannedDeactivations={}, failed={}, pages={}, took={}",
+        "Current event backfill completed: dryRun={}, processed={}, plannedSelections={}, plannedDeactivations={}, skipped={}, failed={}, pages={}, took={}",
         dryRun,
         processed,
         plannedSelections,
         plannedDeactivations,
+        skipped,
         failed,
         pages,
         Duration.between(startedAt, jobLog.endedAt),
@@ -118,7 +126,7 @@ class CurrentEventBackfillJob(
     check(failed == 0) { "Current event backfill failed for $failed offenders; see the job logs before retrying." }
   }
 
-  private fun backfillEvent(offender: Offender, event: Event) {
+  private fun backfillEvent(offender: Offender, event: Event): Boolean {
     if (dryRun) {
       LOGGER.info(
         "DRY RUN: would set current_event={} for CRN {} (expectedEndDate={})",
@@ -126,17 +134,27 @@ class CurrentEventBackfillJob(
         offender.crn,
         event.sentence?.expectedEndDate,
       )
+      return true
     } else {
-      offender.currentEvent = event.number
-      offender.updatedAt = clock.instant()
-      offenderRepository.save(offender)
-      LOGGER.info("Set current_event={} for CRN {}", event.number, offender.crn)
+      val updated = offenderRepository.setCurrentEventIfMissing(
+        offenderId = offender.id,
+        status = OffenderStatus.VERIFIED,
+        eventNumber = event.number,
+        updatedAt = clock.instant(),
+      )
+      if (updated == 1) {
+        LOGGER.info("Set current_event={} for CRN {}", event.number, offender.crn)
+        return true
+      }
+      LOGGER.info("Skipped current_event backfill for CRN {} because the offender changed during the Delius lookup", offender.crn)
+      return false
     }
   }
 
-  private fun backfillWithoutActiveSentence(offender: Offender, details: ContactDetails) {
+  private fun backfillWithoutActiveSentence(offender: Offender, details: ContactDetails): Boolean {
     if (dryRun) {
       LOGGER.info("DRY RUN: would deactivate CRN {} because Delius returned no active sentence", offender.crn)
+      return true
     } else {
       offenderDeactivationService.deactivateOffender(
         offender = offender,
@@ -144,7 +162,12 @@ class CurrentEventBackfillJob(
         contactDetails = details,
         auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       )
-      LOGGER.info("Deactivated CRN {} because Delius returned no active sentence", offender.crn)
+      if (offender.status == OffenderStatus.INACTIVE) {
+        LOGGER.info("Deactivated CRN {} because Delius returned no active sentence", offender.crn)
+        return true
+      }
+      LOGGER.info("Skipped deactivation for CRN {} because the offender changed during the Delius lookup", offender.crn)
+      return false
     }
   }
 

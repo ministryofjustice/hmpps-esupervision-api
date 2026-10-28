@@ -109,7 +109,9 @@ data class CheckinSubmittedEvent(
   override val practitionerId: ExternalUserId,
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
-) : ICheckinEvent {
+  override val currentEvent: Long? = null,
+) : ICheckinEvent,
+  ActiveEvent {
   override val outboxItemCoords = OutboxItemType.CHECKIN_SUBMITTED to checkinId
 }
 

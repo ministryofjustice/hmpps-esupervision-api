@@ -44,6 +44,28 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT o FROM Offender o WHERE o.id = :offenderId")
+  fun findByIdForUpdate(@Param("offenderId") offenderId: Long): Optional<Offender>
+
+  @Modifying
+  @Transactional
+  @Query(
+    """
+    UPDATE Offender o
+    SET o.currentEvent = :eventNumber, o.updatedAt = :updatedAt
+    WHERE o.id = :offenderId
+      AND o.status = :status
+      AND o.currentEvent IS NULL
+    """,
+  )
+  fun setCurrentEventIfMissing(
+    @Param("offenderId") offenderId: Long,
+    @Param("status") status: OffenderStatus,
+    @Param("eventNumber") eventNumber: Long,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
+
   @Query(
     """
     SELECT o FROM Offender o

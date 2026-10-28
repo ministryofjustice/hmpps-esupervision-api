@@ -47,12 +47,32 @@ class CurrentEventBackfillJobTest {
     whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(offender.crn))).thenReturn(
       listOf(contactDetails(offender.crn, listOf(event(1L, "2027-01-01"), event(2L, "2028-01-01")))),
     )
+    whenever(
+      offenderRepository.setCurrentEventIfMissing(offender.id, OffenderStatus.VERIFIED, 2L, clock.instant()),
+    ).thenReturn(1)
 
     job(dryRun = false).process()
 
-    assertThat(offender.currentEvent).isEqualTo(2L)
-    verify(offenderRepository).save(offender)
+    verify(offenderRepository).setCurrentEventIfMissing(offender.id, OffenderStatus.VERIFIED, 2L, clock.instant())
     verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+  }
+
+  @Test
+  fun `does not overwrite a selection made while Delius details were being fetched`() {
+    val offender = offender("X123456")
+    stubCandidates(offender)
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(offender.crn))).thenReturn(
+      listOf(contactDetails(offender.crn, listOf(event(1L, "2027-01-01")))),
+    )
+    whenever(
+      offenderRepository.setCurrentEventIfMissing(offender.id, OffenderStatus.VERIFIED, 1L, clock.instant()),
+    ).thenReturn(0)
+
+    job(dryRun = false).process()
+
+    assertThat(offender.currentEvent).isNull()
+    verify(offenderRepository).setCurrentEventIfMissing(offender.id, OffenderStatus.VERIFIED, 1L, clock.instant())
+    verify(offenderRepository, never()).save(any())
   }
 
   @Test
@@ -66,6 +86,7 @@ class CurrentEventBackfillJobTest {
     job(dryRun = true).process()
 
     assertThat(offender.currentEvent).isNull()
+    verify(offenderRepository, never()).setCurrentEventIfMissing(any(), any(), any(), any())
     verify(offenderRepository, never()).save(any())
     verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
   }
@@ -77,6 +98,18 @@ class CurrentEventBackfillJobTest {
     whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(offender.crn))).thenReturn(
       listOf(contactDetails(offender.crn, emptyList())),
     )
+    whenever(
+      offenderDeactivationService.deactivateOffender(
+        eq(offender),
+        any(),
+        any(),
+        any(),
+        eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+      ),
+    ).thenAnswer {
+      offender.status = OffenderStatus.INACTIVE
+      offender
+    }
 
     job(dryRun = false).process()
 

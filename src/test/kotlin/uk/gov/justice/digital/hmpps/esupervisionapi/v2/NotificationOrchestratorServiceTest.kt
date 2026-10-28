@@ -197,7 +197,9 @@ class NotificationOrchestratorServiceTest {
   fun `sendCheckinCreatedNotifications - happy path - sends to offender only`() {
     val offender = createOffender()
     val checkin = createCheckin(offender)
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(
+      events = createContactDetails().events + Event(2, CodedDescription("OFF02", "Selected offence"), sentence = null),
+    )
 
     whenever(
       notificationPersistence.buildOffenderNotifications(
@@ -216,7 +218,7 @@ class NotificationOrchestratorServiceTest {
       checkinId = checkin.id,
       practitionerId = offender.practitionerId,
       offenderContactPreference = offender.contactPreference,
-      currentEvent = null,
+      currentEvent = 2L,
       checkinMode = offender.mode,
     )
     service.sendCheckinCreatedNotifications(event)
@@ -236,7 +238,7 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = 2L)),
     )
     verify(ndiliusApiClient, never()).getContactDetails(any())
   }
@@ -322,7 +324,9 @@ class NotificationOrchestratorServiceTest {
   fun `sendCheckinSubmittedNotifications test`() {
     val offender = createOffender()
     val checkin = createCheckin(offender, status = CheckinStatus.SUBMITTED)
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(
+      events = createContactDetails().events + Event(2, CodedDescription("OFF02", "Selected offence"), sentence = null),
+    )
 
     whenever(
       notificationPersistence.buildOffenderNotifications(
@@ -352,6 +356,7 @@ class NotificationOrchestratorServiceTest {
       offender.practitionerId,
       checkin.dto(contactDetails, clock = clock),
       offender.contactPreference,
+      currentEvent = 2L,
     )
     service.sendCheckinSubmittedNotifications(event)
 
@@ -361,7 +366,7 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = 2L)),
     )
     verify(eventAuditService, never()).recordCheckinSubmitted(checkin, event)
   }
@@ -418,7 +423,7 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = 1L)),
     )
   }
 
