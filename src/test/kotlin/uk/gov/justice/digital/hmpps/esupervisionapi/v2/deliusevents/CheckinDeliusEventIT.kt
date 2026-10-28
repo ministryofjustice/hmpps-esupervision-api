@@ -199,6 +199,16 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `a run stops after a few failures in a row`() {
+    repeat(5) { record(DomainEventType.V2_CHECKIN_CANCELLED, saveCheckin()) }
+    doThrow(RuntimeException("topic unavailable")).whenever(publisher).publishOrThrow(any())
+
+    assertThat(service.publishPending(10, minGap)).isEqualTo(0)
+
+    verify(publisher, times(CheckinDeliusEventService.MAX_FAILURES_IN_A_ROW)).publishOrThrow(any())
+  }
+
+  @Test
   fun `event detail endpoint returns the recorded event`() {
     val checkin = saveCheckin()
     record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, date = LocalDate.of(2026, 7, 1))

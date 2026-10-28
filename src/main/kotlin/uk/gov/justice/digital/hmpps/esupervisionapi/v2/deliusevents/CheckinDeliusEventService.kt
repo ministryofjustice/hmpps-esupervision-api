@@ -74,13 +74,20 @@ class CheckinDeliusEventService(
   }
 
   /**
-   * Publish the events that are next in line for their check-in.
+   * Publish the events that are next in line for their check-in. Stops early after a few failures
+   * in a row: the topic is probably unavailable, and each failed publish can take several seconds
+   * of SDK retries, which could otherwise keep the job running past its lock.
    * @return the number of events published
    */
   fun publishPending(batchSize: Int, minGap: Duration): Int {
     val events = repository.findPublishable(publishedBefore = clock.instant().minus(minGap), limit = batchSize)
     var published = 0
-    for (event in events) {
+    var failuresInARow = 0
+    for ((index, event) in events.withIndex()) {
+      if (failuresInARow >= MAX_FAILURES_IN_A_ROW) {
+        LOGGER.warn("Stopping after {} failed publishes in a row, {} events left for the next run", failuresInARow, events.size - index)
+        break
+      }
       try {
         domainEventService.publishDomainEventOrThrow(
           eventType = event.eventType,
@@ -92,9 +99,17 @@ class CheckinDeliusEventService(
         )
         repository.markPublished(event.id, clock.instant())
         published++
+        failuresInARow = 0
       } catch (e: Exception) {
+        failuresInARow++
         val message = PiiSanitizer.sanitizeMessage(e.message ?: e::class.simpleName ?: "Unknown error")
-        LOGGER.warn("Failed to publish {} event {} for checkin={}, attempt {}: {}", event.eventType.eventTypeName, event.eventId, event.checkinUuid, event.publishAttempts + 1, message)
+        val attempt = event.publishAttempts + 1
+        if (attempt == ALERT_AFTER_ATTEMPTS) {
+          // the check-in's later events are held back until this one is published
+          LOGGER.error("Failed to publish {} event {} for checkin={} after {} attempts: {}", event.eventType.eventTypeName, event.eventId, event.checkinUuid, attempt, message)
+        } else {
+          LOGGER.warn("Failed to publish {} event {} for checkin={}, attempt {}: {}", event.eventType.eventTypeName, event.eventId, event.checkinUuid, attempt, message)
+        }
         repository.markFailed(event.id, message)
       }
     }
@@ -103,5 +118,7 @@ class CheckinDeliusEventService(
 
   companion object {
     private val LOGGER = logger<CheckinDeliusEventService>()
+    const val MAX_FAILURES_IN_A_ROW = 3
+    const val ALERT_AFTER_ATTEMPTS = 20
   }
 }

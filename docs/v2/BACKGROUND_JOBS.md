@@ -148,7 +148,9 @@ This job publishes them.
   retries a message only a few times before dead-lettering it, and NDelius rejects, for example,
   a `link.delivered` for a check-in it hasn't seen `scheduled` for yet.
 - A failed publish is recorded (`publish_attempts`, `last_error`) and retried on the next run.
-  It holds back the check-in's later events but not other check-ins' events.
+  It holds back the check-in's later events but not other check-ins' events. A run stops after
+  3 failures in a row (the topic is probably unavailable), and an event's 20th failed attempt
+  (about 5 minutes) is logged as an error.
 - Each event type is recorded at most once per check-in, except rescheduling.
 
 ### Configuration
@@ -177,7 +179,7 @@ ORDER BY id;
 
 ## ShedLock
 
-Both jobs use ShedLock to prevent duplicate execution across instances.
+All jobs use ShedLock to prevent duplicate execution across instances.
 
 ```kotlin
 @SchedulerLock(
