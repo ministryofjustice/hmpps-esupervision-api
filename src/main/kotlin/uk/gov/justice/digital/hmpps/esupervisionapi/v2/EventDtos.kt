@@ -66,6 +66,10 @@ data class SetupInfo private constructor(
 ) {
   companion object {
     fun from(setup: OffenderSetup) = SetupInfo(primaryKey = setup.id, setupId = setup.setupId())
+    fun from(setup: LatestOffenderSetup) = SetupInfo(
+      primaryKey = setup.setupPrimaryKey,
+      setupId = OffenderSetup.setupId(setup.setupPrimaryKey, setup.setupCounter),
+    )
   }
 }
 

@@ -6,10 +6,12 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
@@ -19,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
@@ -91,6 +94,7 @@ class OffenderEligibilitySyncJob(
           )
         }
 
+        val ineligible = mutableListOf<IneligibleOffender>()
         for (offender in offenders) {
           val contactDetails = contactDetailsByCrn[offender.crn]
           if (contactDetails == null) {
@@ -106,24 +110,43 @@ class OffenderEligibilitySyncJob(
             )
             processed += 1
             if (result.outcome == EligibilityCheckOutcome.INELIGIBLE) {
-              val reason = "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"} found the offender ineligible for online check-ins."
-              val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
-              val event = OffenderDeactivatedEvent(
-                offenderId = offender.id,
-                offender = offender.dto(contactDetails),
-                auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
-                setup = setup?.let { SetupInfo.from(it) },
-                activeEventNumber = activeEventNumber(offender, contactDetails),
-                reason = reason,
-                sensitive = false,
-                deliusOutcomeCode = result.deliusOutcomeCode,
-                practitionerMessageFragment = result.messageFragment,
-              )
-
-              offenderDeactivationService.deactivateOffender(offender, event)
-              deactivated += 1
-              LOGGER.info("Stopped online check-ins for CRN {}: triggered rule code={}, outcome={}", offender.crn, result.triggeredRuleCode, result.outcome)
+              ineligible += IneligibleOffender(offender, contactDetails, result)
             }
+          } catch (e: Exception) {
+            failed += 1
+            LOGGER.warn("Failed eligibility sync for CRN {} on page {}", offender.crn, pages, e)
+          }
+        }
+
+        if (ineligible.isEmpty()) continue
+
+        val setupsByOffenderId = try {
+          offenderSetupRepository.findLatestByOffenderIdIn(ineligible.map { it.offender.id })
+            .associateBy { it.offenderId }
+        } catch (e: Exception) {
+          LOGGER.warn("Could not fetch offender setups for eligibility sync page {}", pages, e)
+          failed += ineligible.size
+          continue
+        }
+
+        for ((offender, contactDetails, result) in ineligible) {
+          try {
+            val reason = "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"} found the offender ineligible for online check-ins."
+            val event = OffenderDeactivatedEvent(
+              offenderId = offender.id,
+              offender = offender.dto(contactDetails),
+              auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
+              setup = setupsByOffenderId[offender.id]?.let { SetupInfo.from(it) },
+              activeEventNumber = activeEventNumber(offender, contactDetails),
+              reason = reason,
+              sensitive = false,
+              deliusOutcomeCode = result.deliusOutcomeCode,
+              practitionerMessageFragment = result.messageFragment,
+            )
+
+            offenderDeactivationService.deactivateOffender(offender, event)
+            deactivated += 1
+            LOGGER.info("Stopped online check-ins for CRN {}: triggered rule code={}, outcome={}", offender.crn, result.triggeredRuleCode, result.outcome)
           } catch (e: Exception) {
             failed += 1
             LOGGER.warn("Failed eligibility sync for CRN {} on page {}", offender.crn, pages, e)
@@ -145,6 +168,12 @@ class OffenderEligibilitySyncJob(
       )
     }
   }
+
+  private data class IneligibleOffender(
+    val offender: Offender,
+    val contactDetails: ContactDetails,
+    val result: EligibilityResult,
+  )
 
   companion object {
     const val JOB_TYPE = "V2_OFFENDER_ELIGIBILITY_SYNC"

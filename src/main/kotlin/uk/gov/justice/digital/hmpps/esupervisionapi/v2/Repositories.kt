@@ -185,6 +185,12 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findMigratedWithoutAudit(pageable: Pageable): List<Offender>
 }
 
+interface LatestOffenderSetup {
+  val offenderId: Long
+  val setupPrimaryKey: Long
+  val setupCounter: Int
+}
+
 /**
  * Repository for V2 Offender Setup
  */
@@ -202,6 +208,20 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
   """,
   )
   fun findByOffender(offender: Offender): Optional<OffenderSetup>
+
+  @Query(
+    """
+    SELECT DISTINCT ON (s.offender_id)
+      s.offender_id AS "offenderId",
+      s.id AS "setupPrimaryKey",
+      s.setup_counter AS "setupCounter"
+    FROM offender_setup_v2 s
+    WHERE s.offender_id IN (:offenderIds)
+    ORDER BY s.offender_id, s.created_at DESC, s.id DESC
+  """,
+    nativeQuery = true,
+  )
+  fun findLatestByOffenderIdIn(offenderIds: Collection<Long>): List<LatestOffenderSetup>
 
   /**
    * Creates a new setup record for the given offender and updates the

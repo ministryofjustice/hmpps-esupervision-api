@@ -9,6 +9,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.same
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -20,10 +21,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LatestOffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -176,6 +179,72 @@ class OffenderEligibilitySyncJobTest {
     )
   }
 
+  @Test
+  fun `setups are fetched once per batch for ineligible offenders only`() {
+    val first = offender("X000006", id = 6)
+    val eligible = offender("X000007", id = 7)
+    val second = offender("X000008", id = 8)
+    val withoutSetup = offender("X000009", id = 9)
+    val allEligible = offender("X000010", id = 10)
+    whenever(
+      offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
+        eq(OffenderStatus.VERIFIED),
+        any(),
+        any(),
+      ),
+    ).thenReturn(listOf(first, eligible, second), listOf(withoutSetup), listOf(allEligible), emptyList())
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenAnswer { invocation ->
+      (invocation.arguments[0] as List<*>).map { contactDetails(it as String) }
+    }
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible reason", "RULE"))
+    whenever(eligibilityChecker.check(same(eligible), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+    whenever(eligibilityChecker.check(same(allEligible), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+    val firstSetup = latestSetup(first.id, setupPrimaryKey = 61, setupCounter = 1)
+    val secondSetup = latestSetup(second.id, setupPrimaryKey = 81, setupCounter = 2)
+    whenever(offenderSetupRepository.findLatestByOffenderIdIn(listOf(first.id, second.id)))
+      .thenReturn(listOf(secondSetup, firstSetup))
+    whenever(offenderSetupRepository.findLatestByOffenderIdIn(listOf(withoutSetup.id))).thenReturn(emptyList())
+
+    job.process()
+
+    verify(offenderSetupRepository, times(2)).findLatestByOffenderIdIn(any())
+    verify(offenderSetupRepository).findLatestByOffenderIdIn(listOf(first.id, second.id))
+    verify(offenderSetupRepository).findLatestByOffenderIdIn(listOf(withoutSetup.id))
+    verify(offenderSetupRepository, never()).findByOffender(any())
+    verify(deactivationService).deactivateOffender(same(first), argThat { setup == SetupInfo.from(firstSetup) })
+    verify(deactivationService).deactivateOffender(same(second), argThat { setup == SetupInfo.from(secondSetup) })
+    verify(deactivationService).deactivateOffender(same(withoutSetup), argThat { setup == null })
+    verify(deactivationService, never()).deactivateOffender(same(eligible), any())
+    verify(deactivationService, never()).deactivateOffender(same(allEligible), any())
+  }
+
+  @Test
+  fun `setup batch failure does not stop later pages`() {
+    val failing = offender("X000011", id = 11)
+    val ineligible = offender("X000012", id = 12)
+    whenever(
+      offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
+        eq(OffenderStatus.VERIFIED),
+        any(),
+        any(),
+      ),
+    ).thenReturn(listOf(failing), listOf(ineligible), emptyList())
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(failing.crn))).thenReturn(listOf(contactDetails(failing.crn)))
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(ineligible.crn))).thenReturn(listOf(contactDetails(ineligible.crn)))
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible reason", "RULE"))
+    whenever(offenderSetupRepository.findLatestByOffenderIdIn(listOf(failing.id)))
+      .thenThrow(IllegalStateException("database unavailable"))
+
+    job.process()
+
+    verify(deactivationService, never()).deactivateOffender(same(failing), any())
+    verify(deactivationService).deactivateOffender(same(ineligible), argThat { setup == null })
+  }
+
   private fun givenPage(offenders: List<Offender>, details: List<ContactDetails>) {
     whenever(
       offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
@@ -201,6 +270,12 @@ class OffenderEligibilitySyncJobTest {
     updatedAt = clock.instant(),
     contactPreference = ContactPreference.EMAIL,
   ).also { ReflectionTestUtils.setField(it, "id", id) }
+
+  private fun latestSetup(offenderId: Long, setupPrimaryKey: Long, setupCounter: Int) = object : LatestOffenderSetup {
+    override val offenderId = offenderId
+    override val setupPrimaryKey = setupPrimaryKey
+    override val setupCounter = setupCounter
+  }
 
   private fun contactDetails(crn: String) = ContactDetails(
     crn = crn,

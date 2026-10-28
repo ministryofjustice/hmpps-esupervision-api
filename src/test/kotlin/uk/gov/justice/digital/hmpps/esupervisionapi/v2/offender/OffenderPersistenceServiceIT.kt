@@ -66,6 +66,33 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `batch setup lookup returns the latest setup for each requested offender`() {
+    val offenders = (1..4).map {
+      offenderRepository.save(offenderTemplate.copy(uuid = randomUUID(), crn = "X00000$it").toEntity())
+    }
+    val now = clock.instant()
+    fun saveSetup(index: Int, createdAt: Instant) = offenderSetupRepository.saveAndFlush(
+      OffenderSetup(randomUUID(), offenders[index], offenders[index].practitionerId, createdAt),
+    )
+    saveSetup(0, now.minusSeconds(60))
+    val latestFirst = saveSetup(0, now)
+    saveSetup(1, now)
+    val latestSecond = saveSetup(1, now)
+    saveSetup(3, now)
+
+    latestSecond.incrementSetupCounter()
+    offenderSetupRepository.saveAndFlush(latestSecond)
+
+    val setups = offenderSetupRepository.findLatestByOffenderIdIn(offenders.take(3).map { it.id })
+      .associateBy { it.offenderId }
+
+    assertEquals(setOf(offenders[0].id, offenders[1].id), setups.keys)
+    assertEquals(SetupInfo.from(latestFirst), SetupInfo.from(setups.getValue(offenders[0].id)))
+    assertEquals(SetupInfo.from(latestSecond), SetupInfo.from(setups.getValue(offenders[1].id)))
+    assertEquals(2, setups.getValue(offenders[1].id).setupCounter)
+  }
+
+  @Test
   fun `offenderDeactivation cancels checkins and deletes upcoming question assignments`() {
     var offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity()
     offender = offenderRepository.save(offender)
