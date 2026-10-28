@@ -9,6 +9,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
@@ -29,12 +30,18 @@ import java.util.UUID
 class OffenderDeactivationServiceTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-10T10:00:00Z"), ZoneId.of("UTC"))
+  private val appConfig: AppConfig = mock()
   private val offenderPersistenceService: OffenderPersistenceService = mock()
 
   private val service = OffenderDeactivationService(
     clock,
+    appConfig,
     offenderPersistenceService,
   )
+
+  init {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
+  }
 
   private val contactDetails = ContactDetails(crn = "X123456", name = Name("John", "Doe"), mobile = "07700900123", dateOfBirth = LocalDate.of(1980, 1, 1))
 

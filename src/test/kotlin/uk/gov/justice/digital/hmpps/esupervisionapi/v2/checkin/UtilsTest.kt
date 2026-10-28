@@ -149,6 +149,14 @@ class UtilsTest {
   }
 
   @Test
+  fun `active event number - preserves first event inference when selection feature is disabled`() {
+    val offender = offenderTemplate.toEntity()
+    val events = listOf(eventEnding(1L, today.plusMonths(3)), eventEnding(2L, today.plusMonths(6)))
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = events), useLatestExpectedEndDateWhenNoSelection = false))
+  }
+
+  @Test
   fun `active event number - uses the saved selection when multiple events exist`() {
     val offender = offenderTemplate.toEntity().apply { currentEvent = 2L }
 

@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -21,6 +22,7 @@ import kotlin.math.min
 /** One-off batch to backfill existing verified offenders' selected Delius event. */
 @Component
 class CurrentEventBackfillJob(
+  private val appConfig: AppConfig,
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
   private val ndiliusApiClient: INdiliusApiClient,
@@ -30,6 +32,7 @@ class CurrentEventBackfillJob(
   @param:Value("\${app.scheduling.current-event-backfill.dry-run:true}") private val dryRun: Boolean,
 ) {
   fun process() {
+    check(appConfig.esup2305DeliusEventSelection) { "Current event backfill requires ESUP-2305 to be enabled" }
     val pageSize = min(chunkSize, INdiliusApiClient.MAX_BATCH_SIZE)
     require(pageSize > 0) { "Current event backfill chunk size must be greater than zero" }
 

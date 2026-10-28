@@ -111,6 +111,7 @@ class CheckinServiceTest {
   @BeforeEach
   fun setUp() {
     reset(s3UploadService)
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     service = buildService(allowPastDueDate = false)
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())

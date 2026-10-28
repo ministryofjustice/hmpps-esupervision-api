@@ -16,8 +16,14 @@ import java.time.temporal.ChronoUnit
  *
  * @see uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
  */
-fun activeEventNumber(offender: ActiveEvent, details: ContactDetails): Long? = if (offender.currentEvent != null) {
+fun activeEventNumber(
+  offender: ActiveEvent,
+  details: ContactDetails,
+  useLatestExpectedEndDateWhenNoSelection: Boolean = true,
+): Long? = if (offender.currentEvent != null) {
   details.events.firstOrNull { it.number == offender.currentEvent }?.number
+} else if (!useLatestExpectedEndDateWhenNoSelection) {
+  details.events.firstOrNull()?.number
 } else {
   val sentenceEvents = details.events.filter { it.sentence != null }
   when {

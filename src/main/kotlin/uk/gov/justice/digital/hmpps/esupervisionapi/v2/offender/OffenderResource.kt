@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import tools.jackson.databind.annotation.JsonDeserialize
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -48,6 +49,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
@@ -107,6 +109,7 @@ class OffenderResource(
   private val questionService: QuestionService,
   private val transactionTemplate: TransactionTemplate,
   private val entityManager: EntityManager,
+  private val appConfig: AppConfig,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -167,7 +170,7 @@ class OffenderResource(
         dateOfBirth = contactDetails.dateOfBirth,
         mobile = contactDetails.mobile,
         email = contactDetails.email,
-        events = contactDetails.events,
+        events = contactDetails.events.takeIf { appConfig.esup2305DeliusEventSelection }.orEmpty(),
       ),
     )
   }
@@ -609,7 +612,12 @@ class OffenderResource(
       )
     }
 
+    val eventSelectionEnabled = appConfig.esup2305DeliusEventSelection
     val selectedEventNumber = when {
+      request.currentEvent != null && !eventSelectionEnabled -> throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Delius event selection is not enabled",
+      )
       request.currentEvent != null -> {
         if (contactDetails.events.none { it.number == request.currentEvent }) {
           throw ResponseStatusException(
@@ -620,15 +628,20 @@ class OffenderResource(
         request.currentEvent
       }
       offender.currentEvent != null && contactDetails.events.any { it.number == offender.currentEvent } -> offender.currentEvent
-      contactDetails.events.size == 1 -> contactDetails.events.single().number
-      contactDetails.events.isEmpty() -> throw ResponseStatusException(
+      offender.currentEvent != null -> throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Selected event ${offender.currentEvent} is not active for offender ${offender.crn}",
+      )
+      eventSelectionEnabled && contactDetails.events.size == 1 -> contactDetails.events.single().number
+      eventSelectionEnabled && contactDetails.events.isEmpty() -> throw ResponseStatusException(
         HttpStatus.UNPROCESSABLE_CONTENT,
         "Cannot reactivate ${offender.crn}: no active events in NDelius.",
       )
-      else -> throw ResponseStatusException(
+      eventSelectionEnabled -> throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "A current event must be selected for offender ${offender.crn}",
       )
+      else -> activeEventNumber(offender, contactDetails, useLatestExpectedEndDateWhenNoSelection = false)
     }
 
     val requestedPreference = request.contactPreference?.contactPreference ?: offender.contactPreference
@@ -754,6 +767,9 @@ is *today*.""",
     }
 
     var currentEventUpdated = false
+    if (request.currentEvent != null && !appConfig.esup2305DeliusEventSelection) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Delius event selection is not enabled")
+    }
     if (request.currentEvent != null && offender.currentEvent != request.currentEvent) {
       val contactDetails = ndiliusApiClient.getContactDetailsStrict(offender.crn)
       if (contactDetails?.events?.none { it.number == request.currentEvent } != false) {

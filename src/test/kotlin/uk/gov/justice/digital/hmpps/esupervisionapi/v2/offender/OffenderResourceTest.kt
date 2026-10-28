@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BeanPropertyBindingResult
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
@@ -82,6 +83,7 @@ import java.util.concurrent.CompletionException
 class OffenderResourceTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-10T10:00:00Z"), ZoneId.of("UTC"))
+  private val appConfig: AppConfig = mock()
   private val offenderRepository: OffenderRepository = mock()
   private val s3UploadService: S3UploadService = mock()
   private val checkinCreationService: CheckinCreationService = mock()
@@ -107,6 +109,7 @@ class OffenderResourceTest {
 
   @BeforeEach
   fun setUp() {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     whenever(transactionTemplate.execute<Any>(any())).thenAnswer {
       val callback = it.getArgument<TransactionCallback<Any>>(0)
       callback.doInTransaction(SimpleTransactionStatus())
@@ -131,6 +134,7 @@ class OffenderResourceTest {
       questionService,
       transactionTemplate,
       entityManager,
+      appConfig,
     )
   }
 
@@ -1007,6 +1011,22 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - rejects event selection when feature is disabled`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender(uuid, OffenderStatus.VERIFIED)
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(false)
+    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(uuid, OffenderDetailsUpdateRequest(currentEvent = 2L))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(ndiliusApiClient, never()).getContactDetailsStrict(any())
+    verify(offenderRepository, never()).save(any())
+  }
+
+  @Test
   fun `scheduleAdHocCheckin - creates today's checkin with questions using canonical CRN`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED, CheckinMode.AD_HOC).apply {
@@ -1310,6 +1330,23 @@ class OffenderResourceTest {
     assertEquals("john.doe@example.com", result.body?.email)
     assertEquals(listOf(event), result.body?.events)
     verify(offenderRepository, times(0)).findByCrn(any())
+  }
+
+  @Test
+  fun `getPersonalDetailsByCrn - hides event choices when selection feature is disabled`() {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(false)
+    val contactDetails = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
+      crn = "X123456",
+      name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(anEvent),
+    )
+    whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(contactDetails)
+
+    val result = resource.getPersonalDetailsByCrn("X123456")
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(emptyList<Event>(), result.body?.events)
   }
 
   @Test

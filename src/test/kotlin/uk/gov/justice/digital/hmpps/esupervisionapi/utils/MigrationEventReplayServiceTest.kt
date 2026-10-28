@@ -12,6 +12,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.domain.PageRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
@@ -43,6 +44,7 @@ import java.util.UUID
 class MigrationEventReplayServiceTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-03T10:00:00Z"), ZoneId.of("UTC"))
+  private val appConfig: AppConfig = mock()
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val offenderRepository: OffenderRepository = mock()
   private val offenderSetupRepository: OffenderSetupRepository = mock()
@@ -51,11 +53,16 @@ class MigrationEventReplayServiceTest {
   private val domainEventService: DomainEventService = mock()
   private val eventAuditLogRepository: EventAuditRepository = mock()
 
+  init {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
+  }
+
   private lateinit var service: MigrationEventReplayService
 
   @BeforeEach
   fun setUp() {
     service = MigrationEventReplayService(
+      appConfig,
       checkinRepository,
       offenderRepository,
       offenderSetupRepository,

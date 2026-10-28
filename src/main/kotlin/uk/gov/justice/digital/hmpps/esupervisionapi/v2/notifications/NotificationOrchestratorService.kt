@@ -79,7 +79,7 @@ class NotificationOrchestratorService(
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = contactDetails?.let { activeEventNumber(offender, it) },
+        eventNumber = contactDetails?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) },
         setupId = setup.setupId,
       ),
     )
@@ -249,7 +249,11 @@ class NotificationOrchestratorService(
     // to the client). But let's say checkin was created, and we somehow got here. We will publish domain event
     // to reflect what happened in the database and possibly resolve any issues after investigating
     val checkin = event.checkin
-    val activeEventNumber = if (checkin.personalDetails == null) event.currentEvent else activeEventNumber(event, checkin.personalDetails)
+    val activeEventNumber = if (checkin.personalDetails == null) {
+      event.currentEvent
+    } else {
+      activeEventNumber(event, checkin.personalDetails, appConfig.esup2305DeliusEventSelection)
+    }
     if (activeEventNumber == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: no active events found", checkin.uuid, checkin.crn)
       return
@@ -355,7 +359,7 @@ class NotificationOrchestratorService(
     val eventNumber = if (checkin.personalDetails == null) {
       event.currentEvent
     } else {
-      activeEventNumber(event, checkin.personalDetails)
+      activeEventNumber(event, checkin.personalDetails, appConfig.esup2305DeliusEventSelection)
     }
     event.copy(currentEvent = eventNumber).publish(domainEventService)
 
@@ -450,7 +454,7 @@ class NotificationOrchestratorService(
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
 
-    val eventNumber = activeEventNumber(checkin.offender, details)
+    val eventNumber = activeEventNumber(checkin.offender, details, appConfig.esup2305DeliusEventSelection)
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_EXPIRED,
       uuid = checkin.uuid,

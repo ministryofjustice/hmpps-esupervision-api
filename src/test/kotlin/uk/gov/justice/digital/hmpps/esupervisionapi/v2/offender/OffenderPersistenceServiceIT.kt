@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.test.context.TestPropertySource
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
@@ -31,6 +32,7 @@ import java.time.LocalDate
 import java.util.UUID
 import java.util.UUID.randomUUID
 
+@TestPropertySource(properties = ["app.features.esup-2305=true"])
 class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
   @Autowired

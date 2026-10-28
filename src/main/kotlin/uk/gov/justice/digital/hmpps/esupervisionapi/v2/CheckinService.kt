@@ -241,7 +241,12 @@ class CheckinService(
     }
 
     checkin.applyRequest(request, clock)
-    val event = checkin.toCheckinSubmittedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    val event = checkin.toCheckinSubmittedEvent(
+      contactDetails,
+      clock = clock,
+      checkinWindow = checkinWindowPeriod,
+      eventSelectionEnabled = appConfig.esup2305DeliusEventSelection,
+    )
     checkinPersistenceService.checkinSubmission(checkin, event)
 
     LOGGER.info("Checkin submitted: {}, submission started at {}", uuid, checkin.checkinStartedAt)
@@ -937,7 +942,7 @@ class CheckinService(
 
     val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
-    if (activeEventNumber(offender, personalDetails) == null) {
+    if (activeEventNumber(offender, personalDetails, appConfig.esup2305DeliusEventSelection) == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
 
@@ -966,7 +971,11 @@ class CheckinService(
       }
 
     val offender = checkin.offender
-    val currentEvent = if (contactDetails == null) offender.currentEvent else activeEventNumber(offender, contactDetails)
+    val currentEvent = if (contactDetails == null) {
+      offender.currentEvent
+    } else {
+      activeEventNumber(offender, contactDetails, appConfig.esup2305DeliusEventSelection)
+    }
     if (currentEvent == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
@@ -1173,6 +1182,7 @@ private fun OffenderCheckin.toCheckinSubmittedEvent(
   contactDetails: ContactDetails?,
   clock: Clock,
   checkinWindow: Period,
+  eventSelectionEnabled: Boolean,
   videoUrl: URL? = null,
   snapshotUrl: URL? = null,
 ) = CheckinSubmittedEvent(
@@ -1181,7 +1191,7 @@ private fun OffenderCheckin.toCheckinSubmittedEvent(
   checkin = this.dto(contactDetails, clock = clock, checkinWindow = checkinWindow, videoUrl = videoUrl, snapshotUrl = snapshotUrl),
   practitionerId = this.offender.practitionerId,
   offenderContactPreference = this.offender.contactPreference,
-  currentEvent = contactDetails?.let { activeEventNumber(this.offender, it) } ?: this.offender.currentEvent,
+  currentEvent = contactDetails?.let { activeEventNumber(this.offender, it, eventSelectionEnabled) } ?: this.offender.currentEvent,
 )
 
 private fun OffenderCheckin.toCheckinReviewedEvent(

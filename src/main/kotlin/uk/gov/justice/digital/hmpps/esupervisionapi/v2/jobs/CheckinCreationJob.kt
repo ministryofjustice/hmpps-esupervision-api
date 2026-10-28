@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHint
@@ -65,6 +66,7 @@ class CheckinCreationJob(
   private val ndiliusApiClient: INdiliusApiClient,
   private val checkinCreationService: CheckinCreationService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val appConfig: AppConfig,
   private val jobLogRepository: JobLogRepository,
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
@@ -148,7 +150,7 @@ class CheckinCreationJob(
   ): Pair<OffenderCheckin, PartialCheckinCreatedEvent>? {
     val offenderRef = offenderRepository.getReferenceById(info.id)
     val checkin = checkinCreationService.prepareCheckinForOffender(offenderRef, today)
-    val eventNumber = activeEventNumber(info, contactDetails)
+    val eventNumber = activeEventNumber(info, contactDetails, appConfig.esup2305DeliusEventSelection)
     var result: Pair<OffenderCheckin, PartialCheckinCreatedEvent>? = null
     if (eventNumber != null) {
       val event = PartialCheckinCreatedEvent(

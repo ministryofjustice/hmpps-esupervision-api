@@ -11,6 +11,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.domain.Pageable
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
@@ -33,11 +34,16 @@ import java.util.UUID
 class CurrentEventBackfillJobTest {
 
   private val clock = Clock.fixed(Instant.parse("2026-10-26T12:00:00Z"), ZoneId.of("UTC"))
+  private val appConfig: AppConfig = mock()
   private val offenderRepository: OffenderRepository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val offenderDeactivationService: OffenderDeactivationService = mock()
   private val jobLogRepository: JobLogRepository = mock {
     on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
+  }
+
+  init {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
   }
 
   @Test
@@ -89,6 +95,16 @@ class CurrentEventBackfillJobTest {
     verify(offenderRepository, never()).setCurrentEventIfMissing(any(), any(), any(), any())
     verify(offenderRepository, never()).save(any())
     verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+  }
+
+  @Test
+  fun `does not run when Delius event selection feature is disabled`() {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(false)
+
+    assertThrows(IllegalStateException::class.java) { job(dryRun = true).process() }
+
+    verify(jobLogRepository, never()).saveAndFlush(any<JobLog>())
+    verify(ndiliusApiClient, never()).getContactDetailsForMultiple(any())
   }
 
   @Test
@@ -158,6 +174,7 @@ class CurrentEventBackfillJobTest {
   }
 
   private fun job(dryRun: Boolean) = CurrentEventBackfillJob(
+    appConfig = appConfig,
     clock = clock,
     offenderRepository = offenderRepository,
     ndiliusApiClient = ndiliusApiClient,

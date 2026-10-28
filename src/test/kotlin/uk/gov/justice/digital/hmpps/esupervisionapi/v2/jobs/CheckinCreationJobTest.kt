@@ -13,6 +13,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.test.util.ReflectionTestUtils
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -51,6 +52,7 @@ class CheckinCreationJobTest {
   private val checkinCreationService: CheckinCreationService = mock()
 
   private val deactivationService: OffenderDeactivationService = mock()
+  private val appConfig: AppConfig = mock()
   private val jobLogRepository: JobLogRepository = mock {
     on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
   }
@@ -62,6 +64,7 @@ class CheckinCreationJobTest {
     ndiliusApiClient,
     checkinCreationService,
     deactivationService,
+    appConfig,
     jobLogRepository,
     entityManager,
     chunkSize = 100,
@@ -69,6 +72,10 @@ class CheckinCreationJobTest {
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
+
+  init {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
+  }
 
   @Test
   fun `eligible offender - creates checkin, notifies, does not deactivate`() {

@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
@@ -27,6 +28,7 @@ import java.time.Clock
 @Service
 class OffenderDeactivationService(
   private val clock: Clock,
+  private val appConfig: AppConfig,
   private val offenderPersistenceService: OffenderPersistenceService,
 ) {
 
@@ -66,7 +68,7 @@ class OffenderDeactivationService(
       offender = offender.dto(contactDetails).copy(status = OffenderStatus.INACTIVE, updatedAt = updatedAt),
       auditEventType = auditEventType,
       setup = null,
-      activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
+      activeEventNumber = contactDetails?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) },
       reason = reason,
       sensitive = sensitive,
     )

@@ -49,6 +49,7 @@ class NotificationOrchestratorServiceTest {
 
   @BeforeEach
   fun setUp() {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     whenever(appConfig.checkinSubmitUrlV2(any())).thenReturn(URI("https://example.com/submitv2"))
     whenever(appConfig.checkinReviewUrlV2(any(), any())).thenReturn(URI("https://example.com/reviewv2"))
     whenever(appConfig.feedbackUrl()).thenReturn(URI("https://example.com/feedback"))

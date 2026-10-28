@@ -136,7 +136,9 @@ class OffenderSetupService(
       existing.createdBy = offenderInfo.practitionerId
       existing.updatedAt = now
       existing.contactPreference = offenderInfo.contactPreference
-      offenderInfo.currentEvent?.let { existing.currentEvent = it }
+      if (Feature.ESUP_2305 in appConfig.enabledFeatures) {
+        offenderInfo.currentEvent?.let { existing.currentEvent = it }
+      }
       existing
     } else {
       Offender(
@@ -151,7 +153,7 @@ class OffenderSetupService(
         createdBy = offenderInfo.practitionerId,
         updatedAt = now,
         contactPreference = offenderInfo.contactPreference,
-        currentEvent = offenderInfo.currentEvent,
+        currentEvent = offenderInfo.currentEvent.takeIf { Feature.ESUP_2305 in appConfig.enabledFeatures },
       )
     }
 
@@ -233,17 +235,19 @@ class OffenderSetupService(
     // reset). We only block when NDelius details are available - a transient fetch failure must not
     // prevent setup completion. The daily creation job applies the same check on an ongoing basis.
     if (contactDetails != null) {
-      val eventNumbers = contactDetails.events.map { it.number }
-      when {
-        offender.currentEvent == null && eventNumbers.size == 1 -> offender.currentEvent = eventNumbers.single()
-        offender.currentEvent == null && eventNumbers.size > 1 -> throw ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "A current event must be selected for offender ${offender.crn}",
-        )
-        offender.currentEvent != null && offender.currentEvent !in eventNumbers -> throw ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Selected event ${offender.currentEvent} is not active for offender ${offender.crn}",
-        )
+      if (Feature.ESUP_2305 in appConfig.enabledFeatures) {
+        val eventNumbers = contactDetails.events.map { it.number }
+        when {
+          offender.currentEvent == null && eventNumbers.size == 1 -> offender.currentEvent = eventNumbers.single()
+          offender.currentEvent == null && eventNumbers.size > 1 -> throw ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "A current event must be selected for offender ${offender.crn}",
+          )
+          offender.currentEvent != null && offender.currentEvent !in eventNumbers -> throw ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Selected event ${offender.currentEvent} is not active for offender ${offender.crn}",
+          )
+        }
       }
 
       try {

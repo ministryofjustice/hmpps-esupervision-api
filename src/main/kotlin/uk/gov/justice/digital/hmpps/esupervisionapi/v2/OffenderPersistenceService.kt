@@ -5,6 +5,8 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
@@ -13,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 
 @Service
 class OffenderPersistenceService(
+  private val appConfig: AppConfig,
   private val offenderRepository: OffenderRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
   private val checkinRepository: OffenderCheckinRepository,
@@ -52,7 +55,7 @@ class OffenderPersistenceService(
     val persistedEvent = event.copy(
       offender = currentOffender.dto(event.offender.personalDetails),
       setup = setup,
-      activeEventNumber = event.offender.personalDetails?.let { activeEventNumber(currentOffender, it) },
+      activeEventNumber = event.activeEventNumber,
     )
     offenderRepository.save(currentOffender)
     if (setup != null) {
@@ -88,7 +91,9 @@ class OffenderPersistenceService(
       offender.firstCheckin = event.offender.firstCheckin
       offender.checkinInterval = event.offender.checkinInterval?.duration
       offender.contactPreference = event.offender.contactPreference
-      offender.currentEvent = event.currentEvent
+      if (Feature.ESUP_2305 in appConfig.enabledFeatures) {
+        offender.currentEvent = event.currentEvent
+      }
       offenderRepository.save(offender)
 
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)

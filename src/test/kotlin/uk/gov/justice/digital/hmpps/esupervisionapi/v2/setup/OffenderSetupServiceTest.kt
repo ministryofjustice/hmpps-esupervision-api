@@ -483,6 +483,38 @@ class OffenderSetupServiceTest {
   }
 
   @Test
+  fun `completeOffenderSetup - does not apply event selection when feature is disabled`() {
+    whenever(appConfig.enabledFeatures).thenReturn(emptySet())
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      events = listOf(activeEvent, activeEvent.copy(number = 2L)),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+    whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
+      .thenReturn(OffenderSetupPersistenceService.CompletionResult(checkin = null))
+
+    val result = service.completeOffenderSetup(setup.uuid, OffenderSetupCompletionDto())
+
+    assertNull(result.currentEvent)
+    assertNull(offender.currentEvent)
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any())
+  }
+
+  @Test
   fun `completeOffenderSetup - completes when offender has an active event`() {
     val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
     val setup = OffenderSetup(
