@@ -27,6 +27,27 @@ links the contact to the check-in through `checkinUuid` in the detail response.
 
 ---
 
+## Upcoming Check-ins (ESUP-2223, feature `ESUP_2223`)
+
+NDelius records each person's next check-in before it is due. `UpcomingCheckinService.scheduleNext`
+creates it as a `SCHEDULED` check-in and records a `scheduled` event. Only the next check-in is
+recorded: while a check-in is open (`CREATED`), the one after it waits until it is submitted or missed.
+
+| Trigger | Where |
+|---------|-------|
+| Setup completed | `OffenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin` |
+| Check-ins restarted | `OffenderResource.reactivateOffender` |
+| Schedule set (`update_details`) | `OffenderResource.updateDetails` (moving an already scheduled check-in comes later) |
+| Ad hoc check-in arranged | `OffenderResource.scheduleAdHocCheckin` |
+| Check-in submitted | `CheckinPersistenceService.checkinSubmission` |
+| Check-in missed | `CheckinExpiryJob` |
+| Scheduled check-in not created on its due date | `CheckinCreationJob` (cancels it, then schedules the next) |
+
+Scheduling runs after the triggering transaction commits, in its own transaction, and never fails
+the change that triggered it. A check-in created without having been scheduled (no upcoming check-in
+for its date, for example someone set up before the feature was on) is recorded as `scheduled` when
+it is created, so NDelius always sees `scheduled` first.
+
 ## Event Publishing Flow
 
 ```mermaid

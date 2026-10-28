@@ -130,6 +130,7 @@ class OffenderResourceTest {
       questionService,
       transactionTemplate,
       entityManager,
+      mock(),
     )
   }
 

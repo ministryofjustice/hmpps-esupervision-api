@@ -23,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEven
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.BatchCheckinCreationException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinIneligibilityReason
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
@@ -67,6 +68,7 @@ class CheckinCreationJob(
   private val ndiliusApiClient: INdiliusApiClient,
   private val checkinCreationService: CheckinCreationService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val upcomingCheckinService: UpcomingCheckinService,
   private val jobLogRepository: JobLogRepository,
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
@@ -87,6 +89,8 @@ class CheckinCreationJob(
     val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = "V2_CHECKIN_CREATION", createdAt = now))
     LOGGER.info("Checkin Creation Job(id={}) started: creating checkins for date={}", logEntry.id, today)
     val metrics = JobMetrics()
+
+    rescheduleUncreatedCheckins(today)
 
     try {
       val upperBound = today.plusDays(1)
@@ -142,6 +146,24 @@ class CheckinCreationJob(
     jobLogRepository.saveAndFlush(logEntry)
 
     metrics.info(LOGGER, jobId = logEntry.id, Duration.between(now, endTime))
+  }
+
+  /**
+   * ESUP-2223: an upcoming check-in whose due date passed without it being created (no active
+   * event, or the schedule changed) is cancelled and the next one scheduled, before today's
+   * check-ins are created (which may activate it).
+   */
+  private fun rescheduleUncreatedCheckins(today: LocalDate) {
+    if (!upcomingCheckinService.enabled()) return
+    try {
+      val offenderIds = checkinRepository.findOffenderIdsWithScheduledBefore(today)
+      offenderIds.forEach { upcomingCheckinService.scheduleNext(it) }
+      if (offenderIds.isNotEmpty()) {
+        LOGGER.info("Rescheduled upcoming check-ins that were not created on their due date for {} offenders", offenderIds.size)
+      }
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to reschedule upcoming check-ins that were not created on their due date", e)
+    }
   }
 
   private fun prepareCheckin(

@@ -40,6 +40,10 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select o from Offender o where o.id = :id")
+  fun findByIdForUpdate(id: Long): Offender?
+
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
@@ -333,6 +337,10 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findScheduledForOffenders(offenderIds: Collection<Long>, dueDate: LocalDate): List<OffenderCheckin>
+
+  /** Offenders whose upcoming (SCHEDULED) check-in's due date has passed without it being created. */
+  @Query("SELECT c.offender.id FROM OffenderCheckin c WHERE c.status = 'SCHEDULED' AND c.dueDate < :today")
+  fun findOffenderIdsWithScheduledBefore(today: LocalDate): List<Long>
 
   /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(
