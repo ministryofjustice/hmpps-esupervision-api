@@ -163,3 +163,7 @@ databaseChangeLog:
       file: db/changelog/changesets/81_eligibility_more_rules.sql
   - include:
       file: db/changelog/changesets/82_fix_monthly_stats_counts.sql
+  - include:
+      file: db/changelog/changesets/84_checkin_status_scheduled.sql
+  - include:
+      file: db/changelog/changesets/85_scheduled_checkin_activation.sql

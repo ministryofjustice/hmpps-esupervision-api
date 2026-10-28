@@ -269,6 +269,14 @@ open class OffenderCheckin(
 
   @Column(name = "image_deleted_at", nullable = true)
   open var imageDeletedAt: Instant? = null,
+
+  /** Null for check-ins created before ESUP-2223; those are not subject to the link-sent gate. */
+  @Column(name = "link_status", nullable = true)
+  @Enumerated(EnumType.STRING)
+  open var linkStatus: CheckinLinkStatus? = null,
+
+  @Column(name = "link_status_updated_at", nullable = true)
+  open var linkStatusUpdatedAt: Instant? = null,
 ) : V2BaseEntity() {
   fun dto(
     personalDetails: ContactDetails? = null,
@@ -311,6 +319,13 @@ open class OffenderCheckin(
       photoUrl = photoUrl,
     )
   }
+}
+
+/** Whether the check-in invite (the link) was accepted by GOV.UK Notify. */
+enum class CheckinLinkStatus {
+  PENDING,
+  SENT,
+  NOT_SENT,
 }
 
 fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {

@@ -320,13 +320,14 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   )
   fun findAllByOffenderIdAndDueDate(offenderId: Long, dueDate: LocalDate): List<OffenderCheckin>
 
-  /** Find all checkins by practitioner (created by) */
+  /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(
     """
     SELECT c FROM OffenderCheckin c
     JOIN FETCH c.offender o
     WHERE o.practitionerId = :practitionerId
       AND (:offenderUuid IS NULL OR o.uuid = :offenderUuid)
+      AND c.status <> 'SCHEDULED'
     """,
   )
   fun findAllByCreatedBy(
