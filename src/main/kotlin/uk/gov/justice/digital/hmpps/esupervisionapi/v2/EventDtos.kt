@@ -34,6 +34,7 @@ data class OffenderDeactivatedEvent(
   val activeEventNumber: Long?,
   val reason: String? = null,
   val sensitive: Boolean = false,
+  val expectedCurrentEvent: Long? = offender.currentEvent,
 ) : IOffenderEvent {
   override val outboxItemCoords = setup?.let { OutboxItemType.OFFENDER_DEACTIVATED to setup.primaryKey }
 }

@@ -56,6 +56,22 @@ class OffenderDeactivationService(
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+  ): Offender = deactivateOffender(
+    offender = offender,
+    reason = reason,
+    contactDetails = contactDetails,
+    sensitive = sensitive,
+    auditEventType = auditEventType,
+    expectedCurrentEvent = offender.currentEvent,
+  )
+
+  fun deactivateOffender(
+    offender: Offender,
+    reason: String,
+    contactDetails: ContactDetails? = null,
+    sensitive: Boolean = false,
+    auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+    expectedCurrentEvent: Long?,
   ): Offender {
     if (offender.status != OffenderStatus.VERIFIED) {
       LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
@@ -71,6 +87,7 @@ class OffenderDeactivationService(
       activeEventNumber = contactDetails?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) },
       reason = reason,
       sensitive = sensitive,
+      expectedCurrentEvent = expectedCurrentEvent,
     )
 
     offenderPersistenceService.offenderDeactivation(offender, event)

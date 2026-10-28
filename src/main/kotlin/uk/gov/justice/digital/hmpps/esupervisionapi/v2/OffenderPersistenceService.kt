@@ -29,13 +29,14 @@ class OffenderPersistenceService(
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
     val currentOffender = offenderRepository.findByIdForUpdate(offender.id).orElse(null) ?: return
+    entityManager.refresh(currentOffender)
     val deactivationDependsOnCurrentEvent = event.auditEventType in setOf(
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
     )
     if (
       currentOffender.status != OffenderStatus.VERIFIED ||
-      (deactivationDependsOnCurrentEvent && currentOffender.currentEvent != event.offender.currentEvent)
+      (deactivationDependsOnCurrentEvent && currentOffender.currentEvent != event.expectedCurrentEvent)
     ) {
       LOGGER.info(
         "Skipping stale deactivation for CRN {}: persisted status={}, currentEvent={}",
@@ -50,7 +51,7 @@ class OffenderPersistenceService(
     }
 
     currentOffender.status = OffenderStatus.INACTIVE
-    currentOffender.updatedAt = offender.updatedAt
+    currentOffender.updatedAt = event.offender.updatedAt
     val setup = offenderSetupRepository.findByOffender(currentOffender).orElse(null)?.let { SetupInfo.from(it) }
     val persistedEvent = event.copy(
       offender = currentOffender.dto(event.offender.personalDetails),

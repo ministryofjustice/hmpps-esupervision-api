@@ -193,10 +193,11 @@ class CheckinCreationJob(
     val offender = offenderRepository.findById(offenderInfo.id).getOrNull() ?: return
     try {
       offenderDeactivationService.deactivateOffender(
-        offender,
-        ineligibility.auditNote,
-        contactDetails,
+        offender = offender,
+        reason = ineligibility.auditNote,
+        contactDetails = contactDetails,
         auditEventType = ineligibility.auditEventType,
+        expectedCurrentEvent = offenderInfo.currentEvent,
       )
       metrics.deactivated += 1
     } catch (e: Exception) {

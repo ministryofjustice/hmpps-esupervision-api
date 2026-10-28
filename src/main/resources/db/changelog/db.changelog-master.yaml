@@ -165,3 +165,5 @@ databaseChangeLog:
       file: db/changelog/changesets/82_fix_monthly_stats_counts.sql
   - include:
       file: db/changelog/changesets/83_add_current_event_backfill_job_type.sql
+  - include:
+      file: db/changelog/changesets/84_update_monthly_stats_for_selected_event_deactivation.sql

@@ -91,9 +91,10 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     )
     assignment = questionListAssignmentRepository.save(assignment)
 
+    val deactivatedAt = clock.instant()
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = deactivatedAt),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
       setup = null,
       activeEventNumber = null,
@@ -103,6 +104,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
     val updatedCheckin = checkinRepository.findById(checkin.id).orElseThrow()
     assertEquals(CheckinStatus.CANCELLED, updatedCheckin.status)
+    assertEquals(deactivatedAt, offenderRepository.findById(offender.id).orElseThrow().updatedAt)
 
     val assignments = questionListAssignmentRepository.findAll()
     assertEquals(0, assignments.size)
@@ -121,6 +123,52 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       setup = null,
       activeEventNumber = null,
       reason = "Automatically deactivated: no active sentence in NDelius",
+    )
+
+    offenderPersistenceService.offenderDeactivation(offender, staleEvent)
+
+    val persisted = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(OffenderStatus.VERIFIED, persisted.status)
+    assertEquals(202L, persisted.currentEvent)
+  }
+
+  @Test
+  fun `stale selected-event decision is compared with the selection captured before Delius lookup`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity().apply {
+      currentEvent = 202L
+    }
+    offenderRepository.save(offender)
+    val staleEvent = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, currentEvent = 202L),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+      setup = null,
+      activeEventNumber = null,
+      expectedCurrentEvent = 101L,
+      reason = "Automatically deactivated: the selected probation event is no longer active in NDelius",
+    )
+
+    offenderPersistenceService.offenderDeactivation(offender, staleEvent)
+
+    val persisted = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(OffenderStatus.VERIFIED, persisted.status)
+    assertEquals(202L, persisted.currentEvent)
+  }
+
+  @Test
+  fun `stale selected-event deactivation compares against the selection checked before Delius lookup`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity().apply {
+      currentEvent = 202L
+    }
+    offenderRepository.save(offender)
+    val staleEvent = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, currentEvent = 202L),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+      setup = null,
+      activeEventNumber = null,
+      expectedCurrentEvent = 101L,
+      reason = "Automatically deactivated: the selected probation event is no longer active in NDelius",
     )
 
     offenderPersistenceService.offenderDeactivation(offender, staleEvent)
