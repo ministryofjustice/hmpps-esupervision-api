@@ -6,7 +6,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
@@ -19,12 +19,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
-import java.util.concurrent.CompletableFuture
 import kotlin.math.min
 
 /**
@@ -104,7 +102,7 @@ class OffenderEligibilitySyncJob(
             val result = eligibilityChecker.check(
               offender,
               contactDetails.name,
-              prePopulatedCache(contactDetails),
+              makeCache(offender, contactDetails, EligibilityAnswers(accreditedProgramme = true, deviceRestriction = false, youthSentence = false)),
             )
             processed += 1
             if (result.outcome == EligibilityCheckOutcome.INELIGIBLE) {
@@ -147,17 +145,6 @@ class OffenderEligibilitySyncJob(
       )
     }
   }
-
-  private fun prePopulatedCache(contactDetails: ContactDetails): EligibilityEvaluationEngine.Cache = mapOf(
-    "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
-    "MANUAL" to CompletableFuture.completedFuture(
-      mapOf(
-        "DEVICE_RESTRICTION" to false,
-        "ACCREDITED_PROGRAMME" to true,
-        "YOUTH_SENTENCE" to false,
-      ),
-    ),
-  )
 
   companion object {
     const val JOB_TYPE = "V2_OFFENDER_ELIGIBILITY_SYNC"
