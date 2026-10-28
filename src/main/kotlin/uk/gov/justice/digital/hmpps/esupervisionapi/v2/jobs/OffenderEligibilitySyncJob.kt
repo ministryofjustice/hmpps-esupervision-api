@@ -4,6 +4,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
@@ -35,8 +37,14 @@ class OffenderEligibilitySyncJob(
   private val eligibilityChecker: EligibilityChecker,
   private val offenderDeactivationService: OffenderDeactivationService,
   @param:Value("\${app.scheduling.v2-offender-eligibility-sync.chunk-size:100}") private val chunkSize: Int,
+  private val appConfig: AppConfig,
 ) {
   fun process() {
+    if (!appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
+      LOGGER.info("ESUP-2082 feature is disabled, skipping job execution")
+      return
+    }
+
     val pageSize = min(chunkSize, INdiliusApiClient.MAX_BATCH_SIZE)
     require(pageSize > 0) { "Eligibility sync chunk size must be greater than zero" }
 

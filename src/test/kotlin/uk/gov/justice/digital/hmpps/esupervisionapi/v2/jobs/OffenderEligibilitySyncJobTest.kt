@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -13,6 +14,8 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.test.util.ReflectionTestUtils
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
@@ -46,6 +49,12 @@ class OffenderEligibilitySyncJobTest {
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
   private val deactivationService: OffenderDeactivationService = mock()
+  private val appConfig: AppConfig = mock()
+
+  @BeforeEach
+  fun setUp() {
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+  }
 
   private val job = OffenderEligibilitySyncJob(
     clock = clock,
@@ -55,6 +64,7 @@ class OffenderEligibilitySyncJobTest {
     eligibilityChecker = eligibilityChecker,
     offenderDeactivationService = deactivationService,
     chunkSize = 100,
+    appConfig = appConfig,
   )
 
   @Test
