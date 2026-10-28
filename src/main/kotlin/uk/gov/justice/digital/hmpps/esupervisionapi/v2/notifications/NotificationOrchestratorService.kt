@@ -211,6 +211,7 @@ class NotificationOrchestratorService(
           )
         if (event.auditEventType.automated) {
           personalisation["reason"] = event.practitionerMessageFragment ?: event.reason ?: "eligibility rules"
+          personalisation["popDashboardUrl"] = appConfig.dashboardUrl().toString()
         }
 
         val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
