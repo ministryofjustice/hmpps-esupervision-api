@@ -1404,7 +1404,7 @@ class OffenderResourceTest {
     whenever(eligibilityEvaluationEngine.newFetchCache(any())).thenReturn(mock<EligibilityEvaluationEngine.FetchCache>())
     whenever(eligibilityEvaluationEngine.evaluate(any(), any(), any<EligibilityEvaluationEngine.FetchCache>())).thenReturn(
       java.util.concurrent.CompletableFuture.completedFuture(
-        EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null),
+        EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, dashboardMessage = null, triggeredRuleCode = null),
       ),
     )
 
@@ -1425,7 +1425,7 @@ class OffenderResourceTest {
       java.util.concurrent.CompletableFuture.completedFuture(
         EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
-          message = "Not eligible: person is recorded as deceased.",
+          dashboardMessage = "Not eligible: person is recorded as deceased.",
           triggeredRuleCode = "IS_ALIVE",
         ),
       ),
@@ -1507,7 +1507,7 @@ class OffenderResourceTest {
       java.util.concurrent.CompletableFuture.completedFuture(
         EligibilityResult(
           outcome = EligibilityCheckOutcome.INELIGIBLE,
-          message = "Person is deceased",
+          dashboardMessage = "Person is deceased",
           triggeredRuleCode = "IS_ALIVE",
         ),
       ),

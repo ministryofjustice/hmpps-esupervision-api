@@ -89,7 +89,7 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
-    assertNull(result.message)
+    assertNull(result.dashboardMessage)
     assertNull(result.triggeredRuleCode)
   }
 
@@ -112,7 +112,7 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
-    assertNull(result.message)
+    assertNull(result.dashboardMessage)
     assertEquals("SHORTCUT", result.triggeredRuleCode)
     verify(nomisProvider, never()).fetch(org.mockito.kotlin.any())
   }
@@ -170,7 +170,7 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.INELIGIBLE, result.outcome)
-    assertEquals("not eligible: IS_ALIVE", result.message)
+    assertEquals("not eligible: IS_ALIVE", result.dashboardMessage)
     assertEquals("IS_ALIVE", result.triggeredRuleCode)
     assertEquals("ESPRC", result.deliusOutcomeCode)
   }

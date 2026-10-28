@@ -15,7 +15,10 @@ enum class EligibilityCheckOutcome {
 
 data class EligibilityResult(
   val outcome: EligibilityCheckOutcome,
-  val message: String?,
+  /**
+   * A message describing the outcome of the eligibility check. This is going to be displayed on the dashboard.
+   */
+  val dashboardMessage: String?,
   /** Code of the rule that produced a terminal outcome, or null if every rule passed. */
   val triggeredRuleCode: String?,
   /** NDelius outcome code for the rule that produced the terminal decision, when available. */
@@ -124,7 +127,7 @@ class EligibilityEvaluationEngine(
   ): CompletableFuture<EligibilityResult> {
     require(rules.isNotEmpty()) { "No rules found for ruleSet $ruleSet" }
     if (index >= rules.size) {
-      return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, message = null, triggeredRuleCode = null, deliusOutcomeCode = null))
+      return CompletableFuture.completedFuture(EligibilityResult(outcome = EligibilityCheckOutcome.ELIGIBLE, dashboardMessage = null, triggeredRuleCode = null, deliusOutcomeCode = null))
     }
     val rule = rules[index]
     return evaluateRule(rule, crn, fetchCache).thenCompose { (outcome, message) ->

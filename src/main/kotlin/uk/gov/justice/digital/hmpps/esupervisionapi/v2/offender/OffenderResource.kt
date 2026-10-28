@@ -222,7 +222,7 @@ class OffenderResource(
           ResponseEntity.ok(
             EligibilityCheckResponse(
               outcome = result.outcome.toResponseOutcome(),
-              message = result.message?.let { applyTemplate(it, contactDetails.name) },
+              message = result.dashboardMessage?.let { applyTemplate(it, contactDetails.name) },
             ),
           )
         }
@@ -269,7 +269,7 @@ class OffenderResource(
                 message = if (evalIssue == EvalIssue.MANUAL_DATA_MISSING) {
                   applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name)
                 } else {
-                  evalResult.message?.let { applyTemplate(it, contactDetails.name) }
+                  evalResult.dashboardMessage?.let { applyTemplate(it, contactDetails.name) }
                 },
                 allRules = report
                   .filter { (rule, _) -> rule.source != "MANUAL" }
@@ -600,7 +600,7 @@ class OffenderResource(
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
         HttpStatus.UNPROCESSABLE_CONTENT,
-        "Cannot reactivate ${offender.crn}: ${outcome.message ?: "ineligible for online check-ins."}",
+        "Cannot reactivate ${offender.crn}: ${outcome.dashboardMessage ?: "ineligible for online check-ins."}",
       )
     }
 

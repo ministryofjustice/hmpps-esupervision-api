@@ -10,8 +10,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
@@ -33,6 +37,7 @@ class OffenderEligibilitySyncJob(
   private val clock: Clock,
   private val jobLogRepository: JobLogRepository,
   private val offenderRepository: OffenderRepository,
+  private val offenderSetupRepository: OffenderSetupRepository,
   private val ndiliusApiClient: INdiliusApiClient,
   private val eligibilityChecker: EligibilityChecker,
   private val offenderDeactivationService: OffenderDeactivationService,
@@ -103,18 +108,23 @@ class OffenderEligibilitySyncJob(
             )
             processed += 1
             if (result.outcome == EligibilityCheckOutcome.INELIGIBLE) {
-              val reason = result.message
-                ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"} found the offender ineligible for online check-ins."
-              offenderDeactivationService.deactivateOffender(
-                offender = offender,
-                reason = reason,
-                practitionerMessageFragment = result.messageFragment,
-                contactDetails = contactDetails,
+              val reason = "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"} found the offender ineligible for online check-ins."
+              val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
+              val event = OffenderDeactivatedEvent(
+                offenderId = offender.id,
+                offender = offender.dto(contactDetails),
                 auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
+                setup = setup?.let { SetupInfo.from(it) },
+                activeEventNumber = activeEventNumber(offender, contactDetails),
+                reason = reason,
+                sensitive = false,
                 deliusOutcomeCode = result.deliusOutcomeCode,
+                practitionerMessageFragment = result.messageFragment,
               )
+
+              offenderDeactivationService.deactivateOffender(offender, event)
               deactivated += 1
-              LOGGER.info("Stopped online check-ins for CRN {}: {}", offender.crn, reason)
+              LOGGER.info("Stopped online check-ins for CRN {}: triggered rule code={}, outcome={}", offender.crn, result.triggeredRuleCode, result.outcome)
             }
           } catch (e: Exception) {
             failed += 1

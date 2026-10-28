@@ -4,7 +4,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
@@ -23,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -46,6 +47,7 @@ class OffenderEligibilitySyncJobTest {
     on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
   }
   private val offenderRepository: OffenderRepository = mock()
+  private val offenderSetupRepository: OffenderSetupRepository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
   private val deactivationService: OffenderDeactivationService = mock()
@@ -60,6 +62,7 @@ class OffenderEligibilitySyncJobTest {
     clock = clock,
     jobLogRepository = jobLogRepository,
     offenderRepository = offenderRepository,
+    offenderSetupRepository = offenderSetupRepository,
     ndiliusApiClient = ndiliusApiClient,
     eligibilityChecker = eligibilityChecker,
     offenderDeactivationService = deactivationService,
@@ -113,12 +116,9 @@ class OffenderEligibilitySyncJobTest {
 
     verify(deactivationService).deactivateOffender(
       same(offender),
-      eq(reason),
-      anyOrNull(),
-      same(details),
-      eq(false),
-      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
-      eq("ESPRC"),
+      argThat {
+        !sensitive && this.reason != null && auditEventType == OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE && deliusOutcomeCode == "ESPRC"
+      },
     )
   }
 
@@ -150,12 +150,9 @@ class OffenderEligibilitySyncJobTest {
     )
     verify(deactivationService).deactivateOffender(
       same(ineligible),
-      eq("Ineligible reason"),
-      anyOrNull(),
-      same(ineligibleDetails),
-      eq(false),
-      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
-      anyOrNull(),
+      argThat {
+        reason != null && !sensitive && auditEventType == OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE
+      },
     )
   }
 
@@ -173,12 +170,9 @@ class OffenderEligibilitySyncJobTest {
     verify(eligibilityChecker, times(1)).check(any(), any(), any())
     verify(deactivationService).deactivateOffender(
       same(ineligible),
-      anyOrNull(),
-      anyOrNull(),
-      same(details),
-      eq(false),
-      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE),
-      anyOrNull(),
+      argThat {
+        !sensitive && this.reason != null && auditEventType == OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE
+      },
     )
   }
 

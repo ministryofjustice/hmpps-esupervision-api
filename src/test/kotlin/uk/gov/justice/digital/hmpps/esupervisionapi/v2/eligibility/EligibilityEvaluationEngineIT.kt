@@ -107,7 +107,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       .join()
 
     assertThat(resultC.outcome).isEqualTo(EligibilityCheckOutcome.INELIGIBLE)
-    assertThat(resultC.message).isEqualTo("{{offender}} is not eligible for online check ins because they are in Tier C.")
+    assertThat(resultC.dashboardMessage).isEqualTo("{{offender}} is not eligible for online check ins because they are in Tier C.")
     assertThat(resultC.triggeredRuleCode).isEqualTo("IS_TIER_C")
   }
 }
