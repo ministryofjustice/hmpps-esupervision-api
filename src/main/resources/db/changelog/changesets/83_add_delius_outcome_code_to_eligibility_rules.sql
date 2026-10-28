@@ -14,7 +14,7 @@ set delius_outcome_code = case code
     when 'IN_FINAL_THIRD' then 'ESPFT'
     when 'IS_PRACTITIONER_ASSIGNED' then 'ESPNP'
     when 'HAS_DEVICE_RESTRICTION' then 'ESPDI'
-    when 'IS_TIER_C' then 'ESPIT'
+    -- when 'IS_TIER_C' then 'ESPIT'
     when 'ON_ACCREDITED_PROGRAMME' then 'ESPAP'
     when 'IN_EARLY_ENGAGEMENT' then 'ESPEE'
 end
