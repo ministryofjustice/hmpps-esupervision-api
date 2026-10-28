@@ -2,7 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -139,7 +139,7 @@ class ScheduledCheckinSchemaIT : IntegrationTestBase() {
     assertNull(checkinRepository.findByUuid(legacy.uuid).get().linkStatus)
     val reloaded = checkinRepository.findByUuid(withLink.uuid).get()
     assertEquals(CheckinLinkStatus.NOT_SENT, reloaded.linkStatus)
-    assertFalse(reloaded.linkStatusUpdatedAt == null)
+    assertNotNull(reloaded.linkStatusUpdatedAt)
   }
 
   @Test
