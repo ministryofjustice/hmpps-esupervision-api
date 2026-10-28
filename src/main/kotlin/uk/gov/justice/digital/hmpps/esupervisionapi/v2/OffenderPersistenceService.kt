@@ -58,7 +58,7 @@ class OffenderPersistenceService(
       setup = setup,
       activeEventNumber = event.offender.personalDetails?.let {
         activeEventNumber(currentOffender, it, appConfig.esup2305DeliusEventSelection)
-      },
+      } ?: currentOffender.currentEvent.takeIf { setup == null },
     )
     offenderRepository.save(currentOffender)
     if (setup != null) {

@@ -8,10 +8,14 @@ import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.event.ApplicationEvents
+import org.springframework.test.context.event.RecordApplicationEvents
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
@@ -35,6 +39,7 @@ import java.util.UUID
 import java.util.UUID.randomUUID
 
 @TestPropertySource(properties = ["app.features.esup-2305=true"])
+@RecordApplicationEvents
 class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
   @Autowired
@@ -57,6 +62,9 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var clock: Clock
+
+  @Autowired
+  private lateinit var applicationEvents: ApplicationEvents
 
   @AfterEach
   fun cleanUp() {
@@ -156,6 +164,35 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     val persisted = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(OffenderStatus.VERIFIED, persisted.status)
     assertEquals(202L, persisted.currentEvent)
+  }
+
+  @Test
+  fun `deactivation without setup id publishes saved event number when Delius returns no events`() {
+    val offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity().apply {
+      currentEvent = 101L
+    }
+    offenderRepository.save(offender)
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+    val staleEvent = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(details).copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+      setup = null,
+      activeEventNumber = null,
+      reason = "Automatically deactivated: the selected probation event is no longer active in NDelius",
+    )
+
+    offenderPersistenceService.offenderDeactivation(offender, staleEvent)
+
+    val publishedEvent = applicationEvents.stream(OffenderDeactivatedEvent::class.java)
+      .filter { it.offenderId == offender.id }
+      .findFirst()
+      .orElseThrow()
+    assertEquals(101L, publishedEvent.activeEventNumber)
   }
 
   @Test
