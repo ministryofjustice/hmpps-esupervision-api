@@ -16,15 +16,20 @@ class DomainEventPublisher(
   }
   fun publish(domainEvent: DomainEvent) {
     try {
-      val response = domainEventsTopic.publish(
-        domainEvent.eventType,
-        objectMapper.writeValueAsString(domainEvent),
-      )
-      LOG.info("Published event to outbound topic, eventType={}, messageId={}", domainEvent.eventType, response.messageId())
-      LOG.debug("Event contains person reference, messageId={}, identifiers={}", response.messageId(), domainEvent.personReference?.identifiers)
+      publishOrThrow(domainEvent)
     } catch (ex: Exception) {
       LOG.warn("Failed to publish event to outbound topic, eventType={}, message: {}", domainEvent.eventType, ex.message)
     }
+  }
+
+  /** Like [publish], but lets the failure through so the caller can retry. */
+  fun publishOrThrow(domainEvent: DomainEvent) {
+    val response = domainEventsTopic.publish(
+      domainEvent.eventType,
+      objectMapper.writeValueAsString(domainEvent),
+    )
+    LOG.info("Published event to outbound topic, eventType={}, messageId={}", domainEvent.eventType, response.messageId())
+    LOG.debug("Event contains person reference, messageId={}, identifiers={}", response.messageId(), domainEvent.personReference?.identifiers)
   }
 
   companion object {

@@ -41,15 +41,7 @@ class DomainEventService(
     val detailUrl = eventType.pathSegment?.let { "$apiBaseUrl/v2/events/$it/$uuid" }
 
     try {
-      val event = DomainEvent(
-        eventType = eventType.type,
-        detailUrl = detailUrl,
-        occurredAt = occurredAt ?: clock.instant().atZone(clock.zone),
-        description = description,
-        personReference = PersonReference(listOf(PersonReference.PersonIdentifier("CRN", crn))),
-        additionalInformation = additionalInformation,
-      )
-
+      val event = buildEvent(eventType, detailUrl, crn, description, occurredAt, additionalInformation)
       eventPublisher.publish(event)
       LOGGER.info("Published domain event: eventType={}, crn={}, detailUrl={}, eventNumber={}, setupId={}, outcomeCode={}", eventType.type, crn, detailUrl, additionalInformation?.eventNumber, additionalInformation?.setupId, additionalInformation?.outcomeCode)
       return true
@@ -62,6 +54,38 @@ class DomainEventService(
       return false
     }
   }
+
+  /**
+   * Publish a domain event, throwing if it could not be published so the caller can retry.
+   */
+  fun publishDomainEventOrThrow(
+    eventType: DomainEventType,
+    uuid: UUID,
+    crn: String,
+    description: String,
+    occurredAt: ZonedDateTime,
+    additionalInformation: AdditionalInformation? = null,
+  ) {
+    val detailUrl = eventType.pathSegment?.let { "$apiBaseUrl/v2/events/$it/$uuid" }
+    eventPublisher.publishOrThrow(buildEvent(eventType, detailUrl, crn, description, occurredAt, additionalInformation))
+    LOGGER.info("Published domain event: eventType={}, crn={}, detailUrl={}, eventNumber={}", eventType.type, crn, detailUrl, additionalInformation?.eventNumber)
+  }
+
+  private fun buildEvent(
+    eventType: DomainEventType,
+    detailUrl: String?,
+    crn: String,
+    description: String,
+    occurredAt: ZonedDateTime?,
+    additionalInformation: AdditionalInformation?,
+  ) = DomainEvent(
+    eventType = eventType.type,
+    detailUrl = detailUrl,
+    occurredAt = occurredAt ?: clock.instant().atZone(clock.zone),
+    description = description,
+    personReference = PersonReference(listOf(PersonReference.PersonIdentifier("CRN", crn))),
+    additionalInformation = additionalInformation,
+  )
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(DomainEventService::class.java)

@@ -13,7 +13,17 @@ Domain events are published to AWS SQS for integration with NDelius and other do
 | `V2_CHECKIN_SUBMITTED` | `checkin-submitted` | Offender submitted checkin | Yes |
 | `V2_CHECKIN_REVIEWED` | `checkin-reviewed` | Practitioner reviewed checkin | Yes |
 | `V2_CHECKIN_EXPIRED` | `checkin-expired` | Checkin marked as expired | Yes |
-| `V2_CHECKIN_UPDATED` | `checkin-updated` | Checkin updated (annotated) | Yes |
+| `V2_CHECKIN_ANNOTATED` | `checkin-annotated` | Checkin updated (annotated) | Yes |
+| `V2_CHECKIN_SCHEDULED` | `checkin-scheduled` | Next check-in scheduled (ESUP-2223) | Yes |
+| `V2_CHECKIN_RESCHEDULED` | `checkin-rescheduled` | Scheduled check-in moved to a new date; published as `check-in.updated` (ESUP-2223) | Yes |
+| `V2_CHECKIN_CANCELLED` | `checkin-cancelled` | Check-in cancelled before it was submitted (ESUP-2223) | Yes |
+| `V2_CHECKIN_LINK_DELIVERED` | `checkin-link-delivered` | Check-in link accepted by GOV.UK Notify (ESUP-2223) | Yes |
+| `V2_CHECKIN_LINK_NOT_DELIVERED` | `checkin-link-not-delivered` | Check-in link could not be sent (ESUP-2223) | Yes |
+
+The ESUP-2223 events are not published directly: they are recorded in `checkin_delius_event_v2`
+and published in order by `CheckinDeliusEventRelayJob` (see [Background Jobs](BACKGROUND_JOBS.md)).
+Their detail URL carries the event's own id (from that table), not the check-in UUID; NDelius
+links the contact to the check-in through `checkinUuid` in the detail response.
 
 ---
 
@@ -118,8 +128,21 @@ data class EventDetailResponse(
     val offenderUuid: UUID,
     val checkinUuid: UUID?,
     val timestamp: Instant,
+    val sensitive: Boolean,
+    val dateTime: ZonedDateTime?,  // see below
 )
 ```
+
+### dateTime
+
+NDelius uses `dateTime`, when present, as the contact's date and start time.
+
+| Event | dateTime |
+|-------|----------|
+| scheduled | The scheduled date at 9am Europe/London (check-ins only have a date; 9am is when the creation job sends links) |
+| received (submitted) | The submission time (only with feature ESUP_2223 on) |
+| updated, for a reschedule | The new scheduled date at 9am Europe/London |
+| Every other event (link, cancelled, expired, reviewed, annotation updates) | Absent: NDelius would otherwise move the contact |
 
 ### Notes Formatting
 
@@ -166,7 +189,12 @@ Notes: Spoke to offender about housing issue. Referring to housing officer.
 | `GET` | `/v2/events/checkin-submitted/{uuid}` | Checkin submitted event details |
 | `GET` | `/v2/events/checkin-reviewed/{uuid}` | Checkin reviewed event details |
 | `GET` | `/v2/events/checkin-expired/{uuid}` | Checkin expired event details |
-| `GET` | `/v2/events/checkin-updated/{uuid}` | Checkin updated event details |
+| `GET` | `/v2/events/checkin-annotated/{uuid}` | Checkin updated (annotated) event details |
+| `GET` | `/v2/events/checkin-scheduled/{eventId}` | Checkin scheduled event details |
+| `GET` | `/v2/events/checkin-rescheduled/{eventId}` | Checkin rescheduled event details |
+| `GET` | `/v2/events/checkin-cancelled/{eventId}` | Checkin cancelled event details |
+| `GET` | `/v2/events/checkin-link-delivered/{eventId}` | Checkin link delivered event details |
+| `GET` | `/v2/events/checkin-link-not-delivered/{eventId}` | Checkin link not delivered event details |
 
 ---
 

@@ -8,6 +8,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.formatHumanReadableDateTime
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.appendQuestionsAndAnswers
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.DELIUS_ZONE
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -18,6 +20,7 @@ import kotlin.jvm.optionals.getOrNull
 class EventDetailService(
   private val checkinRepository: OffenderCheckinRepository,
   private val eventLogRepository: OffenderEventLogRepository,
+  private val checkinDeliusEventRepository: CheckinDeliusEventRepository,
   private val proxyLinkCreator: ProxyLinkCreator,
   private val appConfig: AppConfig,
   val expansionsConfig: SurveyValueExpansionsConfig,
@@ -49,6 +52,12 @@ class EventDetailService(
       DomainEventType.V2_CHECKIN_EXPIRED,
       -> getCheckinEventDetail(uuid, domainEventType)
       DomainEventType.V2_CHECKIN_ANNOTATED -> getCheckinAnnotatedEventDetail(uuid)
+      DomainEventType.V2_CHECKIN_SCHEDULED,
+      DomainEventType.V2_CHECKIN_RESCHEDULED,
+      DomainEventType.V2_CHECKIN_CANCELLED,
+      DomainEventType.V2_CHECKIN_LINK_DELIVERED,
+      DomainEventType.V2_CHECKIN_LINK_NOT_DELIVERED,
+      -> getCheckinDeliusEventDetail(uuid, domainEventType)
       DomainEventType.V2_SETUP_COMPLETED,
       DomainEventType.V2_SETUP_REMOVED,
       null,
@@ -83,6 +92,37 @@ class EventDetailService(
       checkinUuid = checkinUuid,
       timestamp = timestamp,
       sensitive = checkin.sensitive,
+      dateTime = if (eventType == DomainEventType.V2_CHECKIN_SUBMITTED && appConfig.enabledFeatures.contains(Feature.ESUP_2223)) {
+        checkin.submittedAt?.atZone(DELIUS_ZONE)
+      } else {
+        null
+      },
+    )
+  }
+
+  /** The detail is the event as recorded, so it reflects the check-in at the time of the event. */
+  private fun getCheckinDeliusEventDetail(eventId: UUID, eventType: DomainEventType): EventDetailResponse? {
+    val event = checkinDeliusEventRepository.findByEventId(eventId).getOrNull()
+    if (event == null || event.eventType != eventType) {
+      LOGGER.warn("{} event not found for UUID: {}", eventType.eventTypeName, eventId)
+      return null
+    }
+    val checkin = checkinRepository.findByUuid(event.checkinUuid).getOrNull()
+    if (checkin == null) {
+      LOGGER.warn("Check in not found for UUID={}, where {} event UUID={}", event.checkinUuid, eventType.eventTypeName, eventId)
+      return null
+    }
+
+    return EventDetailResponse(
+      eventReferenceId = "${eventType.eventTypeName}-$eventId",
+      eventType = eventType.eventTypeName,
+      notes = event.notes,
+      crn = event.crn,
+      offenderUuid = checkin.offender.uuid,
+      checkinUuid = event.checkinUuid,
+      timestamp = event.occurredAt,
+      sensitive = checkin.sensitive,
+      dateTime = event.dateTime?.atZone(DELIUS_ZONE),
     )
   }
 
@@ -171,6 +211,11 @@ class EventDetailService(
       }
       DomainEventType.V2_SETUP_COMPLETED,
       DomainEventType.V2_SETUP_REMOVED,
+      DomainEventType.V2_CHECKIN_SCHEDULED,
+      DomainEventType.V2_CHECKIN_RESCHEDULED,
+      DomainEventType.V2_CHECKIN_CANCELLED,
+      DomainEventType.V2_CHECKIN_LINK_DELIVERED,
+      DomainEventType.V2_CHECKIN_LINK_NOT_DELIVERED,
       -> {}
     }
 

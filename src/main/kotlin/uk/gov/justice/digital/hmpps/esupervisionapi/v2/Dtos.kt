@@ -23,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidQuestionPar
 import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.util.UUID
 
 // ========================================
@@ -746,6 +747,11 @@ data class EventDetailResponse(
   @Schema(description = "Offender UUID", required = false) val offenderUuid: UUID? = null,
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
   @Schema(description = "Sensitive", required = false) val sensitive: Boolean = false,
+  @Schema(
+    description = "When the check-in happens or happened: the scheduled date for scheduled and rescheduled events, the submission time for received events. Absent for every other event.",
+    required = false,
+  )
+  val dateTime: ZonedDateTime? = null,
 )
 
 enum class QuestionPolicy {

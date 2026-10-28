@@ -111,4 +111,94 @@ class EventResource(
 
     return ResponseEntity.ok(event)
   }
+
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/checkin-scheduled/{uuid}")
+  @Operation(
+    summary = "Get checkin scheduled event details",
+    description =
+    "Callback URL for Ndilius to query formatted notes for checkin scheduled event",
+  )
+  fun getCheckinScheduledEvent(
+    @Parameter(description = "Event UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<EventDetailResponse> {
+    val detailUrl = "/v2/events/checkin-scheduled/$uuid"
+    val event =
+      notificationService.getEventDetail(detailUrl)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found")
+
+    return ResponseEntity.ok(event)
+  }
+
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/checkin-rescheduled/{uuid}")
+  @Operation(
+    summary = "Get checkin rescheduled event details",
+    description =
+    "Callback URL for Ndilius to query formatted notes for checkin rescheduled event",
+  )
+  fun getCheckinRescheduledEvent(
+    @Parameter(description = "Event UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<EventDetailResponse> {
+    val detailUrl = "/v2/events/checkin-rescheduled/$uuid"
+    val event =
+      notificationService.getEventDetail(detailUrl)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found")
+
+    return ResponseEntity.ok(event)
+  }
+
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/checkin-cancelled/{uuid}")
+  @Operation(
+    summary = "Get checkin cancelled event details",
+    description =
+    "Callback URL for Ndilius to query formatted notes for checkin cancelled event",
+  )
+  fun getCheckinCancelledEvent(
+    @Parameter(description = "Event UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<EventDetailResponse> {
+    val detailUrl = "/v2/events/checkin-cancelled/$uuid"
+    val event =
+      notificationService.getEventDetail(detailUrl)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found")
+
+    return ResponseEntity.ok(event)
+  }
+
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/checkin-link-delivered/{uuid}")
+  @Operation(
+    summary = "Get checkin link delivered event details",
+    description =
+    "Callback URL for Ndilius to query formatted notes for checkin link delivered event",
+  )
+  fun getCheckinLinkDeliveredEvent(
+    @Parameter(description = "Event UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<EventDetailResponse> {
+    val detailUrl = "/v2/events/checkin-link-delivered/$uuid"
+    val event =
+      notificationService.getEventDetail(detailUrl)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found")
+
+    return ResponseEntity.ok(event)
+  }
+
+  @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @GetMapping("/checkin-link-not-delivered/{uuid}")
+  @Operation(
+    summary = "Get checkin link not delivered event details",
+    description =
+    "Callback URL for Ndilius to query formatted notes for checkin link not delivered event",
+  )
+  fun getCheckinLinkNotDeliveredEvent(
+    @Parameter(description = "Event UUID", required = true) @PathVariable uuid: UUID,
+  ): ResponseEntity<EventDetailResponse> {
+    val detailUrl = "/v2/events/checkin-link-not-delivered/$uuid"
+    val event =
+      notificationService.getEventDetail(detailUrl)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found")
+
+    return ResponseEntity.ok(event)
+  }
 }

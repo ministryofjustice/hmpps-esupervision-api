@@ -167,3 +167,5 @@ databaseChangeLog:
       file: db/changelog/changesets/84_checkin_status_scheduled.sql
   - include:
       file: db/changelog/changesets/85_scheduled_checkin_activation.sql
+  - include:
+      file: db/changelog/changesets/86_checkin_delius_events.sql
