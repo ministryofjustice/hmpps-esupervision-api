@@ -203,7 +203,7 @@ class CheckinCreationJob(
         // "old" rules are a special case, so we massage the the wording a bit so it fits
         // '..., because ((name)) ((reason))', `practitionerMessageFragment` is used as ((reason))
         // Ugly, but once eligibility is live, we will can delete this whole method.
-        practitionerMessageFragment = "triggered the following rule: ${ineligibility.auditNote}",
+        practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
         contactDetails = contactDetails,
         auditEventType = ineligibility.auditEventType,
       )

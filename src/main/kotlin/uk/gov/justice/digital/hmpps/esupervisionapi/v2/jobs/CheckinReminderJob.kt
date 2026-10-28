@@ -127,7 +127,7 @@ class CheckinReminderJob(
                   // "old" rules are a special case, so we massage the the wording a bit so it fits
                   // '..., because ((name)) ((reason))', `practitionerMessageFragment` is used as ((reason))
                   // Ugly, but once eligibility is live, we will remove the deactivation call from here.
-                  practitionerMessageFragment = "triggered the following rule: ${ineligibility.auditNote}",
+                  practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
                   contactDetails = contactDetails,
                   auditEventType = ineligibility.auditEventType,
                 )
