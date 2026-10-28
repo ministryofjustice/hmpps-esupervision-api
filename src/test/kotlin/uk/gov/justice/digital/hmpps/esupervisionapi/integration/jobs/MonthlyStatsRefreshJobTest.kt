@@ -6,6 +6,7 @@ import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.jdbc.core.JdbcTemplate
@@ -92,12 +93,12 @@ class MonthlyStatsRefreshJobTest {
 
     job.refresh()
 
-    verify(jdbcTemplate).execute(
+    verify(jdbcTemplate, times(2)).execute(
       eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
       any<PreparedStatementCallback<*>>(),
     )
 
-    verify(jdbcTemplate).execute(
+    verify(jdbcTemplate, times(2)).execute(
       eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
       any<PreparedStatementCallback<*>>(),
     )
@@ -114,12 +115,12 @@ class MonthlyStatsRefreshJobTest {
 
     job.refresh()
 
-    verify(jdbcTemplate).execute(
+    verify(jdbcTemplate, times(2)).execute(
       eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_STATS_SQL),
       any<PreparedStatementCallback<*>>(),
     )
 
-    verify(jdbcTemplate).execute(
+    verify(jdbcTemplate, times(2)).execute(
       eq(MonthlyStatsRefreshJob.REFRESH_MONTHLY_FEEDBACK_STATS_SQL),
       any<PreparedStatementCallback<*>>(),
     )
