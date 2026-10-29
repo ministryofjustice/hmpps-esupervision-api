@@ -34,7 +34,7 @@ class OffenderPersistenceService(
     }
     eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 
-    appEventPublisher.publishEvent(event)
+    appEventPublisher.publishEvent(event.copy(offender = offender.dto(event.offender.personalDetails)))
   }
 
   /**

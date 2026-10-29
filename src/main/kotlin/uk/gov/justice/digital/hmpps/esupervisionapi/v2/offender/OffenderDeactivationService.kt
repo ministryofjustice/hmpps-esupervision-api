@@ -62,8 +62,7 @@ class OffenderDeactivationService(
   ): Offender {
     if (validateOffender(offender)) return offender
 
-    offender.status = OffenderStatus.INACTIVE
-    offender.updatedAt = clock.instant()
+    updateForDeactivation(offender)
 
     val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
     val event = OffenderDeactivatedEvent(
@@ -85,8 +84,16 @@ class OffenderDeactivationService(
 
   fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender {
     if (validateOffender(offender)) return offender
-    offenderPersistenceService.offenderDeactivation(offender, event)
+
+    updateForDeactivation(offender)
+
+    offenderPersistenceService.offenderDeactivation(offender, event.copy(offender = offender.dto(event.offender.personalDetails)))
     return offender
+  }
+
+  private fun updateForDeactivation(offender: Offender) {
+    offender.status = OffenderStatus.INACTIVE
+    offender.updatedAt = clock.instant()
   }
 
   private fun validateOffender(offender: Offender): Boolean {
