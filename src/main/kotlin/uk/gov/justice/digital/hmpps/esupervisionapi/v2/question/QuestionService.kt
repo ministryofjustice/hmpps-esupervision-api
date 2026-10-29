@@ -11,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequ
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
@@ -132,7 +133,7 @@ class QuestionService(
       throw BadArgumentException("Offender is due for a checkin. Too late to assign questions.")
     }
 
-    val listId = createQuestionList(request)
+    val listId = createQuestionList(materialiseBespokeQuestions(request))
 
     val assigned = questionListAssignmentRepository.createAssignment(offender.id, listId) == 1
     LOG.info("Question list assignment for offender={}, listId={} assigned?={}", crn, listId, assigned)
@@ -160,20 +161,66 @@ class QuestionService(
       if (!item.params.containsKey("placeholders")) {
         throw BadArgumentException("Question ${item.id} is missing placeholders")
       }
-      mapOf("id" to item.id, "params" to item.params)
+      mapOf("id" to requireNotNull(item.id), "params" to item.params)
     },
   ) ?: throw RuntimeException("Failed to create question list.")
 
+  /**
+   * A bespoke question has no template to point at, so a question row is created for the author
+   * (or an identical earlier one reused) before the list is built. The returned request references
+   * every question by id.
+   *
+   * Distinct texts are defined in sorted order. The whole assignment is one transaction, and an insert
+   * on uk_question_uuid waits for an uncommitted row with the same uuid, so two concurrent assignments
+   * that introduced the same new texts in different orders could otherwise deadlock.
+   */
+  private fun materialiseBespokeQuestions(request: AssignCustomQuestionsRequest): AssignCustomQuestionsRequest {
+    val idsByText = request.questions
+      .filter { it.hasBespokeText() }
+      .map { requireNotNull(it.text).trim() }
+      .distinct()
+      .sorted()
+      .associateWith { questionsRepository.defineBespokeQuestion(request.author, it) }
+    return request.copy(
+      questions = request.questions.map { item ->
+        if (item.hasBespokeText()) {
+          val questionId = idsByText.getValue(requireNotNull(item.text).trim())
+          CustomQuestionItem(id = questionId, params = mapOf("placeholders" to emptyMap<String, String>()))
+        } else {
+          item
+        }
+      },
+    )
+  }
+
+  /**
+   * Checks template questions against their templates. Bespoke questions have no template; the
+   * request validator has already checked they carry text.
+   *
+   * Any CUSTOMISABLE question that has not been retired is accepted by id, whoever authored it. That
+   * includes a bespoke question another practitioner wrote: a client reusing ids it was given from
+   * an existing list must keep working when a colleague takes over, and the text is already visible
+   * to practitioners. The UI re-sends earlier bespoke questions as text, so they are redefined for
+   * the new author rather than shared.
+   */
   private fun validateQuestionRequest(request: AssignCustomQuestionsRequest) {
-    val questionsById = questionsRepository
-      .getQuestionTemplates(request.questions.map { it.id }, request.language)
-      .associateBy { it.id }
-    request.questions.forEach {
-      val template = questionsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
-      if (template.policy != QuestionPolicy.CUSTOMISABLE) {
+    val templateQuestions = request.questions.filter { !it.hasBespokeText() }
+    if (templateQuestions.isEmpty()) {
+      return
+    }
+    val lookupsById = questionsRepository
+      .getQuestionTemplates(templateQuestions.map { requireNotNull(it.id) }, request.language)
+      .associateBy { it.template.id }
+    templateQuestions.forEach {
+      val lookup = lookupsById[it.id] ?: throw BadArgumentException("No question with ID=${it.id}")
+      if (lookup.template.policy != QuestionPolicy.CUSTOMISABLE) {
         throw BadArgumentException("Question ${it.id} is not customisable")
       }
-      validateAgainstTemplates(it, template)
+      // Retired templates stay resolvable for lists assigned before retirement but are no longer offered
+      if (lookup.retired) {
+        throw BadArgumentException("Question ${it.id} has been retired")
+      }
+      validateAgainstTemplates(it, lookup.template)
     }
   }
 
