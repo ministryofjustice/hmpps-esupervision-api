@@ -136,9 +136,10 @@ class EventDetailServiceTest {
       assertThat(service.getEventDetail("/v2/events/checkin-link-delivered/${UUID.randomUUID()}")).isNull()
     }
 
-    private fun deliusEvent(type: DomainEventType, checkinUuid: UUID, dateTime: Instant? = null) = CheckinDeliusEvent(
-      eventId = UUID.randomUUID(),
+    private fun deliusEvent(type: DomainEventType, checkinUuid: UUID, dateTime: Instant? = null, eventId: UUID = UUID.randomUUID()) = CheckinDeliusEvent(
+      eventId = eventId,
       eventType = type,
+      detailId = eventId,
       checkinUuid = checkinUuid,
       crn = "X123456",
       eventNumber = 2,

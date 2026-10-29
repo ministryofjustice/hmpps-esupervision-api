@@ -25,6 +25,11 @@ and published in order by `CheckinDeliusEventRelayJob` (see [Background Jobs](BA
 Their detail URL carries the event's own id (from that table), not the check-in UUID; NDelius
 links the contact to the check-in through `checkinUuid` in the detail response.
 
+With feature `ESUP_2223` on, the received, expired, reviewed and updated (annotation) events go
+through the same table, recorded in the transaction that changes the check-in, so they can't
+overtake the check-in's lifecycle events (NDelius updates the contact `scheduled` created). Their
+detail URL and detail response are unchanged.
+
 ---
 
 ## Upcoming Check-ins (ESUP-2223, feature `ESUP_2223`)

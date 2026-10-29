@@ -51,6 +51,9 @@ class CheckinPersistenceService(
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
     upcomingCheckinService.scheduleNext(checkin.offender.id)
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin)
+    }
 
     appEventPublisher.publishEvent(event)
   }
@@ -60,6 +63,9 @@ class CheckinPersistenceService(
     require(event.checkin.reviewedBy != null)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinReviewed(checkin, event)
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_REVIEWED, checkin)
+    }
     offenderEventLogRepository.save(
       OffenderEventLog(
         comment = reviewInfo.comment,
@@ -91,6 +97,9 @@ class CheckinPersistenceService(
         checkin = checkin.id,
       ),
     )
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_ANNOTATED, checkin, detailId = logEntry.uuid)
+    }
 
     appEventPublisher.publishEvent(event.finalise(logEntry))
   }
