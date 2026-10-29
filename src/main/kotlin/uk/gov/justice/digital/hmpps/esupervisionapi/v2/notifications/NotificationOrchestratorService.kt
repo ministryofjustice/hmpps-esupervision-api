@@ -454,7 +454,8 @@ class NotificationOrchestratorService(
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
 
-    val eventNumber = activeEventNumber(checkin.offender, details, appConfig.esup2305DeliusEventSelection)
+    val eventNumber = checkin.offender.currentEvent
+      ?: activeEventNumber(checkin.offender, details, appConfig.esup2305DeliusEventSelection)
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_EXPIRED,
       uuid = checkin.uuid,

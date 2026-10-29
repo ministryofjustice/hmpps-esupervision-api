@@ -240,6 +240,10 @@ class CheckinService(
       )
     }
 
+    if (appConfig.esup2305DeliusEventSelection && contactDetails != null && activeEventNumber(checkin.offender, contactDetails) == null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot submit check-in because a probation event must be selected.")
+    }
+
     checkin.applyRequest(request, clock)
     val event = checkin.toCheckinSubmittedEvent(
       contactDetails,

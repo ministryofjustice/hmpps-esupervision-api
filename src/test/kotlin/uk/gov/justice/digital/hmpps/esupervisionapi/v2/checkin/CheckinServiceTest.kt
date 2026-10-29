@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
@@ -245,6 +247,52 @@ class CheckinServiceTest {
     assertNull(result.videoUrl, "Submission result should not contain media URLs")
     assertNull(result.snapshotUrl, "Submission result should not contain media URLs")
     verify(checkinPersistenceService).checkinSubmission(any(), any())
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = [true, false])
+  fun `submitCheckin - unresolved sentence selection is rejected only when enabled`(enabled: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = createOffender()
+    val checkin = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      checkinStartedAt = clock.instant(),
+    )
+    val sentence = Event.Sentence(
+      date = LocalDate.now(clock).minusMonths(1),
+      description = "Community order",
+      expectedEndDate = LocalDate.now(clock).plusMonths(6),
+    )
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(
+        Event(1L, CodedDescription("X", "An offence"), sentence),
+        Event(2L, CodedDescription("Y", "Another offence"), sentence.copy(expectedEndDate = null)),
+      ),
+    )
+    whenever(checkinPersistenceService.findCheckin(checkin.uuid)).thenReturn(checkin)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(details)
+    whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
+    val request = SubmitCheckinRequest(survey = mapOf("question1" to "answer1"))
+
+    if (enabled) {
+      val exception = assertThrows(ResponseStatusException::class.java) { service.submitCheckin(checkin.uuid, request) }
+      assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+      assertEquals(CheckinStatus.CREATED, checkin.status)
+      assertNull(checkin.submittedAt)
+      verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
+    } else {
+      assertEquals(CheckinStatus.SUBMITTED, service.submitCheckin(checkin.uuid, request).status)
+      verify(checkinPersistenceService).checkinSubmission(any(), any())
+    }
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
   }
 
   @Test

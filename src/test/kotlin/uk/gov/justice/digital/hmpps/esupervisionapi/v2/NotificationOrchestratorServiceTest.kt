@@ -3,6 +3,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -425,6 +427,30 @@ class NotificationOrchestratorServiceTest {
       any(),
       eq(null),
       eq(AdditionalInformation(eventNumber = 1L)),
+    )
+  }
+
+  @ParameterizedTest
+  @CsvSource("true,true", "true,false", "false,true", "false,false")
+  fun `sendCheckinExpiredNotifications - retains saved association after event disappears`(enabled: Boolean, hasOtherEvent: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = createOffender().apply { currentEvent = 101L }
+    val checkin = createCheckin(offender, status = CheckinStatus.EXPIRED)
+    val details = createContactDetails().copy(
+      events = if (hasOtherEvent) listOf(Event(202L, CodedDescription("X", "Another offence"), null)) else emptyList(),
+    )
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendCheckinExpiredNotifications(checkin, details)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_CHECKIN_EXPIRED),
+      eq(checkin.uuid),
+      eq(offender.crn),
+      any(),
+      eq(null),
+      eq(AdditionalInformation(eventNumber = 101L)),
     )
   }
 
