@@ -55,7 +55,6 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     """,
     nativeQuery = true,
   )
-  @Modifying
   fun deactivateIfVerified(offenderId: Long): Optional<Offender>
 
   /**
