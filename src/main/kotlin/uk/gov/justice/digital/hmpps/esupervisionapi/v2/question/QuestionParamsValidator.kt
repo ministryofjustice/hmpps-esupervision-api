@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintValidatorContext
 import jakarta.validation.Payload
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.BESPOKE_QUESTION_MAX_LENGTH
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CustomQuestionItem
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionTemplateDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
@@ -24,20 +25,46 @@ class QuestionParamsValidator : ConstraintValidator<ValidQuestionParams, AssignC
       context.constraint("Up to three question allowed")
       return false
     }
+    if (value.author.equals(SYSTEM_AUTHOR, ignoreCase = true) && value.questions.any { it.hasBespokeText() }) {
+      // A SYSTEM-authored CUSTOMISABLE question would be offered to every practitioner as a template
+      context.constraint("Bespoke questions cannot be authored by $SYSTEM_AUTHOR")
+      return false
+    }
 
     val questions = value.questions
     var valid = true
     for (i in 0..<questions.size) {
-      valid = valid && preValidateParams(questions[i], i, context)
+      valid = valid && validateIdOrText(questions[i], i, context) && preValidateParams(questions[i], i, context)
     }
     return valid
   }
 }
 
+/** The author of the shared question templates. Practitioner-written questions must never use it. */
+const val SYSTEM_AUTHOR = "SYSTEM"
+
 internal fun ConstraintValidatorContext.constraint(message: String) {
   this.disableDefaultConstraintViolation()
   this.buildConstraintViolationWithTemplate(message)
     .addConstraintViolation()
+}
+
+/**
+ * A question is either a template reference (`id`) or a bespoke question (`text`), never both or neither.
+ */
+fun validateIdOrText(question: CustomQuestionItem, i: Int = 0, context: ConstraintValidatorContext?): Boolean {
+  val text = question.text
+  val problem = when {
+    question.id == null && text.isNullOrBlank() -> "Question ${i + 1} needs an id or text"
+    question.id != null && text != null -> "Question ${i + 1} must have an id or text, not both"
+    text != null && text.length > BESPOKE_QUESTION_MAX_LENGTH -> "Question ${i + 1} text must be $BESPOKE_QUESTION_MAX_LENGTH characters or less"
+    else -> null
+  }
+  if (problem != null) {
+    context?.constraint(problem)
+    return false
+  }
+  return true
 }
 
 fun validatePlaceholders(params: Map<String, Any>): Boolean {

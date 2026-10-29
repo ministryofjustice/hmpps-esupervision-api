@@ -164,8 +164,14 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/82_fix_monthly_stats_counts.sql
   - include:
-      file: db/changelog/changesets/84_checkin_status_scheduled.sql
+      file: db/changelog/changesets/83_retire_unused_custom_question_templates.sql
   - include:
-      file: db/changelog/changesets/85_scheduled_checkin_activation.sql
+      file: db/changelog/changesets/84_bespoke_question_identity.sql
   - include:
-      file: db/changelog/changesets/86_checkin_delius_events.sql
+      file: db/changelog/changesets/85_question_templates_by_ids_retired.sql
+  - include:
+      file: db/changelog/changesets/86_checkin_status_scheduled.sql
+  - include:
+      file: db/changelog/changesets/87_scheduled_checkin_activation.sql
+  - include:
+      file: db/changelog/changesets/88_checkin_delius_events.sql
