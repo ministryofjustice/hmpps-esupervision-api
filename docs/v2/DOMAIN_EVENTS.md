@@ -55,6 +55,24 @@ the change that triggered it. A check-in created without having been scheduled (
 for its date, for example someone set up before the feature was on) is recorded as `scheduled` when
 it is created, so NDelius always sees `scheduled` first.
 
+### Check-in link (ESUP-2223)
+
+With the feature on, a check-in is created (or activated) with `link_status` SENDING, and the
+invite is sent once that commits (`NotificationOrchestratorService.sendCheckinCreatedNotifications`).
+We don't get delivery receipts from GOV.UK Notify, so "sent" means Notify accepted it.
+
+| Outcome | link_status | Check-in | NDelius |
+|---------|-------------|----------|---------|
+| Notify accepted the invite | SENT | unchanged | `link.delivered` |
+| Notify rejected it, or it couldn't be sent (no active event, no contact details, no mobile number or email address for their preference) | FAILED | CANCELLED: not missed, no reminders; questions assigned to it carry over; the practitioner is emailed (`PRACTITIONER_INVITE_ISSUE_GENERIC`); the next check-in is scheduled | `link.not_delivered` |
+
+**Link-sent gate**: a check-in can't be started (identity check) or submitted while it is
+SCHEDULED or its link is SENDING (409), so NDelius records the link before the check-in is
+received. Check-ins created before the feature have no link status and aren't held.
+
+The creation job doesn't create another check-in for a day whose invite failed, and a failed
+check-in keeps its date when the next one is scheduled.
+
 ## Event Publishing Flow
 
 ```mermaid

@@ -222,6 +222,7 @@ stateDiagram-v2
     SCHEDULED --> CANCELLED: Stopped or unscheduled
     CREATED --> SUBMITTED: Offender submits
     CREATED --> EXPIRED: Grace period passed
+    CREATED --> CANCELLED: Invite couldn't be sent (link_status FAILED, ESUP-2223)
     SUBMITTED --> REVIEWED: Practitioner reviews
     EXPIRED --> REVIEWED: Practitioner reviews
     REVIEWED --> [*]

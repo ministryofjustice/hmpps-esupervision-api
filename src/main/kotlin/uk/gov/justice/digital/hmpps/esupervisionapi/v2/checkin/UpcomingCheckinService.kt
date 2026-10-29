@@ -11,6 +11,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
@@ -144,12 +145,16 @@ class UpcomingCheckinService(
 
   private fun creationJobStarted(today: LocalDate) = jobLogRepository.existsByJobTypeAndCreatedAtGreaterThanEqual(CheckinCreationJob.JOB_TYPE, today.atStartOfDay(clock.zone).toInstant())
 
-  private fun hasCheckin(offender: Offender, date: LocalDate) = checkinRepository.findAllByOffenderAndDueDate(offender, date).any { it.status in STATUSES_HOLDING_DATE }
+  private fun hasCheckin(offender: Offender, date: LocalDate) = checkinRepository.findAllByOffenderAndDueDate(offender, date)
+    .any { it.status in STATUSES_HOLDING_DATE || it.linkStatus == CheckinLinkStatus.FAILED }
 
   companion object {
     private val LOGGER = logger<UpcomingCheckinService>()
 
-    /** A check-in in one of these statuses takes its date: no other check-in is scheduled for it. */
+    /**
+     * A check-in in one of these statuses takes its date: no other check-in is scheduled for it.
+     * So does one cancelled because its invite couldn't be sent.
+     */
     private val STATUSES_HOLDING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED, CheckinStatus.EXPIRED)
 
     // TODO ESUP-2223: wording to be agreed with product

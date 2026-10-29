@@ -16,6 +16,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
@@ -23,6 +24,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinLinkService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -64,6 +66,7 @@ class NotificationOrchestratorService(
   private val appConfig: AppConfig,
   private val clock: Clock,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  private val checkinLinkService: CheckinLinkService,
 ) {
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
 
@@ -246,6 +249,7 @@ class NotificationOrchestratorService(
     val activeEventNumber = if (checkin.personalDetails == null) event.currentEvent else activeEventNumber(event, checkin.personalDetails)
     if (activeEventNumber == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: no active events found", checkin.uuid, checkin.crn)
+      inviteFailed(event, CheckinLinkService.NO_ACTIVE_EVENT)
       return
     }
 
@@ -253,6 +257,7 @@ class NotificationOrchestratorService(
 
     if (event.checkin.personalDetails == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: personal details not found", checkin.uuid, checkin.crn)
+      inviteFailed(event, CheckinLinkService.NO_CONTACT_DETAILS)
       return
     }
 
@@ -277,8 +282,17 @@ class NotificationOrchestratorService(
           contactDetails = contactDetails,
           notificationType = NotificationType.OffenderCheckinInvite,
         )
+      if (notificationsWithRecipients.isEmpty()) {
+        inviteFailed(event, CheckinLinkService.NO_ADDRESS)
+        return
+      }
 
-      processAndSendNotifications(notificationsWithRecipients, personalisation)
+      val sent = processAndSendNotifications(notificationsWithRecipients, personalisation)
+      if (sent.isEmpty()) {
+        inviteFailed(event, CheckinLinkService.NOTIFY_FAILED)
+      } else {
+        checkinLinkService.linkSent(event.checkinId, sent.first().channel)
+      }
     } catch (e: Exception) {
       val sanitized = PiiSanitizer.sanitizeException(e, checkin.crn)
       LOGGER.warn(
@@ -287,6 +301,34 @@ class NotificationOrchestratorService(
         sanitized,
       )
       throw NotificationFailureException("Failed to send checkin created notification. Checkin uuid=${checkin.uuid}")
+    }
+  }
+
+  /**
+   * ESUP-2223: the check-in invite couldn't be sent. If that cancelled the check-in (feature on),
+   * tell the practitioner, who can arrange another.
+   */
+  private fun inviteFailed(event: CheckinCreatedEvent, reason: String) {
+    if (!checkinLinkService.linkFailed(event.checkinId, reason)) return
+    val details = event.checkin.personalDetails ?: return
+    val practitioner = details.practitioner ?: return
+    try {
+      val personalisation = mapOf(
+        "practitionerName" to "${practitioner.name.forename} ${practitioner.name.surname}",
+        "name" to "${details.name.forename} ${details.name.surname}",
+        "popDashboardUrl" to appConfig.dashboardUrl().toString(),
+      )
+      val notifications = notificationPersistence.buildPractitionerNotifications(
+        offenderId = event.offenderId,
+        crn = event.checkin.crn,
+        contactDetails = practitioner,
+        checkin = event.checkin,
+        notificationType = NotificationType.PractitionerInviteIssueGeneric,
+        practitionerId = event.practitionerId,
+      )
+      processAndSendNotifications(notifications, personalisation)
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to tell the practitioner the invite for checkin {} was not sent: {}", event.checkin.uuid, PiiSanitizer.sanitizeException(e, event.checkin.crn))
     }
   }
 
@@ -498,13 +540,15 @@ class NotificationOrchestratorService(
   /** Get event detail for a given URL */
   fun getEventDetail(detailUrl: String): EventDetailResponse? = eventDetailService.getEventDetail(detailUrl)
 
+  /** @return the notifications GOV.UK Notify accepted */
   private fun processAndSendNotifications(
     notificationsWithRecipients: List<NotificationWithRecipient>,
     personalisation: Map<String, String>,
-  ) {
-    if (notificationsWithRecipients.isEmpty()) return
+  ): List<GenericNotification> {
+    if (notificationsWithRecipients.isEmpty()) return emptyList()
 
     notificationPersistence.saveNotifications(notificationsWithRecipients.map { it.notification })
+    val sent = mutableListOf<GenericNotification>()
 
     notificationsWithRecipients.forEach { wrapper ->
       val notification = wrapper.notification
@@ -519,6 +563,8 @@ class NotificationOrchestratorService(
             personalisation = personalisation,
             reference = notification.reference,
           )
+        // accepted by Notify, even if recording that below fails
+        sent.add(notification)
 
         LOGGER.info(
           "Sent {} notification to {} for offender {}, notificationId={}",
@@ -550,6 +596,7 @@ class NotificationOrchestratorService(
         )
       }
     }
+    return sent
   }
 
   companion object {
