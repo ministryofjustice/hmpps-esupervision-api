@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional
 import tools.jackson.core.type.TypeReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
@@ -28,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.SubmitTimeDistribut
 import java.lang.reflect.ParameterizedType
 import java.math.BigDecimal
 import java.sql.ResultSet
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -49,6 +51,47 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     val uuid: UUID
     val crn: CRN
     val status: OffenderStatus
+  }
+
+  @Query(
+    """
+    SELECT o.uuid AS uuid, o.crn AS crn, o.practitionerId AS practitionerId,
+      o.status AS status, o.firstCheckin AS firstCheckin, o.checkinInterval AS checkinInterval,
+      o.mode AS mode, o.createdAt AS createdAt, o.createdBy AS createdBy,
+      o.updatedAt AS updatedAt, o.contactPreference AS contactPreference, o.currentEvent AS currentEvent
+    FROM Offender o WHERE o.id = :id
+    """,
+  )
+  fun findDeactivationSnapshot(@Param("id") id: Long): Optional<IOffenderDeactivationSnapshot>
+
+  interface IOffenderDeactivationSnapshot {
+    val uuid: UUID
+    val crn: CRN
+    val practitionerId: ExternalUserId
+    val status: OffenderStatus
+    val firstCheckin: LocalDate?
+    val checkinInterval: Duration?
+    val mode: CheckinMode
+    val createdAt: Instant
+    val createdBy: String
+    val updatedAt: Instant
+    val contactPreference: ContactPreference
+    val currentEvent: Long?
+
+    fun dto() = OffenderDto(
+      uuid = uuid,
+      crn = crn,
+      practitionerId = practitionerId,
+      status = status,
+      firstCheckin = firstCheckin,
+      checkinInterval = checkinInterval?.let { CheckinInterval.fromDuration(it) },
+      mode = mode,
+      createdAt = createdAt,
+      createdBy = createdBy,
+      updatedAt = updatedAt,
+      contactPreference = contactPreference,
+      currentEvent = currentEvent,
+    )
   }
 
   @Transactional(readOnly = true)

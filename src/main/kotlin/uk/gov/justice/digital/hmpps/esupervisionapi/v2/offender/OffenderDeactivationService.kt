@@ -84,25 +84,27 @@ class OffenderDeactivationService(
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
     )
-    val snapshot = offender.dto(contactDetails).copy(
-      status = OffenderStatus.INACTIVE,
-      updatedAt = clock.instant(),
-      currentEvent = if (checkEvent) expectedCurrentEvent else offender.currentEvent,
-    )
-    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) }
-    val event = OffenderDeactivatedEvent(
+    val updatedAt = clock.instant()
+    return offenderPersistenceService.offenderDeactivation(
       offenderId = offender.id,
-      offender = snapshot,
-      auditEventType = auditEventType,
-      setup = setup,
-      activeEventNumber = contactDetails?.let { activeEventNumber(snapshot.currentEvent, it, appConfig.esup2305DeliusEventSelection) }
-        ?: snapshot.currentEvent.takeIf { setup == null },
-      reason = reason,
-      sensitive = sensitive,
       expectedCurrentEvent = expectedCurrentEvent,
-    )
-
-    return offenderPersistenceService.offenderDeactivation(event, checkEvent)
+      checkEvent = checkEvent,
+      updatedAt = updatedAt,
+    ) { persisted ->
+      val snapshot = persisted.copy(personalDetails = contactDetails, updatedAt = updatedAt)
+      val setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) }
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = snapshot,
+        auditEventType = auditEventType,
+        setup = setup,
+        activeEventNumber = contactDetails?.let { activeEventNumber(snapshot.currentEvent, it, appConfig.esup2305DeliusEventSelection) }
+          ?: snapshot.currentEvent.takeIf { setup == null },
+        reason = reason,
+        sensitive = sensitive,
+        expectedCurrentEvent = expectedCurrentEvent,
+      )
+    }
   }
 
   companion object {

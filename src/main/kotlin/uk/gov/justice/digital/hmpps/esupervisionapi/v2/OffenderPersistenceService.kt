@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import java.time.Instant
 
 @Service
 class OffenderPersistenceService(
@@ -22,12 +23,20 @@ class OffenderPersistenceService(
 ) {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  fun offenderDeactivation(event: OffenderDeactivatedEvent, checkEvent: Boolean): Boolean {
-    if (offenderRepository.deactivateIfUnchanged(event.offenderId, event.expectedCurrentEvent, checkEvent, event.offender.updatedAt) == 0) {
-      LOGGER.info("Skipping stale deactivation for CRN {}", event.offender.crn)
+  fun offenderDeactivation(
+    offenderId: Long,
+    expectedCurrentEvent: Long?,
+    checkEvent: Boolean,
+    updatedAt: Instant,
+    buildEvent: (OffenderDto) -> OffenderDeactivatedEvent,
+  ): Boolean {
+    if (offenderRepository.deactivateIfUnchanged(offenderId, expectedCurrentEvent, checkEvent, updatedAt) == 0) {
+      LOGGER.info("Skipping stale deactivation for offender {}", offenderId)
       return false
     }
 
+    val snapshot = offenderRepository.findDeactivationSnapshot(offenderId).orElseThrow().dto()
+    val event = buildEvent(snapshot)
     event.setup?.let {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, it.primaryKey)
     }

@@ -155,7 +155,7 @@ class CheckinCreationService(
   private fun resolveEventNumber(currentEvent: Long?, contactDetails: ContactDetails?): Long? {
     val enabled = appConfig.esup2305DeliusEventSelection
     val eventNumber = contactDetails?.let { activeEventNumber(currentEvent, it, enabled) }
-    if (enabled && eventNumber == null) {
+    if (eventNumber == null && (enabled || currentEvent != null)) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because a probation event must be selected.")
     }
     return eventNumber

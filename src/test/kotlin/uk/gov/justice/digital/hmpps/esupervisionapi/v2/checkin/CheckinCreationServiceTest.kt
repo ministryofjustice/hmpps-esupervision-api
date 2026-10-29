@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
@@ -49,9 +50,10 @@ class CheckinCreationServiceTest {
   )
 
   @ParameterizedTest
-  @CsvSource("true,true", "true,false", "false,true", "false,false")
-  fun `ambiguous selection is rejected before direct or batch persistence only when enabled`(enabled: Boolean, batch: Boolean) {
+  @CsvSource("true,true,false", "true,false,false", "false,true,false", "false,false,false", "true,true,true", "true,false,true", "false,true,true", "false,false,true")
+  fun `unresolved selection is rejected before persistence when enabled or a selection is saved`(enabled: Boolean, batch: Boolean, savedSelection: Boolean) {
     whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    offender.currentEvent = if (savedSelection) 99L else null
     val create = {
       if (batch) {
         val checkin = service.prepareCheckinForOffender(offender, today)
@@ -60,7 +62,7 @@ class CheckinCreationServiceTest {
           practitionerId = checkin.createdBy,
           checkin = checkin.dto(details, clock = clock, checkinWindow = service.checkinWindowPeriod),
           offenderContactPreference = offender.contactPreference,
-          currentEvent = null,
+          currentEvent = offender.currentEvent,
           checkinMode = offender.mode,
         )
         service.createCheckins(listOf(checkin to event))
@@ -69,7 +71,7 @@ class CheckinCreationServiceTest {
       }
     }
 
-    if (enabled) {
+    if (enabled || savedSelection) {
       val exception = if (batch) {
         assertThrows<BatchCheckinCreationException> { create() }.cause as ResponseStatusException
       } else {
@@ -81,12 +83,13 @@ class CheckinCreationServiceTest {
       create()
       verify(persistence).checkinCreation(any(), any())
     }
-    assertNull(offender.currentEvent)
+    assertEquals(if (savedSelection) 99L else null, offender.currentEvent)
   }
 
-  @Test
-  fun `creation preserves a valid saved selection even when other sentences cannot be ranked`() {
-    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
+  @ParameterizedTest
+  @ValueSource(booleans = [true, false])
+  fun `creation preserves a valid saved selection even when other sentences cannot be ranked`(enabled: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
     offender.currentEvent = 1L
 
     val checkin = service.createCheckinForOffender(offender, today, "SYSTEM", details)

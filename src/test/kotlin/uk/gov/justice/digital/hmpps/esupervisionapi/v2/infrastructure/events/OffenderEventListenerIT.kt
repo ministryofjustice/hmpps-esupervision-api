@@ -68,7 +68,9 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       setup = SetupInfo.from(setup),
       activeEventNumber = null,
     )
-    offenderPersistenceService.offenderDeactivation(event, checkEvent = false)
+    offenderPersistenceService.offenderDeactivation(offender.id, event.expectedCurrentEvent, false, event.offender.updatedAt) { snapshot ->
+      event.copy(offender = snapshot)
+    }
 
     offenderEventListener.processEvent(event).get(2, TimeUnit.SECONDS)
 
