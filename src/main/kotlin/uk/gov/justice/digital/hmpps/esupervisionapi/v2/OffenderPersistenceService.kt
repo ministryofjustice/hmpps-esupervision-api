@@ -28,10 +28,11 @@ class OffenderPersistenceService(
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
-    if (offenderRepository.deactivateIfVerified(offender.id, offender.updatedAt) == 0) {
+    if (offenderRepository.deactivateIfVerified(offender.id) == 0) {
       LOGGER.info("Skipping deactivation for CRN {}: no VERIFIED offender record was updated", offender.crn)
       return null
     }
+    entityManager.refresh(offender)
 
     if (event.setup != null) {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)

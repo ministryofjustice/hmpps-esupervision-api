@@ -69,11 +69,11 @@ class OffenderPersistenceServiceTest {
 
   @Test
   fun `skips every downstream operation when no VERIFIED row is updated`() {
-    whenever(offenderRepository.deactivateIfVerified(offender.id, offender.updatedAt)).thenReturn(0)
+    whenever(offenderRepository.deactivateIfVerified(offender.id)).thenReturn(0)
 
     assertNull(service.offenderDeactivation(offender, event))
 
-    verify(offenderRepository).deactivateIfVerified(offender.id, offender.updatedAt)
+    verify(offenderRepository).deactivateIfVerified(offender.id)
     verifyNoMoreInteractions(offenderRepository)
     verifyNoInteractions(
       offenderSetupRepository,
@@ -89,14 +89,14 @@ class OffenderPersistenceServiceTest {
   @ParameterizedTest
   @ValueSource(booleans = [true, false])
   fun `performs downstream operations once for repeated deactivation`(hasSetup: Boolean) {
-    whenever(offenderRepository.deactivateIfVerified(offender.id, offender.updatedAt)).thenReturn(1, 0)
+    whenever(offenderRepository.deactivateIfVerified(offender.id)).thenReturn(1, 0)
     val deactivationEvent = event.copy(setup = if (hasSetup) setup else null)
 
     assertSame(offender, service.offenderDeactivation(offender, deactivationEvent))
     assertNull(service.offenderDeactivation(offender, deactivationEvent))
 
     inOrder(offenderRepository, outboxItemRepository, questionListAssignmentRepository, checkinRepository, eventAuditService, appEventPublisher) {
-      verify(offenderRepository).deactivateIfVerified(offender.id, offender.updatedAt)
+      verify(offenderRepository).deactivateIfVerified(offender.id)
       if (hasSetup) {
         verify(outboxItemRepository).addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, setup.primaryKey)
       }
@@ -104,7 +104,7 @@ class OffenderPersistenceServiceTest {
       verify(checkinRepository).updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
       verify(eventAuditService).recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
       verify(appEventPublisher).publishEvent(deactivationEvent)
-      verify(offenderRepository).deactivateIfVerified(offender.id, offender.updatedAt)
+      verify(offenderRepository).deactivateIfVerified(offender.id)
     }
     verifyNoMoreInteractions(offenderRepository, outboxItemRepository, questionListAssignmentRepository, checkinRepository, eventAuditService, appEventPublisher)
     verifyNoInteractions(offenderSetupRepository, entityManager)
@@ -113,7 +113,7 @@ class OffenderPersistenceServiceTest {
   @Test
   fun `does not swallow conditional update failures or perform downstream work`() {
     val failure = IllegalStateException("Update failed")
-    whenever(offenderRepository.deactivateIfVerified(offender.id, offender.updatedAt)).thenThrow(failure)
+    whenever(offenderRepository.deactivateIfVerified(offender.id)).thenThrow(failure)
 
     assertEquals(failure, assertThrows<IllegalStateException> { service.offenderDeactivation(offender, event) })
 
