@@ -144,9 +144,10 @@ class OffenderEligibilitySyncJob(
               practitionerMessageFragment = result.messageFragment,
             )
 
-            offenderDeactivationService.deactivateOffender(offender, event)
-            deactivated += 1
-            LOGGER.info("Stopped online check-ins for CRN {}: triggered rule code={}, outcome={}", offender.crn, result.triggeredRuleCode, result.outcome)
+            if (offenderDeactivationService.deactivateOffender(offender, event) != null) {
+              deactivated += 1
+              LOGGER.info("Stopped online check-ins for CRN {}: triggered rule code={}, outcome={}", offender.crn, result.triggeredRuleCode, result.outcome)
+            }
           } catch (e: Exception) {
             failed += 1
             LOGGER.warn("Failed eligibility sync for CRN {} on page {}", offender.crn, pages, e)
