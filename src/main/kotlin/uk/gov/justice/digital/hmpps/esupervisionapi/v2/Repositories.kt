@@ -741,6 +741,12 @@ interface CheckinNoteResendRepository : JpaRepository<CheckinNoteResend, Long> {
   fun findBySentAtIsNull(pageable: Pageable): List<CheckinNoteResend>
 }
 
+/** A template fetched by id for validation, with whether it has been retired from the offered list. */
+data class QuestionTemplateLookup(val template: QuestionTemplateDto, val retired: Boolean)
+
+/** Hint shown under a bespoke question, the same one the SYSTEM customisable templates carry. */
+const val BESPOKE_QUESTION_HINT = "Add as much detail as you feel comfortable with, so we can support you in the best way."
+
 @Repository
 class QuestionRepository(
   private val jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate,
@@ -774,7 +780,7 @@ class QuestionRepository(
    */
   fun getQuestionTemplates(language: Language, author: ExternalUserId = "SYSTEM"): List<QuestionTemplateDto> {
     val result = jdbcTemplate.query(
-      "select * from get_question_templates(?::text_language, ?) order by question_id",
+      "select * from get_question_templates(?::text_language, ?)",
       { rs, idx -> questionTemplateRowMapper(rs, idx) },
       language.dbString,
       author,
@@ -795,14 +801,36 @@ class QuestionRepository(
     return result
   }
 
-  fun getQuestionTemplates(questionIds: List<Long>, language: Language): List<QuestionTemplateDto> {
-    val result = jdbcTemplate.query(
-      "select * from get_question_templates_by_ids(?, ?::text_language)",
-      { rs, idx -> questionTemplateRowMapper(rs, idx) },
-      questionIds.toTypedArray(),
-      language.dbString,
+  /**
+   * Looks up templates by id for validating an assignment. Unlike the listings, this includes
+   * retired templates (see changeset 83) and says which they are, so the caller can reject them.
+   */
+  fun getQuestionTemplates(questionIds: List<Long>, language: Language): List<QuestionTemplateLookup> = jdbcTemplate.query(
+    "select * from get_question_templates_by_ids(?, ?::text_language)",
+    { rs, idx -> QuestionTemplateLookup(toQuestionTemplate(rs, idx), retired = rs.getTimestamp("retired_at") != null) },
+    questionIds.toTypedArray(),
+    language.dbString,
+  )
+
+  /**
+   * Stores a bespoke question written by a practitioner as a CUSTOMISABLE question they author,
+   * so it never appears among the SYSTEM templates. Both language rows carry the text as written.
+   *
+   * The question's identity is derived from the author and the text together (see changeset 84),
+   * so the same text from two practitioners yields two questions, text matching a SYSTEM template
+   * does not collide with it, and re-sending the same text for the same author reuses the row.
+   */
+  fun defineBespokeQuestion(author: ExternalUserId, text: String): Long {
+    val spec = objectMapper.writeValueAsString(mapOf("hint" to BESPOKE_QUESTION_HINT, "placeholders" to emptyList<String>()))
+    return requireNotNull(
+      jdbcTemplate.queryForObject(
+        "select define_bespoke_question(?, ?, ?::jsonb)",
+        { rs, _ -> rs.getLong(1) },
+        author,
+        text,
+        spec,
+      ),
     )
-    return result
   }
 
   /**
