@@ -812,30 +812,43 @@ fun questionTemplatePlaceholders(responseSpec: Map<String, Any>): List<String> {
 
 fun QuestionTemplateDto.placeholders(): List<String> = questionTemplatePlaceholders(responseSpec)
 
+const val BESPOKE_QUESTION_MAX_LENGTH = 1000
+
 /**
- * Specifies parameters for a choice item of a custom question item
+ * One question to add to a check-in: either a template chosen from GET /v2/questions/templates
+ * (`id` plus its placeholder values) or a bespoke question the practitioner wrote (`text`).
  */
 data class CustomQuestionItem(
   @field:Schema(
-    description = "Question template ID returned by GET /v2/questions/templates for the selected language.",
-    required = true,
+    description = "Question template ID returned by GET /v2/questions/templates for the selected language. Omit when sending `text`.",
+    required = false,
     exclusiveMinimumValue = 0,
   )
-  val id: Long,
+  val id: Long? = null,
 
   @field:Schema(
-    description = "For custom questions, provide a placeholders object whose keys match the selected question template.",
-    required = true,
+    description = "For template questions, a placeholders object whose keys match the selected question template. Bespoke questions have no placeholders.",
+    required = false,
     example = """{"placeholders":{"thing":"your course"}}""",
   )
-  val params: Map<String, Any>,
-)
+  val params: Map<String, Any> = emptyMap(),
+
+  @field:Schema(
+    description = "A bespoke question written by the practitioner, sent instead of `id`. It is asked exactly as written and stored as a question authored by the request's `author`.",
+    required = false,
+    maxLength = BESPOKE_QUESTION_MAX_LENGTH,
+    example = "Have you managed to speak to your landlord?",
+  )
+  val text: String? = null,
+) {
+  fun hasBespokeText(): Boolean = !text.isNullOrBlank()
+}
 
 /**
  * Specifies custom questions to be added to a checkin.
  */
 @Schema(
-  description = "Assigns one to three custom questions. Use each question template ID returned by GET /v2/questions/templates for the selected language; placeholder keys must match that template.",
+  description = "Assigns one to three custom questions. Each is either a question template ID returned by GET /v2/questions/templates for the selected language, with placeholder keys matching that template, or the text of a bespoke question.",
 )
 @ValidQuestionParams
 data class AssignCustomQuestionsRequest(
