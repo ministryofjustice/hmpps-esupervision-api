@@ -138,6 +138,16 @@ case "$WORK_DIR/" in
 esac
 chmod 700 "$WORK_DIR"
 
+# One run per work_dir: two runs on the same day share the default one, and
+# each would delete the other's files. mkdir is atomic, so only one run can
+# take the lock. It is taken before anything is deleted and released on exit
+# -- by this run only, so a refused run never frees a lock it does not hold.
+LOCK="$WORK_DIR/.lock"
+mkdir "$LOCK" 2>/dev/null \
+  || die "another run is using $WORK_DIR. If none is (one was killed outright), remove $LOCK and re-run."
+release_lock() { rmdir "$LOCK" 2>/dev/null || true; }
+trap release_lock EXIT
+
 CRNS="$WORK_DIR/crns.txt"
 RESULTS="$WORK_DIR/mailing_list.jsonl"
 UNRESOLVED="$WORK_DIR/unresolved.txt"
@@ -228,6 +238,7 @@ cleanup() {
   # half-written output.
   rm -f "$RESULTS" ${body:+"$body"}
   for l in "${LISTS[@]}" excluded; do rm -f "$(tmp_of "$l")"; done
+  release_lock
   exit "$rc"
 }
 trap cleanup EXIT
@@ -399,7 +410,9 @@ for pass in $(seq 1 "$PASSES"); do
     fi
     case "$code" in
       200)
-        result=$(jq -c "$CLASSIFY" "$body" 2>/dev/null) || result='{"outcome":"retry","reason":"unreadable response"}' ;;
+        # -e: an empty body gives jq no input and so no output, which would
+        # otherwise succeed and drop the person without a retry.
+        result=$(jq -ce "$CLASSIFY" "$body" 2>/dev/null) || result='{"outcome":"retry","reason":"unreadable response"}' ;;
       401|403)
         die "HTTP $code for $crn -- token rejected or missing ROLE_ESUPERVISION__ESUPERVISION_UI" ;;
       404) result='{"outcome":"retry","reason":"CRN not registered for e-supervision (HTTP 404)"}' ;;

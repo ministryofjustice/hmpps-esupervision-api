@@ -121,6 +121,11 @@ class Handler(BaseHTTPRequestHandler):
       return self.reply(200, person(crn, None, details=False))
     if crn == "NOSTAT1":                        # 200, but not the shape we expect
       return self.reply(200, {"crn": crn})
+    if crn == "EMPTY01":                        # 200 with no body at all
+      self.send_response(200)
+      self.send_header("Content-Length", "0")
+      self.end_headers()
+      return
     if crn == "NOPREF1":                        # a preference we do not know
       return self.reply(200, person(crn, "Nat", "POST"))
     if crn == "ERROR01":
@@ -314,15 +319,16 @@ test_retries_an_ndelius_blip_on_the_next_pass() {
 }
 
 test_reports_crns_still_unresolved_and_exits_3() {
-  printf '%s\n' X000001 X000003 DOWN001 ERROR01 NOSTAT1 NOPREF1 NOSUCH1 > "$T/down.txt"
+  printf '%s\n' X000001 X000003 DOWN001 ERROR01 NOSTAT1 NOPREF1 EMPTY01 NOSUCH1 > "$T/down.txt"
   local out rc; out="$(run "$T/c7" FAKE_CRNS="$T/down.txt")"; rc=$?
   assert_eq 3 "$rc" "exit code"
-  assert_contains "$out" "5 of 7 CRNs are not in the export" "warning"
+  assert_contains "$out" "6 of 8 CRNs are not in the export" "warning"
   assert_contains "$out" "RETRY crn=NOSTAT1 response has no status" "unexpected shape retried, not excluded"
+  assert_contains "$out" "RETRY crn=EMPTY01 unreadable response" "empty body retried, not dropped"
   assert_contains "$out" "RETRY crn=NOPREF1 unexpected contact preference POST" "unknown preference retried"
   assert_contains "$out" "RETRY crn=ERROR01 HTTP 500" "server error retried"
   assert_contains "$out" "RETRY crn=NOSUCH1 CRN not registered" "404 retried"
-  assert_file_eq $'DOWN001\nERROR01\nNOSTAT1\nNOPREF1\nNOSUCH1' "$T/c7/unresolved.txt" "unresolved list"
+  assert_file_eq $'DOWN001\nERROR01\nNOSTAT1\nNOPREF1\nEMPTY01\nNOSUCH1' "$T/c7/unresolved.txt" "unresolved list"
   assert_file_eq 'CRN,First name,Active,Contact suspended,Contact preference,Email address,Phone number
 "X000001","Zoe","Yes","No","PHONE","","+447700900001"
 "X000003","BARRY","Yes","No","EMAIL","barry.b@example.com",""' "$T/c7/mailing_list.PARTIAL.csv" "resolved people exported, under a PARTIAL name"
@@ -413,6 +419,27 @@ test_a_failed_preflight_leaves_no_earlier_results_behind() {
   run "$T/stale" FAKE_DENY="create pods" >/dev/null || rc=$?
   [[ $rc -ne 0 ]] || fail "run succeeded without create permission"
   [[ -z "$(ls "$T/stale")" ]] || fail "an earlier run's outputs were left in place: $(ls "$T/stale")"
+}
+
+test_refuses_a_work_dir_another_run_is_using() {
+  # Stands in for a run in progress: its lock and its finished-looking output.
+  mkdir -p "$T/busy/.lock"
+  echo "the other run's" > "$T/busy/mailing_list.csv"
+  local out rc; out="$(run "$T/busy")"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "another run is using" "message"
+  assert_eq "the other run's" "$(cat "$T/busy/mailing_list.csv")" "the other run's files untouched"
+  [[ -d "$T/busy/.lock" ]] || fail "released a lock it did not hold"
+  [[ ! -s "$T/fake.log" ]] || fail "touched kubectl or psql while another run held the lock"
+}
+
+test_releases_the_lock_however_the_run_ends() {
+  expect_exit 0 run "$T/c-lock1"
+  [[ ! -e "$T/c-lock1/.lock" ]] || fail "lock left after a successful run"
+  expect_exit 1 run "$T/c-lock2" FAKE_DENY="create pods"
+  [[ ! -e "$T/c-lock2/.lock" ]] || fail "lock left after a failed preflight"
+  expect_exit 1 run "$T/c-lock3" FAKE_PSQL_FAIL=1
+  [[ ! -e "$T/c-lock3/.lock" ]] || fail "lock left after a failure with the pod up"
 }
 
 test_the_database_password_is_not_passed_on_after_the_sql_step() {
