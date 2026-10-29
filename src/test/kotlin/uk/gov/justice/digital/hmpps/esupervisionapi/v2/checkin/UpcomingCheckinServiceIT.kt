@@ -214,13 +214,15 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
 
   @Test
   fun `cancels a scheduled check-in whose date passed without it being created, then schedules the next`() {
-    val offender = saveOffender(firstCheckin = today.minusWeeks(1).plusDays(1))
+    val offender = saveOffender(firstCheckin = today.minusWeeks(1).plusDays(1), currentEvent = 4)
     val missed = saveCheckin(offender, CheckinStatus.SCHEDULED, today.minusWeeks(1).plusDays(1))
 
     service.scheduleNext(offender.id)
 
     assertThat(checkinRepository.findByUuid(missed.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
-    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(missed.uuid).single().eventType).isEqualTo(DomainEventType.V2_CHECKIN_CANCELLED)
+    val cancelled = deliusEventRepository.findAllByCheckinUuidOrderById(missed.uuid).single()
+    assertThat(cancelled.eventType).isEqualTo(DomainEventType.V2_CHECKIN_CANCELLED)
+    assertThat(cancelled.eventNumber).isNull()
     assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusDays(1))
   }
 
