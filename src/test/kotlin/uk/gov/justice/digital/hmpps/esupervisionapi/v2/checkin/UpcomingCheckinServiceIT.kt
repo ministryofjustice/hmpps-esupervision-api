@@ -21,6 +21,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
@@ -71,6 +73,9 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var appConfig: AppConfig
+
+  @Autowired
+  private lateinit var jobLogRepository: JobLogRepository
 
   @Autowired
   private lateinit var transactionTemplate: TransactionTemplate
@@ -174,6 +179,16 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     service.scheduleNext(offender.id)
 
     assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today)
+  }
+
+  @Test
+  fun `after today's creation job has started, schedules the next date after today`() {
+    jobLogRepository.save(JobLog(jobType = CheckinCreationJob.JOB_TYPE, createdAt = clock.instant()))
+    val offender = saveOffender(firstCheckin = today.minusWeeks(1))
+
+    service.scheduleNext(offender.id)
+
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusWeeks(1))
   }
 
   @Test

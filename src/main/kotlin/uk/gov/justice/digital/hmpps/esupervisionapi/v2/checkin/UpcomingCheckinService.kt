@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
@@ -21,6 +22,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliu
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
@@ -42,6 +44,7 @@ class UpcomingCheckinService(
   private val appConfig: AppConfig,
   private val clock: Clock,
   private val entityManager: EntityManager,
+  private val jobLogRepository: JobLogRepository,
   transactionManager: PlatformTransactionManager,
 ) {
   private val newTransaction = TransactionTemplate(transactionManager).apply {
@@ -61,23 +64,33 @@ class UpcomingCheckinService(
     if (TransactionSynchronizationManager.isSynchronizationActive()) {
       TransactionSynchronizationManager.registerSynchronization(
         object : TransactionSynchronization {
-          override fun afterCommit() = scheduleNextNow(offenderId, eventNumber)
+          override fun afterCommit() = scheduleNextNow(offenderId, eventNumber, includeToday = null)
         },
       )
     } else {
-      scheduleNextNow(offenderId, eventNumber)
+      scheduleNextNow(offenderId, eventNumber, includeToday = null)
     }
   }
 
-  private fun scheduleNextNow(offenderId: Long, eventNumber: Long?) {
+  /**
+   * For the check-in creation job, before it creates today's check-ins: today counts as the next
+   * check-in date, as the job is about to create (activate) it.
+   */
+  fun scheduleNextBeforeCreation(offenderId: Long) {
+    if (!enabled()) return
+    scheduleNextNow(offenderId, eventNumber = null, includeToday = true)
+  }
+
+  private fun scheduleNextNow(offenderId: Long, eventNumber: Long?, includeToday: Boolean?) {
     try {
-      newTransaction.executeWithoutResult { scheduleNextInTransaction(offenderId, eventNumber) }
+      newTransaction.executeWithoutResult { scheduleNextInTransaction(offenderId, eventNumber, includeToday) }
     } catch (e: Exception) {
       LOGGER.error("Failed to schedule the next check-in for offender id={}", offenderId, e)
     }
   }
 
-  private fun scheduleNextInTransaction(offenderId: Long, eventNumber: Long?) {
+  /** @param includeToday whether today can be the next check-in date; null: only if today's creation job hasn't started */
+  private fun scheduleNextInTransaction(offenderId: Long, eventNumber: Long?, includeToday: Boolean?) {
     // Locking the offender serialises this with stopping check-ins, which cancels upcoming check-ins.
     val offender = offenderRepository.findByIdForUpdate(offenderId) ?: return
     // Under open-in-view this joins the request's persistence context, which may hold the offender
@@ -99,7 +112,9 @@ class UpcomingCheckinService(
 
     if (checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).isNotEmpty()) return
 
-    val dueDate = nextCheckinDate(offender, today) ?: return
+    // After today's creation job, a check-in for today won't be created, so it can't be scheduled.
+    val from = if (includeToday ?: !creationJobStarted(today)) today else today.plusDays(1)
+    val dueDate = nextCheckinDate(offender, from) ?: return
     val checkin = checkinRepository.save(
       OffenderCheckin(
         uuid = UUID.randomUUID(),
@@ -114,18 +129,20 @@ class UpcomingCheckinService(
     LOGGER.info("Scheduled checkin {} for CRN {} due {}", checkin.uuid, offender.crn, dueDate)
   }
 
-  /** The offender's next check-in date from [today] (inclusive) that doesn't have a check-in yet. */
-  private fun nextCheckinDate(offender: Offender, today: LocalDate): LocalDate? {
+  /** The offender's next check-in date on or after [from] that doesn't have a check-in yet. */
+  private fun nextCheckinDate(offender: Offender, from: LocalDate): LocalDate? {
     val firstCheckin = offender.firstCheckin ?: return null
     return when (offender.mode) {
-      CheckinMode.AD_HOC -> firstCheckin.takeIf { it >= today && !hasCheckin(offender, it) }
+      CheckinMode.AD_HOC -> firstCheckin.takeIf { it >= from && !hasCheckin(offender, it) }
       CheckinMode.SCHEDULED -> {
         if (offender.checkinInterval == null) return null
-        val next = nextCheckinDay(offender, today, CheckinScheduleLowerBound.INCLUDE_TODAY)
+        val next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
         if (hasCheckin(offender, next)) nextCheckinDay(offender, next) else next
       }
     }
   }
+
+  private fun creationJobStarted(today: LocalDate) = jobLogRepository.existsByJobTypeAndCreatedAtGreaterThanEqual(CheckinCreationJob.JOB_TYPE, today.atStartOfDay(clock.zone).toInstant())
 
   private fun hasCheckin(offender: Offender, date: LocalDate) = checkinRepository.findAllByOffenderAndDueDate(offender, date).any { it.status in STATUSES_HOLDING_DATE }
 

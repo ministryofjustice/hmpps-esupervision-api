@@ -466,7 +466,9 @@ interface EventAuditRepository : JpaRepository<EventAudit, Long> {
  * Separate from V1 job_log for complete decoupling
  */
 @Repository
-interface JobLogRepository : JpaRepository<JobLog, Long>
+interface JobLogRepository : JpaRepository<JobLog, Long> {
+  fun existsByJobTypeAndCreatedAtGreaterThanEqual(jobType: String, createdAt: Instant): Boolean
+}
 
 enum class LogEntryType {
   OFFENDER_SETUP_COMPLETE,

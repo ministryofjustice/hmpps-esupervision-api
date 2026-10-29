@@ -86,7 +86,7 @@ class CheckinCreationJob(
   fun process() {
     val now = clock.instant()
     val today = LocalDate.now(clock)
-    val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = "V2_CHECKIN_CREATION", createdAt = now))
+    val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = JOB_TYPE, createdAt = now))
     LOGGER.info("Checkin Creation Job(id={}) started: creating checkins for date={}", logEntry.id, today)
     val metrics = JobMetrics()
 
@@ -157,7 +157,7 @@ class CheckinCreationJob(
     if (!upcomingCheckinService.enabled()) return
     try {
       val offenderIds = checkinRepository.findOffenderIdsWithScheduledBefore(today)
-      offenderIds.forEach { upcomingCheckinService.scheduleNext(it) }
+      offenderIds.forEach { upcomingCheckinService.scheduleNextBeforeCreation(it) }
       if (offenderIds.isNotEmpty()) {
         LOGGER.info("Rescheduled upcoming check-ins that were not created on their due date for {} offenders", offenderIds.size)
       }
@@ -265,6 +265,7 @@ class CheckinCreationJob(
   }
 
   companion object {
+    const val JOB_TYPE = "V2_CHECKIN_CREATION"
     private val LOGGER = LoggerFactory.getLogger(CheckinCreationJob::class.java)
   }
 }

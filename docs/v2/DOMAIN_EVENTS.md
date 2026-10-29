@@ -32,6 +32,8 @@ links the contact to the check-in through `checkinUuid` in the detail response.
 NDelius records each person's next check-in before it is due. `UpcomingCheckinService.scheduleNext`
 creates it as a `SCHEDULED` check-in and records a `scheduled` event. Only the next check-in is
 recorded: while a check-in is open (`CREATED`), the one after it waits until it is submitted or missed.
+Today only counts as the next date before that day's creation job has started (or from the job
+itself), because after it nothing would create today's check-in.
 
 | Trigger | Where |
 |---------|-------|
