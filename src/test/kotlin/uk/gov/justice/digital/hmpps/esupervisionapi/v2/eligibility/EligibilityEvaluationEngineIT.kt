@@ -47,7 +47,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "ESPDI",
         null,
         null,
-        "ESPIT",
+        null,
         "ESPAP",
         null,
         "ESPEE",
