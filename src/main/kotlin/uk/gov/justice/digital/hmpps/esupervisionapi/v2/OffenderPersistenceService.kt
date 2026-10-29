@@ -35,6 +35,7 @@ class OffenderPersistenceService(
     }
 
     val updated = maybeUpdated.get()
+    entityManager.refresh(updated)
     if (event.setup != null) {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
