@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -42,6 +43,60 @@ class UtilsTest {
       expectedEndDate = expectedEndDate,
     ),
   )
+
+  @Test
+  fun `reactivation event number validates and uses the requested selection`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertEquals(2L, reactivationEventNumber(1L, 2L, details, true))
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(1L, 3L, details, true) }
+  }
+
+  @Test
+  fun `reactivation event number preserves an active saved selection with either flag value`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertEquals(2L, reactivationEventNumber(2L, null, details, true))
+    assertEquals(2L, reactivationEventNumber(2L, null, details, false))
+  }
+
+  @Test
+  fun `reactivation event number selects the sole remaining event when the saved selection is stale`() {
+    val details = contactDetails(events = listOf(anEvent.copy(number = 2L)))
+
+    assertEquals(2L, reactivationEventNumber(1L, null, details, true))
+    assertEquals(2L, reactivationEventNumber(null, null, details, true))
+  }
+
+  @Test
+  fun `reactivation event number requires a choice between multiple events`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(null, null, details, true) }
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(3L, null, details, true) }
+  }
+
+  @Test
+  fun `reactivation event number rejects selection changes and stale selections when disabled`() {
+    val details = contactDetails(events = listOf(anEvent))
+
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(null, 1L, details, false) }
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(2L, null, details, false) }
+  }
+
+  @Test
+  fun `reactivation event number preserves the legacy first event fallback when disabled`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertEquals(1L, reactivationEventNumber(null, null, details, false))
+    assertNull(reactivationEventNumber(null, null, contactDetails(), false))
+  }
+
+  @Test
+  fun `reactivation event number rejects an empty active event list when enabled`() {
+    assertThrows<IllegalStateException> { reactivationEventNumber(null, null, contactDetails(), true) }
+    assertThrows<IllegalStateException> { reactivationEventNumber(1L, null, contactDetails(), true) }
+  }
 
   @Test
   fun `checkinIneligibilityReason - contact suspended takes priority even with active events`() {

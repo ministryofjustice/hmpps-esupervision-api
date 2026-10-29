@@ -122,10 +122,7 @@ class CurrentEventBackfillJobTest {
         any(),
         eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
       ),
-    ).thenAnswer {
-      offender.status = OffenderStatus.INACTIVE
-      offender
-    }
+    ).thenReturn(true)
 
     job(dryRun = false).process()
 

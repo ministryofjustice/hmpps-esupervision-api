@@ -41,12 +41,39 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
+  @Query("SELECT o.id AS id, o.uuid AS uuid, o.crn AS crn, o.status AS status FROM Offender o WHERE o.uuid = :uuid")
+  fun findUpdateInfoByUuid(@Param("uuid") uuid: UUID): Optional<IOffenderUpdateInfo>
+
+  interface IOffenderUpdateInfo {
+    val id: Long
+    val uuid: UUID
+    val crn: CRN
+    val status: OffenderStatus
+  }
+
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT o FROM Offender o WHERE o.id = :offenderId")
   fun findByIdForUpdate(@Param("offenderId") offenderId: Long): Optional<Offender>
+
+  @Modifying
+  @Transactional
+  @Query(
+    nativeQuery = true,
+    value = """
+    UPDATE offender_v2 SET status = 'INACTIVE', updated_at = :updatedAt
+    WHERE id = :id AND status = 'VERIFIED'
+      AND (:checkEvent = false OR current_event IS NOT DISTINCT FROM :expectedEvent)
+    """,
+  )
+  fun deactivateIfUnchanged(
+    @Param("id") id: Long,
+    @Param("expectedEvent") expectedEvent: Long?,
+    @Param("checkEvent") checkEvent: Boolean,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
 
   @Modifying
   @Transactional
@@ -294,12 +321,12 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """
     UPDATE OffenderCheckin c
     SET c.status = :newStatus
-    WHERE c.offender = :offender
+    WHERE c.offender.id = :offenderId
       AND c.status = :currentStatus
     """,
   )
   @Modifying
-  fun updateStatusForOffender(offender: Offender, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
+  fun updateStatusForOffenderId(offenderId: Long, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
 
   @Query(
     """

@@ -159,13 +159,13 @@ class CurrentEventBackfillJob(
       LOGGER.info("DRY RUN: would deactivate CRN {} because Delius returned no active sentence", offender.crn)
       return true
     } else {
-      offenderDeactivationService.deactivateOffender(
+      val deactivated = offenderDeactivationService.deactivateOffender(
         offender = offender,
         reason = "Automatically deactivated: no active sentence in NDelius",
         contactDetails = details,
         auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       )
-      if (offender.status == OffenderStatus.INACTIVE) {
+      if (deactivated) {
         LOGGER.info("Deactivated CRN {} because Delius returned no active sentence", offender.crn)
         return true
       }

@@ -192,14 +192,14 @@ class CheckinCreationJob(
     LOGGER.info("Deactivating CRN {} instead of creating checkin: {}", offenderInfo.crn, ineligibility.name)
     val offender = offenderRepository.findById(offenderInfo.id).getOrNull() ?: return
     try {
-      offenderDeactivationService.deactivateOffender(
+      val deactivated = offenderDeactivationService.deactivateOffender(
         offender = offender,
         reason = ineligibility.auditNote,
         contactDetails = contactDetails,
         auditEventType = ineligibility.auditEventType,
         expectedCurrentEvent = offenderInfo.currentEvent,
       )
-      metrics.deactivated += 1
+      if (deactivated) metrics.deactivated += 1
     } catch (e: Exception) {
       LOGGER.warn("Failed to deactivate CRN {} in chunk {}", offenderInfo.crn, metrics.chunks, e)
       metrics.errors += 1

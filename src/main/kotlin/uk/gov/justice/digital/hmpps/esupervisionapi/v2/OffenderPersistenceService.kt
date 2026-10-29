@@ -5,17 +5,12 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 
 @Service
 class OffenderPersistenceService(
-  private val appConfig: AppConfig,
   private val offenderRepository: OffenderRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
   private val checkinRepository: OffenderCheckinRepository,
@@ -27,54 +22,24 @@ class OffenderPersistenceService(
 ) {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
-    val currentOffender = offenderRepository.findByIdForUpdate(offender.id).orElse(null) ?: return
-    entityManager.refresh(currentOffender)
-    val deactivationDependsOnCurrentEvent = event.auditEventType in setOf(
-      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
-      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
-    )
-    if (
-      currentOffender.status != OffenderStatus.VERIFIED ||
-      (deactivationDependsOnCurrentEvent && currentOffender.currentEvent != event.expectedCurrentEvent)
-    ) {
-      LOGGER.info(
-        "Skipping stale deactivation for CRN {}: persisted status={}, currentEvent={}",
-        currentOffender.crn,
-        currentOffender.status,
-        currentOffender.currentEvent,
-      )
-      offender.status = currentOffender.status
-      offender.currentEvent = currentOffender.currentEvent
-      offender.updatedAt = currentOffender.updatedAt
-      return
+  fun offenderDeactivation(event: OffenderDeactivatedEvent, checkEvent: Boolean): Boolean {
+    if (offenderRepository.deactivateIfUnchanged(event.offenderId, event.expectedCurrentEvent, checkEvent, event.offender.updatedAt) == 0) {
+      LOGGER.info("Skipping stale deactivation for CRN {}", event.offender.crn)
+      return false
     }
 
-    currentOffender.status = OffenderStatus.INACTIVE
-    currentOffender.updatedAt = event.offender.updatedAt
-    val setup = offenderSetupRepository.findByOffender(currentOffender).orElse(null)?.let { SetupInfo.from(it) }
-    val persistedEvent = event.copy(
-      offender = currentOffender.dto(event.offender.personalDetails),
-      setup = setup,
-      activeEventNumber = event.offender.personalDetails?.let {
-        activeEventNumber(currentOffender, it, appConfig.esup2305DeliusEventSelection)
-      } ?: currentOffender.currentEvent.takeIf { setup == null },
-    )
-    offenderRepository.save(currentOffender)
-    if (setup != null) {
-      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, setup.primaryKey)
+    event.setup?.let {
+      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, it.primaryKey)
     }
-    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(currentOffender.id)
-    val cancelledCheckins = checkinRepository.updateStatusForOffender(currentOffender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
+    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(event.offenderId)
+    val cancelledCheckins = checkinRepository.updateStatusForOffenderId(event.offenderId, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
-      LOGGER.info("Cancelled {} created/pending check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, currentOffender.crn)
+      LOGGER.info("Cancelled {} created/pending check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, event.offender.crn)
     }
-    eventAuditService.recordOffenderEvent(persistedEvent.auditEventType, persistedEvent.offender, persistedEvent.offender.personalDetails, persistedEvent.reason, persistedEvent.sensitive)
+    eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 
-    appEventPublisher.publishEvent(persistedEvent)
-    offender.status = currentOffender.status
-    offender.currentEvent = currentOffender.currentEvent
-    offender.updatedAt = currentOffender.updatedAt
+    appEventPublisher.publishEvent(event)
+    return true
   }
 
   /**
@@ -94,9 +59,7 @@ class OffenderPersistenceService(
       offender.firstCheckin = event.offender.firstCheckin
       offender.checkinInterval = event.offender.checkinInterval?.duration
       offender.contactPreference = event.offender.contactPreference
-      if (Feature.ESUP_2305 in appConfig.enabledFeatures) {
-        offender.currentEvent = event.currentEvent
-      }
+      offender.currentEvent = event.offender.currentEvent
       offenderRepository.save(offender)
 
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)

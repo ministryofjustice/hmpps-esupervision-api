@@ -7,6 +7,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -30,6 +32,7 @@ class OffenderDeactivationService(
   private val clock: Clock,
   private val appConfig: AppConfig,
   private val offenderPersistenceService: OffenderPersistenceService,
+  private val offenderSetupRepository: OffenderSetupRepository,
 ) {
 
   /**
@@ -41,7 +44,6 @@ class OffenderDeactivationService(
    * @param auditEventType the audit event type to record; defaults to a manual practitioner
    *   deactivation. Scheduled jobs pass a criterion-specific automated type so the reason an offender
    *   was stopped (in reset vs no active events) is queryable via the audit event_type.
-   * @return the (possibly unchanged) offender
    *
    * Spins its own transaction (REQUIRES_NEW) so that a deactivation commits independently of any
    * surrounding work. In particular, when called from [V2CheckinCreationJob]'s long-lived job
@@ -56,7 +58,7 @@ class OffenderDeactivationService(
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-  ): Offender = deactivateOffender(
+  ): Boolean = deactivateOffender(
     offender = offender,
     reason = reason,
     contactDetails = contactDetails,
@@ -72,27 +74,35 @@ class OffenderDeactivationService(
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
     expectedCurrentEvent: Long?,
-  ): Offender {
+  ): Boolean {
     if (offender.status != OffenderStatus.VERIFIED) {
       LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
-      return offender
+      return false
     }
 
-    val updatedAt = clock.instant()
+    val checkEvent = auditEventType in setOf(
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+    )
+    val snapshot = offender.dto(contactDetails).copy(
+      status = OffenderStatus.INACTIVE,
+      updatedAt = clock.instant(),
+      currentEvent = if (checkEvent) expectedCurrentEvent else offender.currentEvent,
+    )
+    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) }
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(contactDetails).copy(status = OffenderStatus.INACTIVE, updatedAt = updatedAt),
+      offender = snapshot,
       auditEventType = auditEventType,
-      setup = null,
-      activeEventNumber = contactDetails?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) },
+      setup = setup,
+      activeEventNumber = contactDetails?.let { activeEventNumber(snapshot.currentEvent, it, appConfig.esup2305DeliusEventSelection) }
+        ?: snapshot.currentEvent.takeIf { setup == null },
       reason = reason,
       sensitive = sensitive,
       expectedCurrentEvent = expectedCurrentEvent,
     )
 
-    offenderPersistenceService.offenderDeactivation(offender, event)
-
-    return offender
+    return offenderPersistenceService.offenderDeactivation(event, checkEvent)
   }
 
   companion object {

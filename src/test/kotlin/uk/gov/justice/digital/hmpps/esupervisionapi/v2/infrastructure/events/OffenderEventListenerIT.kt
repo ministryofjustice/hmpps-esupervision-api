@@ -68,7 +68,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       setup = SetupInfo.from(setup),
       activeEventNumber = null,
     )
-    offenderPersistenceService.offenderDeactivation(offender, event)
+    offenderPersistenceService.offenderDeactivation(event, checkEvent = false)
 
     offenderEventListener.processEvent(event).get(2, TimeUnit.SECONDS)
 

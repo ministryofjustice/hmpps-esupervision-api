@@ -13,6 +13,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.GetMapping
@@ -49,8 +50,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.reactivationEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -520,6 +521,7 @@ class OffenderResource(
   @ApiResponse(responseCode = "400", description = "Offender not in VERIFIED status")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   @PostMapping("/{uuid}/deactivate")
+  @Transactional
   fun deactivateOffender(
     @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
     @Valid @RequestBody request: DeactivateOffenderRequest,
@@ -536,12 +538,13 @@ class OffenderResource(
 
     val contactDetails = getContactDetails(offender)
 
-    val saved = offenderDeactivationService.deactivateOffender(
+    offenderDeactivationService.deactivateOffender(
       offender,
       reason = request.reason,
       contactDetails = contactDetails,
       sensitive = request.sensitive,
     )
+    entityManager.refresh(offender)
 
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",
@@ -552,7 +555,7 @@ class OffenderResource(
       request.sensitive,
     )
 
-    return ResponseEntity.ok(saved.toSummaryDto(getOffenderPhotoUrl(saved)))
+    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender)))
   }
 
   private fun getContactDetails(offender: Offender): ContactDetails {
@@ -613,35 +616,12 @@ class OffenderResource(
     }
 
     val eventSelectionEnabled = appConfig.esup2305DeliusEventSelection
-    val selectedEventNumber = when {
-      request.currentEvent != null && !eventSelectionEnabled -> throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Delius event selection is not enabled",
-      )
-      request.currentEvent != null -> {
-        if (contactDetails.events.none { it.number == request.currentEvent }) {
-          throw ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "Selected event ${request.currentEvent} is not active for offender ${offender.crn}",
-          )
-        }
-        request.currentEvent
-      }
-      offender.currentEvent != null && contactDetails.events.any { it.number == offender.currentEvent } -> offender.currentEvent
-      offender.currentEvent != null && !eventSelectionEnabled -> throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "Selected event ${offender.currentEvent} is not active for offender ${offender.crn}",
-      )
-      eventSelectionEnabled && contactDetails.events.size == 1 -> contactDetails.events.single().number
-      eventSelectionEnabled && contactDetails.events.isEmpty() -> throw ResponseStatusException(
-        HttpStatus.UNPROCESSABLE_CONTENT,
-        "Cannot reactivate ${offender.crn}: no active events in NDelius.",
-      )
-      eventSelectionEnabled -> throw ResponseStatusException(
-        HttpStatus.BAD_REQUEST,
-        "A current event must be selected for offender ${offender.crn}",
-      )
-      else -> activeEventNumber(offender, contactDetails, useLatestExpectedEndDateWhenNoSelection = false)
+    val selectedEventNumber = try {
+      reactivationEventNumber(offender.currentEvent, request.currentEvent, contactDetails, eventSelectionEnabled)
+    } catch (e: IllegalArgumentException) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, e.message, e)
+    } catch (e: IllegalStateException) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, e.message, e)
     }
 
     val requestedPreference = request.contactPreference?.contactPreference ?: offender.contactPreference
@@ -673,7 +653,7 @@ class OffenderResource(
 
     val partialEvent = PartialOffenderReactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(contactDetails),
+      offender = offender.dto(contactDetails).copy(currentEvent = if (eventSelectionEnabled) selectedEventNumber else offender.currentEvent),
       currentEvent = selectedEventNumber,
       reason = request.reason,
     )
@@ -736,13 +716,13 @@ is *today*.""",
     @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
     @Valid @RequestBody request: OffenderDetailsUpdateRequest,
   ): ResponseEntity<OffenderSummaryDto> {
-    val offender = offenderRepository.findByUuid(uuid).orElse(null)
+    val offenderInfo = offenderRepository.findUpdateInfoByUuid(uuid).orElse(null)
       ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
 
-    if (offender.status == OffenderStatus.INACTIVE) {
+    if (offenderInfo.status == OffenderStatus.INACTIVE) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
-        "Cannot update offender with status ${offender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+        "Cannot update offender with status ${offenderInfo.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
       )
     }
 
@@ -750,54 +730,54 @@ is *today*.""",
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Delius event selection is not enabled")
     }
     if (request.currentEvent != null) {
-      val contactDetails = ndiliusApiClient.getContactDetailsStrict(offender.crn)
+      val contactDetails = ndiliusApiClient.getContactDetailsStrict(offenderInfo.crn)
       if (contactDetails?.events?.none { it.number == request.currentEvent } != false) {
         throw ResponseStatusException(
           HttpStatus.BAD_REQUEST,
-          "Selected event ${request.currentEvent} is not active for offender ${offender.crn}",
+          "Selected event ${request.currentEvent} is not active for offender ${offenderInfo.crn}",
         )
       }
     }
 
     val updateResult = transactionTemplate.execute<UpdatedOffenderDetails?> {
-      val lockedOffender = offenderRepository.findByIdForUpdate(offender.id).orElse(null)
+      val offender = offenderRepository.findByIdForUpdate(offenderInfo.id).orElse(null)
         ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
-      entityManager.refresh(lockedOffender)
-      if (lockedOffender.status == OffenderStatus.INACTIVE) {
+      entityManager.refresh(offender)
+      if (offender.status == OffenderStatus.INACTIVE) {
         throw ResponseStatusException(
           HttpStatus.BAD_REQUEST,
-          "Cannot update offender with status ${lockedOffender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+          "Cannot update offender with status ${offender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
         )
       }
 
-      val offenderBefore = lockedOffender.toSummaryDto()
+      val offenderBefore = offender.toSummaryDto()
       var changed = false
       request.checkinSchedule?.let { schedule ->
-        val mode = schedule.mode ?: lockedOffender.mode
-        validate(schedule, lockedOffender.mode)
-        lockedOffender.mode = mode
+        val mode = schedule.mode ?: offender.mode
+        validate(schedule, offender.mode)
+        offender.mode = mode
         validateFirstCheckin(mode, schedule.firstCheckin)
-        lockedOffender.firstCheckin = schedule.firstCheckin
-        lockedOffender.checkinInterval = schedule.checkinInterval?.duration
+        offender.firstCheckin = schedule.firstCheckin
+        offender.checkinInterval = schedule.checkinInterval?.duration
         changed = true
       }
 
       request.contactPreference?.let { preferenceUpdate ->
-        if (lockedOffender.contactPreference != preferenceUpdate.contactPreference) {
-          lockedOffender.contactPreference = preferenceUpdate.contactPreference
+        if (offender.contactPreference != preferenceUpdate.contactPreference) {
+          offender.contactPreference = preferenceUpdate.contactPreference
           changed = true
         }
       }
 
-      if (request.currentEvent != null && lockedOffender.currentEvent != request.currentEvent) {
-        lockedOffender.currentEvent = request.currentEvent
+      if (request.currentEvent != null && offender.currentEvent != request.currentEvent) {
+        offender.currentEvent = request.currentEvent
         changed = true
       }
 
       if (!changed) return@execute null
 
-      lockedOffender.updatedAt = clock.instant()
-      val saved = offenderRepository.save(lockedOffender)
+      offender.updatedAt = clock.instant()
+      val saved = offenderRepository.save(offender)
       // Stopping check-ins cancels today's row but leaves it in the database, so only open or
       // completed check-ins occupy today.
       val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(saved, clock.today())
@@ -807,7 +787,7 @@ is *today*.""",
 
     val result = updateResult ?: return ResponseEntity.noContent().build()
     val offenderAfter = result.offenderAfter
-    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
+    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offenderInfo.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null && newFirstCheckinDateIsToday(result.offenderBefore, offenderAfter, clock.today())) {
       if (!result.todayIsOccupied) {
         checkinCreationService.createCheckin(

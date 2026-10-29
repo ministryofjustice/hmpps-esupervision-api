@@ -20,8 +20,14 @@ fun activeEventNumber(
   offender: ActiveEvent,
   details: ContactDetails,
   useLatestExpectedEndDateWhenNoSelection: Boolean = true,
-): Long? = if (offender.currentEvent != null) {
-  details.events.firstOrNull { it.number == offender.currentEvent }?.number
+): Long? = activeEventNumber(offender.currentEvent, details, useLatestExpectedEndDateWhenNoSelection)
+
+fun activeEventNumber(
+  currentEvent: Long?,
+  details: ContactDetails,
+  useLatestExpectedEndDateWhenNoSelection: Boolean = true,
+): Long? = if (currentEvent != null) {
+  details.events.firstOrNull { it.number == currentEvent }?.number
 } else if (!useLatestExpectedEndDateWhenNoSelection) {
   details.events.firstOrNull()?.number
 } else {
@@ -34,6 +40,29 @@ fun activeEventNumber(
     )?.number
     else -> details.events.firstOrNull()?.number
   }
+}
+
+fun reactivationEventNumber(
+  currentEvent: Long?,
+  requestedEvent: Long?,
+  details: ContactDetails,
+  eventSelectionEnabled: Boolean,
+): Long? {
+  require(requestedEvent == null || eventSelectionEnabled) { "Delius event selection is not enabled" }
+  if (requestedEvent != null) {
+    require(details.events.any { it.number == requestedEvent }) {
+      "Selected event $requestedEvent is not active for offender ${details.crn}"
+    }
+    return requestedEvent
+  }
+  if (currentEvent != null && details.events.any { it.number == currentEvent }) return currentEvent
+  if (!eventSelectionEnabled) {
+    require(currentEvent == null) { "Selected event $currentEvent is not active for offender ${details.crn}" }
+    return activeEventNumber(currentEvent, details, useLatestExpectedEndDateWhenNoSelection = false)
+  }
+  check(details.events.isNotEmpty()) { "Cannot reactivate ${details.crn}: no active events in NDelius." }
+  require(details.events.size == 1) { "A current event must be selected for offender ${details.crn}" }
+  return details.events.single().number
 }
 
 /**

@@ -14,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -172,7 +173,7 @@ class OffenderResourceTest {
     whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.INACTIVE
-      o
+      true
     }
 
     val result = resource.deactivateOffender(uuid, request)
@@ -207,9 +208,7 @@ class OffenderResourceTest {
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
-      it.getArgument<Offender>(0)
-    }
+    whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenReturn(true)
 
     resource.deactivateOffender(uuid, request)
 
@@ -296,7 +295,7 @@ class OffenderResourceTest {
     whenever(offenderDeactivationService.deactivateOffender(any(), any(), any(), any(), any())).thenAnswer {
       val o = it.getArgument<Offender>(0)
       o.status = OffenderStatus.INACTIVE
-      o
+      true
     }
     // mock s3
     whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
@@ -1016,7 +1015,7 @@ class OffenderResourceTest {
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
     offender.firstCheckin = LocalDate.now(clock).minusDays(3)
 
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    stubUpdateInfo(offender)
     whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
@@ -1027,6 +1026,7 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(scheduleUpdate.firstCheckin, result.body?.firstCheckin)
     assertEquals(scheduleUpdate.checkinInterval, result.body?.checkinInterval)
+    verify(offenderRepository, never()).findByUuid(any())
   }
 
   @Test
@@ -1039,7 +1039,7 @@ class OffenderResourceTest {
       dateOfBirth = LocalDate.of(1980, 1, 1),
       events = listOf(anEvent, anEvent.copy(number = 2L)),
     )
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    stubUpdateInfo(offender)
     whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
     whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
@@ -1050,6 +1050,13 @@ class OffenderResourceTest {
     assertEquals(2L, result.body?.currentEvent)
     assertEquals(2L, offender.currentEvent)
     verify(offenderRepository).save(offender)
+    inOrder(offenderRepository, ndiliusApiClient, entityManager) {
+      verify(offenderRepository).findUpdateInfoByUuid(uuid)
+      verify(ndiliusApiClient).getContactDetailsStrict(offender.crn)
+      verify(offenderRepository).findByIdForUpdate(offender.id)
+      verify(entityManager).refresh(offender)
+    }
+    verify(offenderRepository, never()).findByUuid(any())
   }
 
   @Test
@@ -1063,7 +1070,7 @@ class OffenderResourceTest {
       dateOfBirth = LocalDate.of(1980, 1, 1),
       events = listOf(anEvent, anEvent.copy(number = 2L)),
     )
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(loadedOffender))
+    stubUpdateInfo(loadedOffender)
     whenever(offenderRepository.findByIdForUpdate(loadedOffender.id)).thenReturn(Optional.of(deactivatedOffender))
     whenever(ndiliusApiClient.getContactDetailsStrict(loadedOffender.crn)).thenReturn(contactDetails)
 
@@ -1074,6 +1081,7 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
     verify(offenderRepository, never()).save(any())
     verify(checkinCreationService, never()).createCheckin(any(), any(), any())
+    verify(offenderRepository, never()).findByUuid(any())
   }
 
   @Test
@@ -1081,7 +1089,7 @@ class OffenderResourceTest {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
     whenever(appConfig.esup2305DeliusEventSelection).thenReturn(false)
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    stubUpdateInfo(offender)
 
     val exception = assertThrows(ResponseStatusException::class.java) {
       resource.updateDetails(uuid, OffenderDetailsUpdateRequest(currentEvent = 2L))
@@ -1090,6 +1098,34 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
     verify(ndiliusApiClient, never()).getContactDetailsStrict(any())
     verify(offenderRepository, never()).save(any())
+    verify(offenderRepository, never()).findByIdForUpdate(any())
+  }
+
+  @Test
+  fun `updateDetails - missing offender is rejected before loading an entity`() {
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(UUID.randomUUID(), OffenderDetailsUpdateRequest(currentEvent = 2L))
+    }
+
+    assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
+    verify(offenderRepository, never()).findByUuid(any())
+    verify(offenderRepository, never()).findByIdForUpdate(any())
+    verify(ndiliusApiClient, never()).getContactDetailsStrict(any())
+  }
+
+  @Test
+  fun `updateDetails - inactive offender is rejected before loading an entity`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.INACTIVE)
+    stubUpdateInfo(offender)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      resource.updateDetails(offender.uuid, OffenderDetailsUpdateRequest(currentEvent = 2L))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderRepository, never()).findByUuid(any())
+    verify(offenderRepository, never()).findByIdForUpdate(any())
+    verify(ndiliusApiClient, never()).getContactDetailsStrict(any())
   }
 
   @Test
@@ -1192,8 +1228,18 @@ class OffenderResourceTest {
     whenever(it.status).thenReturn(status)
   }
 
+  private fun stubUpdateInfo(offender: Offender) {
+    val info = object : OffenderRepository.IOffenderUpdateInfo {
+      override val id = offender.id
+      override val uuid = offender.uuid
+      override val crn = offender.crn
+      override val status = offender.status
+    }
+    whenever(offenderRepository.findUpdateInfoByUuid(offender.uuid)).thenReturn(Optional.of(info))
+  }
+
   private fun updateFirstCheckinToToday(offender: Offender): ResponseEntity<OffenderSummaryDto> {
-    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    stubUpdateInfo(offender)
     whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
     val scheduleUpdate = CheckinScheduleUpdateRequest("XYZ0111", clock.today(), CheckinInterval.FOUR_WEEKS)
@@ -1236,7 +1282,7 @@ class OffenderResourceTest {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
 
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    stubUpdateInfo(offender)
     whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
@@ -1251,7 +1297,7 @@ class OffenderResourceTest {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)
 
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    stubUpdateInfo(offender)
     whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
@@ -1287,7 +1333,7 @@ class OffenderResourceTest {
       contactPreference = ContactPreference.PHONE
     }
 
-    whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
+    stubUpdateInfo(offender)
     whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
     whenever(offenderRepository.save(offender)).thenReturn(offender)
 
