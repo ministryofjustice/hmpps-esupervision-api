@@ -28,23 +28,24 @@ class OffenderPersistenceService(
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
-    if (offenderRepository.deactivateIfVerified(offender.id) == 0) {
+    val maybeUpdated = offenderRepository.deactivateIfVerified(offender.id)
+    if (maybeUpdated.isEmpty) {
       LOGGER.info("Skipping deactivation for CRN {}: no VERIFIED offender record was updated", offender.crn)
       return null
     }
-    entityManager.refresh(offender)
 
+    val updated = maybeUpdated.get()
     if (event.setup != null) {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
-    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(offender.id)
-    val cancelledCheckins = checkinRepository.updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
+    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(updated.id)
+    val cancelledCheckins = checkinRepository.updateStatusForOffender(updated, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
       LOGGER.info("Cancelled {} created/pending check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, offender.crn)
     }
     eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 
-    appEventPublisher.publishEvent(event.copy(offender = offender.dto(event.offender.personalDetails)))
+    appEventPublisher.publishEvent(event.copy(offender = updated.dto(event.offender.personalDetails)))
     return offender
   }
 

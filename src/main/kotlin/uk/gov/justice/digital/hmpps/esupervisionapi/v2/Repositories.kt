@@ -51,11 +51,12 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     UPDATE offender_v2
     SET status = 'INACTIVE', updated_at = now()
     WHERE id = :offenderId AND status = 'VERIFIED'
+    RETURNING *
     """,
     nativeQuery = true,
   )
   @Modifying
-  fun deactivateIfVerified(offenderId: Long): Int
+  fun deactivateIfVerified(offenderId: Long): Optional<Offender>
 
   /**
    * Update an offender based on new due_date and today's date.

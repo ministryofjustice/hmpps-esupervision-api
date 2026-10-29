@@ -32,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID.randomUUID
 
 class OffenderPersistenceServiceTest {
@@ -69,7 +70,7 @@ class OffenderPersistenceServiceTest {
 
   @Test
   fun `skips every downstream operation when no VERIFIED row is updated`() {
-    whenever(offenderRepository.deactivateIfVerified(offender.id)).thenReturn(0)
+    whenever(offenderRepository.deactivateIfVerified(offender.id)).thenReturn(Optional.empty())
 
     assertNull(service.offenderDeactivation(offender, event))
 
@@ -89,7 +90,8 @@ class OffenderPersistenceServiceTest {
   @ParameterizedTest
   @ValueSource(booleans = [true, false])
   fun `performs downstream operations once for repeated deactivation`(hasSetup: Boolean) {
-    whenever(offenderRepository.deactivateIfVerified(offender.id)).thenReturn(1, 0)
+    whenever(offenderRepository.deactivateIfVerified(offender.id))
+      .thenReturn(Optional.of(offender), Optional.empty())
     val deactivationEvent = event.copy(setup = if (hasSetup) setup else null)
 
     assertSame(offender, service.offenderDeactivation(offender, deactivationEvent))
