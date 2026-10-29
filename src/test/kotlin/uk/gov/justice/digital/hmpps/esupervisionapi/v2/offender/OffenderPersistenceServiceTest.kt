@@ -97,8 +97,9 @@ class OffenderPersistenceServiceTest {
     assertSame(offender, service.offenderDeactivation(offender, deactivationEvent))
     assertNull(service.offenderDeactivation(offender, deactivationEvent))
 
-    inOrder(offenderRepository, outboxItemRepository, questionListAssignmentRepository, checkinRepository, eventAuditService, appEventPublisher) {
+    inOrder(offenderRepository, outboxItemRepository, questionListAssignmentRepository, checkinRepository, eventAuditService, appEventPublisher, entityManager) {
       verify(offenderRepository).deactivateIfVerified(offender.id)
+      verify(entityManager).refresh(offender)
       if (hasSetup) {
         verify(outboxItemRepository).addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, setup.primaryKey)
       }
@@ -109,7 +110,6 @@ class OffenderPersistenceServiceTest {
       verify(offenderRepository).deactivateIfVerified(offender.id)
     }
     verifyNoMoreInteractions(offenderRepository, outboxItemRepository, questionListAssignmentRepository, checkinRepository, eventAuditService, appEventPublisher)
-    verifyNoInteractions(offenderSetupRepository, entityManager)
   }
 
   @Test
