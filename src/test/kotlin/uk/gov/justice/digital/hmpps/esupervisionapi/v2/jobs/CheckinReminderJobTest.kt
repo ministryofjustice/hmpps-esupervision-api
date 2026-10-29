@@ -83,6 +83,28 @@ class CheckinReminderJobTest {
   }
 
   @Test
+  fun `checkin is deactivated without reminder when its selected event is no longer active`() {
+    val checkin = checkin("X000004").apply { offender.currentEvent = 1L }
+    val cd = details("X000004", events = listOf(anEvent.copy(number = 2L)))
+    stub(listOf(checkin), listOf(cd))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(checkin.offender),
+      eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      eq(cd),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+    )
+    verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
+
+    val captor = argumentCaptor<Iterable<Pair<OffenderCheckin, ContactDetails?>>>()
+    verify(eventAuditService).recordCheckinReminded(captor.capture())
+    assertThat(captor.firstValue.map { it.first }).doesNotContain(checkin)
+  }
+
+  @Test
   fun `ineligible checkin is deactivated, not reminded, and excluded from the reminder audit`() {
     val eligible = checkin("X000001")
     val ineligible = checkin("X000002")
@@ -132,7 +154,7 @@ class CheckinReminderJobTest {
         any(),
         any(),
       ),
-    ).thenAnswer { it.getArgument<Offender>(0) }
+    ).thenReturn(true)
   }
 
   private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(

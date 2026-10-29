@@ -15,4 +15,9 @@ enum class Feature {
    * ESUP-2082: New eligibility rules
    */
   ESUP_2082,
+
+  /**
+   * ESUP-2305: Delius event selection for online check-ins
+   */
+  ESUP_2305,
 }

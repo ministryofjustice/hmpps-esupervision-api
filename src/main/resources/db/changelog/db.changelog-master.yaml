@@ -169,3 +169,7 @@ databaseChangeLog:
       file: db/changelog/changesets/84_bespoke_question_identity.sql
   - include:
       file: db/changelog/changesets/85_question_templates_by_ids_retired.sql
+  - include:
+      file: db/changelog/changesets/86_add_current_event_backfill_job_type.sql
+  - include:
+      file: db/changelog/changesets/87_update_monthly_stats_for_selected_event_deactivation.sql

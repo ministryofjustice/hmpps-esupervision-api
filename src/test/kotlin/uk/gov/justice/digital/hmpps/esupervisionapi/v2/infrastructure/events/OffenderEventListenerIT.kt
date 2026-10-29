@@ -61,15 +61,16 @@ class OffenderEventListenerIT : IntegrationTestBase() {
     val setup = OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant())
     offenderSetupRepository.save(setup)
 
-    offender.status = OffenderStatus.INACTIVE
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(),
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
       auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
       setup = SetupInfo.from(setup),
       activeEventNumber = null,
     )
-    offenderPersistenceService.offenderDeactivation(offender, event)
+    offenderPersistenceService.offenderDeactivation(offender.id, event.expectedCurrentEvent, false, event.offender.updatedAt) { snapshot ->
+      event.copy(offender = snapshot)
+    }
 
     offenderEventListener.processEvent(event).get(2, TimeUnit.SECONDS)
 

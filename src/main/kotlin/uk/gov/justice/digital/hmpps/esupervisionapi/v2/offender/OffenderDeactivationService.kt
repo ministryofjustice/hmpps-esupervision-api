@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
@@ -29,8 +30,9 @@ import java.time.Clock
 @Service
 class OffenderDeactivationService(
   private val clock: Clock,
-  private val offenderSetupRepository: OffenderSetupRepository,
+  private val appConfig: AppConfig,
   private val offenderPersistenceService: OffenderPersistenceService,
+  private val offenderSetupRepository: OffenderSetupRepository,
 ) {
 
   /**
@@ -42,7 +44,6 @@ class OffenderDeactivationService(
    * @param auditEventType the audit event type to record; defaults to a manual practitioner
    *   deactivation. Scheduled jobs pass a criterion-specific automated type so the reason an offender
    *   was stopped (in reset vs no active events) is queryable via the audit event_type.
-   * @return the (possibly unchanged) offender
    *
    * Spins its own transaction (REQUIRES_NEW) so that a deactivation commits independently of any
    * surrounding work. In particular, when called from [V2CheckinCreationJob]'s long-lived job
@@ -57,29 +58,53 @@ class OffenderDeactivationService(
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-  ): Offender {
+  ): Boolean = deactivateOffender(
+    offender = offender,
+    reason = reason,
+    contactDetails = contactDetails,
+    sensitive = sensitive,
+    auditEventType = auditEventType,
+    expectedCurrentEvent = offender.currentEvent,
+  )
+
+  fun deactivateOffender(
+    offender: Offender,
+    reason: String,
+    contactDetails: ContactDetails? = null,
+    sensitive: Boolean = false,
+    auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+    expectedCurrentEvent: Long?,
+  ): Boolean {
     if (offender.status != OffenderStatus.VERIFIED) {
       LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
-      return offender
+      return false
     }
 
-    offender.status = OffenderStatus.INACTIVE
-    offender.updatedAt = clock.instant()
-
-    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
-    val event = OffenderDeactivatedEvent(
-      offenderId = offender.id,
-      offender = offender.dto(contactDetails),
-      auditEventType = auditEventType,
-      setup = setup?.let { SetupInfo.from(it) },
-      activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
-      reason = reason,
-      sensitive = sensitive,
+    val checkEvent = auditEventType in setOf(
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
     )
-
-    offenderPersistenceService.offenderDeactivation(offender, event)
-
-    return offender
+    val updatedAt = clock.instant()
+    return offenderPersistenceService.offenderDeactivation(
+      offenderId = offender.id,
+      expectedCurrentEvent = expectedCurrentEvent,
+      checkEvent = checkEvent,
+      updatedAt = updatedAt,
+    ) { persisted ->
+      val snapshot = persisted.copy(personalDetails = contactDetails, updatedAt = updatedAt)
+      val setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) }
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = snapshot,
+        auditEventType = auditEventType,
+        setup = setup,
+        activeEventNumber = contactDetails?.let { activeEventNumber(snapshot.currentEvent, it, appConfig.esup2305DeliusEventSelection) }
+          ?: snapshot.currentEvent.takeIf { setup == null },
+        reason = reason,
+        sensitive = sensitive,
+        expectedCurrentEvent = expectedCurrentEvent,
+      )
+    }
   }
 
   companion object {

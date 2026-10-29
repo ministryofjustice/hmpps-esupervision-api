@@ -3,6 +3,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -49,6 +51,7 @@ class NotificationOrchestratorServiceTest {
 
   @BeforeEach
   fun setUp() {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     whenever(appConfig.checkinSubmitUrlV2(any())).thenReturn(URI("https://example.com/submitv2"))
     whenever(appConfig.checkinReviewUrlV2(any(), any())).thenReturn(URI("https://example.com/reviewv2"))
     whenever(appConfig.feedbackUrl()).thenReturn(URI("https://example.com/feedback"))
@@ -197,7 +200,9 @@ class NotificationOrchestratorServiceTest {
   fun `sendCheckinCreatedNotifications - happy path - sends to offender only`() {
     val offender = createOffender()
     val checkin = createCheckin(offender)
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(
+      events = createContactDetails().events + Event(2, CodedDescription("OFF02", "Selected offence"), sentence = null),
+    )
 
     whenever(
       notificationPersistence.buildOffenderNotifications(
@@ -216,7 +221,7 @@ class NotificationOrchestratorServiceTest {
       checkinId = checkin.id,
       practitionerId = offender.practitionerId,
       offenderContactPreference = offender.contactPreference,
-      currentEvent = null,
+      currentEvent = 2L,
       checkinMode = offender.mode,
     )
     service.sendCheckinCreatedNotifications(event)
@@ -236,7 +241,7 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = 2L)),
     )
     verify(ndiliusApiClient, never()).getContactDetails(any())
   }
@@ -322,7 +327,9 @@ class NotificationOrchestratorServiceTest {
   fun `sendCheckinSubmittedNotifications test`() {
     val offender = createOffender()
     val checkin = createCheckin(offender, status = CheckinStatus.SUBMITTED)
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(
+      events = createContactDetails().events + Event(2, CodedDescription("OFF02", "Selected offence"), sentence = null),
+    )
 
     whenever(
       notificationPersistence.buildOffenderNotifications(
@@ -352,6 +359,7 @@ class NotificationOrchestratorServiceTest {
       offender.practitionerId,
       checkin.dto(contactDetails, clock = clock),
       offender.contactPreference,
+      currentEvent = 2L,
     )
     service.sendCheckinSubmittedNotifications(event)
 
@@ -361,7 +369,7 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = 2L)),
     )
     verify(eventAuditService, never()).recordCheckinSubmitted(checkin, event)
   }
@@ -418,7 +426,31 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
+      eq(AdditionalInformation(eventNumber = 1L)),
+    )
+  }
+
+  @ParameterizedTest
+  @CsvSource("true,true", "true,false", "false,true", "false,false")
+  fun `sendCheckinExpiredNotifications - retains saved association after event disappears`(enabled: Boolean, hasOtherEvent: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = createOffender().apply { currentEvent = 101L }
+    val checkin = createCheckin(offender, status = CheckinStatus.EXPIRED)
+    val details = createContactDetails().copy(
+      events = if (hasOtherEvent) listOf(Event(202L, CodedDescription("X", "Another offence"), null)) else emptyList(),
+    )
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendCheckinExpiredNotifications(checkin, details)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_CHECKIN_EXPIRED),
+      eq(checkin.uuid),
+      eq(offender.crn),
+      any(),
       eq(null),
+      eq(AdditionalInformation(eventNumber = 101L)),
     )
   }
 
@@ -685,6 +717,106 @@ class NotificationOrchestratorServiceTest {
           outcomeCode = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode,
         ),
       ),
+    )
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - selected event no longer active uses automatic stopped template`() {
+    val offender = createOffender().apply { contactPreference = ContactPreference.EMAIL }
+    val contactDetails = createContactDetailsWithEvents()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinsStoppedAuto.name,
+      recipientType = "OFFENDER",
+      channel = "EMAIL",
+      offenderId = offender.id,
+      reference = "AUTO-STOP-001",
+      templateId = "automatic-stopped-email-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "test@test.com"
+    val notifyId = UUID.randomUUID()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(notifyId)
+
+    service.sendDeactivationCompletedNotifications(
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+        setup = null,
+        activeEventNumber = null,
+      ),
+    )
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
+    verify(notifyGateway).send(
+      eq("EMAIL"),
+      eq("automatic-stopped-email-template"),
+      eq(recipient),
+      eq(mapOf("name" to "John Smith")),
+      eq(notification.reference),
+    )
+    verify(notificationPersistence).updateSingleNotificationStatus(
+      notification = eq(notification),
+      success = eq(true),
+      notifyId = eq(notifyId),
+      error = isNull(),
+    )
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_REMOVED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      isNull(),
+      eq(
+        AdditionalInformation(
+          eventNumber = null,
+          setupId = null,
+          outcomeCode = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode,
+        ),
+      ),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - practitioner deactivation uses manual stopped template`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendDeactivationCompletedNotifications(
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+        setup = null,
+        activeEventNumber = null,
+      ),
+    )
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStopped),
     )
   }
 

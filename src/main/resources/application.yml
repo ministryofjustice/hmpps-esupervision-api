@@ -54,6 +54,9 @@ app:
     migration-event-replay:
       cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
       batch-size: 50
+    current-event-backfill:
+      chunk-size: ${CURRENT_EVENT_BACKFILL_CHUNK_SIZE:100}
+      dry-run: ${CURRENT_EVENT_BACKFILL_DRY_RUN:true}
     # Resend check-in answers to NDelius for check-ins whose contact note was created
     # without them (ESUP-1956, pre-commit event publish bug). The work list is seeded
     # manually into the checkin_note_resend table. Disabled by default; enable per env
@@ -91,6 +94,8 @@ app:
     # remove the checkin snapshot if the manual id check confirms it is a match without concern
     esup-1763: ${APP_FEATURES_ESUP_1763:false}
     esup-2082: ${APP_FEATURES_ESUP_2082:false}
+    # ESUP-2305: enable Delius event / sentence selection during setup and reactivation
+    esup-2305: ${APP_FEATURES_ESUP_2305:false}
     # ESUP-2186: from this ISO-8601 date-time (with offset) read Tier API v3 instead of v2. Blank = v2.
     esup-2186-tier-v3-from: ${APP_FEATURES_ESUP_2186_TIER_V3_FROM:}
   offender-survey:

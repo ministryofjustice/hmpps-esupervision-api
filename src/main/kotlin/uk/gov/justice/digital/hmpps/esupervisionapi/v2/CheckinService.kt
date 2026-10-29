@@ -16,7 +16,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
@@ -32,6 +34,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -59,6 +62,7 @@ class CheckinService(
   private val livenessSessionService: LivenessSessionService,
   private val livenessCredentialsService: LivenessCredentialsProvider,
   private val checkinPersistenceService: CheckinPersistenceService,
+  private val offenderDeactivationService: OffenderDeactivationService,
   @param:Value("\${app.upload-ttl-minutes:10}") private val uploadTtlMinutes: Long,
   @param:Value("\${rekognition.face-similarity.threshold:90.0}")
   private val faceSimilarityThreshold: Float,
@@ -222,10 +226,32 @@ class CheckinService(
   fun submitCheckin(uuid: UUID, request: SubmitCheckinRequest): CheckinDto {
     val maybeCheckin = checkinPersistenceService.findCheckin(uuid)
     val checkin = validateCheckinForSubmission(uuid, maybeCheckin)
-    checkin.applyRequest(request, clock)
-
     val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    val event = checkin.toCheckinSubmittedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    val ineligibility = contactDetails?.let { checkinIneligibilityReason(checkin.offender, it) }
+    if (ineligibility != null) {
+      offenderDeactivationService.deactivateOffender(
+        offender = checkin.offender,
+        reason = ineligibility.auditNote,
+        contactDetails = contactDetails,
+        auditEventType = ineligibility.auditEventType,
+      )
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot submit check-in because ${ineligibility.description}.",
+      )
+    }
+
+    if (appConfig.esup2305DeliusEventSelection && contactDetails != null && activeEventNumber(checkin.offender, contactDetails) == null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot submit check-in because a probation event must be selected.")
+    }
+
+    checkin.applyRequest(request, clock)
+    val event = checkin.toCheckinSubmittedEvent(
+      contactDetails,
+      clock = clock,
+      checkinWindow = checkinWindowPeriod,
+      eventSelectionEnabled = appConfig.esup2305DeliusEventSelection,
+    )
     checkinPersistenceService.checkinSubmission(checkin, event)
 
     LOGGER.info("Checkin submitted: {}, submission started at {}", uuid, checkin.checkinStartedAt)
@@ -921,7 +947,18 @@ class CheckinService(
 
     val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
-    if (activeEventNumber(offender, personalDetails) == null) {
+    val savedEvent = offender.currentEvent
+    if (savedEvent != null && personalDetails.events.none { it.number == savedEvent }) {
+      val reason = CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE
+      offenderDeactivationService.deactivateOffender(
+        offender,
+        reason.auditNote,
+        personalDetails,
+        auditEventType = reason.auditEventType,
+        expectedCurrentEvent = savedEvent,
+      )
+    }
+    if (activeEventNumber(offender, personalDetails, appConfig.esup2305DeliusEventSelection) == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
 
@@ -950,7 +987,11 @@ class CheckinService(
       }
 
     val offender = checkin.offender
-    val currentEvent = if (contactDetails == null) offender.currentEvent else activeEventNumber(offender, contactDetails)
+    val currentEvent = if (contactDetails == null) {
+      offender.currentEvent
+    } else {
+      activeEventNumber(offender, contactDetails, appConfig.esup2305DeliusEventSelection)
+    }
     if (currentEvent == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
@@ -1157,6 +1198,7 @@ private fun OffenderCheckin.toCheckinSubmittedEvent(
   contactDetails: ContactDetails?,
   clock: Clock,
   checkinWindow: Period,
+  eventSelectionEnabled: Boolean,
   videoUrl: URL? = null,
   snapshotUrl: URL? = null,
 ) = CheckinSubmittedEvent(
@@ -1165,6 +1207,7 @@ private fun OffenderCheckin.toCheckinSubmittedEvent(
   checkin = this.dto(contactDetails, clock = clock, checkinWindow = checkinWindow, videoUrl = videoUrl, snapshotUrl = snapshotUrl),
   practitionerId = this.offender.practitionerId,
   offenderContactPreference = this.offender.contactPreference,
+  currentEvent = contactDetails?.let { activeEventNumber(this.offender, it, eventSelectionEnabled) } ?: this.offender.currentEvent,
 )
 
 private fun OffenderCheckin.toCheckinReviewedEvent(

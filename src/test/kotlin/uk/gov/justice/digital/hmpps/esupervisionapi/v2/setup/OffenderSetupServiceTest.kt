@@ -128,6 +128,7 @@ class OffenderSetupServiceTest {
       firstCheckin = firstCheckin,
       checkinInterval = CheckinInterval.WEEKLY,
       contactPreference = ContactPreference.EMAIL,
+      currentEvent = 2L,
       eligibilityChoice = EligibilityChoice.SUPPLEMENT_F2F,
       rationale = "it's fine",
       eligibilityAnswers = EligibilityAnswers(
@@ -151,13 +152,15 @@ class OffenderSetupServiceTest {
     assertNotNull(result)
     assertEquals(offenderInfo.setupUuid, result.uuid)
     assertEquals(practitionerId, result.practitionerId)
-
     verify(eligibilityChecker).check(any(), any(), argThat { cache -> cache.contains("MANUAL") })
-    verify(offenderSetupPersistenceService).startOffenderSetup(
-      argThat {
-        this.uuid == offenderInfo.setupUuid && rationale == offenderInfo.rationale && eligibilityChoice == offenderInfo.eligibilityChoice
-      },
-    )
+    val setupCaptor = argumentCaptor<OffenderSetup>()
+    verify(offenderSetupPersistenceService).startOffenderSetup(setupCaptor.capture())
+    assertEquals(setupCaptor.firstValue.offender.uuid, result.offenderUuid)
+    assertEquals(2L, result.currentEvent)
+    assertEquals(2L, setupCaptor.firstValue.offender.currentEvent)
+    assertEquals(offenderInfo.setupUuid, setupCaptor.firstValue.uuid)
+    assertEquals(offenderInfo.rationale, setupCaptor.firstValue.rationale)
+    assertEquals(offenderInfo.eligibilityChoice, setupCaptor.firstValue.eligibilityChoice)
   }
 
   @Test
@@ -448,6 +451,70 @@ class OffenderSetupServiceTest {
   }
 
   @Test
+  fun `completeOffenderSetup - requires a selection when multiple events are active`() {
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
+      ContactDetails(
+        crn = offender.crn,
+        name = Name("John", "Doe"),
+        events = listOf(activeEvent, activeEvent.copy(number = 2L)),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
+    )
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.completeOffenderSetup(setup.uuid, OffenderSetupCompletionDto())
+    }
+
+    assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderSetupPersistenceService, never()).completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any())
+  }
+
+  @Test
+  fun `completeOffenderSetup - does not apply event selection when feature is disabled`() {
+    whenever(appConfig.enabledFeatures).thenReturn(emptySet())
+    val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
+    val setup = OffenderSetup(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      practitionerId = "PRACT001",
+      createdAt = clock.instant(),
+      startedAt = null,
+    )
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      events = listOf(activeEvent, activeEvent.copy(number = 2L)),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+    whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
+    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+    whenever(eligibilityChecker.check(any(), any(), any()))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+    whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
+      .thenReturn(OffenderSetupPersistenceService.CompletionResult(checkin = null))
+
+    val result = service.completeOffenderSetup(setup.uuid, OffenderSetupCompletionDto())
+
+    assertNull(result.currentEvent)
+    assertNull(offender.currentEvent)
+    verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any())
+  }
+
+  @Test
   fun `completeOffenderSetup - completes when offender has an active event`() {
     val offender = makeOffender(clock, LocalDate.now(clock).plusDays(1))
     val setup = OffenderSetup(
@@ -476,6 +543,7 @@ class OffenderSetupServiceTest {
     val result = service.completeOffenderSetup(setup.uuid, OffenderSetupCompletionDto())
 
     assertEquals(OffenderStatus.VERIFIED, result.status)
+    assertEquals(activeEvent.number, result.currentEvent)
     verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(
       argThat { status == OffenderStatus.VERIFIED },
       any(),

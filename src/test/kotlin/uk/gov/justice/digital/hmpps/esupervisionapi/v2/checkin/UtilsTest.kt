@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -31,10 +32,75 @@ class UtilsTest {
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
+  private val today = LocalDate.of(2026, 10, 26)
+
+  private fun eventEnding(number: Long, expectedEndDate: LocalDate) = Event(
+    number = number,
+    mainOffence = CodedDescription("X", "An offence"),
+    sentence = Event.Sentence(
+      date = LocalDate.of(2026, 1, 1),
+      description = "Sentence",
+      expectedEndDate = expectedEndDate,
+    ),
+  )
+
+  @Test
+  fun `reactivation event number validates and uses the requested selection`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertEquals(2L, reactivationEventNumber(1L, 2L, details, true))
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(1L, 3L, details, true) }
+  }
+
+  @Test
+  fun `reactivation event number preserves an active saved selection with either flag value`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertEquals(2L, reactivationEventNumber(2L, null, details, true))
+    assertEquals(2L, reactivationEventNumber(2L, null, details, false))
+  }
+
+  @Test
+  fun `reactivation event number selects the sole remaining event when the saved selection is stale`() {
+    val details = contactDetails(events = listOf(anEvent.copy(number = 2L)))
+
+    assertEquals(2L, reactivationEventNumber(1L, null, details, true))
+    assertEquals(2L, reactivationEventNumber(null, null, details, true))
+  }
+
+  @Test
+  fun `reactivation event number requires a choice between multiple events`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(null, null, details, true) }
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(3L, null, details, true) }
+  }
+
+  @Test
+  fun `reactivation event number rejects selection changes and stale selections when disabled`() {
+    val details = contactDetails(events = listOf(anEvent))
+
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(null, 1L, details, false) }
+    assertThrows<IllegalArgumentException> { reactivationEventNumber(2L, null, details, false) }
+  }
+
+  @Test
+  fun `reactivation event number preserves the legacy first event fallback when disabled`() {
+    val details = contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))
+
+    assertEquals(1L, reactivationEventNumber(null, null, details, false))
+    assertNull(reactivationEventNumber(null, null, contactDetails(), false))
+  }
+
+  @Test
+  fun `reactivation event number rejects an empty active event list when enabled`() {
+    assertThrows<IllegalStateException> { reactivationEventNumber(null, null, contactDetails(), true) }
+    assertThrows<IllegalStateException> { reactivationEventNumber(1L, null, contactDetails(), true) }
+  }
 
   @Test
   fun `checkinIneligibilityReason - contact suspended takes priority even with active events`() {
-    val offender = offenderTemplate.toEntity()
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
     assertEquals(
       CheckinIneligibilityReason.CONTACT_SUSPENDED,
       checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent), contactSuspended = true)),
@@ -42,33 +108,138 @@ class UtilsTest {
   }
 
   @Test
+  fun `checkinIneligibilityReason - contact suspended takes priority over a missing saved selection`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+
+    assertEquals(
+      CheckinIneligibilityReason.CONTACT_SUSPENDED,
+      checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent.copy(number = 2L)), contactSuspended = true)),
+    )
+  }
+
+  @Test
   fun `checkinIneligibilityReason - no active events when events list is explicitly empty`() {
-    val offender = offenderTemplate.toEntity()
     assertEquals(
       CheckinIneligibilityReason.NO_ACTIVE_EVENTS,
-      checkinIneligibilityReason(offender, contactDetails(events = emptyList())),
+      checkinIneligibilityReason(offenderTemplate.toEntity(), contactDetails(events = emptyList())),
     )
   }
 
   @Test
   fun `checkinIneligibilityReason - no active events takes priority over contact suspended`() {
-    val offender = offenderTemplate.toEntity()
     assertEquals(
       CheckinIneligibilityReason.NO_ACTIVE_EVENTS,
-      checkinIneligibilityReason(offender, contactDetails(events = emptyList(), contactSuspended = true)),
+      checkinIneligibilityReason(offenderTemplate.toEntity(), contactDetails(events = emptyList(), contactSuspended = true)),
     )
   }
 
   @Test
   fun `checkinIneligibilityReason - eligible when an active event exists and not suspended`() {
-    val offender = offenderTemplate.toEntity()
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
     assertNull(checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent))))
   }
 
   @Test
-  fun `checkinIneligibilityReason - eligible when offender has a cached current event`() {
-    val offender = offenderTemplate.toEntity().apply { currentEvent = 7L }
-    assertNull(checkinIneligibilityReason(offender, contactDetails(events = emptyList())))
+  fun `checkinIneligibilityReason - saved selection is ineligible when Delius returns no events`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+
+    assertEquals(
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE,
+      checkinIneligibilityReason(offender, contactDetails(events = emptyList())),
+    )
+  }
+
+  @Test
+  fun `checkinIneligibilityReason - saved selection is ineligible when another event is active`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+
+    assertEquals(
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE,
+      checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent.copy(number = 2L)))),
+    )
+  }
+
+  @Test
+  fun `checkinIneligibilityReason - does not handle selection when multiple events exist`() {
+    val offender = offenderTemplate.toEntity()
+
+    assertNull(checkinIneligibilityReason(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
+  }
+
+  @Test
+  fun `active event number - uses the only event when no selection is saved`() {
+    val offender = offenderTemplate.toEntity()
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(anEvent))))
+  }
+
+  @Test
+  fun `active event number - selects event with latest expected end date when no selection is saved`() {
+    val offender = offenderTemplate.toEntity()
+    val earlierEndingEvent = eventEnding(1L, today.plusMonths(3))
+    val laterEndingEvent = eventEnding(2L, today.plusMonths(6))
+
+    assertEquals(2L, activeEventNumber(offender, contactDetails(events = listOf(earlierEndingEvent, laterEndingEvent))))
+  }
+
+  @Test
+  fun `active event number - does not guess when multiple sentences include an undated event`() {
+    val offender = offenderTemplate.toEntity()
+    val undatedEvent = eventEnding(2L, today.plusMonths(6)).copy(
+      sentence = Event.Sentence(
+        date = LocalDate.of(2026, 1, 1),
+        description = "Sentence without expected end date",
+        expectedEndDate = null,
+      ),
+    )
+
+    assertNull(activeEventNumber(offender, contactDetails(events = listOf(eventEnding(1L, today.plusMonths(3)), undatedEvent))))
+  }
+
+  @Test
+  fun `active event number - falls back to first event when no expected end dates are available`() {
+    val offender = offenderTemplate.toEntity()
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
+  }
+
+  @Test
+  fun `active event number - preserves first event inference when selection feature is disabled`() {
+    val offender = offenderTemplate.toEntity()
+    val events = listOf(eventEnding(1L, today.plusMonths(3)), eventEnding(2L, today.plusMonths(6)))
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = events), useLatestExpectedEndDateWhenNoSelection = false))
+  }
+
+  @Test
+  fun `active event number - uses the saved selection when multiple events exist`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 2L }
+
+    assertEquals(2L, activeEventNumber(offender, contactDetails(events = listOf(anEvent, anEvent.copy(number = 2L)))))
+  }
+
+  @Test
+  fun `active event number - expected end date does not override Delius active event status`() {
+    val offender = offenderTemplate.toEntity()
+    val completed = eventEnding(1L, today.minusDays(1))
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(completed))))
+  }
+
+  @Test
+  fun `active event number - preserves a saved selection returned by Delius`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+    val completed = eventEnding(1L, today.minusDays(1))
+
+    assertEquals(1L, activeEventNumber(offender, contactDetails(events = listOf(completed))))
+  }
+
+  @Test
+  fun `checkinIneligibilityReason - expected end date does not override Delius active event status`() {
+    val offender = offenderTemplate.toEntity().apply { currentEvent = 1L }
+    assertNull(
+      checkinIneligibilityReason(offender, contactDetails(events = listOf(eventEnding(1L, today.minusDays(1))))),
+    )
   }
 
   @Test
@@ -80,6 +251,14 @@ class UtilsTest {
     assertEquals(
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       CheckinIneligibilityReason.NO_ACTIVE_EVENTS.auditEventType,
+    )
+    assertEquals(
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditEventType,
+    )
+    assertEquals(
+      "ESPNA",
+      CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditEventType.deliusOutcomeCode,
     )
   }
 

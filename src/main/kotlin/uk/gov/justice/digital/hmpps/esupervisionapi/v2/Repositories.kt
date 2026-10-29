@@ -17,16 +17,19 @@ import org.springframework.transaction.annotation.Transactional
 import tools.jackson.core.type.TypeReference
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.SubmitTimeDistributionDto
 import java.lang.reflect.ParameterizedType
 import java.math.BigDecimal
 import java.sql.ResultSet
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -40,8 +43,113 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
+  @Query("SELECT o.id AS id, o.uuid AS uuid, o.crn AS crn, o.status AS status FROM Offender o WHERE o.uuid = :uuid")
+  fun findUpdateInfoByUuid(@Param("uuid") uuid: UUID): Optional<IOffenderUpdateInfo>
+
+  interface IOffenderUpdateInfo {
+    val id: Long
+    val uuid: UUID
+    val crn: CRN
+    val status: OffenderStatus
+  }
+
+  @Query(
+    """
+    SELECT o.uuid AS uuid, o.crn AS crn, o.practitionerId AS practitionerId,
+      o.status AS status, o.firstCheckin AS firstCheckin, o.checkinInterval AS checkinInterval,
+      o.mode AS mode, o.createdAt AS createdAt, o.createdBy AS createdBy,
+      o.updatedAt AS updatedAt, o.contactPreference AS contactPreference, o.currentEvent AS currentEvent
+    FROM Offender o WHERE o.id = :id
+    """,
+  )
+  fun findDeactivationSnapshot(@Param("id") id: Long): Optional<IOffenderDeactivationSnapshot>
+
+  interface IOffenderDeactivationSnapshot {
+    val uuid: UUID
+    val crn: CRN
+    val practitionerId: ExternalUserId
+    val status: OffenderStatus
+    val firstCheckin: LocalDate?
+    val checkinInterval: Duration?
+    val mode: CheckinMode
+    val createdAt: Instant
+    val createdBy: String
+    val updatedAt: Instant
+    val contactPreference: ContactPreference
+    val currentEvent: Long?
+
+    fun dto() = OffenderDto(
+      uuid = uuid,
+      crn = crn,
+      practitionerId = practitionerId,
+      status = status,
+      firstCheckin = firstCheckin,
+      checkinInterval = checkinInterval?.let { CheckinInterval.fromDuration(it) },
+      mode = mode,
+      createdAt = createdAt,
+      createdBy = createdBy,
+      updatedAt = updatedAt,
+      contactPreference = contactPreference,
+      currentEvent = currentEvent,
+    )
+  }
+
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT o FROM Offender o WHERE o.id = :offenderId")
+  fun findByIdForUpdate(@Param("offenderId") offenderId: Long): Optional<Offender>
+
+  @Modifying
+  @Transactional
+  @Query(
+    nativeQuery = true,
+    value = """
+    UPDATE offender_v2 SET status = 'INACTIVE', updated_at = :updatedAt
+    WHERE id = :id AND status = 'VERIFIED'
+      AND (:checkEvent = false OR current_event IS NOT DISTINCT FROM :expectedEvent)
+    """,
+  )
+  fun deactivateIfUnchanged(
+    @Param("id") id: Long,
+    @Param("expectedEvent") expectedEvent: Long?,
+    @Param("checkEvent") checkEvent: Boolean,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
+
+  @Modifying
+  @Transactional
+  @Query(
+    """
+    UPDATE Offender o
+    SET o.currentEvent = :eventNumber, o.updatedAt = :updatedAt
+    WHERE o.id = :offenderId
+      AND o.status = :status
+      AND o.currentEvent IS NULL
+    """,
+  )
+  fun setCurrentEventIfMissing(
+    @Param("offenderId") offenderId: Long,
+    @Param("status") status: OffenderStatus,
+    @Param("eventNumber") eventNumber: Long,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
+
+  @Query(
+    """
+    SELECT o FROM Offender o
+    WHERE o.status = :status
+      AND o.currentEvent IS NULL
+      AND o.id > :afterId
+    ORDER BY o.id ASC
+    """,
+  )
+  fun findVerifiedWithoutCurrentEventAfterId(
+    @Param("status") status: OffenderStatus,
+    @Param("afterId") afterId: Long,
+    pageable: Pageable,
+  ): List<Offender>
 
   /**
    * Update an offender based on new due_date and today's date.
@@ -256,12 +364,12 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """
     UPDATE OffenderCheckin c
     SET c.status = :newStatus
-    WHERE c.offender = :offender
+    WHERE c.offender.id = :offenderId
       AND c.status = :currentStatus
     """,
   )
   @Modifying
-  fun updateStatusForOffender(offender: Offender, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
+  fun updateStatusForOffenderId(offenderId: Long, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
 
   @Query(
     """

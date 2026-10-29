@@ -41,6 +41,10 @@ data class Event(
     val date: LocalDate,
 
     val description: String,
+    @field:JsonDeserialize(using = LocalDateDeserializer::class)
+    val expectedEndDate: LocalDate? = null,
+    val length: Int? = null,
+    val lengthUnit: String? = null,
   )
 }
 
@@ -269,6 +273,8 @@ data class OffenderDto(
   @field:Schema(description = "Last updated timestamp", required = true) val updatedAt: Instant,
   @field:Schema(description = "Contact preference - phone or email", required = true)
   val contactPreference: ContactPreference,
+  @field:Schema(description = "Selected NDelius event number", required = false)
+  val currentEvent: Long? = null,
   @field:Schema(description = "Personal details from Ndilius (optional)", required = false)
   val personalDetails: ContactDetails? = null,
 )
@@ -321,6 +327,8 @@ data class OffenderInfo(
   @field:Schema(description = "Eligibility answers", required = false)
   @field:Valid
   val eligibilityAnswers: EligibilityAnswers? = null,
+  @field:Schema(description = "Selected NDelius event number", required = false)
+  val currentEvent: Long? = null,
 )
 
 data class OffenderSetupCompletionDto(
@@ -344,6 +352,8 @@ data class OffenderSetupDto(
   val rationale: String? = null,
   @field:Schema(description = "Setup ID", required = true)
   val setupId: UUID,
+  @field:Schema(description = "Selected NDelius event number", required = false)
+  val currentEvent: Long? = null,
 )
 
 // ========================================

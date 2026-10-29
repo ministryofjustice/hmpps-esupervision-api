@@ -13,6 +13,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.GetMapping
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import tools.jackson.databind.annotation.JsonDeserialize
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -48,8 +50,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.reactivationEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -108,6 +110,7 @@ class OffenderResource(
   private val questionService: QuestionService,
   private val transactionTemplate: TransactionTemplate,
   private val entityManager: EntityManager,
+  private val appConfig: AppConfig,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -168,6 +171,7 @@ class OffenderResource(
         dateOfBirth = contactDetails.dateOfBirth,
         mobile = contactDetails.mobile,
         email = contactDetails.email,
+        events = contactDetails.events.takeIf { appConfig.esup2305DeliusEventSelection }.orEmpty(),
       ),
     )
   }
@@ -517,6 +521,7 @@ class OffenderResource(
   @ApiResponse(responseCode = "400", description = "Offender not in VERIFIED status")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   @PostMapping("/{uuid}/deactivate")
+  @Transactional
   fun deactivateOffender(
     @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
     @Valid @RequestBody request: DeactivateOffenderRequest,
@@ -533,12 +538,13 @@ class OffenderResource(
 
     val contactDetails = getContactDetails(offender)
 
-    val saved = offenderDeactivationService.deactivateOffender(
+    offenderDeactivationService.deactivateOffender(
       offender,
       reason = request.reason,
       contactDetails = contactDetails,
       sensitive = request.sensitive,
     )
+    entityManager.refresh(offender)
 
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",
@@ -549,7 +555,7 @@ class OffenderResource(
       request.sensitive,
     )
 
-    return ResponseEntity.ok(saved.toSummaryDto(getOffenderPhotoUrl(saved)))
+    return ResponseEntity.ok(offender.toSummaryDto(getOffenderPhotoUrl(offender)))
   }
 
   private fun getContactDetails(offender: Offender): ContactDetails {
@@ -574,7 +580,7 @@ class OffenderResource(
       Only INACTIVE offenders can be reactivated.
       This endpoint performs the following actions:
       1. Updates the offender's status to VERIFIED.
-      2. Optionally updates the check in schedule (frequency and start date) and contact preferences.
+      2. Selects the active NDelius event and optionally updates the check in schedule (frequency and start date) and contact preferences.
          The start date is optional for AD_HOC check-ins and required for SCHEDULED check-ins.
       3. Sends a registration notification to the offender
       4. Automatically creates a check in record for the 'firstCheckin' date. 
@@ -609,6 +615,15 @@ class OffenderResource(
       )
     }
 
+    val eventSelectionEnabled = appConfig.esup2305DeliusEventSelection
+    val selectedEventNumber = try {
+      reactivationEventNumber(offender.currentEvent, request.currentEvent, contactDetails, eventSelectionEnabled)
+    } catch (e: IllegalArgumentException) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, e.message, e)
+    } catch (e: IllegalStateException) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, e.message, e)
+    }
+
     val requestedPreference = request.contactPreference?.contactPreference ?: offender.contactPreference
 
     when (requestedPreference) {
@@ -638,8 +653,8 @@ class OffenderResource(
 
     val partialEvent = PartialOffenderReactivatedEvent(
       offenderId = offender.id,
-      offender = offender.dto(contactDetails),
-      currentEvent = activeEventNumber(offender, contactDetails),
+      offender = offender.dto(contactDetails).copy(currentEvent = if (eventSelectionEnabled) selectedEventNumber else offender.currentEvent),
+      currentEvent = selectedEventNumber,
       reason = request.reason,
     )
     offender.updatedAt = clock.instant()
@@ -701,58 +716,89 @@ is *today*.""",
     @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
     @Valid @RequestBody request: OffenderDetailsUpdateRequest,
   ): ResponseEntity<OffenderSummaryDto> {
-    val offender = offenderRepository.findByUuid(uuid).orElse(null)
+    val offenderInfo = offenderRepository.findUpdateInfoByUuid(uuid).orElse(null)
       ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
 
-    if (offender.status == OffenderStatus.INACTIVE) {
+    if (offenderInfo.status == OffenderStatus.INACTIVE) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
-        "Cannot update offender with status ${offender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+        "Cannot update offender with status ${offenderInfo.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
       )
     }
 
-    val offenderBefore = offender.toSummaryDto()
-    if (request.checkinSchedule != null) {
-      val mode = request.checkinSchedule.mode ?: offender.mode
-      validate(request.checkinSchedule, offender.mode)
-      val scheduleUpdate = request.checkinSchedule
-      offender.mode = mode
-      validateFirstCheckin(mode, scheduleUpdate.firstCheckin)
-      offender.firstCheckin = scheduleUpdate.firstCheckin
-      offender.checkinInterval = scheduleUpdate.checkinInterval?.duration
-      offender.updatedAt = clock.instant()
+    if (request.currentEvent != null && !appConfig.esup2305DeliusEventSelection) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Delius event selection is not enabled")
     }
-
-    if (request.contactPreference != null) {
-      val preferenceUpdate = request.contactPreference
-      if (offender.contactPreference != preferenceUpdate.contactPreference) {
-        offender.contactPreference = preferenceUpdate.contactPreference
-        offender.updatedAt = clock.instant()
+    if (request.currentEvent != null) {
+      val contactDetails = ndiliusApiClient.getContactDetailsStrict(offenderInfo.crn)
+      if (contactDetails?.events?.none { it.number == request.currentEvent } != false) {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Selected event ${request.currentEvent} is not active for offender ${offenderInfo.crn}",
+        )
       }
     }
 
-    // Stopping check-ins cancels the day's check-in but keeps the row, so only a check-in that is
-    // still open or completed counts as occupying today; a cancelled or expired one does not.
-    val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(offender, clock.today())
-      .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
-    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offender.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
-    if (request.checkinSchedule != null || request.contactPreference != null) {
-      val saved = offenderRepository.save(offender)
-      val offenderAfter = saved.toSummaryDto()
-      if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
-        if (!todayIsOccupied) {
-          checkinCreationService.createCheckin(
-            offenderAfter.uuid,
-            requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
-            request.checkinSchedule.requestedBy,
-          )
+    val updateResult = transactionTemplate.execute<UpdatedOffenderDetails?> {
+      val offender = offenderRepository.findByIdForUpdate(offenderInfo.id).orElse(null)
+        ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
+      entityManager.refresh(offender)
+      if (offender.status == OffenderStatus.INACTIVE) {
+        throw ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Cannot update offender with status ${offender.status}. Only offenders with status INITIAL | VERIFIED can be updated.",
+        )
+      }
+
+      val offenderBefore = offender.toSummaryDto()
+      var changed = false
+      request.checkinSchedule?.let { schedule ->
+        val mode = schedule.mode ?: offender.mode
+        validate(schedule, offender.mode)
+        offender.mode = mode
+        validateFirstCheckin(mode, schedule.firstCheckin)
+        offender.firstCheckin = schedule.firstCheckin
+        offender.checkinInterval = schedule.checkinInterval?.duration
+        changed = true
+      }
+
+      request.contactPreference?.let { preferenceUpdate ->
+        if (offender.contactPreference != preferenceUpdate.contactPreference) {
+          offender.contactPreference = preferenceUpdate.contactPreference
+          changed = true
         }
-        LOGGER.debug("{} check-in for offender {}", if (todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
       }
-      return ResponseEntity.ok(offenderAfter)
-    } else {
-      return ResponseEntity.noContent().build()
+
+      if (request.currentEvent != null && offender.currentEvent != request.currentEvent) {
+        offender.currentEvent = request.currentEvent
+        changed = true
+      }
+
+      if (!changed) return@execute null
+
+      offender.updatedAt = clock.instant()
+      val saved = offenderRepository.save(offender)
+      // Stopping check-ins cancels today's row but leaves it in the database, so only open or
+      // completed check-ins occupy today.
+      val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(saved, clock.today())
+        .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
+      UpdatedOffenderDetails(offenderBefore, saved.toSummaryDto(), todayIsOccupied)
     }
+
+    val result = updateResult ?: return ResponseEntity.noContent().build()
+    val offenderAfter = result.offenderAfter
+    LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offenderInfo.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
+    if (request.checkinSchedule != null && newFirstCheckinDateIsToday(result.offenderBefore, offenderAfter, clock.today())) {
+      if (!result.todayIsOccupied) {
+        checkinCreationService.createCheckin(
+          offenderAfter.uuid,
+          requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
+          request.checkinSchedule.requestedBy,
+        )
+      }
+      LOGGER.debug("{} check-in for offender {}", if (result.todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
+    }
+    return ResponseEntity.ok(offenderAfter)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -893,6 +939,7 @@ data class PersonalDetailsSummary(
   val dateOfBirth: LocalDate,
   val mobile: String? = null,
   val email: String? = null,
+  val events: List<Event> = emptyList(),
 ) : INamedPerson
 
 data class SupervisionPackageStatus(
@@ -973,6 +1020,7 @@ data class OffenderSummaryDto(
   val checkinInterval: CheckinInterval?,
   val mode: CheckinMode,
   val contactPreference: ContactPreference,
+  val currentEvent: Long? = null,
   val photoUrl: String? = null,
   val details: OffenderSummaryDetails? = null,
 )
@@ -985,6 +1033,7 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
   checkinInterval = checkinInterval?.let { CheckinInterval.fromDuration(it) },
   mode = mode,
   contactPreference = contactPreference,
+  currentEvent = currentEvent,
   photoUrl = photoUrl,
   details = contactDetails?.let {
     OffenderSummaryDetails(
@@ -1070,6 +1119,9 @@ data class ReactivateOffenderRequest(
   @field:Schema(description = "Eligibility answers", required = false)
   @field:Valid
   val eligibilityAnswers: EligibilityAnswers? = null,
+
+  @field:Schema(description = "Selected active NDelius event number. Required when multiple events are active and no existing selection remains active.")
+  val currentEvent: Long? = null,
 )
 
 /** Request to update offender check in schedule */
@@ -1115,6 +1167,13 @@ data class ContactPreferenceUpdateRequest(
 data class OffenderDetailsUpdateRequest(
   val checkinSchedule: CheckinScheduleUpdateRequest? = null,
   val contactPreference: ContactPreferenceUpdateRequest? = null,
+  val currentEvent: Long? = null,
+)
+
+private data class UpdatedOffenderDetails(
+  val offenderBefore: OffenderSummaryDto,
+  val offenderAfter: OffenderSummaryDto,
+  val todayIsOccupied: Boolean,
 )
 
 private fun newFirstCheckinDateIsToday(

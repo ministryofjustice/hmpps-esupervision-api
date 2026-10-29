@@ -22,6 +22,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -78,7 +79,7 @@ class NotificationOrchestratorService(
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = contactDetails?.let { activeEventNumber(offender, it) },
+        eventNumber = contactDetails?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) },
         setupId = setup.setupId,
       ),
     )
@@ -215,7 +216,13 @@ class NotificationOrchestratorService(
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,
-            notificationType = NotificationType.OffenderCheckinsStopped,
+            notificationType = when (event.auditEventType) {
+              OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+              OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+              OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+              -> NotificationType.OffenderCheckinsStoppedAuto
+              else -> NotificationType.OffenderCheckinsStopped
+            },
           )
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)
@@ -242,13 +249,17 @@ class NotificationOrchestratorService(
     // to the client). But let's say checkin was created, and we somehow got here. We will publish domain event
     // to reflect what happened in the database and possibly resolve any issues after investigating
     val checkin = event.checkin
-    val activeEventNumber = if (checkin.personalDetails == null) event.currentEvent else activeEventNumber(event, checkin.personalDetails)
+    val activeEventNumber = if (checkin.personalDetails == null) {
+      event.currentEvent
+    } else {
+      activeEventNumber(event, checkin.personalDetails, appConfig.esup2305DeliusEventSelection)
+    }
     if (activeEventNumber == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: no active events found", checkin.uuid, checkin.crn)
       return
     }
 
-    event.publish(domainEventService)
+    event.copy(currentEvent = activeEventNumber).publish(domainEventService)
 
     if (event.checkin.personalDetails == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: personal details not found", checkin.uuid, checkin.crn)
@@ -344,9 +355,14 @@ class NotificationOrchestratorService(
 
   /** Send notifications for checkin submitted event */
   fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
-    event.publish(domainEventService)
-
     val checkin = event.checkin
+    val eventNumber = if (checkin.personalDetails == null) {
+      event.currentEvent
+    } else {
+      activeEventNumber(event, checkin.personalDetails, appConfig.esup2305DeliusEventSelection)
+    }
+    event.copy(currentEvent = eventNumber).publish(domainEventService)
+
     if (event.checkin.personalDetails == null) {
       LOGGER.debug("Skipping checkin submitted notifications for checkin {}: personal details not found", event.checkin.uuid)
       return
@@ -438,11 +454,14 @@ class NotificationOrchestratorService(
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
 
+    val eventNumber = checkin.offender.currentEvent
+      ?: activeEventNumber(checkin.offender, details, appConfig.esup2305DeliusEventSelection)
     domainEventService.publishDomainEvent(
       eventType = DomainEventType.V2_CHECKIN_EXPIRED,
       uuid = checkin.uuid,
       crn = checkin.offender.crn,
       description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
+      additionalInformation = AdditionalInformation(eventNumber = eventNumber),
     )
   }
 
@@ -571,6 +590,7 @@ fun CheckinCreatedEvent.publish(domainEventService: DomainEventService) {
     uuid = checkin.uuid,
     crn = checkin.crn,
     description = "Check-in created for ${checkin.crn} with due date ${checkin.dueDate}",
+    additionalInformation = AdditionalInformation(eventNumber = currentEvent),
   )
 }
 
@@ -580,6 +600,7 @@ fun CheckinSubmittedEvent.publish(domainEventService: DomainEventService) {
     uuid = checkin.uuid,
     crn = checkin.crn,
     description = "Check-in submitted for ${checkin.crn}",
+    additionalInformation = AdditionalInformation(eventNumber = currentEvent),
   )
 }
 

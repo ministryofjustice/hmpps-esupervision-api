@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import java.time.Instant
 
 @Service
 class OffenderPersistenceService(
@@ -22,19 +23,32 @@ class OffenderPersistenceService(
 ) {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
-    offenderRepository.save(offender)
-    if (event.setup != null) {
-      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
+  fun offenderDeactivation(
+    offenderId: Long,
+    expectedCurrentEvent: Long?,
+    checkEvent: Boolean,
+    updatedAt: Instant,
+    buildEvent: (OffenderDto) -> OffenderDeactivatedEvent,
+  ): Boolean {
+    if (offenderRepository.deactivateIfUnchanged(offenderId, expectedCurrentEvent, checkEvent, updatedAt) == 0) {
+      LOGGER.info("Skipping stale deactivation for offender {}", offenderId)
+      return false
     }
-    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(offender.id)
-    val cancelledCheckins = checkinRepository.updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
+
+    val snapshot = offenderRepository.findDeactivationSnapshot(offenderId).orElseThrow().dto()
+    val event = buildEvent(snapshot)
+    event.setup?.let {
+      outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, it.primaryKey)
+    }
+    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(event.offenderId)
+    val cancelledCheckins = checkinRepository.updateStatusForOffenderId(event.offenderId, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
-      LOGGER.info("Cancelled {} created/pending check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, offender.crn)
+      LOGGER.info("Cancelled {} created/pending check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, event.offender.crn)
     }
     eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 
     appEventPublisher.publishEvent(event)
+    return true
   }
 
   /**
@@ -54,6 +68,7 @@ class OffenderPersistenceService(
       offender.firstCheckin = event.offender.firstCheckin
       offender.checkinInterval = event.offender.checkinInterval?.duration
       offender.contactPreference = event.offender.contactPreference
+      offender.currentEvent = event.offender.currentEvent
       offenderRepository.save(offender)
 
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)
