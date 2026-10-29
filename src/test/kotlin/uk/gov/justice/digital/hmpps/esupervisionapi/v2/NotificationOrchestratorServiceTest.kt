@@ -52,7 +52,7 @@ class NotificationOrchestratorServiceTest {
     whenever(appConfig.checkinSubmitUrlV2(any())).thenReturn(URI("https://example.com/submitv2"))
     whenever(appConfig.checkinReviewUrlV2(any(), any())).thenReturn(URI("https://example.com/reviewv2"))
     whenever(appConfig.feedbackUrl()).thenReturn(URI("https://example.com/feedback"))
-    whenever(appConfig.dashboardUrl()).thenReturn(URI("https://example.com/dashboard"))
+    whenever(appConfig.contactsUrl(any())).thenReturn(URI("https://example.com/dashboard"))
 
     service = NotificationOrchestratorService(
       notificationPersistence,
