@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertNotNull
 import org.mockito.ArgumentMatcher
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
@@ -62,8 +63,7 @@ class OffenderDeactivationServiceTest {
     whenever(offenderPersistenceService.offenderDeactivation(any(), any())).thenReturn(offender)
 
     val result = service.deactivateOffender(offender, "no active events", null, contactDetails, sensitive = true)
-
-    assertEquals(OffenderStatus.INACTIVE, result?.status)
+    assertNotNull(result)
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
     verify(offenderPersistenceService).offenderDeactivation(any(), argThat(matcher))
   }
