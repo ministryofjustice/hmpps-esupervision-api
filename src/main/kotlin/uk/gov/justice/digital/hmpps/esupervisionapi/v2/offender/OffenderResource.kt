@@ -947,6 +947,8 @@ data class OffenderSummaryDetails(
   val practitioner: PractitionerSummary? = null,
   val events: List<Event> = emptyList(),
   val contactSuspended: Boolean = false,
+  @field:Schema(description = "Date the person was recorded as deceased in NDelius; null if they are not", required = false)
+  val dateOfDeath: LocalDate? = null,
 ) : INamedPerson
 
 /**
@@ -1002,6 +1004,7 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
       practitioner = it.practitioner?.toSummary(),
       events = it.events,
       contactSuspended = it.contactSuspended,
+      dateOfDeath = it.dateOfDeath,
     )
   },
 )
