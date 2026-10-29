@@ -155,7 +155,7 @@ Stores checkin records with survey responses.
 | auto_id_check | VARCHAR(50) | | MATCH, NO_MATCH, NO_FACE_DETECTED, ERROR |
 | manual_id_check | VARCHAR(50) | | CONFIRMED, REJECTED |
 | risk_feedback | BOOLEAN | | Risk management feedback flag |
-| link_status | ENUM | | PENDING, SENT, NOT_SENT: whether GOV.UK Notify accepted the check-in invite. NULL for check-ins created before ESUP-2223 |
+| link_status | ENUM | | Whether GOV.UK Notify accepted the check-in invite (no delivery receipts, so not whether it was delivered). SENDING: live, not yet accepted; SENT: accepted (NDelius `link.delivered`); FAILED: rejected or couldn't be sent (NDelius `link.not_delivered`). NULL for check-ins created before ESUP-2223 |
 | link_status_updated_at | TIMESTAMP | | When link_status last changed |
 
 ### generic_notification_v2
