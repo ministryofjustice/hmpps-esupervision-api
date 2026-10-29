@@ -321,11 +321,19 @@ open class OffenderCheckin(
   }
 }
 
-/** Whether the check-in invite (the link) was accepted by GOV.UK Notify. */
+/**
+ * Whether GOV.UK Notify accepted the check-in invite (the link). We don't get delivery receipts,
+ * so [SENT] means accepted by Notify, not delivered.
+ */
 enum class CheckinLinkStatus {
-  PENDING,
+  /** The check-in is live, the invite not yet accepted by Notify. */
+  SENDING,
+
+  /** Notify accepted the invite. Published to NDelius as `link.delivered`. */
   SENT,
-  NOT_SENT,
+
+  /** Notify rejected the invite, or it couldn't be sent (for example no contact details). Published to NDelius as `link.not_delivered`. */
+  FAILED,
 }
 
 fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
