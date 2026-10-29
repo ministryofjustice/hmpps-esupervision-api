@@ -74,7 +74,7 @@ set ineligibility_auto_message = case code
     when 'HAS_DEVICE_RESTRICTION' then 'has device restrictions'
     when 'IS_TIER_C' then 'is in Tier C'
     when 'ON_ACCREDITED_PROGRAMME' then 'is in Tier A or B and their accredited programme has ended'
-    when 'IN_EARLY_ENGAGEMENT' then 'is in Tier Tier A or B, on an accredited programme, but in early engagement'
+    when 'IN_EARLY_ENGAGEMENT' then 'is in Tier A or B, on an accredited programme, but in early engagement'
     when 'IS_CONTACT_SUSPENDED' then 'is suspended (in reset) in NDelius'
     -- when 'IS_PILOT_USER' then N/A
     -- when 'IS_TIER_D_TO_G' then N/A
