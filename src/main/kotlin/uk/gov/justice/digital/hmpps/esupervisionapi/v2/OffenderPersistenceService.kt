@@ -21,9 +21,18 @@ class OffenderPersistenceService(
   private val appEventPublisher: ApplicationEventPublisher,
 ) {
 
+  /**
+   * Only perform deactivation side effects when the stored status transitions from VERIFIED to INACTIVE.
+   *
+   * @return the deactivated offender, or null if no VERIFIED offender record was updated
+   */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
-    offenderRepository.save(offender)
+  fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
+    if (offenderRepository.deactivateIfVerified(offender.id, offender.updatedAt) == 0) {
+      LOGGER.info("Skipping deactivation for CRN {}: no VERIFIED offender record was updated", offender.crn)
+      return null
+    }
+
     if (event.setup != null) {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
@@ -35,6 +44,7 @@ class OffenderPersistenceService(
     eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 
     appEventPublisher.publishEvent(event.copy(offender = offender.dto(event.offender.personalDetails)))
+    return offender
   }
 
   /**

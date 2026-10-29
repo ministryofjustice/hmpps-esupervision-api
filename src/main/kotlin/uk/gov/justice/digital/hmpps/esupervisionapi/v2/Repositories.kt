@@ -46,6 +46,17 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
 
   fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
 
+  @Query(
+    """
+    UPDATE offender_v2
+    SET status = 'INACTIVE', updated_at = :updatedAt
+    WHERE id = :offenderId AND status = 'VERIFIED'
+    """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun deactivateIfVerified(offenderId: Long, updatedAt: Instant): Int
+
   /**
    * Update an offender based on new due_date and today's date.
    *
