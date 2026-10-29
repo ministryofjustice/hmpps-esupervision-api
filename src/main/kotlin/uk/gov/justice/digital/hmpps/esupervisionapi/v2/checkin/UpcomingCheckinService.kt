@@ -106,7 +106,9 @@ class UpcomingCheckinService(
       // Its due date passed without it being created: no active event, or the schedule changed.
       scheduled.status = CheckinStatus.CANCELLED
       checkinRepository.save(scheduled)
-      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_CANCELLED, scheduled, CheckinDeliusEventNotes.cancelled(NOT_CREATED_REASON), event)
+      // No event number: NDelius matches the contact by check-in, and rejects an update whose event
+      // number differs from the contact's, which it would if the active event changed since.
+      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_CANCELLED, scheduled, CheckinDeliusEventNotes.cancelled(NOT_CREATED_REASON), eventNumber = null)
       LOGGER.info("Cancelled checkin {} for CRN {}: not created on its due date {}", scheduled.uuid, offender.crn, scheduled.dueDate)
     }
 
