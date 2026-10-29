@@ -60,7 +60,7 @@ class OffenderDeactivationService(
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
     deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
   ): Offender {
-    validateOffender(offender)
+    if (validateOffender(offender)) return offender
 
     offender.status = OffenderStatus.INACTIVE
     offender.updatedAt = clock.instant()
