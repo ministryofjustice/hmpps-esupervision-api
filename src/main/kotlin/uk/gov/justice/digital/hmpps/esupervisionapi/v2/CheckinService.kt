@@ -16,6 +16,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -946,6 +947,17 @@ class CheckinService(
 
     val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
+    val savedEvent = offender.currentEvent
+    if (savedEvent != null && personalDetails.events.none { it.number == savedEvent }) {
+      val reason = CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE
+      offenderDeactivationService.deactivateOffender(
+        offender,
+        reason.auditNote,
+        personalDetails,
+        auditEventType = reason.auditEventType,
+        expectedCurrentEvent = savedEvent,
+      )
+    }
     if (activeEventNumber(offender, personalDetails, appConfig.esup2305DeliusEventSelection) == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }

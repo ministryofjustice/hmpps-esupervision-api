@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEven
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -45,6 +46,7 @@ class CheckinCreationService(
   private val transactionTemplate: TransactionTemplate,
   private val checkinPersistenceService: CheckinPersistenceService,
   private val appConfig: AppConfig,
+  private val offenderDeactivationService: OffenderDeactivationService,
 ) {
 
   val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -101,7 +103,18 @@ class CheckinCreationService(
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
   ): OffenderCheckin {
-    val eventNumber = resolveEventNumber(offender.currentEvent, contactDetails)
+    val savedEvent = offender.currentEvent
+    if (savedEvent != null && contactDetails.events.none { it.number == savedEvent }) {
+      val reason = CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE
+      offenderDeactivationService.deactivateOffender(
+        offender,
+        reason.auditNote,
+        contactDetails,
+        auditEventType = reason.auditEventType,
+        expectedCurrentEvent = savedEvent,
+      )
+    }
+    val eventNumber = resolveEventNumber(savedEvent, contactDetails)
     val checkin =
       OffenderCheckin(
         uuid = UUID.randomUUID(),

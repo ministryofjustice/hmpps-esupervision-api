@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
@@ -60,6 +61,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
@@ -1438,6 +1440,58 @@ class CheckinServiceTest {
 
     assertEquals(dueDate, result.dueDate)
     verify(checkinCreationService).createCheckin(offender.uuid, dueDate, "PRACT001")
+  }
+
+  @ParameterizedTest
+  @CsvSource("true,true", "true,false", "false,true", "false,false")
+  fun `manual creation deactivates a stale saved selection before rejecting`(enabled: Boolean, byCrn: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = createOffender().apply {
+      currentEvent = 1L
+      mode = CheckinMode.AD_HOC
+      firstCheckin = null
+    }
+    val details = contactDetails(offender).copy(events = listOf(Event(2L, CodedDescription("X", "Another offence"), null)))
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(details)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      if (byCrn) {
+        service.createCheckinByCrn(CreateCheckinByCrnRequest("PRACT001", offender.crn, LocalDate.now(clock)))
+      } else {
+        service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, LocalDate.now(clock)))
+      }
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(offenderDeactivationService).deactivateOffender(
+      eq(offender),
+      eq(CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditNote),
+      eq(details),
+      eq(false),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      eq(1L),
+    )
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
+  }
+
+  @Test
+  fun `manual creation rejects ambiguous unsaved sentences without deactivating`() {
+    val offender = createOffender()
+    val sentence = Event.Sentence(LocalDate.now(clock), "Community order")
+    val details = contactDetails(offender).copy(
+      events = listOf(Event(1L, CodedDescription("X", "An offence"), sentence), Event(2L, CodedDescription("Y", "Another offence"), sentence)),
+    )
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(details)
+
+    assertThrows(ResponseStatusException::class.java) {
+      service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, LocalDate.now(clock)))
+    }
+
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any(), any())
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
   }
 
   @Test
