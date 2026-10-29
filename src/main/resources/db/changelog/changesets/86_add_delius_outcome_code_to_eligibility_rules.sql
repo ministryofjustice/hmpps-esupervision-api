@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:83_add_delius_outcome_code_to_eligibility_rules-1 splitStatements:false
+--changeset hmpps:86_add_delius_outcome_code_to_eligibility_rules-1 splitStatements:false
 
 alter table offender_eligibility_rule
     add column delius_outcome_code varchar(5);
@@ -84,7 +84,7 @@ where ineligibility_message is not null;
 
 --rollback alter table offender_eligibility_rule drop column ineligibility_auto_message, drop column ineligibility_message, drop column delius_outcome_code;
 
---changeset hmpps:83_add_delius_outcome_code_to_eligibility_rules-2 splitStatements:false
+--changeset hmpps:86_add_delius_outcome_code_to_eligibility_rules-2 splitStatements:false
 
 -- update the stats function to handle 'OFFENDER_AUTO_DEACTIVATED_INELIGIBLE'
 

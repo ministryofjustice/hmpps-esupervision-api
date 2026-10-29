@@ -170,4 +170,4 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/85_question_templates_by_ids_retired.sql
   - include:
-      file: db/changelog/changesets/83_add_delius_outcome_code_to_eligibility_rules.sql
+      file: db/changelog/changesets/86_add_delius_outcome_code_to_eligibility_rules.sql
