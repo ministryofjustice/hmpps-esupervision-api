@@ -274,6 +274,82 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `a changed schedule moves the upcoming check-in, keeping its UUID`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3), currentEvent = 4)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+
+    offender.firstCheckin = today.plusDays(5)
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+
+    val moved = scheduledCheckins(offender).single()
+    assertThat(moved.uuid).isEqualTo(scheduled.uuid)
+    assertThat(moved.dueDate).isEqualTo(today.plusDays(5))
+    val rescheduled = deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).last()
+    assertThat(rescheduled.eventType).isEqualTo(DomainEventType.V2_CHECKIN_RESCHEDULED)
+    assertThat(rescheduled.dateTime).isEqualTo(checkinDateTime(today.plusDays(5)).toInstant())
+    assertThat(rescheduled.notes).startsWith("Check in moved to: ")
+    assertThat(rescheduled.eventNumber).isNull()
+  }
+
+  @Test
+  fun `an unchanged schedule leaves the upcoming check-in alone`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3))
+    service.scheduleNext(offender.id)
+
+    service.scheduleNext(offender.id)
+
+    assertThat(deliusEventRepository.findAll().map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+  }
+
+  @Test
+  fun `the upcoming check-in is cancelled when there's no longer a next date`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3), mode = CheckinMode.AD_HOC)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+
+    offender.firstCheckin = null
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+
+    assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+    val cancelled = deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).last()
+    assertThat(cancelled.eventType).isEqualTo(DomainEventType.V2_CHECKIN_CANCELLED)
+    assertThat(cancelled.notes).isEqualTo("Reason: ${UpcomingCheckinService.SCHEDULE_CHANGED_REASON}")
+  }
+
+  @Test
+  fun `an upcoming check-in alongside an open one is cancelled`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3))
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    saveCheckin(offender, CheckinStatus.CREATED, today)
+
+    service.scheduleNext(offender.id)
+
+    assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+  }
+
+  @Test
+  fun `changing the schedule through update_details moves the upcoming check-in`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3))
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    val firstCheckin = today.plusDays(4)
+
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .contentType(MediaType.APPLICATION_JSON)
+      .bodyValue("""{"checkinSchedule":{"requestedBy":"PRACT001","firstCheckin":"$firstCheckin","checkinInterval":"WEEKLY","mode":"SCHEDULED"}}""")
+      .exchange()
+      .expectStatus().isOk
+
+    assertThat(scheduledCheckins(offender).single().let { it.uuid to it.dueDate }).isEqualTo(scheduled.uuid to firstCheckin)
+  }
+
+  @Test
   fun `submitting a check-in schedules the next`() {
     val offender = saveOffender(firstCheckin = today)
     val checkin = saveCheckin(offender, CheckinStatus.SUBMITTED, today)
