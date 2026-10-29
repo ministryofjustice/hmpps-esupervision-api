@@ -127,6 +127,12 @@ app:
 spring:
   application:
     name: esupervision-api
+  task:
+    execution:
+      shutdown:
+        # Batch pods close the context after the job; drain async event listeners before exit.
+        await-termination: true
+        await-termination-period: 5m
   codec:
     max-in-memory-size: 10MB
   cache:
