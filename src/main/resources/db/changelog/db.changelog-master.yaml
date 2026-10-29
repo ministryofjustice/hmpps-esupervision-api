@@ -164,4 +164,10 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/82_fix_monthly_stats_counts.sql
   - include:
+      file: db/changelog/changesets/83_retire_unused_custom_question_templates.sql
+  - include:
+      file: db/changelog/changesets/84_bespoke_question_identity.sql
+  - include:
+      file: db/changelog/changesets/85_question_templates_by_ids_retired.sql
+  - include:
       file: db/changelog/changesets/83_add_delius_outcome_code_to_eligibility_rules.sql
