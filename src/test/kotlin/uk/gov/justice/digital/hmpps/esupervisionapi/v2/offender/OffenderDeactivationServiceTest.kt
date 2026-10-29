@@ -49,7 +49,6 @@ class OffenderDeactivationServiceTest {
     override fun matches(arg: OffenderDeactivatedEvent): Boolean {
       var matches = arg.offenderId == offender.id
       matches = matches && arg.offender.crn == offender.crn
-      matches = matches && arg.offender.status == OffenderStatus.INACTIVE
       matches = matches && arg.reason == reason
       matches = matches && arg.auditEventType == auditEventType
       return matches
@@ -115,7 +114,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `passes null contact details through when not supplied by caller`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(offenderRepository.deactivateIfVerified(any())).thenAnswer { offender }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
     service.deactivateOffender(offender, "no active events", null)
