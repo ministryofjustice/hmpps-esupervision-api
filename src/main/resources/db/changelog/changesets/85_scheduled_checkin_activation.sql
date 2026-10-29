@@ -2,9 +2,13 @@
 
 --changeset richard.birch:85_scheduled_checkin_activation-1 splitStatements:false
 
--- Whether the check-in invite (the link) reached GOV.UK Notify. NULL for check-ins created
--- before ESUP-2223, which are not subject to the link-sent gate.
-CREATE TYPE checkin_link_status_v2 AS ENUM ('PENDING', 'SENT', 'NOT_SENT');
+-- Whether GOV.UK Notify accepted the check-in invite (the link). We don't get delivery receipts,
+-- so "sent" means accepted by Notify, not delivered. NULL for check-ins created before ESUP-2223,
+-- which are not subject to the link-sent gate.
+--   SENDING: the check-in is live, the invite not yet accepted by Notify
+--   SENT:    Notify accepted the invite (NDelius: link.delivered)
+--   FAILED:  Notify rejected it, or it couldn't be sent (NDelius: link.not_delivered)
+CREATE TYPE checkin_link_status_v2 AS ENUM ('SENDING', 'SENT', 'FAILED');
 
 ALTER TABLE offender_checkin_v2
     ADD COLUMN link_status checkin_link_status_v2,

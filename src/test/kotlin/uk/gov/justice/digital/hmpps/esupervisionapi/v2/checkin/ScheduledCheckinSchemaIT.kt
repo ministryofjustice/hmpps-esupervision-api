@@ -131,14 +131,14 @@ class ScheduledCheckinSchemaIT : IntegrationTestBase() {
     val offender = saveOffender()
     val legacy = checkinRepository.save(checkin(offender, CheckinStatus.CREATED, clock.today()))
     val withLink = checkin(offender, CheckinStatus.CREATED, clock.today()).apply {
-      linkStatus = CheckinLinkStatus.NOT_SENT
+      linkStatus = CheckinLinkStatus.FAILED
       linkStatusUpdatedAt = clock.instant()
     }
     checkinRepository.saveAndFlush(withLink)
 
     assertNull(checkinRepository.findByUuid(legacy.uuid).get().linkStatus)
     val reloaded = checkinRepository.findByUuid(withLink.uuid).get()
-    assertEquals(CheckinLinkStatus.NOT_SENT, reloaded.linkStatus)
+    assertEquals(CheckinLinkStatus.FAILED, reloaded.linkStatus)
     assertNotNull(reloaded.linkStatusUpdatedAt)
   }
 
