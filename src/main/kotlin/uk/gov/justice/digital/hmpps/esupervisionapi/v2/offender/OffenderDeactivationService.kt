@@ -59,7 +59,7 @@ class OffenderDeactivationService(
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
     deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
-  ): Offender {
+  ): Offender? {
     if (validateOffender(offender)) return offender
 
     updateForDeactivation(offender)
@@ -77,18 +77,15 @@ class OffenderDeactivationService(
       practitionerMessageFragment = practitionerMessageFragment,
     )
 
-    offenderPersistenceService.offenderDeactivation(offender, event)
-
-    return offender
+    return offenderPersistenceService.offenderDeactivation(offender, event)
   }
 
-  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender {
+  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
     if (validateOffender(offender)) return offender
 
     updateForDeactivation(offender)
 
-    offenderPersistenceService.offenderDeactivation(offender, event.copy(offender = offender.dto(event.offender.personalDetails)))
-    return offender
+    return offenderPersistenceService.offenderDeactivation(offender, event.copy(offender = offender.dto(event.offender.personalDetails)))
   }
 
   private fun updateForDeactivation(offender: Offender) {

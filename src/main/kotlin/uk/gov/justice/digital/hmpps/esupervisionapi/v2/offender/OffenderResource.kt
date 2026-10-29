@@ -534,6 +534,9 @@ class OffenderResource(
       contactDetails = contactDetails,
       sensitive = request.sensitive,
     )
+    if (saved == null) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Offender deactivation failed - record could not be updated")
+    }
 
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",

@@ -59,12 +59,12 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `deactivates a VERIFIED offender - status, audit and notification`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+    whenever(offenderPersistenceService.offenderDeactivation(any(), any())).thenReturn(offender)
 
     val result = service.deactivateOffender(offender, "no active events", null, contactDetails, sensitive = true)
 
-    assertEquals(OffenderStatus.INACTIVE, result.status)
+    assertEquals(OffenderStatus.INACTIVE, result?.status)
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
     verify(offenderPersistenceService).offenderDeactivation(any(), argThat(matcher))
   }
@@ -109,7 +109,7 @@ class OffenderDeactivationServiceTest {
   fun `is a no-op when offender is not VERIFIED`() {
     val offender = offender(OffenderStatus.INACTIVE)
     val result = service.deactivateOffender(offender, "in reset", null, contactDetails)
-    assertEquals(OffenderStatus.INACTIVE, result.status)
+    assertEquals(OffenderStatus.INACTIVE, result?.status)
   }
 
   @Test
