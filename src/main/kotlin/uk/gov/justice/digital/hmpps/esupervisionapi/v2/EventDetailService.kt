@@ -116,7 +116,7 @@ class EventDetailService(
     return EventDetailResponse(
       eventReferenceId = "${eventType.eventTypeName}-$eventId",
       eventType = eventType.eventTypeName,
-      notes = event.notes,
+      notes = event.notes.orEmpty(),
       crn = event.crn,
       offenderUuid = checkin.offender.uuid,
       checkinUuid = event.checkinUuid,
