@@ -190,6 +190,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offender.updatedAt = Instant.parse("2026-10-29T10:00:00Z")
     val event = deactivationEvent(offender)
     assertNotNull(offenderPersistenceService.offenderDeactivation(offender, event))
+    val firstDeactivatedAt = offenderRepository.findById(offender.id).orElseThrow().updatedAt
     val (checkin, assignment) = savePendingWork(offender)
     offender.updatedAt = offender.updatedAt.plusSeconds(60)
 
@@ -197,7 +198,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
     val persistedOffender = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(OffenderStatus.INACTIVE, persistedOffender.status)
-    assertEquals(event.offender.updatedAt, persistedOffender.updatedAt)
+    assertEquals(firstDeactivatedAt, persistedOffender.updatedAt)
     assertEquals(CheckinStatus.CREATED, checkinRepository.findById(checkin.id).orElseThrow().status)
     assertEquals(assignment.id, questionListAssignmentRepository.findById(assignment.id).orElseThrow().id)
   }
