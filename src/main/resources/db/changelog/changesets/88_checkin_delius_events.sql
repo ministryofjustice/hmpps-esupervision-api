@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset richard.birch:86_checkin_delius_events-1 splitStatements:false
+--changeset richard.birch:88_checkin_delius_events-1 splitStatements:false
 
 -- ESUP-2223: check-in events for NDelius. Rows are written in the same transaction as the change
 -- they describe and published by CheckinDeliusEventRelayJob, one check-in at a time and in id

@@ -2,9 +2,9 @@
 
 -- ESUP-2223: an upcoming check-in exists as a SCHEDULED row from the moment it is scheduled,
 -- and becomes CREATED on its due date. The new value can only be used once this changeset
--- has committed, so the triggers and functions that use it live in changeset 85.
+-- has committed, so the triggers and functions that use it live in changeset 87.
 
---changeset richard.birch:84_checkin_status_scheduled-1 splitStatements:false runInTransaction:false
+--changeset richard.birch:86_checkin_status_scheduled-1 splitStatements:false runInTransaction:false
 ALTER TYPE offender_checkin_status_v2 ADD VALUE IF NOT EXISTS 'SCHEDULED' BEFORE 'CREATED';
 
 -- rollback:
