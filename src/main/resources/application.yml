@@ -61,7 +61,7 @@ app:
     checkin-delius-event-relay:
       enabled: true
       fixed-delay: PT15S
-      batch-size: 100
+      batch-size: 500
       min-gap: PT60S
     # Resend check-in answers to NDelius for check-ins whose contact note was created
     # without them (ESUP-1956, pre-commit event publish bug). The work list is seeded

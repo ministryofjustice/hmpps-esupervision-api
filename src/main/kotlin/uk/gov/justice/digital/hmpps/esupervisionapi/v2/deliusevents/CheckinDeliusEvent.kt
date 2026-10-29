@@ -17,7 +17,7 @@ import java.time.Instant
 import java.util.Optional
 import java.util.UUID
 
-/** The event types published through [CheckinDeliusEvent] rows. */
+/** Check-in lifecycle events, whose detail is the [CheckinDeliusEvent] row itself. */
 val CHECKIN_DELIUS_EVENT_TYPES = setOf(
   DomainEventType.V2_CHECKIN_SCHEDULED,
   DomainEventType.V2_CHECKIN_RESCHEDULED,
@@ -27,9 +27,21 @@ val CHECKIN_DELIUS_EVENT_TYPES = setOf(
 )
 
 /**
- * A check-in lifecycle event for NDelius, written in the same transaction as the change it
- * describes and published later by [CheckinDeliusEventRelayJob]. It is also the source of the
- * event detail NDelius fetches, so the detail reflects the check-in as it was at the time.
+ * Check-in events that existed before ESUP-2223, whose detail is built from the check-in. With
+ * the feature on they are published through [CheckinDeliusEvent] rows too, so they can't overtake
+ * the check-in's lifecycle events.
+ */
+val CHECKIN_UPDATE_EVENT_TYPES = setOf(
+  DomainEventType.V2_CHECKIN_SUBMITTED,
+  DomainEventType.V2_CHECKIN_EXPIRED,
+  DomainEventType.V2_CHECKIN_REVIEWED,
+  DomainEventType.V2_CHECKIN_ANNOTATED,
+)
+
+/**
+ * A check-in event for NDelius, written in the same transaction as the change it describes and
+ * published later by [CheckinDeliusEventRelayJob]. For a lifecycle event it is also the source of
+ * the event detail NDelius fetches, so the detail reflects the check-in as it was at the time.
  */
 @Entity
 @Table(name = "checkin_delius_event_v2")
@@ -40,6 +52,10 @@ open class CheckinDeliusEvent(
   @Column("event_type", nullable = false)
   @Enumerated(EnumType.STRING)
   open var eventType: DomainEventType,
+
+  /** The id in the detail URL: [eventId] for lifecycle events, otherwise what that event's detail endpoint expects. */
+  @Column("detail_id", nullable = false)
+  open var detailId: UUID,
 
   @Column("checkin_uuid", nullable = false)
   open var checkinUuid: UUID,
@@ -54,8 +70,9 @@ open class CheckinDeliusEvent(
   @Column("date_time")
   open var dateTime: Instant?,
 
-  @Column("notes", nullable = false)
-  open var notes: String,
+  /** Null when the detail is built from the check-in. */
+  @Column("notes")
+  open var notes: String?,
 
   @Column("occurred_at", nullable = false)
   open var occurredAt: Instant,
@@ -78,14 +95,14 @@ interface CheckinDeliusEventRepository : JpaRepository<CheckinDeliusEvent, Long>
   fun findAllByCheckinUuidOrderById(checkinUuid: UUID): List<CheckinDeliusEvent>
 
   /**
-   * Insert an event unless the check-in already has one of that type (rescheduling excepted).
+   * Insert an event unless the check-in already has one of that type (rescheduling and annotating excepted).
    * @return 1 if inserted, 0 if it was a duplicate
    */
   @Query(
     """
-    insert into checkin_delius_event_v2 (event_id, event_type, checkin_uuid, crn, event_number, date_time, notes, occurred_at)
-    values (:#{#e.eventId}, :#{#e.eventType.name()}, :#{#e.checkinUuid}, :#{#e.crn}, :#{#e.eventNumber}, :#{#e.dateTime}, :#{#e.notes}, :#{#e.occurredAt})
-    on conflict (checkin_uuid, event_type) where event_type <> 'V2_CHECKIN_RESCHEDULED' do nothing
+    insert into checkin_delius_event_v2 (event_id, event_type, detail_id, checkin_uuid, crn, event_number, date_time, notes, occurred_at)
+    values (:#{#e.eventId}, :#{#e.eventType.name()}, :#{#e.detailId}, :#{#e.checkinUuid}, :#{#e.crn}, :#{#e.eventNumber}, :#{#e.dateTime}, :#{#e.notes}, :#{#e.occurredAt})
+    on conflict (checkin_uuid, event_type) where event_type not in ('V2_CHECKIN_RESCHEDULED', 'V2_CHECKIN_ANNOTATED') do nothing
     """,
     nativeQuery = true,
   )

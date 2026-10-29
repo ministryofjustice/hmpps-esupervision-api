@@ -14,6 +14,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
@@ -32,6 +34,7 @@ class CheckinExpiryJob(
   @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
   private val eventAuditService: EventAuditService,
+  private val checkinDeliusEventService: CheckinDeliusEventService,
 ) {
   @Scheduled(cron = "\${app.scheduling.v2-checkin-expiry.cron}")
   @SchedulerLock(
@@ -74,6 +77,9 @@ class CheckinExpiryJob(
         transactionTemplate.execute {
           checkins.forEach { it.status = CheckinStatus.EXPIRED }
           checkinRepository.saveAll(checkins)
+          if (checkinDeliusEventService.enabled()) {
+            checkins.forEach { checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_EXPIRED, it) }
+          }
         }
         totalExpired = checkins.size
 

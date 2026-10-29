@@ -5,6 +5,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.mockito.kotlin.after
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doThrow
@@ -16,15 +17,20 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.IllegalTransactionStateException
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
@@ -61,6 +67,12 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
   @Autowired
   private lateinit var clock: Clock
 
+  @Autowired
+  private lateinit var appConfig: AppConfig
+
+  @Autowired
+  private lateinit var checkinPersistenceService: CheckinPersistenceService
+
   @MockitoBean
   private lateinit var publisher: DomainEventPublisher
 
@@ -75,6 +87,8 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
   @AfterEach
   fun tearDown() {
     jdbcTemplate.update("TRUNCATE TABLE checkin_delius_event_v2 RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("TRUNCATE TABLE outbox_items RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE offender_checkin_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE offender_v2 RESTART IDENTITY CASCADE")
   }
@@ -206,6 +220,59 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
     assertThat(service.publishPending(10, minGap)).isEqualTo(0)
 
     verify(publisher, times(CheckinDeliusEventService.MAX_FAILURES_IN_A_ROW)).publishOrThrow(any())
+  }
+
+  @Test
+  fun `a check-in update is published in order, pointing at the check-in's detail`() {
+    val checkin = saveCheckin()
+    record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, date = clock.today())
+    transactionTemplate.execute { service.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin) }
+
+    service.publishPending(10, minGap)
+    clock.advanceBy(minGap.plusSeconds(1))
+    service.publishPending(10, minGap)
+
+    val published = argumentCaptor<DomainEvent>().also { verify(publisher, times(2)).publishOrThrow(it.capture()) }.allValues
+    assertThat(published.map { it.eventType }).containsExactly("esupervision.check-in.scheduled", "esupervision.check-in.received")
+    assertThat(published[1].detailUrl).isEqualTo("http://localhost:8080/v2/events/checkin-submitted/${checkin.uuid}")
+    assertThat(published[1].additionalInformation?.eventNumber).isNull()
+  }
+
+  @Test
+  fun `annotations can be recorded more than once, each pointing at its log entry`() {
+    val checkin = saveCheckin()
+    val annotations = listOf(UUID.randomUUID(), UUID.randomUUID())
+
+    annotations.forEach { id -> transactionTemplate.execute { service.recordCheckinUpdate(DomainEventType.V2_CHECKIN_ANNOTATED, checkin, detailId = id) } }
+
+    assertThat(repository.findAllByCheckinUuidOrderById(checkin.uuid).map { it.detailId }).containsExactlyElementsOf(annotations)
+  }
+
+  @Test
+  fun `lifecycle and check-in update events are recorded through their own methods`() {
+    val checkin = saveCheckin()
+
+    assertThrows<IllegalArgumentException> { transactionTemplate.execute { service.recordCheckinUpdate(DomainEventType.V2_CHECKIN_CANCELLED, checkin) } }
+    assertThrows<IllegalArgumentException> { record(DomainEventType.V2_CHECKIN_SUBMITTED, checkin) }
+  }
+
+  @Test
+  fun `with the feature on, a submission is recorded for the relay instead of published directly`() {
+    val featuresBefore = appConfig.enabledFeatures
+    ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
+    try {
+      val checkin = saveCheckin()
+      checkin.status = CheckinStatus.SUBMITTED
+      checkin.submittedAt = clock.instant()
+      val event = CheckinSubmittedEvent(checkin.id, checkin.offender.id, "PRACT001", checkin.dto(), checkin.offender.contactPreference)
+
+      checkinPersistenceService.checkinSubmission(checkin, event)
+
+      assertThat(repository.findAllByCheckinUuidOrderById(checkin.uuid).single().eventType).isEqualTo(DomainEventType.V2_CHECKIN_SUBMITTED)
+      verify(publisher, after(1000).never()).publish(any())
+    } finally {
+      ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore)
+    }
   }
 
   @Test

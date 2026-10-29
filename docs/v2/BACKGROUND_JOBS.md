@@ -140,7 +140,8 @@ Example with 3-day grace period:
 ESUP-2223. Check-in lifecycle events for NDelius (`scheduled`, `updated` for a reschedule,
 `cancelled`, `link.delivered`, `link.not_delivered`) are recorded in `checkin_delius_event_v2`
 in the same transaction as the change they describe (`CheckinDeliusEventService.record`).
-This job publishes them.
+With feature `ESUP_2223` on, so are the `received`, `expired`, `reviewed` and annotation `updated`
+events (`recordCheckinUpdate`), instead of being published directly. This job publishes them.
 
 - Events are published in id order, **one check-in at a time**: an event waits until every
   earlier event for the same check-in has been published, and the most recent of those was
@@ -161,7 +162,7 @@ app:
     checkin-delius-event-relay:
       enabled: true
       fixed-delay: PT15S
-      batch-size: 100
+      batch-size: 500
       min-gap: PT60S
 ```
 
