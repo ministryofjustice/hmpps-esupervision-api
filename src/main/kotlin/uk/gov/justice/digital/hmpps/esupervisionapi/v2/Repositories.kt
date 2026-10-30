@@ -129,7 +129,9 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         WHERE c.offender_id = o.id
           AND :lowerBoundInclusive <= c.due_date
           AND c.due_date < :upperBoundExclusive
-          AND c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+          AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+            -- ESUP-2223: the invite couldn't be sent; don't create another for the same day
+            OR (c.status = 'CANCELLED' AND c.link_status = 'FAILED'))
       )
       AND o.id > coalesce(:lastOffenderId, 0)
     ORDER BY o.id
@@ -322,6 +324,7 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     JOIN FETCH c.offender o
     WHERE c.status = 'CREATED'
       AND c.dueDate = :checkinStartDate
+      AND (c.linkStatus IS NULL OR c.linkStatus = 'SENT')
       AND NOT EXISTS (
           SELECT n FROM GenericNotification n
           WHERE n.offenderId = o.id
@@ -373,6 +376,25 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findScheduledForOffenders(offenderIds: Collection<Long>, dueDate: LocalDate): List<OffenderCheckin>
+
+  /** ESUP-2223: the check-in's invite was accepted by GOV.UK Notify. Only from SENDING, so a repeat is a no-op. */
+  @Query(
+    "update offender_checkin_v2 set link_status = 'SENT', link_status_updated_at = :at where id = :id and link_status = 'SENDING'",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun markLinkSent(id: Long, at: Instant): Int
+
+  /**
+   * ESUP-2223: the check-in's invite couldn't be sent. The check-in is cancelled rather than left
+   * to be missed. Only from SENDING, so a repeat is a no-op.
+   */
+  @Query(
+    "update offender_checkin_v2 set link_status = 'FAILED', link_status_updated_at = :at, status = 'CANCELLED' where id = :id and link_status = 'SENDING' and status = 'CREATED'",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun markLinkFailed(id: Long, at: Instant): Int
 
   /** Offenders whose upcoming (SCHEDULED) check-in's due date has passed without it being created. */
   @Query("SELECT c.offender.id FROM OffenderCheckin c WHERE c.status = 'SCHEDULED' AND c.dueDate < :today")
@@ -968,6 +990,21 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   )
   @Modifying
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
+
+  /**
+   * Unbind the questions assigned to a check-in that never reached the person, so they carry over
+   * to the next one. Kept bound if the practitioner has since assigned questions for the next one.
+   */
+  @Query(
+    """
+    update question_list_assignment set checkin_id = null, updated_at = now()
+    where checkin_id = :checkinId
+      and not exists (select 1 from question_list_assignment a where a.offender_id = :offenderId and a.checkin_id is null)
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun releaseCheckinAssignment(offenderId: Long, checkinId: Long): Int
 
   @Query(
     """

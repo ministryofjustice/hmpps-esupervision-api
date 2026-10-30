@@ -133,6 +133,8 @@ class CheckinService(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
+    requireLinkSent(checkin)
+
     if (checkin.offender.crn != personalDetails.crn) {
       LOGGER.warn(
         "CRN mismatch for checkin {}: expected {}, got {}",
@@ -233,10 +235,23 @@ class CheckinService(
   }
 
   /**
+   * ESUP-2223 link-sent gate: a check-in can't be started or submitted until GOV.UK Notify has
+   * accepted its invite, so NDelius records the link as sent before the check-in is received.
+   * Check-ins created before ESUP-2223 have no link status and aren't held.
+   */
+  private fun requireLinkSent(checkin: OffenderCheckin) {
+    if (checkin.status == CheckinStatus.SCHEDULED || checkin.linkStatus == CheckinLinkStatus.SENDING) {
+      LOGGER.warn("Checkin {} is not open yet: status={}, linkStatus={}", checkin.uuid, checkin.status, checkin.linkStatus)
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin is not open yet: ${checkin.uuid}")
+    }
+  }
+
+  /**
    * Returns the validated value or throws.
    */
   private fun validateCheckinForSubmission(uuid: UUID, maybeCheckin: OffenderCheckin?): OffenderCheckin {
     val checkin = maybeCheckin ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    requireLinkSent(checkin)
     if (checkin.status != CheckinStatus.CREATED) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't submit checkin with status: ${checkin.status}")
     }

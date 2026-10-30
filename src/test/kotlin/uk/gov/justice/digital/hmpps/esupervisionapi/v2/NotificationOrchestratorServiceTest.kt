@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -15,6 +16,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.asSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinLinkService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -44,6 +46,7 @@ class NotificationOrchestratorServiceTest {
   private val eventDetailService: EventDetailService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val appConfig: AppConfig = mock()
+  private val checkinLinkService: CheckinLinkService = mock()
 
   private lateinit var service: NotificationOrchestratorService
 
@@ -64,6 +67,7 @@ class NotificationOrchestratorServiceTest {
       appConfig,
       clock,
       Duration.ofHours(72),
+      checkinLinkService,
     )
   }
 
@@ -240,6 +244,70 @@ class NotificationOrchestratorServiceTest {
       eq(null),
     )
     verify(ndiliusApiClient, never()).getContactDetails(any())
+  }
+
+  @Nested
+  inner class CheckinLink {
+    private val offender = createOffender()
+    private val checkin = createCheckin(offender)
+    private val invite = reactivationNotification(offender, NotificationType.OffenderCheckinInvite, "invite-template", "ref")
+
+    private fun event(contactDetails: ContactDetails? = createContactDetails(), currentEvent: Long? = 1) = CheckinCreatedEvent(
+      checkin = checkin.dto(contactDetails, clock = clock),
+      offenderId = offender.id,
+      checkinId = checkin.id,
+      practitionerId = offender.practitionerId,
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = currentEvent,
+      checkinMode = offender.mode,
+    )
+
+    @BeforeEach
+    fun setUp() {
+      whenever(appConfig.dashboardUrl()).thenReturn(URI("https://example.com/dashboard"))
+    }
+
+    @Test
+    fun `an invite Notify accepts marks the link sent`() {
+      stubReactivationSending(offender, invite, "07700900123")
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkSent(checkin.id, "SMS")
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+    }
+
+    @Test
+    fun `an invite Notify rejects marks the link failed and tells the practitioner`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenThrow(RuntimeException("rejected"))
+      whenever(checkinLinkService.linkFailed(any(), any())).thenReturn(true)
+      whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NOTIFY_FAILED)
+      verify(notificationPersistence).buildPractitionerNotifications(any(), any(), any(), any(), eq(NotificationType.PractitionerInviteIssueGeneric), any())
+    }
+
+    @Test
+    fun `the practitioner isn't told when the link status didn't change`() {
+      whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ADDRESS)
+      verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `no contact details or no active event marks the link failed`() {
+      service.sendCheckinCreatedNotifications(event(contactDetails = null))
+      service.sendCheckinCreatedNotifications(event(contactDetails = null, currentEvent = null))
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_CONTACT_DETAILS)
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ACTIVE_EVENT)
+    }
   }
 
   @Test

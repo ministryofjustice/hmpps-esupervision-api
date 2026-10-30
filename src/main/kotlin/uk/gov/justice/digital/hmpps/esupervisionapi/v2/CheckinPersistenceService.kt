@@ -48,6 +48,11 @@ class CheckinPersistenceService(
     }
     // an activated check-in was recorded in NDelius when it was scheduled
     val notScheduledBefore = checkin.status == CheckinStatus.CREATED && checkin.id == 0L
+    if (upcomingCheckinService.enabled()) {
+      // the invite is sent once this commits; the link-sent gate holds submission until then
+      checkin.linkStatus = CheckinLinkStatus.SENDING
+      checkin.linkStatusUpdatedAt = clock.instant()
+    }
     val savedCheckin = checkinRepository.saveAndFlush(checkin)
     if (notScheduledBefore && upcomingCheckinService.enabled()) {
       checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, savedCheckin, CheckinDeliusEventNotes.scheduled(savedCheckin.dueDate), event.currentEvent, savedCheckin.dueDate)
