@@ -206,8 +206,7 @@ class CheckinCreationJob(
         practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
         contactDetails = contactDetails,
         auditEventType = ineligibility.auditEventType,
-      )
-      metrics.deactivated += 1
+      )?.let { metrics.deactivated += 1 }
     } catch (e: Exception) {
       LOGGER.warn("Failed to deactivate CRN {} in chunk {}", offenderInfo.crn, metrics.chunks, e)
       metrics.errors += 1
