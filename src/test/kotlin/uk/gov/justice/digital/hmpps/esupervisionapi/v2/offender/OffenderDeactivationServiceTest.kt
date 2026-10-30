@@ -1,7 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertNotNull
 import org.mockito.ArgumentMatcher
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
@@ -49,7 +50,6 @@ class OffenderDeactivationServiceTest {
     override fun matches(arg: OffenderDeactivatedEvent): Boolean {
       var matches = arg.offenderId == offender.id
       matches = matches && arg.offender.crn == offender.crn
-      matches = matches && arg.offender.status == OffenderStatus.INACTIVE
       matches = matches && arg.reason == reason
       matches = matches && arg.auditEventType == auditEventType
       return matches
@@ -59,12 +59,11 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `deactivates a VERIFIED offender - status, audit and notification`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
+    whenever(offenderPersistenceService.offenderDeactivation(any(), any())).thenReturn(offender)
 
-    val result = service.deactivateOffender(offender, "no active events", contactDetails, sensitive = true)
-
-    assertEquals(OffenderStatus.INACTIVE, result.status)
+    val result = service.deactivateOffender(offender, "no active events", null, contactDetails, sensitive = true)
+    assertNotNull(result)
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
     verify(offenderPersistenceService).offenderDeactivation(any(), argThat(matcher))
   }
@@ -78,6 +77,7 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender,
       "no active events",
+      null,
       contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
     )
@@ -95,6 +95,7 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender,
       "contact suspended",
+      null,
       contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
     )
@@ -106,17 +107,17 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `is a no-op when offender is not VERIFIED`() {
     val offender = offender(OffenderStatus.INACTIVE)
-    val result = service.deactivateOffender(offender, "in reset", contactDetails)
-    assertEquals(OffenderStatus.INACTIVE, result.status)
+    val result = service.deactivateOffender(offender, "in reset", null, contactDetails)
+    assertNull(result)
   }
 
   @Test
   fun `passes null contact details through when not supplied by caller`() {
     val offender = offender(OffenderStatus.VERIFIED)
-    whenever(offenderRepository.save(any<Offender>())).thenAnswer { it.getArgument<Offender>(0) }
+    whenever(offenderRepository.deactivateIfVerified(any())).thenAnswer { offender }
     whenever(offenderSetupRepository.findByOffender(any())).thenReturn(Optional.empty())
 
-    service.deactivateOffender(offender, "no active events")
+    service.deactivateOffender(offender, "no active events", null)
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
     verify(offenderPersistenceService).offenderDeactivation(any(), argThat(matcher))

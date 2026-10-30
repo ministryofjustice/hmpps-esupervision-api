@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.replacePlaceholder
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.StatsProviderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.stats.SubmitTimeDistributionDto
@@ -62,6 +63,19 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
 
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
+
+  fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
+
+  @Query(
+    """
+    UPDATE offender_v2
+    SET status = 'INACTIVE', updated_at = now()
+    WHERE id = :offenderId AND status = 'VERIFIED'
+    RETURNING *
+    """,
+    nativeQuery = true,
+  )
+  fun deactivateIfVerified(offenderId: Long): Optional<Offender>
 
   /**
    * Update an offender based on new due_date and today's date.
@@ -207,6 +221,12 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findMigratedWithoutAudit(pageable: Pageable): List<Offender>
 }
 
+interface LatestOffenderSetup {
+  val offenderId: Long
+  val setupPrimaryKey: Long
+  val setupCounter: Int
+}
+
 /**
  * Repository for V2 Offender Setup
  */
@@ -224,6 +244,20 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
   """,
   )
   fun findByOffender(offender: Offender): Optional<OffenderSetup>
+
+  @Query(
+    """
+    SELECT DISTINCT ON (s.offender_id)
+      s.offender_id AS "offenderId",
+      s.id AS "setupPrimaryKey",
+      s.setup_counter AS "setupCounter"
+    FROM offender_setup_v2 s
+    WHERE s.offender_id IN (:offenderIds)
+    ORDER BY s.offender_id, s.created_at DESC, s.id DESC
+  """,
+    nativeQuery = true,
+  )
+  fun findLatestByOffenderIdIn(offenderIds: Collection<Long>): List<LatestOffenderSetup>
 
   /**
    * Creates a new setup record for the given offender and updates the

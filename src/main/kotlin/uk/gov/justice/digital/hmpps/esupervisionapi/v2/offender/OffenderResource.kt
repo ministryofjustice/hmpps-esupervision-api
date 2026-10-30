@@ -224,7 +224,7 @@ class OffenderResource(
           ResponseEntity.ok(
             EligibilityCheckResponse(
               outcome = result.outcome.toResponseOutcome(),
-              message = result.message?.let { applyTemplate(it, contactDetails.name) },
+              message = result.dashboardMessage?.let { applyTemplate(it, contactDetails.name) },
             ),
           )
         }
@@ -248,7 +248,7 @@ class OffenderResource(
       .thenCompose { evalResult -> CompletableFuture.completedFuture(Pair(evalResult, EvalIssue.NONE)) }
       .exceptionallyCompose { throwable ->
         handleMissingManualData(throwable) {
-          val result = EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, null, null)
+          val result = EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, null, null, null)
           CompletableFuture.completedFuture(Pair(result, EvalIssue.MANUAL_DATA_MISSING))
         }
       }
@@ -271,7 +271,7 @@ class OffenderResource(
                 message = if (evalIssue == EvalIssue.MANUAL_DATA_MISSING) {
                   applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name)
                 } else {
-                  evalResult.message?.let { applyTemplate(it, contactDetails.name) }
+                  evalResult.dashboardMessage?.let { applyTemplate(it, contactDetails.name) }
                 },
                 allRules = report
                   .filter { (rule, _) -> rule.source != "MANUAL" }
@@ -285,13 +285,7 @@ class OffenderResource(
                         EligibilityRuleOutcome.CONTINUE -> null
                         EligibilityRuleOutcome.ELIGIBLE -> null // we don't care about the message here
                         // we need to extract the right message from the rule
-                        EligibilityRuleOutcome.NOT_ELIGIBLE -> if (rule.outcomeOnNoMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) {
-                          rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
-                        } else if (rule.outcomeOnMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) {
-                          rule.messageOnMatch?.let { applyTemplate(it, contactDetails.name) }
-                        } else {
-                          null
-                        }
+                        EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.ineligibilityMessage?.let { applyTemplate(it, contactDetails.name) }
                       },
                     )
                   },
@@ -331,6 +325,8 @@ class OffenderResource(
       on another sentence are all false.
       If phase code is 'FTHRD' then 'inFinalThird' is true.
       If phase code is 'INIT' then 'inEarlyEngagement' is true.
+      If any sentence's custody status is `C` recalled, and the person is not unlawfully at large on it,
+      then 'recalled' is true.
       Does not require the person to already be registered for e-supervision.
 
       A CRN Supervision Packages does not know is a 404 rather than false, so callers can tell an
@@ -538,9 +534,13 @@ class OffenderResource(
     val saved = offenderDeactivationService.deactivateOffender(
       offender,
       reason = request.reason,
+      practitionerMessageFragment = null, // notification not sent when deactivation requested by practitioner
       contactDetails = contactDetails,
       sensitive = request.sensitive,
     )
+    if (saved == null) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Offender deactivation failed - record could not be updated")
+    }
 
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",
@@ -607,7 +607,7 @@ class OffenderResource(
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
         HttpStatus.UNPROCESSABLE_CONTENT,
-        "Cannot reactivate ${offender.crn}: ${outcome.message ?: "ineligible for online check-ins."}",
+        "Cannot reactivate ${offender.crn}: ${outcome.dashboardMessage ?: "ineligible for online check-ins."}",
       )
     }
 
@@ -909,6 +909,11 @@ data class SupervisionPackageStatus(
   val inFinalThird: Boolean,
   @field:Schema(description = "Whether the person is in early engagement")
   val inEarlyEngagement: Boolean,
+  @field:Schema(
+    description = "Whether the person has been recalled to prison on any sentence. False for someone recalled " +
+      "but unlawfully at large, and for a recall request not yet decided",
+  )
+  val recalled: Boolean,
 )
 
 enum class EligibilityCheckResponseOutcome {
@@ -947,6 +952,8 @@ data class OffenderSummaryDetails(
   val practitioner: PractitionerSummary? = null,
   val events: List<Event> = emptyList(),
   val contactSuspended: Boolean = false,
+  @field:Schema(description = "Date the person was recorded as deceased in NDelius; null if they are not", required = false)
+  val dateOfDeath: LocalDate? = null,
 ) : INamedPerson
 
 /**
@@ -1002,6 +1009,7 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
       practitioner = it.practitioner?.toSummary(),
       events = it.events,
       contactSuspended = it.contactSuspended,
+      dateOfDeath = it.dateOfDeath,
     )
   },
 )

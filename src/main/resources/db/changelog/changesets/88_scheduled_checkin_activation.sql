@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset richard.birch:87_scheduled_checkin_activation-1 splitStatements:false
+--changeset richard.birch:88_scheduled_checkin_activation-1 splitStatements:false
 
 -- Whether GOV.UK Notify accepted the check-in invite (the link). We don't get delivery receipts,
 -- so "sent" means accepted by Notify, not delivered. NULL for check-ins created before ESUP-2223,
@@ -18,7 +18,7 @@ ALTER TABLE offender_checkin_v2
 --rollback ALTER TABLE offender_checkin_v2 DROP COLUMN link_status_updated_at, DROP COLUMN link_status;
 --rollback DROP TYPE checkin_link_status_v2;
 
---changeset richard.birch:87_scheduled_checkin_activation-2 splitStatements:false
+--changeset richard.birch:88_scheduled_checkin_activation-2 splitStatements:false
 
 -- A SCHEDULED check-in becomes CREATED on its due date. That activation must have the same
 -- effects as inserting a CREATED row: a CHECKIN_CREATED outbox item and binding the pending
@@ -41,7 +41,7 @@ EXECUTE FUNCTION fn_update_question_assignment_on_insert();
 --rollback DROP TRIGGER IF EXISTS trg_checkin_activation__question_assignment ON offender_checkin_v2;
 --rollback DROP TRIGGER IF EXISTS trg_checkin_activation__outbox ON offender_checkin_v2;
 
---changeset richard.birch:87_scheduled_checkin_activation-3 splitStatements:false
+--changeset richard.birch:88_scheduled_checkin_activation-3 splitStatements:false
 
 -- Same as changeset 74, except that SCHEDULED check-ins are ignored when looking for the most
 -- recent check-in: a SCHEDULED row due today has not happened yet, so it must not be treated

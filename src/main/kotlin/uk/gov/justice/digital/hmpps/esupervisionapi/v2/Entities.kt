@@ -164,7 +164,7 @@ open class OffenderSetup(
   @Column(name = "rationale", nullable = true)
   open var rationale: String? = null,
 ) : V2BaseEntity() {
-  fun setupId(): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
+  fun setupId(): UUID = setupId(id, setupCounter)
 
   fun incrementSetupCounter() {
     setupCounter++
@@ -180,6 +180,10 @@ open class OffenderSetup(
     rationale = rationale,
     setupId = setupId(),
   )
+
+  companion object {
+    fun setupId(id: Long, setupCounter: Int): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
+  }
 }
 
 /**

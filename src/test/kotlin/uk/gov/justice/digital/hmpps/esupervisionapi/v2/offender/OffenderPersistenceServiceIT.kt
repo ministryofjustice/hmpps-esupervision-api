@@ -2,15 +2,20 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
@@ -69,6 +74,33 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `batch setup lookup returns the latest setup for each requested offender`() {
+    val offenders = (1..4).map {
+      offenderRepository.save(offenderTemplate.copy(uuid = randomUUID(), crn = "X00000$it").toEntity())
+    }
+    val now = clock.instant()
+    fun saveSetup(index: Int, createdAt: Instant) = offenderSetupRepository.saveAndFlush(
+      OffenderSetup(randomUUID(), offenders[index], offenders[index].practitionerId, createdAt),
+    )
+    saveSetup(0, now.minusSeconds(60))
+    val latestFirst = saveSetup(0, now)
+    saveSetup(1, now)
+    val latestSecond = saveSetup(1, now)
+    saveSetup(3, now)
+
+    latestSecond.incrementSetupCounter()
+    offenderSetupRepository.saveAndFlush(latestSecond)
+
+    val setups = offenderSetupRepository.findLatestByOffenderIdIn(offenders.take(3).map { it.id })
+      .associateBy { it.offenderId }
+
+    assertEquals(setOf(offenders[0].id, offenders[1].id), setups.keys)
+    assertEquals(SetupInfo.from(latestFirst), SetupInfo.from(setups.getValue(offenders[0].id)))
+    assertEquals(SetupInfo.from(latestSecond), SetupInfo.from(setups.getValue(offenders[1].id)))
+    assertEquals(2, setups.getValue(offenders[1].id).setupCounter)
+  }
+
+  @Test
   fun `offenderDeactivation cancels checkins and deletes upcoming question assignments`() {
     var offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity()
     offender = offenderRepository.save(offender)
@@ -92,7 +124,6 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     )
     assignment = questionListAssignmentRepository.save(assignment)
 
-    offender.status = OffenderStatus.INACTIVE
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(),
@@ -103,11 +134,106 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
     offenderPersistenceService.offenderDeactivation(offender, event)
 
+    val updatedOffender = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(OffenderStatus.INACTIVE, updatedOffender.status)
+    assertNotEquals(offender.updatedAt, updatedOffender.updatedAt)
+
     val updatedCheckin = checkinRepository.findById(checkin.id).orElseThrow()
     assertEquals(CheckinStatus.CANCELLED, updatedCheckin.status)
 
     val assignments = questionListAssignmentRepository.findAll()
     assertEquals(0, assignments.size)
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = OffenderStatus::class, names = ["INITIAL", "INACTIVE"])
+  fun `offenderDeactivation skips downstream updates when the stored status is not VERIFIED`(status: OffenderStatus) {
+    val originalUpdatedAt = Instant.parse("2026-10-28T10:00:00Z")
+    val offender = offenderRepository.saveAndFlush(
+      offenderTemplate.copy(status = status).toEntity().apply { updatedAt = originalUpdatedAt },
+    )
+    val (checkin, assignment) = savePendingWork(offender)
+    val setup = offenderSetupRepository.saveAndFlush(OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant()))
+    offender.status = OffenderStatus.INACTIVE
+    offender.updatedAt = originalUpdatedAt.plusSeconds(60)
+    val event = deactivationEvent(offender).copy(setup = SetupInfo.from(setup))
+
+    assertNull(offenderPersistenceService.offenderDeactivation(offender, event))
+
+    val persistedOffender = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(status, persistedOffender.status)
+    assertEquals(originalUpdatedAt, persistedOffender.updatedAt)
+    assertEquals(CheckinStatus.CREATED, checkinRepository.findById(checkin.id).orElseThrow().status)
+    assertEquals(assignment.id, questionListAssignmentRepository.findById(assignment.id).orElseThrow().id)
+    assertTrue(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, setup.id).isEmpty)
+  }
+
+  @Test
+  fun `offenderDeactivation does not overwrite unrelated fields from a stale entity`() {
+    val offender = offenderRepository.saveAndFlush(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity())
+    val latestOffender = offenderRepository.findById(offender.id).orElseThrow()
+    latestOffender.practitionerId = "NEW_PRACTITIONER"
+    latestOffender.firstCheckin = LocalDate.of(2026, 11, 1)
+    offenderRepository.saveAndFlush(latestOffender)
+    offender.status = OffenderStatus.INACTIVE
+
+    offenderPersistenceService.offenderDeactivation(offender, deactivationEvent(offender))
+
+    val persistedOffender = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(OffenderStatus.INACTIVE, persistedOffender.status)
+    assertEquals(latestOffender.practitionerId, persistedOffender.practitionerId)
+    assertEquals(latestOffender.firstCheckin, persistedOffender.firstCheckin)
+  }
+
+  @Test
+  fun `repeated offenderDeactivation leaves the timestamp and subsequent pending work unchanged`() {
+    val offender = offenderRepository.saveAndFlush(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity())
+    offender.status = OffenderStatus.INACTIVE
+    offender.updatedAt = Instant.parse("2026-10-29T10:00:00Z")
+    val event = deactivationEvent(offender)
+    assertNotNull(offenderPersistenceService.offenderDeactivation(offender, event))
+    val firstDeactivatedAt = offenderRepository.findById(offender.id).orElseThrow().updatedAt
+    val (checkin, assignment) = savePendingWork(offender)
+    offender.updatedAt = offender.updatedAt.plusSeconds(60)
+
+    assertNull(offenderPersistenceService.offenderDeactivation(offender, event))
+
+    val persistedOffender = offenderRepository.findById(offender.id).orElseThrow()
+    assertEquals(OffenderStatus.INACTIVE, persistedOffender.status)
+    assertEquals(firstDeactivatedAt, persistedOffender.updatedAt)
+    assertEquals(CheckinStatus.CREATED, checkinRepository.findById(checkin.id).orElseThrow().status)
+    assertEquals(assignment.id, questionListAssignmentRepository.findById(assignment.id).orElseThrow().id)
+  }
+
+  private fun deactivationEvent(offender: Offender) = OffenderDeactivatedEvent(
+    offenderId = offender.id,
+    offender = offender.dto(),
+    auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+    setup = null,
+    activeEventNumber = null,
+  )
+
+  private fun savePendingWork(offender: Offender): Pair<OffenderCheckin, QuestionListAssignment> {
+    val checkin = checkinRepository.saveAndFlush(
+      OffenderCheckin(
+        uuid = randomUUID(),
+        offender = offender,
+        status = CheckinStatus.CREATED,
+        dueDate = LocalDate.now(clock),
+        createdAt = clock.instant(),
+        createdBy = "test_user",
+      ),
+    )
+    val assignment = questionListAssignmentRepository.saveAndFlush(
+      QuestionListAssignment(
+        questionListId = 1L,
+        offenderId = offender.id,
+        checkinId = null,
+        created_at = clock.instant(),
+        updatedAt = clock.instant(),
+      ),
+    )
+    return checkin to assignment
   }
 
   @Test
