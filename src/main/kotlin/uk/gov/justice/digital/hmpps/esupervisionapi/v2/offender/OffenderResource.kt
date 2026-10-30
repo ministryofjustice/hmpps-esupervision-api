@@ -323,6 +323,8 @@ class OffenderResource(
       on another sentence are all false.
       If phase code is 'FTHRD' then 'inFinalThird' is true.
       If phase code is 'INIT' then 'inEarlyEngagement' is true.
+      If any sentence's custody status is `C` recalled, and the person is not unlawfully at large on it,
+      then 'recalled' is true.
       Does not require the person to already be registered for e-supervision.
 
       A CRN Supervision Packages does not know is a 404 rather than false, so callers can tell an
@@ -900,6 +902,11 @@ data class SupervisionPackageStatus(
   val inFinalThird: Boolean,
   @field:Schema(description = "Whether the person is in early engagement")
   val inEarlyEngagement: Boolean,
+  @field:Schema(
+    description = "Whether the person has been recalled to prison on any sentence. False for someone recalled " +
+      "but unlawfully at large, and for a recall request not yet decided",
+  )
+  val recalled: Boolean,
 )
 
 enum class EligibilityCheckResponseOutcome {
@@ -938,6 +945,8 @@ data class OffenderSummaryDetails(
   val practitioner: PractitionerSummary? = null,
   val events: List<Event> = emptyList(),
   val contactSuspended: Boolean = false,
+  @field:Schema(description = "Date the person was recorded as deceased in NDelius; null if they are not", required = false)
+  val dateOfDeath: LocalDate? = null,
 ) : INamedPerson
 
 /**
@@ -993,6 +1002,7 @@ private fun Offender.toSummaryDto(photoUrl: String? = null, contactDetails: Cont
       practitioner = it.practitioner?.toSummary(),
       events = it.events,
       contactSuspended = it.contactSuspended,
+      dateOfDeath = it.dateOfDeath,
     )
   },
 )
