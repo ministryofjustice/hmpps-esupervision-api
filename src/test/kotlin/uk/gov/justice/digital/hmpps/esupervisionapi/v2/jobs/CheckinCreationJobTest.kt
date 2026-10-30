@@ -227,7 +227,7 @@ class CheckinCreationJobTest {
         0,
       ).mapIndexed { index, (checkin, event) ->
         ReflectionTestUtils.setField(checkin, "id", index + 1L)
-        event.finalise(checkin)
+        event.finalise(checkin, index + 1L)
       }
     }
     whenever(
