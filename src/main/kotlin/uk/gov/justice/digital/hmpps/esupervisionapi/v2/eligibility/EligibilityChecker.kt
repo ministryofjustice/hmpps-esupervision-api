@@ -52,7 +52,7 @@ class EligibilityChecker(
       }
     }
     LOGGER.info("Eligibility evaluation for {} result: {}", offender.crn, result)
-    return result.copy(message = result.message?.let { applyTemplate(it, name) })
+    return result.copy(dashboardMessage = result.dashboardMessage?.let { applyTemplate(it, name) })
   }
 
   companion object {

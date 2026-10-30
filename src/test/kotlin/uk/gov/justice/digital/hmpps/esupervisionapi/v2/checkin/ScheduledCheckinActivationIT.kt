@@ -130,7 +130,7 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
     val offender = saveOffender()
     val scheduled = saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today().plusDays(7))
 
-    offenderDeactivationService.deactivateOffender(offender, "stopped", contactDetails(offender))
+    offenderDeactivationService.deactivateOffender(offender, "stopped", practitionerMessageFragment = null, contactDetails = contactDetails(offender))
 
     assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
   }

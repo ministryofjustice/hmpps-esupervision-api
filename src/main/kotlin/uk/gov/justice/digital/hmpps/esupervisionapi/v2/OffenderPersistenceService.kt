@@ -21,21 +21,34 @@ class OffenderPersistenceService(
   private val appEventPublisher: ApplicationEventPublisher,
 ) {
 
+  /**
+   * Only perform deactivation side effects when the stored status transitions from VERIFIED to INACTIVE.
+   *
+   * @return the deactivated offender, or null if no VERIFIED offender record was updated
+   */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent) {
-    offenderRepository.save(offender)
+  fun offenderDeactivation(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
+    val maybeUpdated = offenderRepository.deactivateIfVerified(offender.id)
+    if (maybeUpdated.isEmpty) {
+      LOGGER.info("Skipping deactivation for CRN {}: no VERIFIED offender record was updated", offender.crn)
+      return null
+    }
+
+    val updated = maybeUpdated.get()
+    entityManager.refresh(updated)
     if (event.setup != null) {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
-    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(offender.id)
-    val cancelledCheckins = checkinRepository.updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED) +
-      checkinRepository.updateStatusForOffender(offender, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED)
+    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(updated.id)
+    val cancelledCheckins = checkinRepository.updateStatusForOffender(updated, CheckinStatus.CREATED, CheckinStatus.CANCELLED) +
+      checkinRepository.updateStatusForOffender(updated, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
       LOGGER.info("Cancelled {} created/scheduled check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, offender.crn)
     }
     eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 
-    appEventPublisher.publishEvent(event)
+    appEventPublisher.publishEvent(event.copy(offender = updated.dto(event.offender.personalDetails)))
+    return updated
   }
 
   /**

@@ -40,6 +40,9 @@ open class OffenderEligibilityRule(
   @Column(name = "code", nullable = false, columnDefinition = "varchar(64)")
   open var code: String,
 
+  @Column(name = "delius_outcome_code", columnDefinition = "varchar(5)")
+  open var deliusOutcomeCode: String? = null,
+
   @Column(name = "question", nullable = false, columnDefinition = "text")
   open var question: String,
 
@@ -61,15 +64,15 @@ open class OffenderEligibilityRule(
   @Enumerated(EnumType.STRING)
   open var outcomeOnMatch: EligibilityRuleOutcome,
 
-  @Column(name = "message_on_match", nullable = true, columnDefinition = "text")
-  open var messageOnMatch: String? = null,
-
   @Column(name = "outcome_on_no_match", nullable = false)
   @Enumerated(EnumType.STRING)
   open var outcomeOnNoMatch: EligibilityRuleOutcome,
 
-  @Column(name = "message_on_no_match", nullable = true, columnDefinition = "text")
-  open var messageOnNoMatch: String? = null,
+  @Column(name = "ineligibility_message", nullable = true, columnDefinition = "text")
+  open var ineligibilityMessage: String? = null,
+
+  @Column(name = "ineligibility_auto_message", nullable = true, columnDefinition = "text")
+  open var ineligibilityAutoMessage: String? = null,
 
   @Column(name = "enabled", nullable = false)
   open var enabled: Boolean = true,
