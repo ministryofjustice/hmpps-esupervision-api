@@ -169,3 +169,5 @@ databaseChangeLog:
       file: db/changelog/changesets/84_bespoke_question_identity.sql
   - include:
       file: db/changelog/changesets/85_question_templates_by_ids_retired.sql
+  - include:
+      file: db/changelog/changesets/86_add_delius_outcome_code_to_eligibility_rules.sql

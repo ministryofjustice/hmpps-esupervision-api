@@ -222,7 +222,7 @@ class OffenderResource(
           ResponseEntity.ok(
             EligibilityCheckResponse(
               outcome = result.outcome.toResponseOutcome(),
-              message = result.message?.let { applyTemplate(it, contactDetails.name) },
+              message = result.dashboardMessage?.let { applyTemplate(it, contactDetails.name) },
             ),
           )
         }
@@ -246,7 +246,7 @@ class OffenderResource(
       .thenCompose { evalResult -> CompletableFuture.completedFuture(Pair(evalResult, EvalIssue.NONE)) }
       .exceptionallyCompose { throwable ->
         handleMissingManualData(throwable) {
-          val result = EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, null, null)
+          val result = EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, null, null, null)
           CompletableFuture.completedFuture(Pair(result, EvalIssue.MANUAL_DATA_MISSING))
         }
       }
@@ -269,7 +269,7 @@ class OffenderResource(
                 message = if (evalIssue == EvalIssue.MANUAL_DATA_MISSING) {
                   applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name)
                 } else {
-                  evalResult.message?.let { applyTemplate(it, contactDetails.name) }
+                  evalResult.dashboardMessage?.let { applyTemplate(it, contactDetails.name) }
                 },
                 allRules = report
                   .filter { (rule, _) -> rule.source != "MANUAL" }
@@ -283,13 +283,7 @@ class OffenderResource(
                         EligibilityRuleOutcome.CONTINUE -> null
                         EligibilityRuleOutcome.ELIGIBLE -> null // we don't care about the message here
                         // we need to extract the right message from the rule
-                        EligibilityRuleOutcome.NOT_ELIGIBLE -> if (rule.outcomeOnNoMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) {
-                          rule.messageOnNoMatch?.let { applyTemplate(it, contactDetails.name) }
-                        } else if (rule.outcomeOnMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) {
-                          rule.messageOnMatch?.let { applyTemplate(it, contactDetails.name) }
-                        } else {
-                          null
-                        }
+                        EligibilityRuleOutcome.NOT_ELIGIBLE -> rule.ineligibilityMessage?.let { applyTemplate(it, contactDetails.name) }
                       },
                     )
                   },
@@ -538,9 +532,13 @@ class OffenderResource(
     val saved = offenderDeactivationService.deactivateOffender(
       offender,
       reason = request.reason,
+      practitionerMessageFragment = null, // notification not sent when deactivation requested by practitioner
       contactDetails = contactDetails,
       sensitive = request.sensitive,
     )
+    if (saved == null) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Offender deactivation failed - record could not be updated")
+    }
 
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",
@@ -607,7 +605,7 @@ class OffenderResource(
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
         HttpStatus.UNPROCESSABLE_CONTENT,
-        "Cannot reactivate ${offender.crn}: ${outcome.message ?: "ineligible for online check-ins."}",
+        "Cannot reactivate ${offender.crn}: ${outcome.dashboardMessage ?: "ineligible for online check-ins."}",
       )
     }
 

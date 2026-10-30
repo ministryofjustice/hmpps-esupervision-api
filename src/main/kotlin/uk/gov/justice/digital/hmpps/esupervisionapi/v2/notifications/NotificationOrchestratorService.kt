@@ -198,25 +198,49 @@ class NotificationOrchestratorService(
       additionalInformation = AdditionalInformation(
         eventNumber = event.activeEventNumber,
         setupId = event.setup?.setupId,
-        outcomeCode = event.auditEventType.deliusOutcomeCode,
+        outcomeCode = event.deliusOutcomeCode ?: event.auditEventType.deliusOutcomeCode,
       ),
     )
 
     if (details != null) {
       try {
         val personalisation =
-          mapOf(
+          mutableMapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
+            "practitionerName" to (details.practitioner?.name?.forename ?: "Practitioner"),
           )
+        if (event.auditEventType.automated) {
+          personalisation["reason"] = event.practitionerMessageFragment ?: event.reason ?: "eligibility rules"
+          personalisation["popDashboardUrl"] = appConfig.contactsUrl(offender.crn).toString()
+        }
 
-        val notificationsWithRecipients =
+        val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
+        notificationsWithRecipients.addAll(
           notificationPersistence.buildOffenderNotifications(
             offenderId = event.offenderId,
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,
-            notificationType = NotificationType.OffenderCheckinsStopped,
+            notificationType = if (event.auditEventType.automated) {
+              NotificationType.OffenderCheckinsStoppedAuto
+            } else {
+              NotificationType.OffenderCheckinsStopped
+            },
+          ),
+        )
+
+        if (event.auditEventType.automated) {
+          notificationsWithRecipients.addAll(
+            notificationPersistence.buildPractitionerNotifications(
+              offenderId = event.offenderId,
+              crn = offender.crn,
+              contactDetails = details.practitioner,
+              checkin = null,
+              notificationType = NotificationType.PractitionerCheckinsStoppedAuto,
+              practitionerId = offender.practitionerId,
+            ),
           )
+        }
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)
       } catch (e: Exception) {
