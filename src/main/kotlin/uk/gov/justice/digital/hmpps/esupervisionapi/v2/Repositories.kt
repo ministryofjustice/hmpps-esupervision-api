@@ -44,6 +44,22 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   @Query("select o from Offender o where o.id = :id")
   fun findByIdForUpdate(id: Long): Offender?
 
+  /**
+   * ESUP-2223 backfill: verified offenders with neither an upcoming (SCHEDULED) nor an open
+   * (CREATED) check-in, in id order after [afterId].
+   */
+  @Query(
+    """
+    select o.id from offender_v2 o
+    where o.status = 'VERIFIED' and o.id > :afterId
+      and not exists (select 1 from offender_checkin_v2 c where c.offender_id = o.id and c.status in ('SCHEDULED', 'CREATED'))
+    order by o.id
+    limit :limit
+    """,
+    nativeQuery = true,
+  )
+  fun findIdsWithoutUpcomingCheckin(afterId: Long, limit: Int): List<Long>
+
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
@@ -490,6 +506,8 @@ interface EventAuditRepository : JpaRepository<EventAudit, Long> {
 @Repository
 interface JobLogRepository : JpaRepository<JobLog, Long> {
   fun existsByJobTypeAndCreatedAtGreaterThanEqual(jobType: String, createdAt: Instant): Boolean
+
+  fun existsByJobTypeAndCreatedAtGreaterThanEqualAndEndedAtIsNull(jobType: String, createdAt: Instant): Boolean
 }
 
 enum class LogEntryType {

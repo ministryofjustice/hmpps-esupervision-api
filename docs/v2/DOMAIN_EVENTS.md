@@ -61,6 +61,22 @@ the change that triggered it. A check-in created without having been scheduled (
 for its date, for example someone set up before the feature was on) is recorded as `scheduled` when
 it is created, so NDelius always sees `scheduled` first.
 
+### Turning the feature on: backfill
+
+People set up before the feature was on have no upcoming check-in until one of the triggers above
+fires. `UpcomingCheckinBackfillJob` schedules it for every verified person with neither an upcoming
+nor an open check-in (someone with an open check-in gets the next once it's submitted or missed).
+It's safe to run again, and it won't run alongside the check-in creation job.
+
+It runs as a batch CronJob kept suspended (`upcoming-checkin-backfill` in
+`helm_deploy/hmpps-esupervision-api/values.yaml`). When turning the feature on in an environment:
+
+1. Turn the flag on (`APP_FEATURES_ESUP_2223`) after that day's 9am creation job has finished.
+2. The same day, run the backfill:
+   `kubectl create job --from=cronjob/batch-upcoming-checkin-backfill upcoming-checkin-backfill-<date>`
+   (or `POST /v2/jobs/upcoming-checkin-backfill/run` where manual triggering is enabled).
+3. Check its `job_log_v2` row has `ended_at` set and the log line's `processed` count.
+
 ### Check-in link (ESUP-2223)
 
 With the feature on, a check-in is created (or activated) with `link_status` SENDING, and the
