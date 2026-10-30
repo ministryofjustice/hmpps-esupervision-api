@@ -432,6 +432,19 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
 """,
   )
   fun findMigratedByStatus(status: CheckinStatus, pageable: Pageable): List<OffenderCheckin>
+
+  /** Returns the inserted checkin, or null if a CREATED checkin already exists for this offender and due date. */
+  @Query(
+    """
+    INSERT INTO offender_checkin_v2 (uuid, offender_id, status, due_date, created_at, created_by)
+    VALUES (:#{#checkin.uuid}, :#{#checkin.offender.id}, :#{#checkin.status.name()}, :#{#checkin.dueDate}, :#{#checkin.createdAt}, :#{#checkin.createdBy})
+    ON CONFLICT (offender_id, due_date) WHERE status = 'CREATED'
+    DO NOTHING
+    RETURNING id
+    """,
+    nativeQuery = true,
+  )
+  fun maybeInsert(checkin: OffenderCheckin): Long?
 }
 
 /**

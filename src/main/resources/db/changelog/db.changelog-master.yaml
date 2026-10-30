@@ -175,3 +175,5 @@ databaseChangeLog:
       file: db/changelog/changesets/87_checkin_status_scheduled.sql
   - include:
       file: db/changelog/changesets/88_scheduled_checkin_activation.sql
+  - include:
+      file: db/changelog/changesets/89_one_created_checkin_per_day.sql
