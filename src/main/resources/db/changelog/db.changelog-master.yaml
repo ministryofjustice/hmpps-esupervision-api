@@ -170,8 +170,10 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/85_question_templates_by_ids_retired.sql
   - include:
-      file: db/changelog/changesets/86_checkin_status_scheduled.sql
+      file: db/changelog/changesets/86_add_delius_outcome_code_to_eligibility_rules.sql
   - include:
-      file: db/changelog/changesets/87_scheduled_checkin_activation.sql
+      file: db/changelog/changesets/87_checkin_status_scheduled.sql
   - include:
-      file: db/changelog/changesets/88_checkin_delius_events.sql
+      file: db/changelog/changesets/88_scheduled_checkin_activation.sql
+  - include:
+      file: db/changelog/changesets/89_checkin_delius_events.sql
