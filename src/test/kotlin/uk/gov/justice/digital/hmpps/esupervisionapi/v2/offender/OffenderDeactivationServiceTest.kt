@@ -1,6 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
