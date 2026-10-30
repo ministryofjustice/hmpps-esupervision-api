@@ -333,15 +333,9 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     val inserted = checkinV2Repository.maybeInsert(checkin)
 
     assertNotNull(inserted)
-    assertTrue(inserted!!.id > 0)
-    assertEquals(checkinUuid, inserted.uuid)
-    assertEquals(offender.id, inserted.offender.id)
-    assertEquals(dueDate, inserted.dueDate)
-    assertEquals(CheckinStatus.CREATED, inserted.status)
-    assertEquals("TEST_USER", inserted.createdBy)
     val persisted = checkinV2Repository.findByUuid(checkinUuid)
     assertTrue(persisted.isPresent)
-    assertEquals(inserted.id, persisted.get().id)
+    assertEquals(inserted, persisted.get().id)
     assertEquals(checkinUuid, persisted.get().uuid)
     assertEquals(offender.id, persisted.get().offender.id)
     assertEquals(dueDate, persisted.get().dueDate)
@@ -422,7 +416,6 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     )
 
     assertNotNull(inserted)
-    assertEquals(CheckinStatus.CREATED, inserted!!.status)
     assertEquals(3, checkinV2Repository.findAllByOffenderAndDueDate(offender, dueDate).size)
   }
 
@@ -476,7 +469,6 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     )
 
     assertNotNull(inserted)
-    assertEquals(CheckinStatus.CREATED, inserted!!.status)
     assertEquals(2, checkinV2Repository.findAllByOffenderAndDueDate(offender, dueDate).size)
   }
 

@@ -28,10 +28,11 @@ class CheckinPersistenceService(
 
   @Transactional
   fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
+    require(checkin.status == CheckinStatus.CREATED)
     val inserted = checkinRepository.maybeInsert(checkin)
     if (inserted != null) {
-      val finalisedEvent = event.finalise(inserted)
-      eventAuditService.recordCheckinCreated(inserted, finalisedEvent)
+      val finalisedEvent = event.finalise(checkin)
+      eventAuditService.recordCheckinCreated(checkin, finalisedEvent)
 
       appEventPublisher.publishEvent(finalisedEvent)
       return finalisedEvent

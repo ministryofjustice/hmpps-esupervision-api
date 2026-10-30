@@ -440,11 +440,11 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     VALUES (:#{#checkin.uuid}, :#{#checkin.offender.id}, :#{#checkin.status.name()}, :#{#checkin.dueDate}, :#{#checkin.createdAt}, :#{#checkin.createdBy})
     ON CONFLICT (offender_id, due_date) WHERE status = 'CREATED'
     DO NOTHING
-    RETURNING *
+    RETURNING id
     """,
     nativeQuery = true,
   )
-  fun maybeInsert(checkin: OffenderCheckin): OffenderCheckin?
+  fun maybeInsert(checkin: OffenderCheckin): Long?
 }
 
 /**
