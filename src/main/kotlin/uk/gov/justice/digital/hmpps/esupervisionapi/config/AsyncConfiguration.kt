@@ -24,6 +24,11 @@ class AsyncConfiguration {
     }
   }
 
+  @Bean
+  fun offenderEventExecutor(builder: ThreadPoolTaskExecutorBuilder): ThreadPoolTaskExecutor = builder
+    .threadNamePrefix("offender-event-")
+    .build()
+
   /** Backs [uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataProvider]
    *  implementations that wrap blocking client calls in a [java.util.concurrent.CompletableFuture]. */
   @Bean(name = ["eligibilityDataFetchExecutor"])

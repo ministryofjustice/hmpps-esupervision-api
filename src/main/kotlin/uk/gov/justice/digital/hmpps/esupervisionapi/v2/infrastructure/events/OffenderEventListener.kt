@@ -18,7 +18,7 @@ class OffenderEventListener(
   private val outboxItemRepository: OutboxItemRepository,
 ) {
 
-  @Async
+  @Async("offenderEventExecutor")
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   fun processEvent(event: IOffenderEvent): CompletableFuture<Void> {
     LOGGER.debug("processing offender event for offender CRN={} with status={}", event.offender.crn, event.offender.status.name)
