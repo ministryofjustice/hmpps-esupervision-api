@@ -34,6 +34,11 @@ data class OffenderDeactivatedEvent(
   val activeEventNumber: Long?,
   val reason: String? = null,
   val sensitive: Boolean = false,
+  val deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
+  /**
+   * Passed in the notification message to practitioner.
+   */
+  val practitionerMessageFragment: String? = null,
 ) : IOffenderEvent {
   override val outboxItemCoords = setup?.let { OutboxItemType.OFFENDER_DEACTIVATED to setup.primaryKey }
 }
@@ -61,6 +66,10 @@ data class SetupInfo private constructor(
 ) {
   companion object {
     fun from(setup: OffenderSetup) = SetupInfo(primaryKey = setup.id, setupId = setup.setupId())
+    fun from(setup: LatestOffenderSetup) = SetupInfo(
+      primaryKey = setup.setupPrimaryKey,
+      setupId = OffenderSetup.setupId(setup.setupPrimaryKey, setup.setupCounter),
+    )
   }
 }
 
