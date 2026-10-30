@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset hmpps:83_one_created_checkin_per_day-1 splitStatements:false
+--changeset hmpps:89_one_created_checkin_per_day-1 splitStatements:false
 
 -- NOTE: we verified with the below query, that prod does not contain duplicates,
 -- but DEV might contain them, so we will make sure we deal with that first
@@ -27,7 +27,7 @@ WHERE c.id = r.id
   AND r.position > 1
   AND c.status = 'CREATED';
 
---changeset hmpps:83_one_created_checkin_per_day-2 splitStatements:false
+--changeset hmpps:89_one_created_checkin_per_day-2 splitStatements:false
 CREATE UNIQUE INDEX uk_checkin_v2_created_offender_due_date
 ON offender_checkin_v2 (offender_id, due_date)
 WHERE status = 'CREATED';
