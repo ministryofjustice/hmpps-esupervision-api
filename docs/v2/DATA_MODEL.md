@@ -141,7 +141,7 @@ Stores checkin records with survey responses.
 | id | BIGINT | PK, AUTO | Internal ID |
 | uuid | UUID | UNIQUE, NOT NULL | Public identifier |
 | offender_id | BIGINT | FK, NOT NULL | Reference to offender |
-| status | VARCHAR(50) | NOT NULL | CREATED, SUBMITTED, REVIEWED, EXPIRED, CANCELLED |
+| status | VARCHAR(50) | NOT NULL | SCHEDULED, CREATED, SUBMITTED, REVIEWED, EXPIRED, CANCELLED |
 | due_date | DATE | NOT NULL | When checkin is due |
 | survey_response | JSONB | | Survey answers |
 | created_at | TIMESTAMP | NOT NULL | Creation time |
@@ -155,6 +155,8 @@ Stores checkin records with survey responses.
 | auto_id_check | VARCHAR(50) | | MATCH, NO_MATCH, NO_FACE_DETECTED, ERROR |
 | manual_id_check | VARCHAR(50) | | CONFIRMED, REJECTED |
 | risk_feedback | BOOLEAN | | Risk management feedback flag |
+| link_status | ENUM | | Whether GOV.UK Notify accepted the check-in invite (no delivery receipts, so not whether it was delivered). SENDING: live, not yet accepted; SENT: accepted (NDelius `link.delivered`); FAILED: rejected or couldn't be sent (NDelius `link.not_delivered`). NULL for check-ins created before ESUP-2223 |
+| link_status_updated_at | TIMESTAMP | | When link_status last changed |
 
 ### generic_notification_v2
 
@@ -214,7 +216,10 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
+    [*] --> SCHEDULED: Next check-in scheduled (ESUP-2223)
     [*] --> CREATED: Created by job/setup
+    SCHEDULED --> CREATED: Due date reached
+    SCHEDULED --> CANCELLED: Stopped or unscheduled
     CREATED --> SUBMITTED: Offender submits
     CREATED --> EXPIRED: Grace period passed
     SUBMITTED --> REVIEWED: Practitioner reviews

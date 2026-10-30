@@ -352,6 +352,8 @@ data class OffenderSetupDto(
 
 /** V2 Checkin status */
 enum class CheckinStatus {
+  /** An upcoming check-in: not due yet, so the offender can't act on it. Becomes CREATED on its due date. */
+  SCHEDULED,
   CREATED,
   SUBMITTED,
   REVIEWED,
@@ -360,6 +362,7 @@ enum class CheckinStatus {
   ;
 
   fun canTransitionTo(newStatus: CheckinStatus): Boolean = when (this) {
+    SCHEDULED -> newStatus == CREATED || newStatus == CANCELLED
     CREATED -> newStatus == SUBMITTED || newStatus == CANCELLED || newStatus == EXPIRED
     SUBMITTED -> newStatus == REVIEWED || newStatus == CANCELLED
     REVIEWED -> false
