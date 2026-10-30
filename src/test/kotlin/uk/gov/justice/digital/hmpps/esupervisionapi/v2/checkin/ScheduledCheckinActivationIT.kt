@@ -23,11 +23,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
 
 /**
@@ -86,6 +88,29 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
       assertThat(it.createdBy).isEqualTo("PRACT001")
     })
     assertThat(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, scheduled.id)).isPresent
+  }
+
+  @Test
+  fun `an upcoming check-in cancelled after it was read is not activated`() {
+    val offender = saveOffender()
+    saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today())
+    val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), clock.today()).single()
+    // check-ins stopped while the creation job was getting contact details
+    transactionTemplate.execute { checkinRepository.updateStatusForOffender(offender, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) }
+
+    val checkin = checkinCreationService.prepareCheckinForOffender(offender, clock.today(), scheduled)
+    val event = PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = "SYSTEM",
+      checkin = checkin.dto(contactDetails(offender), clock = clock, checkinWindow = Period.ofDays(3)),
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = 1L,
+      checkinMode = offender.mode,
+    )
+    checkinCreationService.createCheckins(listOf(checkin to event))
+
+    assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+    assertThat(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, scheduled.id)).isEmpty
   }
 
   @Test
