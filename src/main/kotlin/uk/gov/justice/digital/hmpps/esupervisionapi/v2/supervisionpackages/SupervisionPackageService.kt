@@ -9,7 +9,7 @@ class SupervisionPackageService(
   private val supervisionPackagesApiClient: ISupervisionPackagesApiClient,
 ) {
   /**
-   * Whether the person is on a supervision package, in the final third, or in early engagement - see [SupervisionPackageDetails.isOnSupervisionPackage].
+   * Whether the person is on a supervision package, in the final third, in early engagement, or recalled - see [SupervisionPackageDetails.isOnSupervisionPackage].
    * Null when Supervision Packages does not know the CRN.
    * @throws SupervisionPackagesFetchException when Supervision Packages could not be asked
    */
@@ -19,6 +19,7 @@ class SupervisionPackageService(
       onSupervisionPackage = packageDetails.isOnSupervisionPackage,
       inFinalThird = packageDetails.isInFinalThird,
       inEarlyEngagement = packageDetails.isInEarlyEngagement,
+      recalled = packageDetails.isRecalled,
     )
   }
 }

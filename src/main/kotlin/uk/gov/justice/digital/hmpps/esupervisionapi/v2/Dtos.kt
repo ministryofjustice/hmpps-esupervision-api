@@ -99,11 +99,11 @@ data class ContactDetails(
   )
   val contactSuspended: Boolean = false,
 
-//  @field:Schema(
-//    description = "Date the person was recorded as deceased in NDelius, if applicable (optional)",
-//    required = false,
-//  )
-//  val deceasedDate: LocalDate? = null,
+  @field:Schema(
+    description = "Date the person was recorded as deceased in NDelius; null if they are not (optional)",
+    required = false,
+  )
+  val dateOfDeath: LocalDate? = null,
 ) : INamedPerson
 
 /** Person's name from Ndilius */
