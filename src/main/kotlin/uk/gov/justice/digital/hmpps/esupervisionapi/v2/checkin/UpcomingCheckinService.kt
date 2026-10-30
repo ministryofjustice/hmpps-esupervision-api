@@ -111,6 +111,11 @@ class UpcomingCheckinService(
       scheduled = null
     }
 
+    // After today's creation job has started, today's upcoming check-in is the job's: it may be
+    // activating it right now. If the job doesn't create it, it's cancelled before tomorrow's run.
+    val todayIsTheJobs = includeToday != true && creationJobStarted(today)
+    if (scheduled != null && scheduled.dueDate == today && todayIsTheJobs) return
+
     if (checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).isNotEmpty()) {
       // Only the next check-in is recorded, and that's the open one. An upcoming one alongside it is
       // left from a schedule change that created today's check-in.
@@ -119,7 +124,7 @@ class UpcomingCheckinService(
     }
 
     // After today's creation job, a check-in for today won't be created, so it can't be scheduled.
-    val from = if (includeToday ?: !creationJobStarted(today)) today else today.plusDays(1)
+    val from = if (todayIsTheJobs) today.plusDays(1) else today
     val dueDate = nextCheckinDate(offender, from)
     if (scheduled != null) {
       when (dueDate) {

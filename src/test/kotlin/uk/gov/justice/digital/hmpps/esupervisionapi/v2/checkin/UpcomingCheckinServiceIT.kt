@@ -320,6 +320,22 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `after today's creation job has started, today's upcoming check-in is left for the job`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    jobLogRepository.save(JobLog(jobType = CheckinCreationJob.JOB_TYPE, createdAt = clock.instant()))
+
+    offender.firstCheckin = today.plusDays(2)
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today)
+    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).map { it.eventType })
+      .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+  }
+
+  @Test
   fun `an upcoming check-in alongside an open one is cancelled`() {
     val offender = saveOffender(firstCheckin = today.plusDays(3))
     service.scheduleNext(offender.id)
