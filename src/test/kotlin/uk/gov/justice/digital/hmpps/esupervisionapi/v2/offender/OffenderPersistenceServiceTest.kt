@@ -105,6 +105,7 @@ class OffenderPersistenceServiceTest {
       }
       verify(questionListAssignmentRepository).deleteUpcomingAssignment(offender.id)
       verify(checkinRepository).updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
+      verify(checkinRepository).updateStatusForOffender(offender, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED)
       verify(eventAuditService).recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
       verify(appEventPublisher).publishEvent(deactivationEvent)
       verify(offenderRepository).deactivateIfVerified(offender.id)

@@ -86,7 +86,8 @@ class CheckinCreationService(
   }
 
   /**
-   * Create a checkin for an offender
+   * Create a checkin for an offender. If the offender has an upcoming (SCHEDULED) check-in for
+   * [dueDate], that check-in is activated instead, keeping its UUID.
    * @param offender Offender entity
    * @param dueDate Due date for checkin
    * @param createdBy Who created the checkin
@@ -99,15 +100,8 @@ class CheckinCreationService(
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
   ): OffenderCheckin {
-    val checkin =
-      OffenderCheckin(
-        uuid = UUID.randomUUID(),
-        offender = offender,
-        status = CheckinStatus.CREATED,
-        dueDate = dueDate,
-        createdAt = clock.instant(),
-        createdBy = createdBy,
-      )
+    val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), dueDate).singleOrNull()
+    val checkin = newOrActivatedCheckin(offender, dueDate, createdBy, scheduled)
 
     val event = PartialCheckinCreatedEvent(
       offenderId = checkin.offender.id,
@@ -118,7 +112,9 @@ class CheckinCreationService(
       checkinMode = offender.mode,
     )
 
-    checkinPersistenceService.checkinCreation(checkin, event)
+    if (!checkinPersistenceService.checkinCreation(checkin, event)) {
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in ${checkin.uuid} was cancelled before it could be created")
+    }
 
     LOGGER.info(
       "Created checkin {} for offender CRN={} with due date {} by {}",
@@ -153,16 +149,39 @@ class CheckinCreationService(
    * Does not save to database - call batchCreateCheckins() to persist
    * @param offender Offender entity
    * @param dueDate Due date for checkin
+   * @param scheduled the offender's upcoming check-in for [dueDate], if any, to activate instead of creating a new one
    * @return Checkin entity ready to save
    */
-  fun prepareCheckinForOffender(offender: Offender, dueDate: LocalDate): OffenderCheckin = OffenderCheckin(
-    uuid = UUID.randomUUID(),
-    offender = offender,
-    status = CheckinStatus.CREATED,
-    dueDate = dueDate,
-    createdAt = clock.instant(),
-    createdBy = "SYSTEM",
-  )
+  fun prepareCheckinForOffender(offender: Offender, dueDate: LocalDate, scheduled: OffenderCheckin? = null): OffenderCheckin = newOrActivatedCheckin(offender, dueDate, "SYSTEM", scheduled)
+
+  /**
+   * A CREATED check-in, not yet saved: [scheduled] activated, or a new one. Activation keeps the
+   * UUID NDelius already knows the check-in by; saving it fires the same triggers as an insert
+   * (outbox item, question assignment). It takes the creation time and creator of the activation,
+   * as a new check-in would.
+   */
+  private fun newOrActivatedCheckin(offender: Offender, dueDate: LocalDate, createdBy: ExternalUserId, scheduled: OffenderCheckin?): OffenderCheckin {
+    if (scheduled == null) {
+      return OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.CREATED,
+        dueDate = dueDate,
+        createdAt = clock.instant(),
+        createdBy = createdBy,
+      )
+    }
+    require(scheduled.status == CheckinStatus.SCHEDULED && scheduled.dueDate == dueDate) {
+      "Check-in ${scheduled.uuid} is ${scheduled.status} for ${scheduled.dueDate}, expected SCHEDULED for $dueDate"
+    }
+    LOGGER.info("Activating scheduled checkin {} due {}", scheduled.uuid, dueDate)
+    return scheduled.apply {
+      this.offender = offender
+      status = CheckinStatus.CREATED
+      createdAt = clock.instant()
+      this.createdBy = createdBy
+    }
+  }
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinCreationService::class.java)

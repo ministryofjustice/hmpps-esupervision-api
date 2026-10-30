@@ -18,12 +18,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
@@ -169,6 +171,38 @@ class CheckinCreationJobIT : IntegrationTestBase() {
 
         outboxItemRepository
           .findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, checkins["A000002"]!!.id)
+          .orElseThrow()
+          .let { assertEquals(OutboxItemStatus.SENT, it.status) }
+      }
+  }
+
+  @Test
+  fun `activates a scheduled check-in instead of creating another`() {
+    val offender = offenderRepository.findByCrn("A000001").orElseThrow()
+    val scheduled = checkinRepository.save(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.SCHEDULED,
+        dueDate = clock.today(),
+        createdAt = clock.instant(),
+        createdBy = "SYSTEM",
+      ),
+    )
+
+    job.process()
+
+    val checkins = checkinRepository.findAll()
+    assertEquals(2, checkins.size)
+    val activated = checkins.single { it.id == scheduled.id }
+    assertEquals(scheduled.uuid, activated.uuid)
+    assertEquals(CheckinStatus.CREATED, activated.status)
+    await()
+      .atMost(Duration.ofSeconds(10))
+      .pollInterval(100, TimeUnit.MILLISECONDS)
+      .untilAsserted {
+        outboxItemRepository
+          .findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, scheduled.id)
           .orElseThrow()
           .let { assertEquals(OutboxItemStatus.SENT, it.status) }
       }
