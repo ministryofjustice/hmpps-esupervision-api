@@ -60,7 +60,7 @@ class OffenderDeactivationService(
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
     deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
   ): Offender? {
-    if (validateOffender(offender)) return offender
+    if (!canDeactivate(offender)) return null
 
     val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
     val event = OffenderDeactivatedEvent(
@@ -79,17 +79,17 @@ class OffenderDeactivationService(
   }
 
   fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
-    if (validateOffender(offender)) return offender
+    if (!canDeactivate(offender)) return offender
 
     return offenderPersistenceService.offenderDeactivation(offender, event.copy(offender = offender.dto(event.offender.personalDetails)))
   }
 
-  private fun validateOffender(offender: Offender): Boolean {
+  private fun canDeactivate(offender: Offender): Boolean {
     if (offender.status != OffenderStatus.VERIFIED) {
       LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
-      return true
+      return false
     }
-    return false
+    return true
   }
 
   companion object {

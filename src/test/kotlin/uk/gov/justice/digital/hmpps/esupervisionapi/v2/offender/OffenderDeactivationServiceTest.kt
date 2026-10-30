@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
 import org.mockito.ArgumentMatcher
@@ -108,7 +109,7 @@ class OffenderDeactivationServiceTest {
   fun `is a no-op when offender is not VERIFIED`() {
     val offender = offender(OffenderStatus.INACTIVE)
     val result = service.deactivateOffender(offender, "in reset", null, contactDetails)
-    assertEquals(OffenderStatus.INACTIVE, result?.status)
+    assertNull(result)
   }
 
   @Test
