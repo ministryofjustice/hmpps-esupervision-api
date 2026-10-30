@@ -6,6 +6,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -40,6 +42,7 @@ class CheckinReminderJob(
   private val transactionTemplate: TransactionTemplate,
   private val eventAuditService: EventAuditService,
   private val genericNotificationRepository: GenericNotificationRepository,
+  private val appConfig: AppConfig,
 ) {
 
   @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
@@ -105,6 +108,7 @@ class CheckinReminderJob(
         // Send notifications with pre-fetched contact details - NO transaction
         val sentNotifications = mutableListOf<Pair<OffenderCheckin, ContactDetails>>()
         val notSentNotifications = mutableSetOf<Int>()
+        val newEligibilityRulesEnabled = appConfig.enabledFeatures.contains(Feature.ESUP_2082)
         checkins.forEachIndexed { index, checkin ->
           try {
             val contactDetails = contactDetailsMap[checkin.offender.crn]
@@ -114,17 +118,21 @@ class CheckinReminderJob(
                 notSentNotifications.add(index)
                 "not sent (missing details)"
               }
-              ineligibility != null -> {
+              ineligibility != null && !newEligibilityRulesEnabled -> {
                 // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
                 // Deactivation cancels this check-in, so it is NOT recorded as a reminder (notSent) below.
-                offenderDeactivationService.deactivateOffender(
-                  checkin.offender,
-                  ineligibility.auditNote,
-                  contactDetails,
+                val deactivated = offenderDeactivationService.deactivateOffender(
+                  offender = checkin.offender,
+                  reason = ineligibility.auditNote,
+                  // "old" rules are a special case, so we massage the the wording a bit so it fits
+                  // '..., because ((name)) ((reason))', `practitionerMessageFragment` is used as ((reason))
+                  // Ugly, but once eligibility is live, we will remove the deactivation call from here.
+                  practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
+                  contactDetails = contactDetails,
                   auditEventType = ineligibility.auditEventType,
-                )
-                totalDeactivated += 1
-                "not sent (deactivated: ${ineligibility.name})"
+                ) != null
+                totalDeactivated += if (deactivated) 1 else 0
+                "not sent (${if (deactivated) "deactivated" else "could not deactivate"}: ${ineligibility.name})"
               }
               else -> {
                 notificationService.sendCheckinReminderNotifications(checkin, contactDetails)

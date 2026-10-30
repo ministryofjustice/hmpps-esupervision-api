@@ -88,10 +88,10 @@ private fun renderRule(rule: OffenderEligibilityRule): String {
       "comparisonValue" to renderNullable(rule.comparisonValue),
       "outcomeOnMatchClass" to rule.outcomeOnMatch.name.lowercase(),
       "outcomeOnMatch" to rule.outcomeOnMatch.name,
-      "messageOnMatch" to renderMessage(rule.messageOnMatch),
+      "messageOnMatch" to renderMessage(if (rule.outcomeOnMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) rule.ineligibilityMessage else null),
       "outcomeOnNoMatchClass" to rule.outcomeOnNoMatch.name.lowercase(),
       "outcomeOnNoMatch" to rule.outcomeOnNoMatch.name,
-      "messageOnNoMatch" to renderMessage(rule.messageOnNoMatch),
+      "messageOnNoMatch" to renderMessage(if (rule.outcomeOnNoMatch == EligibilityRuleOutcome.NOT_ELIGIBLE) rule.ineligibilityMessage else null),
       "comment" to renderComment(rule.comment),
     ),
   )

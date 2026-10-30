@@ -31,6 +31,7 @@ object NotificationContext {
       NotificationType.PractitionerCheckinMissed -> "PEXP-$date-$env"
       NotificationType.PractitionerInviteIssueGeneric -> "PING-$date-$env"
       NotificationType.PractitionerCustomQuestionsReminder -> "PCQR-$date-$env"
+      NotificationType.PractitionerCheckinsStoppedAuto -> "PSTA-$date-$env"
     }
   }
 }
