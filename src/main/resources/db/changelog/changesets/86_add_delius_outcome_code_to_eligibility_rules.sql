@@ -82,7 +82,10 @@ set ineligibility_auto_message = case code
 end
 where ineligibility_message is not null;
 
+--rollback:
 --rollback alter table offender_eligibility_rule drop column ineligibility_auto_message, drop column ineligibility_message, drop column delius_outcome_code;
+--rollback alter table offender_eligibility_rule add constraint offender_eligibility_rule_match_message_check check ((outcome_on_match = 'CONTINUE') = (message_on_match is null));
+--rollback alter table offender_eligibility_rule add constraint offender_eligibility_rule_no_match_message_check check ((outcome_on_no_match = 'CONTINUE') = (message_on_no_match is null));
 
 --changeset hmpps:86_add_delius_outcome_code_to_eligibility_rules-2 splitStatements:false
 
