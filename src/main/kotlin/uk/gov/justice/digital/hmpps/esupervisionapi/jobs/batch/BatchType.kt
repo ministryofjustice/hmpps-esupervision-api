@@ -7,4 +7,5 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.jobs.batch
  */
 enum class BatchType {
   OFFENDER_ELIGIBILITY_SYNC,
+  UPCOMING_CHECKIN_BACKFILL,
 }

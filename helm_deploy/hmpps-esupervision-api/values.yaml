@@ -84,6 +84,12 @@ generic-service:
       type: OFFENDER_ELIGIBILITY_SYNC
       schedule: "0 3 * * *"
       suspend: true # flip to false once real sync logic lands (job body is currently a TODO)
+    # ESUP-2223: one-off, run by hand when the feature is turned on in an environment:
+    # kubectl create job --from=cronjob/batch-upcoming-checkin-backfill upcoming-checkin-backfill-<date>
+    - name: upcoming-checkin-backfill
+      type: UPCOMING_CHECKIN_BACKFILL
+      schedule: "0 12 * * *"
+      suspend: true
 
 generic-prometheus-alerts:
   targetApplication: hmpps-esupervision-api

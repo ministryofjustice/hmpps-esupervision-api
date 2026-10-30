@@ -10,6 +10,7 @@ import org.springframework.context.event.ContextRefreshedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.OffenderEligibilitySyncJob
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.UpcomingCheckinBackfillJob
 
 /**
  * Entry point for batch-mode pods started by the K8s CronJobs in
@@ -24,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.OffenderEligibilityS
 @ConditionalOnProperty(name = ["app.batch.enabled"], havingValue = "true")
 class BatchManager(
   private val offenderEligibilitySyncJob: OffenderEligibilitySyncJob,
+  private val upcomingCheckinBackfillJob: UpcomingCheckinBackfillJob,
   private val context: ConfigurableApplicationContext,
   @Value("\${app.batch.type}") private val batchType: String,
 ) {
@@ -40,6 +42,7 @@ class BatchManager(
     return try {
       when (type) {
         BatchType.OFFENDER_ELIGIBILITY_SYNC -> offenderEligibilitySyncJob.process()
+        BatchType.UPCOMING_CHECKIN_BACKFILL -> upcomingCheckinBackfillJob.process()
       }
       LOGGER.info("Batch job {} completed", type)
       0

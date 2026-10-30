@@ -7,19 +7,29 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.context.ConfigurableApplicationContext
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.OffenderEligibilitySyncJob
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.UpcomingCheckinBackfillJob
 
 class BatchManagerTest {
 
   private val offenderEligibilitySyncJob: OffenderEligibilitySyncJob = mock()
+  private val upcomingCheckinBackfillJob: UpcomingCheckinBackfillJob = mock()
   private val context: ConfigurableApplicationContext = mock()
 
-  private fun batchManager(batchType: String) = BatchManager(offenderEligibilitySyncJob, context, batchType)
+  private fun batchManager(batchType: String) = BatchManager(offenderEligibilitySyncJob, upcomingCheckinBackfillJob, context, batchType)
 
   @Test
   fun `dispatches to the job matching BATCH_TYPE and exits cleanly`() {
     val exitCode = batchManager("OFFENDER_ELIGIBILITY_SYNC").dispatch()
 
     verify(offenderEligibilitySyncJob).process()
+    assertThat(exitCode).isEqualTo(0)
+  }
+
+  @Test
+  fun `dispatches the upcoming check-in backfill`() {
+    val exitCode = batchManager("UPCOMING_CHECKIN_BACKFILL").dispatch()
+
+    verify(upcomingCheckinBackfillJob).process()
     assertThat(exitCode).isEqualTo(0)
   }
 
