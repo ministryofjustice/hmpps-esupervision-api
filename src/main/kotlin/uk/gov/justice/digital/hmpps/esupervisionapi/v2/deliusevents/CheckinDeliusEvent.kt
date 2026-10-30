@@ -94,6 +94,8 @@ interface CheckinDeliusEventRepository : JpaRepository<CheckinDeliusEvent, Long>
 
   fun findAllByCheckinUuidOrderById(checkinUuid: UUID): List<CheckinDeliusEvent>
 
+  fun existsByCheckinUuidAndEventType(checkinUuid: UUID, eventType: DomainEventType): Boolean
+
   /**
    * Insert an event unless the check-in already has one of that type (rescheduling and annotating excepted).
    * @return 1 if inserted, 0 if it was a duplicate

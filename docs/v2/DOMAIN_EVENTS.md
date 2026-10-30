@@ -56,6 +56,13 @@ If there's no longer a next date (for example an ad hoc check-in with no date), 
 If a check-in is open, an upcoming one alongside it is cancelled. Only upcoming check-ins move:
 a created check-in, whose link may have been sent, keeps its date.
 
+Stopping check-ins (by a practitioner, the creation job's eligibility check or the eligibility
+sync) cancels the upcoming and open check-ins, and NDelius gets `cancelled` for each one it has,
+in the same transaction (`OffenderPersistenceService.offenderDeactivation`). A check-in opened
+before the feature was on has no NDelius contact, so it's cancelled without an event: NDelius
+would reject an update to a contact it can't find. If the invite was still sending, a link sent
+afterwards is marked SENT but not recorded, so it doesn't overwrite the cancellation in NDelius.
+
 Scheduling runs after the triggering transaction commits, in its own transaction, and never fails
 the change that triggered it. A check-in created without having been scheduled (no upcoming check-in
 for its date, for example someone set up before the feature was on) is recorded as `scheduled` when

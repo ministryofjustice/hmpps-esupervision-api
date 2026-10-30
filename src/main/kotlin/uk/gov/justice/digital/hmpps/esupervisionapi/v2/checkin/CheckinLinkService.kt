@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
@@ -35,6 +36,9 @@ class CheckinLinkService(
     val now = clock.instant()
     if (checkinRepository.markLinkSent(checkinId, now) == 0) return@execute false
     val checkin = checkinRepository.findById(checkinId).orElseThrow()
+    // Check-ins were stopped while the invite was sending. NDelius has the check-in as cancelled,
+    // which a link event after it would overwrite.
+    if (checkin.status != CheckinStatus.CREATED) return@execute true
     checkinDeliusEventService.record(
       DomainEventType.V2_CHECKIN_LINK_DELIVERED,
       checkin,
