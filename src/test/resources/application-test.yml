@@ -7,6 +7,9 @@ app:
   scheduling:
     checkin-notification:
       cron: "-"
+    # tests call CheckinDeliusEventService.publishPending directly
+    checkin-delius-event-relay:
+      enabled: false
 server:
   shutdown: immediate
 

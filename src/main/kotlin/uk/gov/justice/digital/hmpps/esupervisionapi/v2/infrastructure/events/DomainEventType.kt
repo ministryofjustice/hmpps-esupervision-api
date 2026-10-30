@@ -37,6 +37,36 @@ enum class DomainEventType(
     "An e-Supervision V2 offender's online check-ins were stopped",
   ),
 
+  // ESUP-2223: lifecycle of an upcoming check-in. Published via checkin_delius_event_v2;
+  // the detail URL carries that row's event_id, not the check-in UUID.
+  V2_CHECKIN_SCHEDULED(
+    "$V2_PREFIX.check-in.scheduled",
+    "An e-Supervision V2 remote check-in was scheduled",
+    "checkin-scheduled",
+  ),
+
+  /** Moves the date of a scheduled check-in. External services call it "update", like annotations. */
+  V2_CHECKIN_RESCHEDULED(
+    "$V2_PREFIX.check-in.updated",
+    "An e-Supervision V2 remote check-in was rescheduled",
+    "checkin-rescheduled",
+  ),
+  V2_CHECKIN_CANCELLED(
+    "$V2_PREFIX.check-in.cancelled",
+    "An e-Supervision V2 remote check-in was cancelled",
+    "checkin-cancelled",
+  ),
+  V2_CHECKIN_LINK_DELIVERED(
+    "$V2_PREFIX.check-in.link.delivered",
+    "An e-Supervision V2 remote check-in link was sent",
+    "checkin-link-delivered",
+  ),
+  V2_CHECKIN_LINK_NOT_DELIVERED(
+    "$V2_PREFIX.check-in.link.not_delivered",
+    "An e-Supervision V2 remote check-in link could not be sent",
+    "checkin-link-not-delivered",
+  ),
+
   /** In esupervision we talk about "annotating a check-in" rather than "updating it",
    * but external services call it "update". */
   V2_CHECKIN_ANNOTATED(

@@ -57,6 +57,15 @@ app:
     migration-event-replay:
       cron: ${MIGRATION_EVENT_REPLAY_CRON:0 */30 * * * *}
       batch-size: 50
+    # ESUP-2223: publishes checkin_delius_event_v2 rows to NDelius in order. An event waits until
+    # the previous event for the same check-in was published at least min-gap ago: the NDelius
+    # queue is unordered and only retries a message a few times, so an event that overtakes its
+    # predecessor would fail there.
+    checkin-delius-event-relay:
+      enabled: true
+      fixed-delay: PT15S
+      batch-size: 500
+      min-gap: PT60S
     # Resend check-in answers to NDelius for check-ins whose contact note was created
     # without them (ESUP-1956, pre-commit event publish bug). The work list is seeded
     # manually into the checkin_note_resend table. Disabled by default; enable per env
@@ -94,6 +103,8 @@ app:
     # remove the checkin snapshot if the manual id check confirms it is a match without concern
     esup-1763: ${APP_FEATURES_ESUP_1763:false}
     esup-2082: ${APP_FEATURES_ESUP_2082:false}
+    # ESUP-2223: record the next upcoming check-in in NDelius (scheduled / link / cancelled events)
+    esup-2223: ${APP_FEATURES_ESUP_2223:false}
     # ESUP-2186: from this ISO-8601 date-time (with offset) read Tier API v3 instead of v2. Blank = v2.
     esup-2186-tier-v3-from: ${APP_FEATURES_ESUP_2186_TIER_V3_FROM:}
   offender-survey:
