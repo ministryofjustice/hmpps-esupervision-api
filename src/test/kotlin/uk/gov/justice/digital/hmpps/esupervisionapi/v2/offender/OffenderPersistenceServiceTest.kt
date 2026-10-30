@@ -30,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRep
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Instant
 import java.util.Optional
@@ -44,6 +45,7 @@ class OffenderPersistenceServiceTest {
   private val eventAuditService: EventAuditService = mock()
   private val entityManager: EntityManager = mock()
   private val appEventPublisher: ApplicationEventPublisher = mock()
+  private val checkinDeliusEventService: CheckinDeliusEventService = mock()
   private val service = OffenderPersistenceService(
     offenderRepository,
     offenderSetupRepository,
@@ -53,6 +55,7 @@ class OffenderPersistenceServiceTest {
     eventAuditService,
     entityManager,
     appEventPublisher,
+    checkinDeliusEventService,
   )
   private val offender = offenderTemplate.copy(status = OffenderStatus.INACTIVE).toEntity().apply {
     updatedAt = Instant.parse("2026-10-29T10:00:00Z")

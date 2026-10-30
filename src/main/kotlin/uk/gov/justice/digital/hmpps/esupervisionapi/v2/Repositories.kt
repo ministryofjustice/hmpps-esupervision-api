@@ -296,6 +296,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
 
   fun findAllByOffenderAndStatus(offender: Offender, status: CheckinStatus): List<OffenderCheckin>
 
+  fun findAllByOffenderAndStatusIn(offender: Offender, statuses: Collection<CheckinStatus>): List<OffenderCheckin>
+
   @Query("""select c from OffenderCheckin c where c.id in :ids""")
   @EntityGraph(attributePaths = ["offender"])
   fun findAllByIds(ids: List<Long>): List<OffenderCheckin>

@@ -127,6 +127,17 @@ class CheckinLinkIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `a link sent after check-ins were stopped is marked sent without telling NDelius`() {
+    val checkin = saveCheckin(saveOffender(), CheckinLinkStatus.SENDING)
+    checkinRepository.save(checkin.also { it.status = CheckinStatus.CANCELLED })
+
+    assertThat(linkService.linkSent(checkin.id, "SMS")).isTrue()
+
+    assertThat(checkinRepository.findByUuid(checkin.uuid).get().linkStatus).isEqualTo(CheckinLinkStatus.SENT)
+    assertThat(deliusEventRepository.findAll()).isEmpty()
+  }
+
+  @Test
   fun `check-ins created before the feature are left alone`() {
     val checkin = saveCheckin(saveOffender(), linkStatus = null)
 

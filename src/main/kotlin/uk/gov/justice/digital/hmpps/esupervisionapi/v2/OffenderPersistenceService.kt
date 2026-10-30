@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 
 @Service
 class OffenderPersistenceService(
@@ -19,6 +20,7 @@ class OffenderPersistenceService(
   private val eventAuditService: EventAuditService,
   private val entityManager: EntityManager,
   private val appEventPublisher: ApplicationEventPublisher,
+  private val checkinDeliusEventService: CheckinDeliusEventService,
 ) {
 
   /**
@@ -40,8 +42,15 @@ class OffenderPersistenceService(
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
     val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(updated.id)
+    // ESUP-2223: NDelius has the upcoming check-in, and the open one, so it's told they're cancelled.
+    val checkinsToCancel = if (checkinDeliusEventService.enabled()) {
+      checkinRepository.findAllByOffenderAndStatusIn(updated, listOf(CheckinStatus.CREATED, CheckinStatus.SCHEDULED))
+    } else {
+      emptyList()
+    }
     val cancelledCheckins = checkinRepository.updateStatusForOffender(updated, CheckinStatus.CREATED, CheckinStatus.CANCELLED) +
       checkinRepository.updateStatusForOffender(updated, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED)
+    checkinsToCancel.forEach { checkinDeliusEventService.recordCancelledIfRecorded(it, CHECKINS_STOPPED_REASON) }
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
       LOGGER.info("Cancelled {} created/scheduled check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, offender.crn)
     }
@@ -82,5 +91,8 @@ class OffenderPersistenceService(
 
   companion object {
     val LOGGER = logger<OffenderPersistenceService>()
+
+    // TODO ESUP-2223: wording to be agreed with product
+    const val CHECKINS_STOPPED_REASON = "Check ins were stopped"
   }
 }
