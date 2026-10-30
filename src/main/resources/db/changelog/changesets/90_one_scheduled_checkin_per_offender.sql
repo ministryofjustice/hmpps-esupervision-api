@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset richard.birch:89_one_scheduled_checkin_per_offender-1 splitStatements:false runInTransaction:false
+--changeset richard.birch:90_one_scheduled_checkin_per_offender-1 splitStatements:false runInTransaction:false
 
 -- ESUP-2223: NDelius records only the next check-in, so an offender has at most one upcoming
 -- (SCHEDULED) check-in. CONCURRENTLY so the index build doesn't block check-in writes.

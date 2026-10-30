@@ -54,17 +54,13 @@ class OffenderDeactivationService(
   fun deactivateOffender(
     offender: Offender,
     reason: String,
+    practitionerMessageFragment: String?,
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-  ): Offender {
-    if (offender.status != OffenderStatus.VERIFIED) {
-      LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
-      return offender
-    }
-
-    offender.status = OffenderStatus.INACTIVE
-    offender.updatedAt = clock.instant()
+    deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
+  ): Offender? {
+    if (!canDeactivate(offender)) return null
 
     val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
     val event = OffenderDeactivatedEvent(
@@ -75,11 +71,25 @@ class OffenderDeactivationService(
       activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
       reason = reason,
       sensitive = sensitive,
+      deliusOutcomeCode = deliusOutcomeCode ?: auditEventType.deliusOutcomeCode,
+      practitionerMessageFragment = practitionerMessageFragment,
     )
 
-    offenderPersistenceService.offenderDeactivation(offender, event)
+    return offenderPersistenceService.offenderDeactivation(offender, event)
+  }
 
-    return offender
+  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
+    if (!canDeactivate(offender)) return offender
+
+    return offenderPersistenceService.offenderDeactivation(offender, event.copy(offender = offender.dto(event.offender.personalDetails)))
+  }
+
+  private fun canDeactivate(offender: Offender): Boolean {
+    if (offender.status != OffenderStatus.VERIFIED) {
+      LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
+      return false
+    }
+    return true
   }
 
   companion object {
