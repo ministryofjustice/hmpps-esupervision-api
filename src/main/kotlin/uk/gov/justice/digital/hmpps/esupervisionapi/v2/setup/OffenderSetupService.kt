@@ -23,6 +23,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupCompletionDt
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateFirstCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSettings
@@ -49,6 +51,7 @@ class OffenderSetupPersistenceService(
   private val offenderSetupRepository: OffenderSetupRepository,
   private val checkinCreationService: CheckinCreationService,
   private val clock: Clock,
+  private val upcomingCheckinService: UpcomingCheckinService,
 ) {
   data class CompletionResult(val checkin: UUID?)
 
@@ -84,6 +87,7 @@ class OffenderSetupPersistenceService(
     } else {
       null
     }
+    upcomingCheckinService.scheduleNext(offender.id, contactDetails?.let { activeEventNumber(offender, it) })
     return CompletionResult(checkin = checkin?.uuid)
   }
 }

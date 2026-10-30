@@ -48,6 +48,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -108,6 +109,7 @@ class OffenderResource(
   private val questionService: QuestionService,
   private val transactionTemplate: TransactionTemplate,
   private val entityManager: EntityManager,
+  private val upcomingCheckinService: UpcomingCheckinService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -663,6 +665,7 @@ class OffenderResource(
           LOGGER.info("Check-in already exists for CRN ${savedOffender.crn}. Skipping creation.")
         }
       }
+      upcomingCheckinService.scheduleNext(offender.id, activeEventNumber(offender, contactDetails))
     } else {
       LOGGER.info("Offender reactivation failed: could not create setup recrod for CRN={}", offender.crn)
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Could not reactivate offender")
@@ -749,6 +752,10 @@ is *today*.""",
         }
         LOGGER.debug("{} check-in for offender {}", if (todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
       }
+      if (request.checkinSchedule != null) {
+        // TODO ESUP-2223 (PR 5): move an already scheduled check-in to the new schedule
+        upcomingCheckinService.scheduleNext(offender.id)
+      }
       return ResponseEntity.ok(offenderAfter)
     } else {
       return ResponseEntity.noContent().build()
@@ -805,6 +812,7 @@ is *today*.""",
         throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Check-in schedule cannot be updated: possibly too late to assign questions")
       }
     }
+    upcomingCheckinService.scheduleNext(offenderId, activeEventNumber(offender, contactDetails))
 
     val shouldNotifyScheduledDate = offenderDto.firstCheckin != request.firstCheckin
     if (shouldNotifyScheduledDate) {
