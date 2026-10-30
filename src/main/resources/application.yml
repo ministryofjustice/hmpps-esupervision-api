@@ -130,7 +130,7 @@ spring:
   task:
     execution:
       shutdown:
-        # Batch pods close the context after the job; drain async event listeners before exit.
+        # Bounded shutdown fallback; batch jobs explicitly drain offender events before completion.
         await-termination: true
         await-termination-period: 5m
   codec:

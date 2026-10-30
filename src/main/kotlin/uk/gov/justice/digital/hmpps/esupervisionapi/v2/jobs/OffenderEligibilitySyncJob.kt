@@ -1,8 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
@@ -26,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
+import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
 /**
@@ -44,6 +47,8 @@ class OffenderEligibilitySyncJob(
   private val offenderDeactivationService: OffenderDeactivationService,
   @param:Value("\${app.scheduling.v2-offender-eligibility-sync.chunk-size:100}") private val chunkSize: Int,
   private val appConfig: AppConfig,
+  @param:Qualifier("offenderEventExecutor") private val offenderEventExecutor: ThreadPoolTaskExecutor,
+  @param:Value("\${app.batch.enabled:false}") private val batchEnabled: Boolean,
 ) {
   fun process() {
     if (!appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
@@ -62,6 +67,7 @@ class OffenderEligibilitySyncJob(
     var processed = 0
     var deactivated = 0
     var failed = 0
+    var processingFailure: Throwable? = null
 
     try {
       var lastOffenderId = 0L
@@ -154,19 +160,51 @@ class OffenderEligibilitySyncJob(
           }
         }
       }
+    } catch (e: Throwable) {
+      processingFailure = e
+      throw e
     } finally {
+      if (batchEnabled) {
+        try {
+          drainOffenderEvents()
+        } catch (e: Exception) {
+          LOGGER.error("Offender Eligibility Sync Job(id={}) failed to drain offender events", logEntry.id, e)
+          if (processingFailure != null) {
+            processingFailure.addSuppressed(e)
+            throw processingFailure
+          }
+          throw e
+        }
+      }
+
       val endTime = clock.instant()
       logEntry.endedAt = endTime
       jobLogRepository.saveAndFlush(logEntry)
       LOGGER.info(
-        "Offender Eligibility Sync Job(id={}) completed: processed={}, deactivated={}, failed={}, pages={}, took={}",
+        "Offender Eligibility Sync Job(id={}) {}: processed={}, deactivated={}, failed={}, pages={}, took={}",
         logEntry.id,
+        if (processingFailure == null) "completed" else "failed",
         processed,
         deactivated,
         failed,
         pages,
         Duration.between(now, endTime),
       )
+    }
+  }
+
+  private fun drainOffenderEvents() {
+    // Every deactivation transaction has returned, so its AFTER_COMMIT listener has submitted its work.
+    val pool = offenderEventExecutor.threadPoolExecutor
+    LOGGER.info("Waiting for queued and running offender events before completing the batch job")
+    pool.shutdown()
+    try {
+      check(pool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)) {
+        "Offender event executor did not terminate"
+      }
+    } catch (e: InterruptedException) {
+      Thread.currentThread().interrupt()
+      throw e
     }
   }
 
