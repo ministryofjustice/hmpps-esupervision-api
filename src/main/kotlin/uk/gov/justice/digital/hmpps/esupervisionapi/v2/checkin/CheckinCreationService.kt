@@ -112,7 +112,9 @@ class CheckinCreationService(
       checkinMode = offender.mode,
     )
 
-    checkinPersistenceService.checkinCreation(checkin, event)
+    if (!checkinPersistenceService.checkinCreation(checkin, event)) {
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in ${checkin.uuid} was cancelled before it could be created")
+    }
 
     LOGGER.info(
       "Created checkin {} for offender CRN={} with due date {} by {}",
