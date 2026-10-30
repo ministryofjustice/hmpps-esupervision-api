@@ -58,6 +58,12 @@ class AppConfig(
     "$mpopUrl/case/$crn/appointments/check-in/manage/$offenderUuid/questions/start",
   )
 
+  // example: https://manage-people-on-probation-dev.hmpps.service.justice.gov.uk/case/Y083911/activity-log
+  fun contactsUrl(crn: CRN): URI = URI(
+    "$mpopUrl/case/$crn/activity-log",
+
+  )
+
   fun mediaProxyUrl(): URI = URI("$hostedAt/resolve")
 
   companion object {

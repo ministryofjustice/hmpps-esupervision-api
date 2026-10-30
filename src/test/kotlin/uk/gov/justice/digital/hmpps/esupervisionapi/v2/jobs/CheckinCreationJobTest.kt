@@ -67,6 +67,7 @@ class CheckinCreationJobTest {
     entityManager,
     chunkSize = 100,
     Duration.ofDays(3),
+    appConfig = mock(),
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -80,7 +81,7 @@ class CheckinCreationJobTest {
 
     verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any())
     verify(checkinCreationService).createCheckins(any())
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
   }
 
   @Test
@@ -114,9 +115,11 @@ class CheckinCreationJobTest {
     verify(deactivationService).deactivateOffender(
       eq(offender),
       any(),
+      anyOrNull(),
       any(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
@@ -131,9 +134,11 @@ class CheckinCreationJobTest {
     verify(deactivationService).deactivateOffender(
       eq(offender),
       any(),
+      anyOrNull(),
       any(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
@@ -149,7 +154,7 @@ class CheckinCreationJobTest {
         eligible.crn to details(eligible.crn, events = listOf(anEvent)),
       ),
     )
-    whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any()))
+    whenever(deactivationService.deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>()))
       .thenThrow(RuntimeException("boom"))
 
     job.process()
@@ -157,7 +162,7 @@ class CheckinCreationJobTest {
     // the failure on the ineligible offender is isolated; the eligible offender is still processed.
     // NB: V2BaseEntity.equals() is id-based and unsaved test offenders share id=0, so match by
     // reference identity (same()) rather than eq() to assert the correct offender each time.
-    verify(deactivationService).deactivateOffender(same(ineligible), any(), any(), any(), any())
+    verify(deactivationService).deactivateOffender(same(ineligible), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
     verify(checkinCreationService, times(1)).prepareCheckinForOffender(any(), any())
   }
 
@@ -169,7 +174,7 @@ class CheckinCreationJobTest {
 
     job.process()
 
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
 
@@ -229,9 +234,11 @@ class CheckinCreationJobTest {
       deactivationService.deactivateOffender(
         any(),
         any(),
+        anyOrNull(),
         any(),
         any(),
-        any(),
+        anyOrNull(),
+        anyOrNull<String>(),
       ),
     ).thenAnswer { it.getArgument<Offender>(0) }
   }

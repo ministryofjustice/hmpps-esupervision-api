@@ -11,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
@@ -124,6 +125,34 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     val resultNoOffender1 = offenderRepository.findEligibleForCheckinCreation(today, today.plusDays(1))
     assertEquals(2, resultNoOffender1.size)
     assertEquals(setOf(offender2.crn, offender5.crn), resultNoOffender1.map { it.crn }.toSet())
+  }
+
+  @Test
+  @Transactional
+  fun `findAllByStatusAndIdGreaterThanOrderByIdAsc - pages verified offenders only`() {
+    val firstVerified = offenderRepository.saveAndFlush(createOffenderV2("V200020", LocalDate.now()))
+    offenderRepository.saveAndFlush(createOffenderV2("V200021", LocalDate.now(), status = OffenderStatus.INACTIVE))
+    val secondVerified = offenderRepository.saveAndFlush(createOffenderV2("V200022", LocalDate.now()))
+
+    val firstPage = offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
+      OffenderStatus.VERIFIED,
+      0L,
+      PageRequest.of(0, 1),
+    )
+    val secondPage = offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
+      OffenderStatus.VERIFIED,
+      firstPage.last().id,
+      PageRequest.of(0, 1),
+    )
+    val finalPage = offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
+      OffenderStatus.VERIFIED,
+      secondPage.last().id,
+      PageRequest.of(0, 1),
+    )
+
+    assertEquals(listOf(firstVerified.id), firstPage.map { it.id })
+    assertEquals(listOf(secondVerified.id), secondPage.map { it.id })
+    assertEquals(emptyList<Long>(), finalPage.map { it.id })
   }
 
   @Test

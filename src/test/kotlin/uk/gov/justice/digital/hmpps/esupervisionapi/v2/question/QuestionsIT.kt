@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.MutableTestClock
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.BESPOKE_QUESTION_HINT
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
@@ -212,6 +213,216 @@ class QuestionsIT(
 
     val offenderQuestions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH)
     assertEquals(2 + 1, offenderQuestions.questions.size)
+  }
+
+  @Test
+  fun `QuestionService - assign bespoke question - success`() {
+    val offender = offenderTemplate.copy(crn = "A123459").toEntity()
+    offenderRepository.save(offender)
+    val text = "Have you managed to speak to your landlord?"
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(text = text)),
+    )
+
+    val resp = questionService.assignCustomQuestions(offender.crn, request)
+
+    val offenderQuestions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH)
+    assertEquals(2 + 1, offenderQuestions.questions.size)
+    assertEquals(text, offenderQuestions.questions.last().question)
+    assertEquals(BESPOKE_QUESTION_HINT, offenderQuestions.questions.last().spec["hint"])
+
+    // Authored by the practitioner, so it is not offered as a SYSTEM template
+    assertTrue(questionRepository.getQuestionTemplates(Language.ENGLISH).none { it.template == text })
+    // Sending the same text again reuses the question rather than adding another
+    val reused = questionRepository.defineBespokeQuestion("BARRY.WHITE", text)
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE").count { it.id == reused })
+  }
+
+  @Test
+  fun `QuestionService - identical bespoke text from two authors creates two questions`() {
+    val first = offenderTemplate.copy(crn = "A123460").toEntity()
+    val second = offenderTemplate.copy(uuid = UUID.randomUUID(), crn = "A123461").toEntity()
+    offenderRepository.saveAll(listOf(first, second))
+    val text = "Have you managed to speak to your landlord?"
+
+    val firstResp = questionService.assignCustomQuestions(
+      first.crn,
+      AssignCustomQuestionsRequest(author = "BARRY.WHITE", language = Language.ENGLISH, questions = listOf(CustomQuestionItem(text = text))),
+    )
+    val secondResp = questionService.assignCustomQuestions(
+      second.crn,
+      AssignCustomQuestionsRequest(author = "KENNY.POWERS", language = Language.ENGLISH, questions = listOf(CustomQuestionItem(text = text))),
+    )
+
+    for (listId in listOf(firstResp.listId, secondResp.listId)) {
+      val questions = questionService.offenderQuestionList(listId, Language.ENGLISH).questions
+      assertEquals(2 + 1, questions.size)
+      assertEquals(text, questions.last().question)
+    }
+    val barry = questionRepository.defineBespokeQuestion("BARRY.WHITE", text)
+    val kenny = questionRepository.defineBespokeQuestion("KENNY.POWERS", text)
+    assertNotEquals(barry, kenny)
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE").count { it.template == text })
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "KENNY.POWERS").count { it.template == text })
+  }
+
+  @Test
+  fun `QuestionService - bespoke text matching a SYSTEM template does not collide with it`() {
+    val offender = offenderTemplate.copy(crn = "A123462").toEntity()
+    offenderRepository.save(offender)
+    val systemTemplate = questionRepository.getQuestionTemplates(Language.ENGLISH).first()
+    // Bespoke text is trimmed before it is stored; some seeded templates carry trailing whitespace
+    val text = systemTemplate.template.trim()
+
+    val resp = questionService.assignCustomQuestions(
+      offender.crn,
+      AssignCustomQuestionsRequest(
+        author = "BARRY.WHITE",
+        language = Language.ENGLISH,
+        questions = listOf(CustomQuestionItem(text = text)),
+      ),
+    )
+
+    val questions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH).questions
+    assertEquals(text, questions.last().question)
+    val bespokeId = questionRepository.defineBespokeQuestion("BARRY.WHITE", text)
+    assertNotEquals(systemTemplate.id, bespokeId)
+  }
+
+  @Test
+  fun `QuestionRepository - concurrent definitions of the same bespoke question resolve to one row`() {
+    val text = "Have you managed to speak to your landlord?"
+    val threads = 8
+    val start = CountDownLatch(1)
+    val ids = java.util.concurrent.ConcurrentLinkedQueue<Long>()
+    val errors = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+    val workers = (1..threads).map {
+      Thread {
+        start.await()
+        try {
+          ids.add(questionRepository.defineBespokeQuestion("BARRY.WHITE", text))
+        } catch (e: Throwable) {
+          errors.add(e)
+        }
+      }.apply { start() }
+    }
+    start.countDown()
+    workers.forEach { it.join(TimeUnit.SECONDS.toMillis(30)) }
+
+    assertTrue(errors.isEmpty(), "concurrent bespoke definitions failed: $errors")
+    assertEquals(threads, ids.size)
+    assertEquals(1, ids.toSet().size, "expected one question id, got $ids")
+    assertEquals(1, questionRepository.getQuestionTemplates(Language.ENGLISH, "BARRY.WHITE").count { it.template == text })
+    assertEquals(2, jdbcTemplate.queryForObject("select count(*) from question_info where question_id = ?", Int::class.java, ids.first()))
+  }
+
+  @Test
+  fun `SYSTEM customisable templates - only the five retained are offered, in display order (English)`() {
+    val templates = questionRepository.getQuestionTemplates(Language.ENGLISH)
+    assertEquals(RETAINED_SYSTEM_TEMPLATES, templates.map { it.template.trim() })
+  }
+
+  @Test
+  fun `SYSTEM customisable templates - only the five retained are offered, in display order (Welsh)`() {
+    val english = questionRepository.getQuestionTemplates(Language.ENGLISH)
+    val welsh = questionRepository.getQuestionTemplates(Language.WELSH)
+    assertEquals(RETAINED_SYSTEM_TEMPLATES.size, welsh.size)
+    assertEquals(english.map { it.id }, welsh.map { it.id })
+  }
+
+  @Test
+  fun `SYSTEM customisable templates - fifteen are retired and none of them is offered`() {
+    val retiredIds = jdbcTemplate.queryForList(
+      "select id from question where author = 'SYSTEM' and policy = 'CUSTOMISABLE' and retired_at is not null",
+      Long::class.java,
+    )
+    assertEquals(15, retiredIds.size)
+    val offered = questionRepository.getQuestionTemplates(Language.ENGLISH).map { it.id }.toSet()
+    assertTrue(retiredIds.none { it in offered })
+  }
+
+  @Test
+  fun `QuestionService - an existing list referencing a retired template still renders`() {
+    val retired = jdbcTemplate.queryForMap(
+      """
+      select q.id, qi.question_template
+      from question q join question_info qi on qi.question_id = q.id and qi.lang = 'en-GB'
+      where q.author = 'SYSTEM' and q.policy = 'CUSTOMISABLE' and q.retired_at is not null
+      order by q.id limit 1
+      """,
+    )
+    val retiredId = (retired["id"] as Number).toLong()
+    val retiredTemplate = retired["question_template"] as String
+    assertTrue(retiredTemplate.contains("{{thing}}"))
+
+    // Assigned before the template was retired; the list row is still there
+    val listId = requireNotNull(
+      questionRepository.upsertQuestionList(
+        null,
+        "BARRY.WHITE",
+        listOf(mapOf("id" to retiredId, "params" to mapOf("placeholders" to mapOf("thing" to "school")))),
+      ),
+    )
+
+    val questions = questionService.offenderQuestionList(listId, Language.ENGLISH).questions
+    assertEquals(2 + 1, questions.size)
+    assertEquals(retiredTemplate.replace("{{thing}}", "school"), questions.last().question)
+    assertEquals(retiredTemplate, questionRepository.getListItems(listId, Language.ENGLISH).last().template.template)
+  }
+
+  @Test
+  fun `QuestionService - bespoke questions are defined in sorted order and listed in request order`() {
+    val offender = offenderTemplate.copy(crn = "A123463").toEntity()
+    offenderRepository.save(offender)
+    val later = "Were you able to get to the gym this week?"
+    val earlier = "Have you managed to speak to your landlord?"
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(text = later), CustomQuestionItem(text = earlier)),
+    )
+
+    val resp = questionService.assignCustomQuestions(offender.crn, request)
+
+    // The list keeps the order the practitioner asked for
+    val questions = questionService.offenderQuestionList(resp.listId, Language.ENGLISH).questions
+    assertEquals(2 + 2, questions.size)
+    assertEquals(listOf(later, earlier), questions.takeLast(2).map { it.question })
+    // Rows are created in text order regardless of request order, so concurrent assignments cannot deadlock
+    val laterId = questionRepository.defineBespokeQuestion("BARRY.WHITE", later)
+    val earlierId = questionRepository.defineBespokeQuestion("BARRY.WHITE", earlier)
+    assertTrue(earlierId < laterId, "expected '$earlier' (id=$earlierId) to be created before '$later' (id=$laterId)")
+  }
+
+  @Test
+  fun `QuestionService - rejects a retired template`() {
+    val offender = offenderTemplate.copy(crn = "A123464").toEntity()
+    offenderRepository.save(offender)
+    val retiredId = requireNotNull(
+      jdbcTemplate.queryForObject(
+        "select min(id) from question where author = 'SYSTEM' and policy = 'CUSTOMISABLE' and retired_at is not null",
+        Long::class.java,
+      ),
+    )
+    val request = AssignCustomQuestionsRequest(
+      author = "BARRY.WHITE",
+      language = Language.ENGLISH,
+      questions = listOf(CustomQuestionItem(id = retiredId, params = mapOf("placeholders" to mapOf("thing" to "school")))),
+    )
+
+    val exception = assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, request)
+    }
+
+    assertEquals("Question $retiredId has been retired", exception.message)
+    // The by-ids lookup still resolves the retired template, it just flags it
+    val lookup = questionRepository.getQuestionTemplates(listOf(retiredId), Language.ENGLISH).single()
+    assertEquals(retiredId, lookup.template.id)
+    assertTrue(lookup.retired)
+    val offered = questionRepository.getQuestionTemplates(Language.ENGLISH).first()
+    assertFalse(questionRepository.getQuestionTemplates(listOf(offered.id), Language.ENGLISH).single().retired)
   }
 
   @Test
@@ -704,6 +915,15 @@ class QuestionsIT(
     assertTrue(candidates.containsKey("A000003"))
   }
 }
+
+/** Changeset 83: the SYSTEM customisable templates still offered to practitioners, in display order. */
+private val RETAINED_SYSTEM_TEMPLATES = listOf(
+  "How is {{thing}}?",
+  "How has {{thing}} been going recently?",
+  "Have you been able to {{thing}}?",
+  "How have things been feeling {{thing}} recently?",
+  "Has anything changed with {{thing}} recently?",
+)
 
 private fun Clock.advanceBy(duration: Duration) = (this as MutableTestClock).advanceBy(duration)
 private fun Clock.advanceTo(instant: Instant) = (this as MutableTestClock).advanceTo(instant)

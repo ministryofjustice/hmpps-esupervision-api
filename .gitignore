@@ -126,5 +126,18 @@ practitioner_tiers.PARTIAL.csv
 crn_tiers.csv
 crn_tiers.PARTIAL.csv
 
+# Outputs of scripts/run_pop_mailing_list_export.sh (names, emails and phone
+# numbers of people on probation), same reasoning.
+crns.txt
+mailing_list.jsonl
+mailing_list.csv
+mailing_list.PARTIAL.csv
+notify_email.csv
+notify_email.PARTIAL.csv
+notify_sms.csv
+notify_sms.PARTIAL.csv
+excluded.csv
+unresolved.txt
+
 # Jars copied to the repo root for local docker builds
 /*.jar
