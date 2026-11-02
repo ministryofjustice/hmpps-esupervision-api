@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHint
@@ -109,19 +111,23 @@ class CheckinCreationJob(
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!
-            val ineligibility = checkinIneligibilityReason(info, contactDetails)
-            if (ineligibility != null) {
-              deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
-            } else {
+            if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
               prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
+            } else {
+              val ineligibility = checkinIneligibilityReason(info, contactDetails)
+              if (ineligibility != null) {
+                deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
+              } else {
+                prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
+              }
             }
           }
 
           metrics.processed += contactDetailsMap.size
           val batchInsertStart = System.currentTimeMillis()
-          val createdCheckins = checkinCreationService.createCheckins(checkinsToCreate)
-          logCreatedCheckins(checkinsToCreate, today, batchInsertStart)
-          metrics.created += checkinsToCreate.size
+          val created = checkinCreationService.createCheckins(checkinsToCreate)
+          logCreatedCheckins(created, today, batchInsertStart)
+          metrics.created += created.size
           metrics.chunks += 1
         } catch (e: NdiliusBatchFetchException) {
           metrics.errors += e.crns.size // already logged elsewhere
@@ -196,6 +202,7 @@ class CheckinCreationJob(
         offender = offender,
         reason = ineligibility.auditNote,
         contactDetails = contactDetails,
+        practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
         auditEventType = ineligibility.auditEventType,
         expectedCurrentEvent = offenderInfo.currentEvent,
       )
@@ -206,12 +213,12 @@ class CheckinCreationJob(
     }
   }
 
-  private fun logCreatedCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>, dueDate: LocalDate, start: Long) {
+  private fun logCreatedCheckins(checkins: List<CheckinCreatedEvent>, dueDate: LocalDate, start: Long) {
     val sb = StringBuilder()
-    for ((checkin, event) in checkins) {
+    for (event in checkins) {
       sb.append("(CRN=").append(event.checkin.crn)
       sb.append(", eventNumber=").append(event.currentEvent ?: "NULL")
-      sb.append(", checkin=").append(checkin.uuid).append(")")
+      sb.append(", checkin=").append(event.checkin.uuid).append(")")
     }
     LOGGER.info(
       "Checkins created: {}, with due date {}, took {}, (CRN,eventNumber,uuid): {}",

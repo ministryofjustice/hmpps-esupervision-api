@@ -1,5 +1,30 @@
 # HELM/K8s CRON JOBS
 
+## Eligibility-sync event completion
+
+With `app.batch.enabled=true`, `OffenderEligibilitySyncJob` drains the dedicated
+`offenderEventExecutor` after it stops producing events, including when processing
+fails. Each deactivation commits independently, so its `AFTER_COMMIT` listener has
+submitted its work before the deactivation call returns. The job initiates orderly
+executor shutdown and waits for all queued and running listener invocations before
+recording its end time or returning to `BatchManager`. The shared application
+executor is not shut down by this drain.
+
+The drain has no batch-level timeout. An interrupted wait fails the batch rather
+than recording successful completion. This is a one-shot operation: the executor
+cannot accept more events afterwards. Manual runs in a non-batch API process do
+not shut it down, so later requests and manual runs can still publish events.
+
+The five-minute `spring.task.execution.shutdown` wait remains a bounded fallback
+for context shutdown, not the eligibility job's completion barrier. Draining only
+guarantees that listener invocations finish: notification and domain-event code
+still handles some delivery failures internally. It does not guarantee delivery
+to recipients or protect against a JVM crash or forced pod termination. A stuck
+external call can keep the batch waiting until a client timeout or external
+Kubernetes lifecycle limit interrupts it.
+
+## CronJob migration notes
+
 Key finding: batch-cronjob.yaml (from generic-service ≥3.17) runs a custom command. It starts the same container image as your Deployment, with the same env/envFrom/secrets/security context, but adds BATCH_ENABLED=true and BATCH_TYPE=<job type>.
 
   This means it's not a Helm-only change — it requires a small, well-defined amount of app code (a "batch mode" entrypoint), even though you don't want that written yet.

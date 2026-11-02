@@ -192,7 +192,7 @@ class OffenderSetupService(
     val cache = makeCache(offender, contactDetails, eligibility)
     val result = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (result.outcome != EligibilityCheckOutcome.ELIGIBLE) {
-      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, result.message ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"}")
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, result.dashboardMessage ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"}")
     }
   }
 

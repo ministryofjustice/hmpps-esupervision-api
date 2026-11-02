@@ -10,6 +10,7 @@ Scheduled jobs that run automatically to manage checkin lifecycle.
 |-----|---------|------------------|
 | V2CheckinCreationJob | Create checkins for eligible offenders | Daily, configurable |
 | V2CheckinExpiryJob | Mark overdue checkins as expired | Daily, configurable |
+| CheckinDeliusEventRelayJob | Publish check-in lifecycle events (scheduled, rescheduled, cancelled, link) to NDelius in order | Every 15 seconds |
 
 ---
 
@@ -134,9 +135,52 @@ Example with 3-day grace period:
 
 ---
 
+## 3. Checkin Delius Event Relay Job
+
+ESUP-2223. Check-in lifecycle events for NDelius (`scheduled`, `updated` for a reschedule,
+`cancelled`, `link.delivered`, `link.not_delivered`) are recorded in `checkin_delius_event_v2`
+in the same transaction as the change they describe (`CheckinDeliusEventService.record`).
+With feature `ESUP_2223` on, so are the `received`, `expired`, `reviewed` and annotation `updated`
+events (`recordCheckinUpdate`), instead of being published directly. This job publishes them.
+
+- Events are published in id order, **one check-in at a time**: an event waits until every
+  earlier event for the same check-in has been published, and the most recent of those was
+  published at least `min-gap` ago. The NDelius queue is a standard (unordered) SQS queue that
+  retries a message only a few times before dead-lettering it, and NDelius rejects, for example,
+  a `link.delivered` for a check-in it hasn't seen `scheduled` for yet.
+- A failed publish is recorded (`publish_attempts`, `last_error`) and retried on the next run.
+  It holds back the check-in's later events but not other check-ins' events. A run stops after
+  3 failures in a row (the topic is probably unavailable), and an event's 20th failed attempt
+  (about 5 minutes) is logged as an error.
+- Each event type is recorded at most once per check-in, except rescheduling.
+
+### Configuration
+
+```yaml
+app:
+  scheduling:
+    checkin-delius-event-relay:
+      enabled: true
+      fixed-delay: PT15S
+      batch-size: 500
+      min-gap: PT60S
+```
+
+### Monitoring Query
+
+```sql
+-- events waiting to be published, oldest first
+SELECT event_type, checkin_uuid, occurred_at, publish_attempts, last_error
+FROM checkin_delius_event_v2
+WHERE published_at IS NULL
+ORDER BY id;
+```
+
+---
+
 ## ShedLock
 
-Both jobs use ShedLock to prevent duplicate execution across instances.
+All jobs use ShedLock to prevent duplicate execution across instances.
 
 ```kotlin
 @SchedulerLock(

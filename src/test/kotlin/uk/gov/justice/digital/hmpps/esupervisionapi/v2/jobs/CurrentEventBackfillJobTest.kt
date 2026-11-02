@@ -4,6 +4,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -60,7 +61,7 @@ class CurrentEventBackfillJobTest {
     job(dryRun = false).process()
 
     verify(offenderRepository).setCurrentEventIfMissing(offender.id, OffenderStatus.VERIFIED, 2L, clock.instant())
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
   @Test
@@ -94,7 +95,7 @@ class CurrentEventBackfillJobTest {
     assertThat(offender.currentEvent).isNull()
     verify(offenderRepository, never()).setCurrentEventIfMissing(any(), any(), any(), any())
     verify(offenderRepository, never()).save(any())
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
   @Test
@@ -118,9 +119,12 @@ class CurrentEventBackfillJobTest {
       offenderDeactivationService.deactivateOffender(
         eq(offender),
         any(),
-        any(),
+        anyOrNull<String>(),
+        anyOrNull(),
         any(),
         eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+        anyOrNull(),
+        eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
       ),
     ).thenReturn(true)
 
@@ -129,9 +133,12 @@ class CurrentEventBackfillJobTest {
     verify(offenderDeactivationService).deactivateOffender(
       eq(offender),
       any(),
-      any(),
+      anyOrNull<String>(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+      anyOrNull(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
     )
     verify(offenderRepository, never()).save(any())
   }
@@ -155,7 +162,7 @@ class CurrentEventBackfillJobTest {
 
     assertThat(offender.currentEvent).isNull()
     verify(offenderRepository, never()).save(any())
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
   @Test
@@ -166,7 +173,7 @@ class CurrentEventBackfillJobTest {
 
     assertThrows(IllegalStateException::class.java) { job(dryRun = false).process() }
 
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(offenderRepository, never()).save(any())
   }
 

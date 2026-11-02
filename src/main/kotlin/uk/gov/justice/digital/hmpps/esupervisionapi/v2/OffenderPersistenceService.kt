@@ -22,6 +22,11 @@ class OffenderPersistenceService(
   private val appEventPublisher: ApplicationEventPublisher,
 ) {
 
+  /**
+   * Only perform deactivation side effects when the stored status transitions from VERIFIED to INACTIVE.
+   *
+   * @return the deactivated offender, or null if no VERIFIED offender record was updated
+   */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   fun offenderDeactivation(
     offenderId: Long,

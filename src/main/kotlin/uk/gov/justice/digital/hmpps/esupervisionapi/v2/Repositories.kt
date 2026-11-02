@@ -151,6 +151,8 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     pageable: Pageable,
   ): List<Offender>
 
+  fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
+
   /**
    * Update an offender based on new due_date and today's date.
    *
@@ -290,6 +292,12 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findMigratedWithoutAudit(pageable: Pageable): List<Offender>
 }
 
+interface LatestOffenderSetup {
+  val offenderId: Long
+  val setupPrimaryKey: Long
+  val setupCounter: Int
+}
+
 /**
  * Repository for V2 Offender Setup
  */
@@ -307,6 +315,20 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
   """,
   )
   fun findByOffender(offender: Offender): Optional<OffenderSetup>
+
+  @Query(
+    """
+    SELECT DISTINCT ON (s.offender_id)
+      s.offender_id AS "offenderId",
+      s.id AS "setupPrimaryKey",
+      s.setup_counter AS "setupCounter"
+    FROM offender_setup_v2 s
+    WHERE s.offender_id IN (:offenderIds)
+    ORDER BY s.offender_id, s.created_at DESC, s.id DESC
+  """,
+    nativeQuery = true,
+  )
+  fun findLatestByOffenderIdIn(offenderIds: Collection<Long>): List<LatestOffenderSetup>
 
   /**
    * Creates a new setup record for the given offender and updates the
@@ -428,13 +450,14 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   )
   fun findAllByOffenderIdAndDueDate(offenderId: Long, dueDate: LocalDate): List<OffenderCheckin>
 
-  /** Find all checkins by practitioner (created by) */
+  /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(
     """
     SELECT c FROM OffenderCheckin c
     JOIN FETCH c.offender o
     WHERE o.practitionerId = :practitionerId
       AND (:offenderUuid IS NULL OR o.uuid = :offenderUuid)
+      AND c.status <> 'SCHEDULED'
     """,
   )
   fun findAllByCreatedBy(
@@ -505,6 +528,19 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
 """,
   )
   fun findMigratedByStatus(status: CheckinStatus, pageable: Pageable): List<OffenderCheckin>
+
+  /** Returns the inserted checkin, or null if a CREATED checkin already exists for this offender and due date. */
+  @Query(
+    """
+    INSERT INTO offender_checkin_v2 (uuid, offender_id, status, due_date, created_at, created_by)
+    VALUES (:#{#checkin.uuid}, :#{#checkin.offender.id}, :#{#checkin.status.name()}, :#{#checkin.dueDate}, :#{#checkin.createdAt}, :#{#checkin.createdBy})
+    ON CONFLICT (offender_id, due_date) WHERE status = 'CREATED'
+    DO NOTHING
+    RETURNING id
+    """,
+    nativeQuery = true,
+  )
+  fun maybeInsert(checkin: OffenderCheckin): Long?
 }
 
 /**

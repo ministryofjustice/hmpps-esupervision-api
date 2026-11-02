@@ -165,7 +165,7 @@ open class OffenderSetup(
   @Column(name = "rationale", nullable = true)
   open var rationale: String? = null,
 ) : V2BaseEntity() {
-  fun setupId(): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
+  fun setupId(): UUID = setupId(id, setupCounter)
 
   fun incrementSetupCounter() {
     setupCounter++
@@ -182,6 +182,10 @@ open class OffenderSetup(
     setupId = setupId(),
     currentEvent = offender.currentEvent,
   )
+
+  companion object {
+    fun setupId(id: Long, setupCounter: Int): UUID = UUID.nameUUIDFromBytes("$id:$setupCounter".toByteArray())
+  }
 }
 
 /**
@@ -271,6 +275,14 @@ open class OffenderCheckin(
 
   @Column(name = "image_deleted_at", nullable = true)
   open var imageDeletedAt: Instant? = null,
+
+  /** Null for check-ins created before ESUP-2223; those are not subject to the link-sent gate. */
+  @Column(name = "link_status", nullable = true)
+  @Enumerated(EnumType.STRING)
+  open var linkStatus: CheckinLinkStatus? = null,
+
+  @Column(name = "link_status_updated_at", nullable = true)
+  open var linkStatusUpdatedAt: Instant? = null,
 ) : V2BaseEntity() {
   fun dto(
     personalDetails: ContactDetails? = null,
@@ -313,6 +325,21 @@ open class OffenderCheckin(
       photoUrl = photoUrl,
     )
   }
+}
+
+/**
+ * Whether GOV.UK Notify accepted the check-in invite (the link). We don't get delivery receipts,
+ * so [SENT] means accepted by Notify, not delivered.
+ */
+enum class CheckinLinkStatus {
+  /** The check-in is live, the invite not yet accepted by Notify. */
+  SENDING,
+
+  /** Notify accepted the invite. Published to NDelius as `link.delivered`. */
+  SENT,
+
+  /** Notify rejected the invite, or it couldn't be sent (for example no contact details). Published to NDelius as `link.not_delivered`. */
+  FAILED,
 }
 
 fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {

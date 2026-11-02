@@ -8,6 +8,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -96,13 +97,15 @@ class CheckinCreationServiceTest {
       verify(deactivation).deactivateOffender(
         eq(offender),
         eq(CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditNote),
+        anyOrNull<String>(),
         eq(details),
         eq(false),
         eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
         eq(99L),
+        eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
       )
     } else {
-      verify(deactivation, never()).deactivateOffender(any(), any(), any(), any(), any(), any())
+      verify(deactivation, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     }
   }
 
@@ -112,10 +115,10 @@ class CheckinCreationServiceTest {
     whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
     offender.currentEvent = 1L
 
-    val checkin = service.createCheckinForOffender(offender, today, "SYSTEM", details)
+    service.createCheckinForOffender(offender, today, "SYSTEM", details)
 
     val event = argumentCaptor<PartialCheckinCreatedEvent>()
-    verify(persistence).checkinCreation(eq(checkin), event.capture())
+    verify(persistence).checkinCreation(any(), event.capture())
     assertEquals(1L, event.firstValue.currentEvent)
   }
 
@@ -124,10 +127,10 @@ class CheckinCreationServiceTest {
     whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     val datedDetails = details.copy(events = listOf(details.events.first(), details.events.last().copy(sentence = sentence.copy(expectedEndDate = today.plusYears(1)))))
 
-    val checkin = service.createCheckinForOffender(offender, today, "SYSTEM", datedDetails)
+    service.createCheckinForOffender(offender, today, "SYSTEM", datedDetails)
 
     val event = argumentCaptor<PartialCheckinCreatedEvent>()
-    verify(persistence).checkinCreation(eq(checkin), event.capture())
+    verify(persistence).checkinCreation(any(), event.capture())
     assertEquals(2L, event.firstValue.currentEvent)
     assertNull(offender.currentEvent)
   }

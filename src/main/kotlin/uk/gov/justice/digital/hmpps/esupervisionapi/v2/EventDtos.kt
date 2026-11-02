@@ -35,6 +35,11 @@ data class OffenderDeactivatedEvent(
   val reason: String? = null,
   val sensitive: Boolean = false,
   val expectedCurrentEvent: Long? = offender.currentEvent,
+  val deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
+  /**
+   * Passed in the notification message to practitioner.
+   */
+  val practitionerMessageFragment: String? = null,
 ) : IOffenderEvent {
   override val outboxItemCoords = setup?.let { OutboxItemType.OFFENDER_DEACTIVATED to setup.primaryKey }
 }
@@ -62,6 +67,10 @@ data class SetupInfo private constructor(
 ) {
   companion object {
     fun from(setup: OffenderSetup) = SetupInfo(primaryKey = setup.id, setupId = setup.setupId())
+    fun from(setup: LatestOffenderSetup) = SetupInfo(
+      primaryKey = setup.setupPrimaryKey,
+      setupId = OffenderSetup.setupId(setup.setupPrimaryKey, setup.setupCounter),
+    )
   }
 }
 
@@ -151,10 +160,10 @@ data class PartialCheckinCreatedEvent(
 ) : ICheckinEventBase,
   IPartialEvent,
   ActiveEvent {
-  fun finalise(checkin: OffenderCheckin): CheckinCreatedEvent {
-    require(checkin.id != 0L) { "Checkin ID must be set after DB insert" }
+  fun finalise(checkin: OffenderCheckin, id: Long): CheckinCreatedEvent {
+    require(id != 0L) { "Checkin ID must be set after DB insert" }
     return CheckinCreatedEvent(
-      checkinId = checkin.id,
+      checkinId = id,
       offenderId = offenderId,
       practitionerId = practitionerId,
       checkin = this.checkin,

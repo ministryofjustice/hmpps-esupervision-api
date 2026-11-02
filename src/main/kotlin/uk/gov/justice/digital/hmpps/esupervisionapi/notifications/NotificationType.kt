@@ -12,6 +12,11 @@ enum class NotificationType {
   PractitionerCheckinSubmitted,
   PractitionerCheckinMissed,
   PractitionerInviteIssueGeneric,
+
+  /**
+   * Checkin stopped via automated process.
+   */
+  PractitionerCheckinsStoppedAuto,
   RegistrationConfirmation,
   RegistrationConfirmationAdHoc,
   PractitionerCustomQuestionsReminder,

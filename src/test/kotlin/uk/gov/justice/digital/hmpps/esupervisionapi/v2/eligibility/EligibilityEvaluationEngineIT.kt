@@ -35,6 +35,26 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "ON_YOUTH_SENTENCE",
         "IN_EARLY_ENGAGEMENT",
       )
+
+    assertThat(rules.map { it.deliusOutcomeCode })
+      .containsExactly(
+        "ESPNA",
+        "ESPRC",
+        "ESPME",
+        "ESPIT",
+        "ESPFT",
+        "ESPNP",
+        "ESPDI",
+        null,
+        null,
+        null,
+        "ESPAP",
+        null,
+        "ESPEE",
+      )
+
+    val pilotRules = eligibilityRuleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc("PILOT_2026_08")
+    assertThat(pilotRules.filter { it.deliusOutcomeCode == null }).isEmpty()
   }
 
   @Test
@@ -87,7 +107,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       .join()
 
     assertThat(resultC.outcome).isEqualTo(EligibilityCheckOutcome.INELIGIBLE)
-    assertThat(resultC.message).isEqualTo("{{offender}} is not eligible for online check ins because they are in Tier C.")
+    assertThat(resultC.dashboardMessage).isEqualTo("{{offender}} is not eligible for online check ins because they are in Tier C.")
     assertThat(resultC.triggeredRuleCode).isEqualTo("IS_TIER_C")
   }
 }

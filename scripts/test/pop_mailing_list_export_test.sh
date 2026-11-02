@@ -53,7 +53,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # Everyone has both a mobile and an email in NDelius unless a case says
 # otherwise, so the tests show only the preferred one is exported.
 UNSET = object()
-def person(crn, forename, pref="PHONE", mobile=UNSET, email=UNSET, status="VERIFIED",
+def _person(crn, forename, pref="PHONE", mobile=UNSET, email=UNSET, status="VERIFIED",
            suspended=False, details=True):
   return {"uuid": "00000000-0000-0000-0000-000000000000", "crn": crn, "status": status,
           "firstCheckin": "2026-01-01", "mode": "SCHEDULED", "contactPreference": pref,
@@ -64,6 +64,14 @@ def person(crn, forename, pref="PHONE", mobile=UNSET, email=UNSET, status="VERIF
             "email": crn.lower() + "@unused.example" if email is UNSET else email,
             "practitioner": {"name": {"forename": "Pat", "surname": "Practitioner"}},
             "events": [], "contactSuspended": suspended}}
+
+# Every response has dateOfDeath, null unless died is given -- except old_api,
+# which leaves the key out as an API from before the field would.
+def person(crn, forename, *args, died=None, old_api=False, **kwargs):
+  p = _person(crn, forename, *args, **kwargs)
+  if p["details"] is not None and not old_api:
+    p["details"]["dateOfDeath"] = died
+  return p
 
 CASES = {
   "X000001": person("X000001", "Zoe", mobile="07700900001"),
@@ -82,6 +90,19 @@ CASES = {
   "X000014": person("X000014", "Mo", mobile="07700900014", status="INITIAL"),
   "X000015": person("X000015", "Ned", "EMAIL", email="barry.b@example.com"),  # shares Barry's
 }
+EXTRA = {
+  "DEAD001": person("DEAD001", "Pia", mobile="07700900101", died="2026-02-01"),
+  "RECAL01": person("RECAL01", "Quin", mobile="07700900102"),
+  "RECNM01": person("RECNM01", "Rex", mobile=None),           # recalled, and no mobile
+  "SPFLAKY": person("SPFLAKY", "Sid", mobile="07700900104"),
+  "SPUNKN1": person("SPUNKN1", "Tam", mobile="07700900105"),
+  "OLDND01": person("OLDND01", "Una", mobile="07700900106", old_api=True),
+  "OLDSP01": person("OLDSP01", "Vic", mobile="07700900107"),
+}
+CASES.update(EXTRA)
+RECALLED = {"RECAL01", "RECNM01"}
+SP_LOG = sys.argv[2]
+
 GOOD_BASIC = "Basic " + base64.b64encode(b"ui-client:s3cr3t").decode()
 calls = {}
 
@@ -102,6 +123,20 @@ class Handler(BaseHTTPRequestHandler):
   def do_GET(self):
     if self.headers.get("Authorization") != "Bearer tok":
       return self.reply(401, {})
+    sp = re.match(r"/v2/offenders/crn/([^/?]+)/supervision-package$", self.path)
+    if sp:
+      crn = sp.group(1)
+      calls["sp:" + crn] = calls.get("sp:" + crn, 0) + 1
+      with open(SP_LOG, "a") as log:
+        log.write(crn + "\n")
+      if crn == "SPFLAKY" and calls["sp:" + crn] == 1:   # Supervision Packages blip
+        return self.reply(503, {"status": 503})
+      if crn == "SPUNKN1":                               # unknown to Supervision Packages
+        return self.reply(404, {})
+      status = {"onSupervisionPackage": True, "inFinalThird": False, "inEarlyEngagement": False}
+      if crn != "OLDSP01":                               # an API from before recalled
+        status["recalled"] = crn in RECALLED
+      return self.reply(200, status)
     m = re.match(r"/v2/offenders/crn/([^/?]+)\?include-personal-details=true$", self.path)
     if not m:
       return self.reply(400, {"error": "unexpected path " + self.path})
@@ -142,7 +177,7 @@ open(sys.argv[1], "w").write(str(server.server_address[1]))
 server.serve_forever()
 EOF
 
-python3 "$T/stub.py" "$T/port" &
+python3 "$T/stub.py" "$T/port" "$T/sp_calls.log" &
 STUB_PID=$!
 for _ in $(seq 1 50); do [[ -s "$T/port" ]] && break; sleep 0.1; done
 [[ -s "$T/port" ]] || { echo "ERROR: stub server did not start" >&2; exit 1; }
@@ -440,6 +475,51 @@ test_releases_the_lock_however_the_run_ends() {
   [[ ! -e "$T/c-lock2/.lock" ]] || fail "lock left after a failed preflight"
   expect_exit 1 run "$T/c-lock3" FAKE_PSQL_FAIL=1
   [[ ! -e "$T/c-lock3/.lock" ]] || fail "lock left after a failure with the pod up"
+}
+
+test_leaves_out_the_dead_and_the_recalled() {
+  printf '%s\n' X000001 DEAD001 RECAL01 RECNM01 > "$T/dead-recalled.txt"
+  : > "$T/sp_calls.log"
+  local out rc; out="$(run "$T/c-dr" FAKE_CRNS="$T/dead-recalled.txt")"; rc=$?
+  assert_eq 0 "$rc" "exit code"
+  assert_file_eq 'CRN,First name,Active,Contact suspended,Contact preference,Email address,Phone number
+"X000001","Zoe","Yes","No","PHONE","","+447700900001"' "$T/c-dr/mailing_list.csv" "mailing list"
+  # Recall is asked about only for people otherwise in the list: Rex, recalled
+  # with no mobile, is no_mobile, and nobody asks about Pia, who has died.
+  assert_file_eq 'CRN,Reason
+"DEAD001","deceased"
+"RECNM01","no_mobile"
+"RECAL01","recalled"' "$T/c-dr/excluded.csv" "excluded"
+  assert_file_eq $'X000001\nRECAL01' "$T/sp_calls.log" "supervision packages asked about"
+  assert_contains "$out" "Excluded:  1 recalled" "summary"
+}
+
+test_retries_a_recall_check_that_could_not_be_made() {
+  printf '%s\n' X000001 SPFLAKY SPUNKN1 > "$T/sp-fail.txt"
+  local out rc; out="$(run "$T/c-spf" FAKE_CRNS="$T/sp-fail.txt")"; rc=$?
+  assert_eq 3 "$rc" "exit code"
+  assert_contains "$out" "RETRY crn=SPFLAKY supervision package: HTTP 503" "outage retried"
+  assert_contains "$out" "RETRY crn=SPUNKN1 CRN not known to Supervision Packages (HTTP 404)" "unknown CRN retried"
+  assert_file_eq 'SPUNKN1' "$T/c-spf/unresolved.txt" "only the unknown CRN left unresolved"
+  assert_file_eq 'CRN,First name,Active,Contact suspended,Contact preference,Email address,Phone number
+"SPFLAKY","Sid","Yes","No","PHONE","","+447700900104"
+"X000001","Zoe","Yes","No","PHONE","","+447700900001"' "$T/c-spf/mailing_list.PARTIAL.csv" "recovered on the second pass"
+}
+
+test_stops_on_an_api_without_date_of_death() {
+  printf '%s\n' X000001 OLDND01 > "$T/oldnd.txt"
+  local out rc; out="$(run "$T/c-oldnd" FAKE_CRNS="$T/oldnd.txt")"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "does not say whether people have died" "message"
+  [[ -z "$(ls "$T/c-oldnd" | grep '\.csv$')" ]] || fail "wrote an export anyway"
+}
+
+test_stops_on_an_api_without_the_recalled_flag() {
+  printf '%s\n' X000001 OLDSP01 > "$T/oldsp.txt"
+  local out rc; out="$(run "$T/c-oldsp" FAKE_CRNS="$T/oldsp.txt")"; rc=$?
+  assert_eq 1 "$rc" "exit code"
+  assert_contains "$out" "does not say whether people are recalled" "message"
+  [[ -z "$(ls "$T/c-oldsp" | grep '\.csv$')" ]] || fail "wrote an export anyway"
 }
 
 test_the_database_password_is_not_passed_on_after_the_sql_step() {

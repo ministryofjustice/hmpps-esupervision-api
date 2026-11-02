@@ -4,6 +4,8 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Clock
 import java.util.UUID
 
@@ -21,24 +23,64 @@ class CheckinPersistenceService(
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val clock: Clock,
+  private val checkinDeliusEventService: CheckinDeliusEventService,
 ) {
 
   @Transactional
   fun findCheckin(uuid: UUID): OffenderCheckin? = checkinRepository.findByUuid(uuid).orElse(null)
 
   @Transactional
-  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent) {
-    val savedCheckin = checkinRepository.saveAndFlush(checkin)
-    val finalisedEvent = event.finalise(savedCheckin)
-    eventAuditService.recordCheckinCreated(savedCheckin, finalisedEvent)
+  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
+    require(checkin.status == CheckinStatus.CREATED)
+    requireOnlyInsertedFieldsSet(checkin)
+    val id = checkinRepository.maybeInsert(checkin)
+    if (id != null) {
+      val finalisedEvent = event.finalise(checkin, id)
+      eventAuditService.recordCheckinCreated(checkin, finalisedEvent)
 
-    appEventPublisher.publishEvent(finalisedEvent)
+      appEventPublisher.publishEvent(finalisedEvent)
+      return finalisedEvent
+    }
+    return null
+  }
+
+  /**
+   * [OffenderCheckinRepository.maybeInsert] writes only uuid, offender, status, due date, created at and
+   * created by. Anything else set on a new check-in would be silently dropped, so refuse it: extend
+   * the INSERT before setting another field at creation time.
+   */
+  private fun requireOnlyInsertedFieldsSet(checkin: OffenderCheckin) {
+    val unsupported = buildList {
+      if (checkin.id != 0L) add("id")
+      if (checkin.surveyResponse != null) add("surveyResponse")
+      if (checkin.submittedAt != null) add("submittedAt")
+      if (checkin.reviewStartedAt != null) add("reviewStartedAt")
+      if (checkin.reviewStartedBy != null) add("reviewStartedBy")
+      if (checkin.reviewedAt != null) add("reviewedAt")
+      if (checkin.reviewedBy != null) add("reviewedBy")
+      if (checkin.checkinStartedAt != null) add("checkinStartedAt")
+      if (checkin.autoIdCheck != null) add("autoIdCheck")
+      if (checkin.autoIdCheckScore != null) add("autoIdCheckScore")
+      if (checkin.livenessResult != null) add("livenessResult")
+      if (checkin.livenessConfidence != null) add("livenessConfidence")
+      if (checkin.livenessEnabled) add("livenessEnabled")
+      if (checkin.manualIdCheck != null) add("manualIdCheck")
+      if (checkin.riskFeedback != null) add("riskFeedback")
+      if (checkin.sensitive) add("sensitive")
+      if (checkin.imageDeletedAt != null) add("imageDeletedAt")
+      if (checkin.linkStatus != null) add("linkStatus")
+      if (checkin.linkStatusUpdatedAt != null) add("linkStatusUpdatedAt")
+    }
+    require(unsupported.isEmpty()) { "Check-in creation does not persist $unsupported; extend OffenderCheckinRepository.maybeInsert" }
   }
 
   @Transactional
   fun checkinSubmission(checkin: OffenderCheckin, event: CheckinSubmittedEvent) {
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin)
+    }
 
     appEventPublisher.publishEvent(event)
   }
@@ -48,6 +90,9 @@ class CheckinPersistenceService(
     require(event.checkin.reviewedBy != null)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinReviewed(checkin, event)
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_REVIEWED, checkin)
+    }
     offenderEventLogRepository.save(
       OffenderEventLog(
         comment = reviewInfo.comment,
@@ -79,6 +124,9 @@ class CheckinPersistenceService(
         checkin = checkin.id,
       ),
     )
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_ANNOTATED, checkin, detailId = logEntry.uuid)
+    }
 
     appEventPublisher.publishEvent(event.finalise(logEntry))
   }

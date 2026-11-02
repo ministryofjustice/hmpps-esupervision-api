@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
@@ -66,6 +67,7 @@ class CheckinReminderJobTest {
     transactionTemplate,
     eventAuditService,
     genericNotificationRepository,
+    appConfig = mock(),
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -79,7 +81,7 @@ class CheckinReminderJobTest {
     job.process()
 
     verify(notificationService).sendCheckinReminderNotifications(same(checkin), eq(cd))
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
   @Test
@@ -93,9 +95,12 @@ class CheckinReminderJobTest {
     verify(deactivationService).deactivateOffender(
       same(checkin.offender),
       eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      anyOrNull<String>(),
       eq(cd),
-      any(),
+      eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      expectedCurrentEvent = eq(1L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
     verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
 
@@ -121,9 +126,12 @@ class CheckinReminderJobTest {
     verify(deactivationService).deactivateOffender(
       same(ineligible.offender),
       any(),
-      any(),
+      anyOrNull(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      anyOrNull(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
     verify(notificationService).sendCheckinReminderNotifications(same(eligible), eq(eligibleCd))
     verify(notificationService, never()).sendCheckinReminderNotifications(same(ineligible), any())
@@ -150,9 +158,12 @@ class CheckinReminderJobTest {
       deactivationService.deactivateOffender(
         any(),
         any(),
+        anyOrNull(),
+        anyOrNull(),
         any(),
-        any(),
-        any(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull<String>(),
       ),
     ).thenReturn(true)
   }

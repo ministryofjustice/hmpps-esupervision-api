@@ -43,21 +43,21 @@ class EligibilityEvaluationEngineTest {
     dataPoint: String,
     operator: EligibilityRuleOperator,
     outcomeOnMatch: EligibilityRuleOutcome = EligibilityRuleOutcome.CONTINUE,
-    messageOnMatch: String? = null,
     outcomeOnNoMatch: EligibilityRuleOutcome = EligibilityRuleOutcome.NOT_ELIGIBLE,
-    messageOnNoMatch: String? = "not eligible: $code",
+    ineligibilityMessage: String? = "not eligible: $code",
+    deliusOutcomeCode: String? = null,
   ) = OffenderEligibilityRule(
     ruleSet = EligibilityEvaluationEngine.DEFAULT_RULE_SET,
     ruleOrder = order,
     code = code,
+    deliusOutcomeCode = deliusOutcomeCode,
     question = code,
     source = source,
     dataPoint = dataPoint,
     operator = operator,
     outcomeOnMatch = outcomeOnMatch,
-    messageOnMatch = messageOnMatch,
     outcomeOnNoMatch = outcomeOnNoMatch,
-    messageOnNoMatch = messageOnNoMatch,
+    ineligibilityMessage = ineligibilityMessage,
     createdAt = Instant.EPOCH,
     updatedAt = Instant.EPOCH,
   )
@@ -89,7 +89,7 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
-    assertNull(result.message)
+    assertNull(result.dashboardMessage)
     assertNull(result.triggeredRuleCode)
   }
 
@@ -102,8 +102,6 @@ class EligibilityEvaluationEngineTest {
       "DECEASED_DATE",
       EligibilityRuleOperator.IS_NULL,
       outcomeOnMatch = EligibilityRuleOutcome.ELIGIBLE,
-      messageOnMatch = "eligible early",
-      messageOnNoMatch = null,
     )
     val secondRule = rule("NEVER_REACHED", 2.0, "NOMIS", "RECALL_STATUS", EligibilityRuleOperator.IS_NULL)
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
@@ -114,7 +112,7 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
-    assertEquals("eligible early", result.message)
+    assertNull(result.dashboardMessage)
     assertEquals("SHORTCUT", result.triggeredRuleCode)
     verify(nomisProvider, never()).fetch(org.mockito.kotlin.any())
   }
@@ -157,7 +155,14 @@ class EligibilityEvaluationEngineTest {
 
   @Test
   fun `terminal NOT_ELIGIBLE outcome stops evaluation with message`() {
-    val rule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)
+    val rule = rule(
+      "IS_ALIVE",
+      1.0,
+      "NDELIUS",
+      "DECEASED_DATE",
+      EligibilityRuleOperator.IS_NULL,
+      deliusOutcomeCode = "ESPRC",
+    )
     whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(EligibilityEvaluationEngine.DEFAULT_RULE_SET))
       .thenReturn(listOf(rule))
     mockProvider("NDELIUS", mapOf("DECEASED_DATE" to "2020-01-01"))
@@ -165,8 +170,9 @@ class EligibilityEvaluationEngineTest {
     val result = engine.evaluate("X123456", DEFAULT_RULE_SET).join()
 
     assertEquals(EligibilityCheckOutcome.INELIGIBLE, result.outcome)
-    assertEquals("not eligible: IS_ALIVE", result.message)
+    assertEquals("not eligible: IS_ALIVE", result.dashboardMessage)
     assertEquals("IS_ALIVE", result.triggeredRuleCode)
+    assertEquals("ESPRC", result.deliusOutcomeCode)
   }
 
   @Test

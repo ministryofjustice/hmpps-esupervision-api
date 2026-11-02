@@ -16,7 +16,9 @@
 #   5. calls GET /v2/offenders/crn/{crn}?include-personal-details=true on this
 #      API for each CRN. We store no names, emails or phone numbers; that
 #      endpoint reads them live from NDelius, along with the person's current
-#      status and contact preference here
+#      status and contact preference here and whether they have died. For
+#      anyone who would be in the list, GET .../supervision-package then says
+#      whether they have been recalled to prison
 #   6. writes the mailing lists, deletes the port-forward pod and the per-CRN
 #      working file whatever happened
 #
@@ -26,6 +28,11 @@
 # sending anything they must not receive.
 #
 # A person is left out, and listed in excluded.csv with the reason, when:
+#   deceased           NDelius has a date of death for them
+#   recalled           they have been recalled to prison on any sentence (as
+#                      the IS_RECALLED eligibility rule has it). Recalled but
+#                      unlawfully at large, or a recall request not yet
+#                      decided, does not count: they stay in
 #   no_email           their preference is EMAIL and NDelius holds no email
 #   invalid_email      their preference is EMAIL and the email is malformed
 #   no_mobile          their preference is PHONE and NDelius holds no mobile
@@ -34,6 +41,12 @@
 #   invalid_number     the number is neither a UK mobile nor an international
 #                      one (+ or 00 then a country code), so cannot be used
 #   not_set_up         their status here is no longer VERIFIED or INACTIVE
+#
+# Recall is asked about only for people who would otherwise be in the list, so
+# someone recalled who also has, say, no mobile is listed as no_mobile.
+#
+# Against an API that predates the dateOfDeath or recalled fields, the run stops
+# rather than passing everyone as alive and not recalled.
 #
 # Phone numbers: UK mobiles -- 07..., +44 7..., +44 (0)7..., 0044 7..., 44 7...
 # with any spaces, dots, dashes or brackets -- are normalised to +44 and the ten
@@ -59,7 +72,8 @@
 #   LOCAL_PG_PORT  local end of the database port-forward, default 5433
 #   PASSES         fetch passes, default 2. Later passes retry only the CRNs
 #                  whose details could not be read (NDelius errors, timeouts)
-#   RATE_SLEEP     seconds between requests, default 0.25
+#   RATE_SLEEP     seconds between people, default 0.25 (each is one request,
+#                  or two for anyone whose recall status is checked)
 #   REQUEST_TIMEOUT  seconds before giving up on one request, default 60
 #   TOKEN_SOURCE   pod (default) | laptop -- as in run_practitioner_export.sh
 #   UI_NAMESPACE   default the API's own namespace
@@ -329,13 +343,47 @@ new_token() {
 # ---------------------------------------------------------------------------
 # One request. Sets $code and leaves the body in $body. The token goes in on
 # stdin, not argv, so `ps` on a shared host never shows it.
-request() {  # crn
+request() {  # path
   code=$(curl -s -o "$body" -w '%{http_code}' \
     --connect-timeout 10 --max-time "$REQUEST_TIMEOUT" \
     -H @- -H 'Accept: application/json' \
-    "$API_BASE/v2/offenders/crn/$1?include-personal-details=true" \
+    "$API_BASE$1" \
     <<<"Authorization: Bearer $TOKEN") || true
   code="${code:-000}"
+}
+
+# A request, made again with a fresh token if the current one has expired.
+fetch() {  # path
+  request "$1"
+  if [[ "$code" == 401 ]]; then
+    new_token; request "$1"   # the token expired mid-pass
+  fi
+}
+
+# For someone otherwise in the export: whether they have been recalled to
+# prison, from GET /v2/offenders/crn/{crn}/supervision-package. Someone
+# recalled but unlawfully at large, or with a recall request not yet decided,
+# is not recalled there, and stays in. Leaves $result as it is if they are not
+# recalled, and replaces it if they are or if it cannot be told.
+check_recall() {  # crn
+  local recalled
+  fetch "/v2/offenders/crn/$1/supervision-package"
+  case "$code" in
+    200)
+      # tostring: jq -e counts a bare false as failure.
+      if recalled=$(jq -er '.recalled | booleans | tostring' "$body" 2>/dev/null); then
+        [[ "$recalled" == false ]] || result='{"outcome":"excluded","reason":"recalled"}'
+      elif jq -e 'type == "object" and has("onSupervisionPackage")' "$body" >/dev/null 2>&1; then
+        die "the API in $ENV does not say whether people are recalled -- deploy the API with 'recalled' on GET /v2/offenders/crn/{crn}/supervision-package first"
+      else
+        result='{"outcome":"retry","reason":"unreadable supervision package response"}'
+      fi ;;
+    401|403)
+      die "HTTP $code for $1's supervision package -- token rejected or missing ROLE_ESUPERVISION__ESUPERVISION_UI" ;;
+    404) result='{"outcome":"retry","reason":"CRN not known to Supervision Packages (HTTP 404)"}' ;;
+    *)   result=$(jq -cn --arg c "$code" '{outcome: "retry", reason: ("supervision package: HTTP " + $c)}') ;;
+  esac
+  : > "$body"
 }
 
 # Turns a 200 into the fields we export, or a reason to leave the person out.
@@ -380,6 +428,8 @@ CLASSIFY='
   elif (.contactPreference == "PHONE" or .contactPreference == "EMAIL") | not
     then {outcome: "retry", reason: "unexpected contact preference \(.contactPreference)"}
   elif .details == null then {outcome: "retry", reason: "NDelius details unavailable"}
+  elif (.details | has("dateOfDeath")) | not then {outcome: "fatal", reason: "no dateOfDeath in the personal details"}
+  elif .details.dateOfDeath != null then {outcome: "excluded", reason: "deceased"}
   elif .contactPreference == "EMAIL" and (.details.email | trimmed) == "" then {outcome: "excluded", reason: "no_email"}
   elif .contactPreference == "PHONE" and (.details.mobile | trimmed) == "" then {outcome: "excluded", reason: "no_mobile"}
   else (if .contactPreference == "EMAIL" then (.details.email | email) else (.details.mobile | phone) end) as $c
@@ -404,10 +454,7 @@ for pass in $(seq 1 "$PASSES"); do
   body=$(mktemp "$WORK_DIR/.response.XXXXXX")
   while read -r crn; do
     [[ -n "$crn" ]] || continue
-    request "$crn"
-    if [[ "$code" == 401 ]]; then
-      new_token; request "$crn"   # the token expired mid-pass
-    fi
+    fetch "/v2/offenders/crn/$crn?include-personal-details=true"
     case "$code" in
       200)
         # -e: an empty body gives jq no input and so no output, which would
@@ -419,6 +466,11 @@ for pass in $(seq 1 "$PASSES"); do
       *)   result=$(jq -cn --arg c "$code" '{outcome: "retry", reason: ("HTTP " + $c)}') ;;
     esac
     : > "$body"
+    case "$(jq -r .outcome <<<"$result")" in
+      # An API from before dateOfDeath would otherwise pass everyone as alive.
+      fatal) die "the API in $ENV does not say whether people have died ($(jq -r .reason <<<"$result")) -- deploy the API with dateOfDeath first" ;;
+      ok) check_recall "$crn" ;;
+    esac
 
     jq -c --arg crn "$crn" --argjson pass "$pass" '{crn: $crn, pass: $pass} + .' <<<"$result" >> "$RESULTS"
     if [[ "$(jq -r .outcome <<<"$result")" == retry ]]; then

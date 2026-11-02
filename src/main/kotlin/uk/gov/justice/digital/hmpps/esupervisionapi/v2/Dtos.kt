@@ -23,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.ValidQuestionPar
 import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.util.UUID
 
 // ========================================
@@ -102,11 +103,11 @@ data class ContactDetails(
   )
   val contactSuspended: Boolean = false,
 
-//  @field:Schema(
-//    description = "Date the person was recorded as deceased in NDelius, if applicable (optional)",
-//    required = false,
-//  )
-//  val deceasedDate: LocalDate? = null,
+  @field:Schema(
+    description = "Date the person was recorded as deceased in NDelius; null if they are not (optional)",
+    required = false,
+  )
+  val dateOfDeath: LocalDate? = null,
 ) : INamedPerson
 
 /** Person's name from Ndilius */
@@ -362,6 +363,8 @@ data class OffenderSetupDto(
 
 /** V2 Checkin status */
 enum class CheckinStatus {
+  /** An upcoming check-in: not due yet, so the offender can't act on it. Becomes CREATED on its due date. */
+  SCHEDULED,
   CREATED,
   SUBMITTED,
   REVIEWED,
@@ -370,6 +373,7 @@ enum class CheckinStatus {
   ;
 
   fun canTransitionTo(newStatus: CheckinStatus): Boolean = when (this) {
+    SCHEDULED -> newStatus == CREATED || newStatus == CANCELLED
     CREATED -> newStatus == SUBMITTED || newStatus == CANCELLED || newStatus == EXPIRED
     SUBMITTED -> newStatus == REVIEWED || newStatus == CANCELLED
     REVIEWED -> false
@@ -753,6 +757,11 @@ data class EventDetailResponse(
   @Schema(description = "Offender UUID", required = false) val offenderUuid: UUID? = null,
   @Schema(description = "Timestamp", required = true) val timestamp: Instant,
   @Schema(description = "Sensitive", required = false) val sensitive: Boolean = false,
+  @Schema(
+    description = "When the check-in happens or happened: the scheduled date for scheduled and rescheduled events, the submission time for received events. Absent for every other event.",
+    required = false,
+  )
+  val dateTime: ZonedDateTime? = null,
 )
 
 enum class QuestionPolicy {

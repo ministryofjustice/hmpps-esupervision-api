@@ -162,6 +162,7 @@ class CurrentEventBackfillJob(
       val deactivated = offenderDeactivationService.deactivateOffender(
         offender = offender,
         reason = "Automatically deactivated: no active sentence in NDelius",
+        practitionerMessageFragment = null,
         contactDetails = details,
         auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       )

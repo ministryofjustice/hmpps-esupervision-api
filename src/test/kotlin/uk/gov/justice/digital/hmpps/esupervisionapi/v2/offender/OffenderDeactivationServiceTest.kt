@@ -61,7 +61,6 @@ class OffenderDeactivationServiceTest {
     override fun matches(arg: OffenderDeactivatedEvent): Boolean {
       var matches = arg.offenderId == offender.id
       matches = matches && arg.offender.crn == offender.crn
-      matches = matches && arg.offender.status == OffenderStatus.INACTIVE
       matches = matches && arg.reason == reason
       matches = matches && arg.auditEventType == auditEventType
       return matches
@@ -73,7 +72,7 @@ class OffenderDeactivationServiceTest {
     val offender = offender(OffenderStatus.VERIFIED)
     stubSuccessfulPersistence()
 
-    val result = service.deactivateOffender(offender, "no active events", contactDetails, sensitive = true)
+    val result = service.deactivateOffender(offender, "no active events", practitionerMessageFragment = null, contactDetails = contactDetails, sensitive = true)
 
     assertEquals(true, result)
     assertEquals(OffenderStatus.VERIFIED, offender.status)
@@ -89,7 +88,8 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender,
       "no active events",
-      contactDetails,
+      practitionerMessageFragment = null,
+      contactDetails = contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
     )
 
@@ -105,7 +105,8 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender,
       "contact suspended",
-      contactDetails,
+      practitionerMessageFragment = null,
+      contactDetails = contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
     )
 
@@ -124,6 +125,7 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender = offender,
       reason = "Automatically deactivated: the selected probation event is no longer active in NDelius",
+      practitionerMessageFragment = null,
       contactDetails = details,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
     )
@@ -145,7 +147,8 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(
       offender,
       "Selected event no longer active",
-      contactDetails,
+      practitionerMessageFragment = null,
+      contactDetails = contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
     )
 
@@ -162,7 +165,8 @@ class OffenderDeactivationServiceTest {
     val result = service.deactivateOffender(
       offender,
       "Selected event no longer active",
-      contactDetails,
+      practitionerMessageFragment = null,
+      contactDetails = contactDetails,
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
       expectedCurrentEvent = 101L,
     )
@@ -176,7 +180,7 @@ class OffenderDeactivationServiceTest {
   @Test
   fun `is a no-op when offender is not VERIFIED`() {
     val offender = offender(OffenderStatus.INACTIVE)
-    val result = service.deactivateOffender(offender, "in reset", contactDetails)
+    val result = service.deactivateOffender(offender, "in reset", practitionerMessageFragment = null, contactDetails = contactDetails)
     assertEquals(false, result)
   }
 
@@ -185,7 +189,7 @@ class OffenderDeactivationServiceTest {
     val offender = offender(OffenderStatus.VERIFIED)
     stubSuccessfulPersistence()
 
-    service.deactivateOffender(offender, "no active events")
+    service.deactivateOffender(offender, "no active events", null)
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
     val event = capturedEvent(offender, checkEvent = false)

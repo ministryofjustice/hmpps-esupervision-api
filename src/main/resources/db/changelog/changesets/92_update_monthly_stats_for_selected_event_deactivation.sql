@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset hmpps:87_update_monthly_stats_for_selected_event_deactivation splitStatements:false
+-- changeset hmpps:92_update_monthly_stats_for_selected_event_deactivation splitStatements:false
 -- Selected-event deactivations also reduce the active PoP count.
 CREATE OR REPLACE FUNCTION refresh_monthly_stats(
     p_month DATE,
@@ -51,7 +51,8 @@ users_by_provider AS (
     COUNT(*) FILTER (WHERE event_type IN ('OFFENDER_DEACTIVATED',
                                           'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED',
                                           'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS',
-                                          'OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE'))::BIGINT AS users_deactivated
+                                          'OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE',
+                                          'OFFENDER_AUTO_DEACTIVATED_INELIGIBLE'))::BIGINT AS users_deactivated
   FROM month_events
   WHERE provider_code <> excluded_provider_code
   GROUP BY provider_code

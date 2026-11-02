@@ -27,7 +27,10 @@ import java.util.UUID
  * @param deliusOutcomeCode the code sent to NDelius on the V2_SETUP_REMOVED domain event to convey
  *   why online check-ins were stopped. Null for event types that do not stop check-ins.
  */
-enum class OffenderAuditEventType(val deliusOutcomeCode: String? = null) {
+enum class OffenderAuditEventType(
+  val deliusOutcomeCode: String? = null,
+  val automated: Boolean = false,
+) {
   SETUP_COMPLETED,
 
   /** Practitioner-initiated deactivation via the deactivate endpoint. */
@@ -35,13 +38,16 @@ enum class OffenderAuditEventType(val deliusOutcomeCode: String? = null) {
   OFFENDER_REACTIVATED,
 
   /** Automated deactivation by a scheduled job because the POP's NDelius contact is suspended (in reset). */
-  OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED("ESPRS"),
+  OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED("ESPRS", automated = true),
 
   /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
-  OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA"),
+  OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA", automated = true),
 
   /** Automated deactivation by a scheduled job because the POP's selected event is no longer active in NDelius. */
-  OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE("ESPNA"),
+  OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE("ESPNA", automated = true),
+
+  /** Automated deactivation because an eligibility rule no longer passes. */
+  OFFENDER_AUTO_DEACTIVATED_INELIGIBLE(automated = true),
   ;
 
   /**
@@ -56,6 +62,7 @@ enum class OffenderAuditEventType(val deliusOutcomeCode: String? = null) {
       OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
       OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+      OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
       -> -1
     }
 }
@@ -243,6 +250,7 @@ class EventAuditService(
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
       -> buildAudit(
         eventType.name,
         offender.crn,

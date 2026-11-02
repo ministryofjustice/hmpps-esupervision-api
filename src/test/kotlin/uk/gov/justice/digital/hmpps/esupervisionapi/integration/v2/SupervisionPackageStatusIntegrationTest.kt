@@ -130,6 +130,51 @@ class SupervisionPackageStatusIntegrationTest : IntegrationTestBase() {
     expectOnSupervisionPackage(false)
   }
 
+  /** Y050768 is held in custody on its one sentence; this sets that custody's status and location. */
+  private fun custodyOf(status: String, location: String = "UNKNOW") = frontendContext("Y050768") {
+    val custody = (get("context").get("sentences") as ArrayNode).get(0).get("custody") as ObjectNode
+    custody.set("status", mapper.readTree("""{"code":"$status","description":"$status"}"""))
+    custody.set("location", mapper.readTree("""{"code":"$location","description":"$location"}"""))
+  }
+
+  private fun expectRecalled(expected: Boolean) = fetchStatus()
+    .expectStatus().isOk
+    .expectBody().jsonPath("$.recalled").isEqualTo(expected)
+
+  @Test
+  fun `custody status C is recalled`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(custodyOf("C")))
+
+    expectRecalled(true)
+  }
+
+  @Test
+  fun `recalled but unlawfully at large is not recalled`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(custodyOf("C", location = "UATLRG")))
+
+    expectRecalled(false)
+  }
+
+  @Test
+  fun `sentenced and in custody is not recalled`() {
+    upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(frontendContext("Y050768")))
+
+    expectRecalled(false)
+  }
+
+  @Test
+  fun `an undecided recall request is not recalled`() {
+    upstream.stubFor(
+      get(urlEqualTo(contextUrl)).willReturn(
+        frontendContext("Y051990") {
+          (get("context") as ObjectNode).set("recallStatus", mapper.readTree("""{"code":"REC01","description":"Recall Initiated"}"""))
+        },
+      ),
+    )
+
+    expectRecalled(false)
+  }
+
   @Test
   fun `a CRN Supervision Packages does not know is 404, not false`() {
     upstream.stubFor(get(urlEqualTo(contextUrl)).willReturn(aResponse().withStatus(HttpStatus.NOT_FOUND.value())))

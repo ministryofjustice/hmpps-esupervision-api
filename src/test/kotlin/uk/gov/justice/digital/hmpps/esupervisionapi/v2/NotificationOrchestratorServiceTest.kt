@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
@@ -55,6 +56,7 @@ class NotificationOrchestratorServiceTest {
     whenever(appConfig.checkinSubmitUrlV2(any())).thenReturn(URI("https://example.com/submitv2"))
     whenever(appConfig.checkinReviewUrlV2(any(), any())).thenReturn(URI("https://example.com/reviewv2"))
     whenever(appConfig.feedbackUrl()).thenReturn(URI("https://example.com/feedback"))
+    whenever(appConfig.contactsUrl(any())).thenReturn(URI("https://example.com/dashboard"))
 
     service = NotificationOrchestratorService(
       notificationPersistence,
@@ -704,6 +706,13 @@ class NotificationOrchestratorServiceTest {
     )
     service.sendDeactivationCompletedNotifications(event)
 
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
     verify(domainEventService).publishDomainEvent(
       eq(DomainEventType.V2_SETUP_REMOVED),
       eq(offender.uuid),
@@ -745,6 +754,8 @@ class NotificationOrchestratorServiceTest {
     val notifyId = UUID.randomUUID()
     whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
       .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), anyOrNull(), anyOrNull(), any(), any()))
+      .thenReturn(emptyList())
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
     whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(notifyId)
 
@@ -769,7 +780,14 @@ class NotificationOrchestratorServiceTest {
       eq("EMAIL"),
       eq("automatic-stopped-email-template"),
       eq(recipient),
-      eq(mapOf("name" to "John Smith")),
+      eq(
+        mapOf(
+          "name" to "John Smith",
+          "practitionerName" to "Jane",
+          "reason" to "eligibility rules",
+          "popDashboardUrl" to "https://example.com/dashboard",
+        ),
+      ),
       eq(notification.reference),
     )
     verify(notificationPersistence).updateSingleNotificationStatus(
@@ -845,6 +863,7 @@ class NotificationOrchestratorServiceTest {
       eventNumber,
       null,
       false,
+      deliusOutcomeCode = "ESPRC",
     )
     service.sendDeactivationCompletedNotifications(event)
 
@@ -854,7 +873,7 @@ class NotificationOrchestratorServiceTest {
       eq(offender.crn),
       any(),
       eq(null),
-      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = "ESPRS")),
+      eq(AdditionalInformation(eventNumber = eventNumber, setupId = null, outcomeCode = "ESPRC")),
     )
   }
 

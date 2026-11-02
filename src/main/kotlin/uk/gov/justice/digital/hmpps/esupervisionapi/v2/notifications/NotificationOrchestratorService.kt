@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
@@ -22,7 +23,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -199,31 +199,49 @@ class NotificationOrchestratorService(
       additionalInformation = AdditionalInformation(
         eventNumber = event.activeEventNumber,
         setupId = event.setup?.setupId,
-        outcomeCode = event.auditEventType.deliusOutcomeCode,
+        outcomeCode = event.deliusOutcomeCode ?: event.auditEventType.deliusOutcomeCode,
       ),
     )
 
     if (details != null) {
       try {
         val personalisation =
-          mapOf(
+          mutableMapOf(
             "name" to "${details.name.forename} ${details.name.surname}",
+            "practitionerName" to (details.practitioner?.name?.forename ?: "Practitioner"),
           )
+        if (event.auditEventType.automated) {
+          personalisation["reason"] = event.practitionerMessageFragment ?: event.reason ?: "eligibility rules"
+          personalisation["popDashboardUrl"] = appConfig.contactsUrl(offender.crn).toString()
+        }
 
-        val notificationsWithRecipients =
+        val notificationsWithRecipients = mutableListOf<NotificationWithRecipient>()
+        notificationsWithRecipients.addAll(
           notificationPersistence.buildOffenderNotifications(
             offenderId = event.offenderId,
             crn = offender.crn,
             contactPreference = offender.contactPreference,
             contactDetails = details,
-            notificationType = when (event.auditEventType) {
-              OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
-              OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
-              OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
-              -> NotificationType.OffenderCheckinsStoppedAuto
-              else -> NotificationType.OffenderCheckinsStopped
+            notificationType = if (event.auditEventType.automated) {
+              NotificationType.OffenderCheckinsStoppedAuto
+            } else {
+              NotificationType.OffenderCheckinsStopped
             },
+          ),
+        )
+
+        if (event.auditEventType.automated) {
+          notificationsWithRecipients.addAll(
+            notificationPersistence.buildPractitionerNotifications(
+              offenderId = event.offenderId,
+              crn = offender.crn,
+              contactDetails = details.practitioner,
+              checkin = null,
+              notificationType = NotificationType.PractitionerCheckinsStoppedAuto,
+              practitionerId = offender.practitionerId,
+            ),
           )
+        }
 
         processAndSendNotifications(notificationsWithRecipients, personalisation)
       } catch (e: Exception) {
@@ -361,7 +379,7 @@ class NotificationOrchestratorService(
     } else {
       activeEventNumber(event, checkin.personalDetails, appConfig.esup2305DeliusEventSelection)
     }
-    event.copy(currentEvent = eventNumber).publish(domainEventService)
+    if (!checkinEventsRelayed()) event.copy(currentEvent = eventNumber).publish(domainEventService)
 
     if (event.checkin.personalDetails == null) {
       LOGGER.debug("Skipping checkin submitted notifications for checkin {}: personal details not found", event.checkin.uuid)
@@ -433,7 +451,9 @@ class NotificationOrchestratorService(
   }
 
   /** Send notifications for checkin reviewed event */
-  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) = event.publish(domainEventService)
+  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) {
+    if (!checkinEventsRelayed()) event.publish(domainEventService)
+  }
 
   /** Send notifications for checkin expired event */
   fun sendCheckinExpiredNotifications(
@@ -454,15 +474,17 @@ class NotificationOrchestratorService(
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
 
-    val eventNumber = checkin.offender.currentEvent
-      ?: activeEventNumber(checkin.offender, details, appConfig.esup2305DeliusEventSelection)
-    domainEventService.publishDomainEvent(
-      eventType = DomainEventType.V2_CHECKIN_EXPIRED,
-      uuid = checkin.uuid,
-      crn = checkin.offender.crn,
-      description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
-      additionalInformation = AdditionalInformation(eventNumber = eventNumber),
-    )
+    if (!checkinEventsRelayed()) {
+      val eventNumber = checkin.offender.currentEvent
+        ?: activeEventNumber(checkin.offender, details, appConfig.esup2305DeliusEventSelection)
+      domainEventService.publishDomainEvent(
+        eventType = DomainEventType.V2_CHECKIN_EXPIRED,
+        uuid = checkin.uuid,
+        crn = checkin.offender.crn,
+        description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
+        additionalInformation = AdditionalInformation(eventNumber = eventNumber),
+      )
+    }
   }
 
   private fun checkinExpiredPersonalisationDetails(
@@ -475,7 +497,15 @@ class NotificationOrchestratorService(
   )
 
   /** Send notifications for checkin updated event */
-  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) = event.publish(domainEventService)
+  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
+    if (!checkinEventsRelayed()) event.publish(domainEventService)
+  }
+
+  /**
+   * ESUP-2223: with the feature on, check-in events for NDelius are recorded with the change and
+   * published in order by CheckinDeliusEventRelayJob instead of here.
+   */
+  private fun checkinEventsRelayed() = appConfig.enabledFeatures.contains(Feature.ESUP_2223)
 
   /** Send reminder for practitioner to add custom questions */
   fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {

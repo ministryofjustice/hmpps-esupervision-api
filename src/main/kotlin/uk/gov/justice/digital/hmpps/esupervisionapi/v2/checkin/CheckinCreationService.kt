@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -62,7 +63,7 @@ class CheckinCreationService(
     offenderUuid: UUID,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val offender =
       offenderRepository.findByUuid(offenderUuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $offenderUuid")
@@ -83,7 +84,7 @@ class CheckinCreationService(
     offender: Offender,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
     return createCheckinForOffender(offender, dueDate, createdBy, contactDetails)
@@ -102,14 +103,15 @@ class CheckinCreationService(
     dueDate: LocalDate,
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val savedEvent = offender.currentEvent
     if (savedEvent != null && contactDetails.events.none { it.number == savedEvent }) {
       val reason = CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE
       offenderDeactivationService.deactivateOffender(
-        offender,
-        reason.auditNote,
-        contactDetails,
+        offender = offender,
+        reason = reason.auditNote,
+        practitionerMessageFragment = null,
+        contactDetails = contactDetails,
         auditEventType = reason.auditEventType,
         expectedCurrentEvent = savedEvent,
       )
@@ -134,17 +136,17 @@ class CheckinCreationService(
       checkinMode = offender.mode,
     )
 
-    checkinPersistenceService.checkinCreation(checkin, event)
-
+    val finalisedEvent = checkinPersistenceService.checkinCreation(checkin, event)
     LOGGER.info(
-      "Created checkin {} for offender CRN={} with due date {} by {}",
+      "{} checkin {} for offender CRN={} with due date {} by {}",
+      if (finalisedEvent != null) "Created" else "Did not create",
       checkin.uuid,
       offender.crn,
       dueDate,
       createdBy,
     )
 
-    return checkin
+    return finalisedEvent?.let { checkinRepository.findById(it.checkinId).orElseThrow() }
   }
 
   /**
@@ -153,16 +155,18 @@ class CheckinCreationService(
    * @throws BatchCheckinCreationException
    */
   @Transactional
-  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>) {
-    if (checkins.isEmpty()) return
+  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>): List<CheckinCreatedEvent> {
+    if (checkins.isEmpty()) return listOf()
+    val created = mutableListOf<CheckinCreatedEvent>()
     try {
       checkins.forEach { (_, event) -> resolveEventNumber(event.currentEvent, event.checkin.personalDetails) }
       for ((checkin, event) in checkins) {
-        checkinPersistenceService.checkinCreation(checkin, event)
+        checkinPersistenceService.checkinCreation(checkin, event)?.let(created::add)
       }
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)
     }
+    return created
   }
 
   private fun resolveEventNumber(currentEvent: Long?, contactDetails: ContactDetails?): Long? {

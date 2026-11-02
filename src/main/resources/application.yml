@@ -40,6 +40,9 @@ app:
       cron: "0 0 9 * * *"  # Every day at 9 AM (matches V1 timing)
       # we process offender records in chunks
       chunk-size: 100
+    v2-offender-eligibility-sync:
+      # The NDelius batch endpoint supports at most 500 CRNs per request.
+      chunk-size: 100
     v2-checkin-reminder:
       cron: "0 0 9 * * *"  # Same time as initial checkin notification
       chunk-size: 100
@@ -57,6 +60,15 @@ app:
     current-event-backfill:
       chunk-size: ${CURRENT_EVENT_BACKFILL_CHUNK_SIZE:100}
       dry-run: ${CURRENT_EVENT_BACKFILL_DRY_RUN:true}
+    # ESUP-2223: publishes checkin_delius_event_v2 rows to NDelius in order. An event waits until
+    # the previous event for the same check-in was published at least min-gap ago: the NDelius
+    # queue is unordered and only retries a message a few times, so an event that overtakes its
+    # predecessor would fail there.
+    checkin-delius-event-relay:
+      enabled: true
+      fixed-delay: PT15S
+      batch-size: 500
+      min-gap: PT60S
     # Resend check-in answers to NDelius for check-ins whose contact note was created
     # without them (ESUP-1956, pre-commit event publish bug). The work list is seeded
     # manually into the checkin_note_resend table. Disabled by default; enable per env
@@ -96,6 +108,8 @@ app:
     esup-2082: ${APP_FEATURES_ESUP_2082:false}
     # ESUP-2305: enable Delius event / sentence selection during setup and reactivation
     esup-2305: ${APP_FEATURES_ESUP_2305:false}
+    # ESUP-2223: record the next upcoming check-in in NDelius (scheduled / link / cancelled events)
+    esup-2223: ${APP_FEATURES_ESUP_2223:false}
     # ESUP-2186: from this ISO-8601 date-time (with offset) read Tier API v3 instead of v2. Blank = v2.
     esup-2186-tier-v3-from: ${APP_FEATURES_ESUP_2186_TIER_V3_FROM:}
   offender-survey:
@@ -129,6 +143,12 @@ app:
 spring:
   application:
     name: esupervision-api
+  task:
+    execution:
+      shutdown:
+        # Bounded shutdown fallback; batch jobs explicitly drain offender events before completion.
+        await-termination: true
+        await-termination-period: 5m
   codec:
     max-in-memory-size: 10MB
   cache:
@@ -270,6 +290,7 @@ notify:
     PRACTITIONER_CHECKIN_MISSED: c1bb3afc-31ce-4e83-a97f-b6e5d686d702
     PRACTITIONER_CUSTOM_QUESTION_REMINDER: 00EED1B5-5578-4C5E-B705-E874C287DAAD #  fake, no SMS template for practitioners
     PRACTITIONER_INVITE_ISSUE_GENERIC: 0bef5b11-9261-4c98-9580-92f2f3ecd27d
+    PRACTITIONER_CHECKINS_STOPPED_AUTO: 77d312c7-ca6a-47b4-95d6-471ff89dab17 #  fake, no SMS template for practitioners
     POP_REGISTRATION_CONFIRMATION: 35274201-ecef-493b-b4e1-86e60d071142
     POP_REGISTRATION_CONFIRMATION_AD_HOC: 4251c103-540e-4acd-a5d4-da2a62074bed
     POP_SUBMISSION_CONFIRMATION: 30e5881a-f7f5-427b-a46e-980f3089aec4
@@ -289,6 +310,7 @@ notify:
     PRACTITIONER_CHECKIN_MISSED: a65ff803-22f5-4f8b-947e-10535ad24bc5
     PRACTITIONER_INVITE_ISSUE_GENERIC: 6054dbfb-5d43-4d23-8ecf-138216f8b629
     PRACTITIONER_CUSTOM_QUESTION_REMINDER: 8140b40b-8339-486d-b95a-e28156766b09
+    PRACTITIONER_CHECKINS_STOPPED_AUTO: 229bc1fb-b79f-4fab-a29d-ddcca579abce
     POP_REGISTRATION_CONFIRMATION: 7e63c01c-05df-4b2c-a77c-57d2412793a1
     POP_REGISTRATION_CONFIRMATION_AD_HOC: 2c2b25c8-ef01-4b5f-98ab-093eecf70635
     POP_SUBMISSION_CONFIRMATION: df4b43f5-767b-4f0f-b248-615554431384

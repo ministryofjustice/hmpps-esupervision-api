@@ -12,6 +12,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -294,7 +295,7 @@ class CheckinServiceTest {
       assertEquals(CheckinStatus.SUBMITTED, service.submitCheckin(checkin.uuid, request).status)
       verify(checkinPersistenceService).checkinSubmission(any(), any())
     }
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any())
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
   @Test
@@ -329,9 +330,12 @@ class CheckinServiceTest {
     verify(offenderDeactivationService).deactivateOffender(
       offender = eq(offender),
       reason = eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      practitionerMessageFragment = eq(null),
       contactDetails = eq(contactDetails),
       sensitive = eq(false),
       auditEventType = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      expectedCurrentEvent = eq(1L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
     verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
   }
@@ -1468,10 +1472,12 @@ class CheckinServiceTest {
     verify(offenderDeactivationService).deactivateOffender(
       eq(offender),
       eq(CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditNote),
+      anyOrNull<String>(),
       eq(details),
       eq(false),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
       eq(1L),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).createCheckin(any(), any(), any())
   }
@@ -1490,7 +1496,7 @@ class CheckinServiceTest {
       service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, LocalDate.now(clock)))
     }
 
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), any(), any(), any(), any())
+    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(checkinCreationService, never()).createCheckin(any(), any(), any())
   }
 
@@ -1507,6 +1513,38 @@ class CheckinServiceTest {
     service.createCheckinByCrn(CreateCheckinByCrnRequest("PRACT001", offender.crn, dueDate))
 
     verify(checkinCreationService).createCheckin(offender.uuid, dueDate, "PRACT001")
+  }
+
+  @Test
+  fun `createCheckin - returns 422 when a CREATED check-in already exists for the due date`() {
+    val dueDate = LocalDate.now(clock)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001")).thenReturn(null)
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, dueDate))
+    }
+
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, ex.statusCode)
+  }
+
+  @Test
+  fun `createCheckinByCrn - returns 422 when a CREATED check-in already exists for the due date`() {
+    val dueDate = LocalDate.now(clock)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001")).thenReturn(null)
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.createCheckinByCrn(CreateCheckinByCrnRequest("PRACT001", offender.crn, dueDate))
+    }
+
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, ex.statusCode)
   }
 
   private fun contactDetails(offender: Offender) = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(

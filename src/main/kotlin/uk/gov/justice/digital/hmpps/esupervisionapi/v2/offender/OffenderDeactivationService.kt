@@ -55,25 +55,12 @@ class OffenderDeactivationService(
   fun deactivateOffender(
     offender: Offender,
     reason: String,
+    practitionerMessageFragment: String?,
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-  ): Boolean = deactivateOffender(
-    offender = offender,
-    reason = reason,
-    contactDetails = contactDetails,
-    sensitive = sensitive,
-    auditEventType = auditEventType,
-    expectedCurrentEvent = offender.currentEvent,
-  )
-
-  fun deactivateOffender(
-    offender: Offender,
-    reason: String,
-    contactDetails: ContactDetails? = null,
-    sensitive: Boolean = false,
-    auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
-    expectedCurrentEvent: Long?,
+    expectedCurrentEvent: Long? = offender.currentEvent,
+    deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
   ): Boolean {
     if (offender.status != OffenderStatus.VERIFIED) {
       LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
@@ -103,8 +90,40 @@ class OffenderDeactivationService(
         reason = reason,
         sensitive = sensitive,
         expectedCurrentEvent = expectedCurrentEvent,
+        deliusOutcomeCode = deliusOutcomeCode ?: auditEventType.deliusOutcomeCode,
+        practitionerMessageFragment = practitionerMessageFragment,
       )
     }
+  }
+
+  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
+    if (!canDeactivate(offender)) return offender
+
+    val updatedAt = clock.instant()
+    val checkEvent = event.auditEventType in setOf(
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+    )
+    val deactivated = offenderPersistenceService.offenderDeactivation(
+      offenderId = offender.id,
+      expectedCurrentEvent = event.expectedCurrentEvent,
+      checkEvent = checkEvent,
+      updatedAt = updatedAt,
+    ) { persisted ->
+      event.copy(
+        offender = persisted.copy(personalDetails = event.offender.personalDetails, updatedAt = updatedAt),
+        expectedCurrentEvent = event.expectedCurrentEvent,
+      )
+    }
+    return offender.takeIf { deactivated }
+  }
+
+  private fun canDeactivate(offender: Offender): Boolean {
+    if (offender.status != OffenderStatus.VERIFIED) {
+      LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
+      return false
+    }
+    return true
   }
 
   companion object {

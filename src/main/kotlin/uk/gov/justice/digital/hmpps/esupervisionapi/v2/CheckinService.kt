@@ -232,6 +232,7 @@ class CheckinService(
       offenderDeactivationService.deactivateOffender(
         offender = checkin.offender,
         reason = ineligibility.auditNote,
+        practitionerMessageFragment = null,
         contactDetails = contactDetails,
         auditEventType = ineligibility.auditEventType,
       )
@@ -951,9 +952,10 @@ class CheckinService(
     if (savedEvent != null && personalDetails.events.none { it.number == savedEvent }) {
       val reason = CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE
       offenderDeactivationService.deactivateOffender(
-        offender,
-        reason.auditNote,
-        personalDetails,
+        offender = offender,
+        reason = reason.auditNote,
+        practitionerMessageFragment = null,
+        contactDetails = personalDetails,
         auditEventType = reason.auditEventType,
         expectedCurrentEvent = savedEvent,
       )
@@ -968,7 +970,8 @@ class CheckinService(
       createdBy = requestedBy,
     )
 
-    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    return checkin?.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Failed to create checkin, a check-in possibly exists for given due date")
   }
 
   fun sendInvite(uuid: UUID, request: CheckinNotificationRequest): CheckinDto {

@@ -15,11 +15,13 @@ class AppConfig(
   @Value("\${app.features.esup-1763}") val esup1763RemoveSnapshots: Boolean,
   @Value($$"${app.features.esup-2082:false}") val esup2082NewEligibilityRules: Boolean,
   @Value($$"${app.features.esup-2305:false}") val esup2305DeliusEventSelection: Boolean,
+  @Value($$"${app.features.esup-2223:false}") val esup2223UpcomingCheckins: Boolean,
   val enabledFeatures: Set<Feature> = listOfNotNull(
     if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
     if (esup1763RemoveSnapshots) Feature.ESUP_1763 else null,
     if (esup2082NewEligibilityRules) Feature.ESUP_2082 else null,
     if (esup2305DeliusEventSelection) Feature.ESUP_2305 else null,
+    if (esup2223UpcomingCheckins) Feature.ESUP_2223 else null,
   ).toSet(),
 ) {
 
@@ -58,6 +60,12 @@ class AppConfig(
 
   fun addQuestionsUrl(offenderUuid: UUID, crn: CRN): URI = URI(
     "$mpopUrl/case/$crn/appointments/check-in/manage/$offenderUuid/questions/start",
+  )
+
+  // example: https://manage-people-on-probation-dev.hmpps.service.justice.gov.uk/case/Y083911/activity-log
+  fun contactsUrl(crn: CRN): URI = URI(
+    "$mpopUrl/case/$crn/activity-log",
+
   )
 
   fun mediaProxyUrl(): URI = URI("$hostedAt/resolve")

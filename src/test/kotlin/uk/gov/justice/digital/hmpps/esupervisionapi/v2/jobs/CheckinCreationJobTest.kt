@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -86,7 +87,28 @@ class CheckinCreationJobTest {
 
     verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any())
     verify(checkinCreationService).createCheckins(any())
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any(), any())
+    verify(
+      deactivationService,
+      never(),
+    ).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+  }
+
+  @Test
+  fun `creating checkins for a full page does not abort processing the next page`() {
+    val offenders = (1..101).map { offender("X${it.toString().padStart(6, '0')}") }
+    stubEligible(
+      offenders,
+      offenders.associate { it.crn to details(it.crn, events = listOf(anEvent)) },
+    )
+
+    job.process()
+
+    verify(offenderRepository).findEligibleForCheckinCreation(any(), any(), eq(100), eq(99L))
+    verify(ndiliusApiClient).getContactDetailsForMultiple(listOf(offenders.last().crn))
+    verify(checkinCreationService, times(2)).createCheckins(any())
+    verify(checkinCreationService).createCheckins(
+      argThat { size == 1 && single().second.checkin.crn == offenders.last().crn },
+    )
   }
 
   @Test
@@ -102,10 +124,12 @@ class CheckinCreationJobTest {
     verify(deactivationService).deactivateOffender(
       eq(offender),
       any(),
-      any(),
+      anyOrNull(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
       expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
@@ -120,10 +144,12 @@ class CheckinCreationJobTest {
     verify(deactivationService).deactivateOffender(
       eq(offender),
       any(),
-      any(),
+      anyOrNull(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
       expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
@@ -139,9 +165,11 @@ class CheckinCreationJobTest {
       same(offender),
       eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
       anyOrNull(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
       expectedCurrentEvent = eq(1L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
@@ -157,7 +185,7 @@ class CheckinCreationJobTest {
         eligible.crn to details(eligible.crn, events = listOf(anEvent)),
       ),
     )
-    whenever(deactivationService.deactivateOffender(any(), any(), any(), any(), any(), anyOrNull()))
+    whenever(deactivationService.deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull()))
       .thenThrow(RuntimeException("boom"))
 
     job.process()
@@ -165,7 +193,7 @@ class CheckinCreationJobTest {
     // the failure on the ineligible offender is isolated; the eligible offender is still processed.
     // NB: V2BaseEntity.equals() is id-based and unsaved test offenders share id=0, so match by
     // reference identity (same()) rather than eq() to assert the correct offender each time.
-    verify(deactivationService).deactivateOffender(same(ineligible), any(), any(), any(), any(), anyOrNull())
+    verify(deactivationService).deactivateOffender(same(ineligible), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(checkinCreationService, times(1)).prepareCheckinForOffender(any(), any())
   }
 
@@ -177,7 +205,7 @@ class CheckinCreationJobTest {
 
     job.process()
 
-    verify(deactivationService, never()).deactivateOffender(any(), any(), any(), any(), any(), any())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
   }
 
@@ -196,8 +224,10 @@ class CheckinCreationJobTest {
       override val currentEvent: Long?,
     ) : OffenderRepository.IOffenderCheckinCreationInfo
     whenever(offenderRepository.findEligibleForCheckinCreation(any(), any(), any(), anyOrNull()))
-      .thenReturn(
-        offenders.map {
+      .thenAnswer { invocation ->
+        val limit = invocation.getArgument<Int>(2)
+        val lastOffenderId = invocation.getArgument<Long?>(3)
+        offenders.filter { lastOffenderId == null || it.id > lastOffenderId }.take(limit).map {
           CheckinCreationInfo(
             it.id,
             it.crn,
@@ -206,10 +236,12 @@ class CheckinCreationJobTest {
             it.mode,
             it.currentEvent,
           )
-        },
-      )
+        }
+      }
     whenever(offenderRepository.getReferenceById(any())).thenReturn(mock<Offender>())
-    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(detailsByCrn.values.toList())
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenAnswer {
+      it.getArgument<List<String>>(0).mapNotNull(detailsByCrn::get)
+    }
     whenever(checkinCreationService.prepareCheckinForOffender(any(), any())).thenAnswer { arg ->
       val offender = arg.getArgument<Offender>(0)
       OffenderCheckin(
@@ -224,17 +256,23 @@ class CheckinCreationJobTest {
     whenever(checkinCreationService.createCheckins(any())).thenAnswer {
       it.getArgument<List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>>(
         0,
-      )
+      ).mapIndexed { index, (checkin, event) ->
+        ReflectionTestUtils.setField(checkin, "id", index + 1L)
+        event.finalise(checkin, index + 1L)
+      }
     }
     whenever(
       deactivationService.deactivateOffender(
         any(),
         any(),
+        anyOrNull(),
+        anyOrNull(),
         any(),
-        any(),
-        any(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull<String>(),
       ),
-    ).thenAnswer { it.getArgument<Offender>(0) }
+    ).thenReturn(true)
   }
 
   private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(
