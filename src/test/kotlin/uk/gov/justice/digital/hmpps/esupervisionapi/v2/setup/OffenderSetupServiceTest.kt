@@ -700,7 +700,7 @@ class OffenderSetupServiceTest {
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, null, true)
 
-      verify(offenderRepository).save(offender)
+      verify(offenderRepository).saveAndFlush(offender)
       verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
     }
 
@@ -712,7 +712,7 @@ class OffenderSetupServiceTest {
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, true)
 
-      verify(offenderRepository).save(offender)
+      verify(offenderRepository).saveAndFlush(offender)
       verify(checkinCreationService, times(1)).createCheckinForOffender(any(), any(), any(), anyOrNull())
     }
 
@@ -723,7 +723,7 @@ class OffenderSetupServiceTest {
       val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock)
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, false)
-      verify(offenderRepository, times(1)).save(offender)
+      verify(offenderRepository, times(1)).saveAndFlush(offender)
       verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
     }
   }

@@ -73,7 +73,8 @@ class OffenderSetupPersistenceService(
     require(offender.status == OffenderStatus.VERIFIED) { "Offender must be in VERIFIED status" }
     require(!createCheckin || offender.firstCheckin == LocalDate.now(clock)) { "createCheckin=true requires offender.firstCheckin to be today" }
 
-    offenderRepository.save(offender)
+    // flushed so creating the check-in sees the offender as VERIFIED
+    offenderRepository.saveAndFlush(offender)
     val checkin = if (createCheckin && contactDetails != null) {
       checkinCreationService.createCheckinForOffender(
         offender,
