@@ -594,7 +594,6 @@ class NotificationOrchestratorService(
             personalisation = personalisation,
             reference = notification.reference,
           )
-        // accepted by Notify, even if recording that below fails
         sent.add(notification)
 
         LOGGER.info(
@@ -605,11 +604,7 @@ class NotificationOrchestratorService(
           notifyId,
         )
 
-        notificationPersistence.updateSingleNotificationStatus(
-          notification = notification,
-          success = true,
-          notifyId = notifyId,
-        )
+        recordNotificationStatus(wrapper, success = true, notifyId = notifyId)
       } catch (e: Exception) {
         if (NOTIFY_OUTCOME_UNKNOWN.test(e)) maybeSent.add(notification)
         val sanitized = PiiSanitizer.sanitizeException(e, wrapper.offender?.crn, null)
@@ -620,8 +615,8 @@ class NotificationOrchestratorService(
           sanitized,
         )
 
-        notificationPersistence.updateSingleNotificationStatus(
-          notification = notification,
+        recordNotificationStatus(
+          wrapper,
           success = false,
           notifyId = UUID.randomUUID(),
           error = PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", wrapper.offender?.crn, null),
@@ -629,6 +624,24 @@ class NotificationOrchestratorService(
       }
     }
     return SendOutcome(sent, maybeSent)
+  }
+
+  /**
+   * The outcome is what Notify did, so failing to record it doesn't change it: a sent notification
+   * isn't recorded as failed, and a rejected invite still fails its check-in's link.
+   */
+  private fun recordNotificationStatus(wrapper: NotificationWithRecipient, success: Boolean, notifyId: UUID, error: String? = null) {
+    try {
+      notificationPersistence.updateSingleNotificationStatus(wrapper.notification, success, notifyId, error)
+    } catch (e: Exception) {
+      LOGGER.error(
+        "Failed to record {} {} notification as {}: {}",
+        wrapper.notification.channel,
+        wrapper.notification.recipientType,
+        if (success) "sent" else "failed",
+        PiiSanitizer.sanitizeException(e, wrapper.offender?.crn, null),
+      )
+    }
   }
 
   companion object {
