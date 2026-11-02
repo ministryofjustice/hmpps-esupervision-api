@@ -32,6 +32,7 @@ class CheckinPersistenceService(
   @Transactional
   fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
     require(checkin.status == CheckinStatus.CREATED)
+    requireOnlyInsertedFieldsSet(checkin)
     val id = checkinRepository.maybeInsert(checkin)
     if (id != null) {
       val finalisedEvent = event.finalise(checkin, id)
@@ -41,6 +42,36 @@ class CheckinPersistenceService(
       return finalisedEvent
     }
     return null
+  }
+
+  /**
+   * [OffenderCheckinRepository.maybeInsert] writes only uuid, offender, status, due date, created at and
+   * created by. Anything else set on a new check-in would be silently dropped, so refuse it: extend
+   * the INSERT before setting another field at creation time.
+   */
+  private fun requireOnlyInsertedFieldsSet(checkin: OffenderCheckin) {
+    val unsupported = buildList {
+      if (checkin.id != 0L) add("id")
+      if (checkin.surveyResponse != null) add("surveyResponse")
+      if (checkin.submittedAt != null) add("submittedAt")
+      if (checkin.reviewStartedAt != null) add("reviewStartedAt")
+      if (checkin.reviewStartedBy != null) add("reviewStartedBy")
+      if (checkin.reviewedAt != null) add("reviewedAt")
+      if (checkin.reviewedBy != null) add("reviewedBy")
+      if (checkin.checkinStartedAt != null) add("checkinStartedAt")
+      if (checkin.autoIdCheck != null) add("autoIdCheck")
+      if (checkin.autoIdCheckScore != null) add("autoIdCheckScore")
+      if (checkin.livenessResult != null) add("livenessResult")
+      if (checkin.livenessConfidence != null) add("livenessConfidence")
+      if (checkin.livenessEnabled) add("livenessEnabled")
+      if (checkin.manualIdCheck != null) add("manualIdCheck")
+      if (checkin.riskFeedback != null) add("riskFeedback")
+      if (checkin.sensitive) add("sensitive")
+      if (checkin.imageDeletedAt != null) add("imageDeletedAt")
+      if (checkin.linkStatus != null) add("linkStatus")
+      if (checkin.linkStatusUpdatedAt != null) add("linkStatusUpdatedAt")
+    }
+    require(unsupported.isEmpty()) { "Check-in creation does not persist $unsupported; extend OffenderCheckinRepository.maybeInsert" }
   }
 
   @Transactional

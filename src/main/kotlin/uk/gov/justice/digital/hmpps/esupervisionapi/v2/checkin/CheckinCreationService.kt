@@ -143,10 +143,7 @@ class CheckinCreationService(
     val created = mutableListOf<CheckinCreatedEvent>()
     try {
       for ((checkin, event) in checkins) {
-        val event = checkinPersistenceService.checkinCreation(checkin, event)
-        if (event != null) {
-          created.add(event)
-        }
+        checkinPersistenceService.checkinCreation(checkin, event)?.let(created::add)
       }
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)

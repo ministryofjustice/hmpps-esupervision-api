@@ -10,12 +10,14 @@
 -- GROUP BY offender_id, due_date
 -- HAVING COUNT(*) > 1;
 
+-- Keep the oldest CREATED check-in for each offender and due date: it is the one the offender was
+-- most likely sent a link for, and the one any pending custom questions were bound to on insert.
 WITH ranked AS (
     SELECT
         id,
         ROW_NUMBER() OVER (
             PARTITION BY offender_id, due_date
-            ORDER BY created_at DESC, id DESC
+            ORDER BY created_at ASC, id ASC
             ) AS position
     FROM offender_checkin_v2
     WHERE status = 'CREATED'
