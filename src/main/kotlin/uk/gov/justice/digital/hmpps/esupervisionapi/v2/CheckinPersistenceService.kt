@@ -60,6 +60,10 @@ class CheckinPersistenceService(
       checkin.linkStatusUpdatedAt = clock.instant()
     }
     val savedCheckin = checkinRepository.saveAndFlush(checkin)
+    if (!notScheduledBefore && upcomingCheckinService.enabled()) {
+      // the link columns are only written on insert (see OffenderCheckin.linkStatus)
+      checkinRepository.markLinkSending(savedCheckin.id, savedCheckin.linkStatusUpdatedAt!!)
+    }
     if (notScheduledBefore && upcomingCheckinService.enabled()) {
       // the event's number is the one on record, which can be unset when the caller has NDelius's
       val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(savedCheckin.offender, it) }

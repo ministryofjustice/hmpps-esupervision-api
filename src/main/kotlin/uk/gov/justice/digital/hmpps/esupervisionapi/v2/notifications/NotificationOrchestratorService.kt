@@ -340,7 +340,7 @@ class NotificationOrchestratorService(
       val personalisation = mapOf(
         "practitionerName" to "${practitioner.name.forename} ${practitioner.name.surname}",
         "name" to "${details.name.forename} ${details.name.surname}",
-        "popDashboardUrl" to appConfig.dashboardUrl().toString(),
+        "popDashboardUrl" to appConfig.contactsUrl(event.checkin.crn).toString(),
       )
       val notifications = notificationPersistence.buildPractitionerNotifications(
         offenderId = event.offenderId,

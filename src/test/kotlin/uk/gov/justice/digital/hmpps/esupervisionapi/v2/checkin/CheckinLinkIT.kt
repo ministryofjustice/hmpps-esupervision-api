@@ -108,9 +108,42 @@ class CheckinLinkIT : IntegrationTestBase() {
   fun `a check-in created with the feature on is waiting for its link`() {
     val offender = saveOffender()
 
-    val checkin = transactionTemplate.execute { checkinCreationService.createCheckinForOffender(offender, today, "PRACT001", contactDetails(offender)) }!!
+    // rolled back: committing would send the invite, which marks the link sent or failed
+    transactionTemplate.executeWithoutResult { status ->
+      val checkin = checkinCreationService.createCheckinForOffender(offender, today, "PRACT001", contactDetails(offender))
 
-    assertThat(checkinRepository.findByUuid(checkin.uuid).get().linkStatus).isEqualTo(CheckinLinkStatus.SENDING)
+      assertThat(checkinRepository.findByUuid(checkin.uuid).get().linkStatus).isEqualTo(CheckinLinkStatus.SENDING)
+      status.setRollbackOnly()
+    }
+  }
+
+  @Test
+  fun `an activated upcoming check-in is waiting for its link`() {
+    val offender = saveOffender()
+    val scheduled = saveCheckin(offender, linkStatus = null, status = CheckinStatus.SCHEDULED)
+
+    // rolled back: committing would send the invite, which marks the link sent or failed
+    transactionTemplate.executeWithoutResult { status ->
+      val checkin = checkinCreationService.createCheckinForOffender(offender, today, "PRACT001", contactDetails(offender))
+
+      assertThat(checkin.uuid).isEqualTo(scheduled.uuid)
+      assertThat(jdbcTemplate.queryForObject("select link_status::text from offender_checkin_v2 where id = ?", String::class.java, scheduled.id)).isEqualTo("SENDING")
+      status.setRollbackOnly()
+    }
+  }
+
+  @Test
+  fun `saving a check-in read before its link was sent doesn't undo it`() {
+    val checkin = saveCheckin(saveOffender(), CheckinLinkStatus.SENDING)
+    val stale = checkinRepository.findById(checkin.id).get()
+    linkService.linkSent(checkin.id, "SMS")
+
+    stale.checkinStartedAt = clock.instant()
+    checkinRepository.save(stale)
+
+    val saved = checkinRepository.findById(checkin.id).get()
+    assertThat(saved.checkinStartedAt).isNotNull()
+    assertThat(saved.linkStatus).isEqualTo(CheckinLinkStatus.SENT)
   }
 
   @Test
