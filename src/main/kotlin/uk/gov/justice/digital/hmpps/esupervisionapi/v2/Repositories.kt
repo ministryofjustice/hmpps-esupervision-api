@@ -397,6 +397,14 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Modifying
   fun markLinkFailed(id: Long, at: Instant): Int
 
+  /** An activated upcoming check-in's invite is about to be sent. */
+  @Query(
+    "update offender_checkin_v2 set link_status = 'SENDING', link_status_updated_at = :at where id = :id",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun markLinkSending(id: Long, at: Instant): Int
+
   /** Offenders whose upcoming (SCHEDULED) check-in's due date has passed without it being created. */
   @Query("SELECT c.offender.id FROM OffenderCheckin c WHERE c.status = 'SCHEDULED' AND c.dueDate < :today")
   fun findOffenderIdsWithScheduledBefore(today: LocalDate): List<Long>
