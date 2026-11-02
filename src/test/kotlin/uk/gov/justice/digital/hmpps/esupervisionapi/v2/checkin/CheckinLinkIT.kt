@@ -111,7 +111,7 @@ class CheckinLinkIT : IntegrationTestBase() {
 
     // rolled back: committing would send the invite, which marks the link sent or failed
     transactionTemplate.executeWithoutResult { status ->
-      val checkin = checkinCreationService.createCheckinForOffender(offender, today, "PRACT001", contactDetails(offender))
+      val checkin = checkinCreationService.createCheckinForOffender(offender, today, "PRACT001", contactDetails(offender))!!
 
       assertThat(checkinRepository.findByUuid(checkin.uuid).get().linkStatus).isEqualTo(CheckinLinkStatus.SENDING)
       status.setRollbackOnly()
@@ -125,7 +125,7 @@ class CheckinLinkIT : IntegrationTestBase() {
 
     // rolled back: committing would send the invite, which marks the link sent or failed
     transactionTemplate.executeWithoutResult { status ->
-      val checkin = checkinCreationService.createCheckinForOffender(offender, today, "PRACT001", contactDetails(offender))
+      val checkin = checkinCreationService.createCheckinForOffender(offender, today, "PRACT001", contactDetails(offender))!!
 
       assertThat(checkin.uuid).isEqualTo(scheduled.uuid)
       assertThat(jdbcTemplate.queryForObject("select link_status::text from offender_checkin_v2 where id = ?", String::class.java, scheduled.id)).isEqualTo("SENDING")
