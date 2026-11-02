@@ -311,11 +311,12 @@ class NotificationOrchestratorService(
         return
       }
 
-      val sent = processAndSendNotifications(notificationsWithRecipients, personalisation)
-      if (sent.isEmpty()) {
-        inviteFailed(event, CheckinLinkService.NOTIFY_FAILED)
-      } else {
-        checkinLinkService.linkSent(event.checkinId, sent.first().channel)
+      val outcome = processAndSendNotifications(notificationsWithRecipients, personalisation)
+      when {
+        outcome.sent.isNotEmpty() -> checkinLinkService.linkSent(event.checkinId, outcome.sent.first().channel)
+        // Notify may have sent it: keep the check-in open rather than cancel a link they may have
+        outcome.maybeSent.isNotEmpty() -> checkinLinkService.linkMaybeSent(event.checkinId)
+        else -> inviteFailed(event, CheckinLinkService.NOTIFY_FAILED)
       }
     } catch (e: Exception) {
       val sanitized = PiiSanitizer.sanitizeException(e, checkin.crn)
@@ -564,15 +565,21 @@ class NotificationOrchestratorService(
   /** Get event detail for a given URL */
   fun getEventDetail(detailUrl: String): EventDetailResponse? = eventDetailService.getEventDetail(detailUrl)
 
-  /** @return the notifications GOV.UK Notify accepted */
+  /**
+   * @property sent the notifications GOV.UK Notify accepted
+   * @property maybeSent those it failed in a way that leaves unknown whether it sent them
+   */
+  private data class SendOutcome(val sent: List<GenericNotification>, val maybeSent: List<GenericNotification>)
+
   private fun processAndSendNotifications(
     notificationsWithRecipients: List<NotificationWithRecipient>,
     personalisation: Map<String, String>,
-  ): List<GenericNotification> {
-    if (notificationsWithRecipients.isEmpty()) return emptyList()
+  ): SendOutcome {
+    if (notificationsWithRecipients.isEmpty()) return SendOutcome(emptyList(), emptyList())
 
     notificationPersistence.saveNotifications(notificationsWithRecipients.map { it.notification })
     val sent = mutableListOf<GenericNotification>()
+    val maybeSent = mutableListOf<GenericNotification>()
 
     notificationsWithRecipients.forEach { wrapper ->
       val notification = wrapper.notification
@@ -604,6 +611,7 @@ class NotificationOrchestratorService(
           notifyId = notifyId,
         )
       } catch (e: Exception) {
+        if (NOTIFY_OUTCOME_UNKNOWN.test(e)) maybeSent.add(notification)
         val sanitized = PiiSanitizer.sanitizeException(e, wrapper.offender?.crn, null)
         LOGGER.warn(
           "Failed to send {} to {}: {}",
@@ -620,11 +628,12 @@ class NotificationOrchestratorService(
         )
       }
     }
-    return sent
+    return SendOutcome(sent, maybeSent)
   }
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(NotificationOrchestratorService::class.java)
+    private val NOTIFY_OUTCOME_UNKNOWN = NotifyOutcomeUnknown()
 
     // Match V1 date format: "Monday 15 January 2025"
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")

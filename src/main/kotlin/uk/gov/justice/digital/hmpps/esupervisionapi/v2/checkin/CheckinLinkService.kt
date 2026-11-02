@@ -46,6 +46,19 @@ class CheckinLinkService(
   }!!
 
   /**
+   * GOV.UK Notify failed in a way that leaves unknown whether it sent the invite (a timeout, or a
+   * 502/504 from its gateway), so the person may have the link. The check-in is opened as if it was
+   * sent, so they can use it, but NDelius isn't told the link was sent. If they didn't get it, the
+   * check-in is missed.
+   * @return true if this changed the check-in
+   */
+  fun linkMaybeSent(checkinId: Long): Boolean = transactionTemplate.execute {
+    val changed = checkinRepository.markLinkSent(checkinId, clock.instant()) > 0
+    if (changed) LOGGER.warn("Checkin id={} opened without telling NDelius: unknown whether its invite was sent", checkinId)
+    changed
+  }!!
+
+  /**
    * The invite couldn't be sent. The check-in is cancelled, not left to be missed; questions
    * assigned to it carry over; and the next check-in is scheduled.
    * @param reason why, for the NDelius contact
