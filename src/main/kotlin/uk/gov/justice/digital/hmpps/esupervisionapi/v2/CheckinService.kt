@@ -920,7 +920,7 @@ class CheckinService(
     }
 
     val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
-      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
+      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Failed to fetch contact details for CRN=${offender.crn}")
     if (activeEventNumber(offender, personalDetails) == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
@@ -931,7 +931,8 @@ class CheckinService(
       createdBy = requestedBy,
     )
 
-    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    return checkin?.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Failed to create checkin, a check-in possibly exists for given due date")
   }
 
   fun sendInvite(uuid: UUID, request: CheckinNotificationRequest): CheckinDto {

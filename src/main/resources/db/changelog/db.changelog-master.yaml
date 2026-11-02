@@ -178,4 +178,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/89_checkin_delius_events.sql
   - include:
-      file: db/changelog/changesets/90_one_scheduled_checkin_per_offender.sql
+      file: db/changelog/changesets/90_one_created_checkin_per_day.sql
+  - include:
+      file: db/changelog/changesets/91_one_scheduled_checkin_per_offender.sql

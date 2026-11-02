@@ -743,14 +743,13 @@ is *today*.""",
       val saved = offenderRepository.save(offender)
       val offenderAfter = saved.toSummaryDto()
       if (request.checkinSchedule != null && newFirstCheckinDateIsToday(offenderBefore, offenderAfter, clock.today())) {
-        if (!todayIsOccupied) {
+        val created = !todayIsOccupied &&
           checkinCreationService.createCheckin(
             offenderAfter.uuid,
             requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
             request.checkinSchedule.requestedBy,
-          )
-        }
-        LOGGER.debug("{} check-in for offender {}", if (todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
+          ) != null
+        LOGGER.debug("{} check-in for offender {}", if (created) "created" else "skipped", offenderAfter.uuid)
       }
       if (request.checkinSchedule != null) {
         // TODO ESUP-2223 (PR 5): move an already scheduled check-in to the new schedule
