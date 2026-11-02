@@ -293,13 +293,18 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
 
     assertThat(created.checkinId).isEqualTo(scheduled.id)
     assertThat(created.checkin.uuid).isEqualTo(scheduled.uuid)
-    assertThat(checkinRepository.findAll()).singleElement().satisfies({
+    // Only today's: the invite is sent in the background, and if it fails the next check-in is scheduled.
+    assertThat(checkinRepository.findAllByOffenderAndDueDate(offender, today)).singleElement().satisfies({
       assertThat(it.uuid).isEqualTo(scheduled.uuid)
-      assertThat(it.status).isEqualTo(CheckinStatus.CREATED)
+      // CANCELLED if the invite has already failed
+      assertThat(it.status).isNotEqualTo(CheckinStatus.SCHEDULED)
     })
     // recorded once, when it was scheduled
-    assertThat(deliusEventRepository.findAll().filter { it.eventType == DomainEventType.V2_CHECKIN_SCHEDULED }.map { it.checkinUuid })
-      .containsExactly(scheduled.uuid)
+    assertThat(
+      deliusEventRepository.findAll()
+        .filter { it.eventType == DomainEventType.V2_CHECKIN_SCHEDULED && it.dateTime == checkinDateTime(today).toInstant() }
+        .map { it.checkinUuid },
+    ).containsExactly(scheduled.uuid)
   }
 
   @Test
