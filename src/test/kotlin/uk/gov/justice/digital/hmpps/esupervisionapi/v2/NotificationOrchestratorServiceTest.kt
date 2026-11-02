@@ -285,6 +285,19 @@ class NotificationOrchestratorServiceTest {
       verify(checkinLinkService).linkSent(checkin.id, "SMS")
       verify(checkinLinkService, never()).linkFailed(any(), any())
       verify(checkinLinkService, never()).linkMaybeSent(any())
+      // not recorded as failed: Notify sent it
+      verify(notificationPersistence, never()).updateSingleNotificationStatus(any(), eq(false), any(), anyOrNull())
+    }
+
+    @Test
+    fun `an invite Notify rejects fails the link even if recording the notification fails`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenThrow(RuntimeException("rejected"))
+      doThrow(RuntimeException("database unavailable")).whenever(notificationPersistence).updateSingleNotificationStatus(any(), eq(false), any(), anyOrNull())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NOTIFY_FAILED)
     }
 
     @Test
