@@ -139,16 +139,21 @@ class UpcomingCheckinService(
       CheckinMode.AD_HOC -> firstCheckin.takeIf { it >= from && !hasCheckin(offender, it) }
       CheckinMode.SCHEDULED -> {
         if (offender.checkinInterval == null) return null
-        val next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
-        if (hasCheckin(offender, next)) nextCheckinDay(offender, next) else next
+        val taken = checkinRepository.findAllByOffenderAndDueDateGreaterThanEqual(offender, from)
+          .filter(::holdsDate).map { it.dueDate }.toSet()
+        var next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
+        while (next in taken) next = nextCheckinDay(offender, next)
+        next
       }
     }
   }
 
   private fun creationJobStarted(today: LocalDate) = jobLogRepository.existsByJobTypeAndCreatedAtGreaterThanEqual(CheckinCreationJob.JOB_TYPE, today.atStartOfDay(clock.zone).toInstant())
 
-  private fun hasCheckin(offender: Offender, date: LocalDate) = checkinRepository.findAllByOffenderAndDueDate(offender, date)
-    .any { it.status in STATUSES_HOLDING_DATE || it.linkStatus == CheckinLinkStatus.FAILED }
+  private fun hasCheckin(offender: Offender, date: LocalDate) = checkinRepository.findAllByOffenderAndDueDate(offender, date).any(::holdsDate)
+
+  /** Whether [checkin] takes its date: no other check-in is scheduled for it. */
+  private fun holdsDate(checkin: OffenderCheckin) = checkin.status in STATUSES_HOLDING_DATE || checkin.linkStatus == CheckinLinkStatus.FAILED
 
   companion object {
     private val LOGGER = logger<UpcomingCheckinService>()
