@@ -7,16 +7,21 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.SurveyValueExpansionsConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.ProxyLinkCreator
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.util.Optional
 import java.util.UUID
 
@@ -24,6 +29,7 @@ class EventDetailServiceTest {
 
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val eventLogRepository: OffenderEventLogRepository = mock()
+  private val checkinDeliusEventRepository: CheckinDeliusEventRepository = mock()
   private val proxyLinkCreator: ProxyLinkCreator = mock()
   private val appConfig: AppConfig = mock()
   private val surveyExpansionsConfig: SurveyValueExpansionsConfig = SurveyValueExpansionsConfig(
@@ -40,7 +46,107 @@ class EventDetailServiceTest {
 
   @BeforeEach
   fun setUp() {
-    service = EventDetailService(checkinRepository, eventLogRepository, proxyLinkCreator, appConfig, surveyExpansionsConfig)
+    service = EventDetailService(checkinRepository, eventLogRepository, checkinDeliusEventRepository, proxyLinkCreator, appConfig, surveyExpansionsConfig)
+  }
+
+  @Nested
+  inner class DateTime {
+
+    @Test
+    fun `received event has the submission time when ESUP-2223 is on`() {
+      whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2223))
+      val uuid = UUID.randomUUID()
+      val checkin = createCheckin(uuid, createOffender(UUID.randomUUID()), submittedAt = Instant.parse("2025-06-15T14:30:00Z"))
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
+
+      val result = service.getEventDetail("/v2/events/checkin-submitted/$uuid")!!
+
+      assertThat(result.dateTime).isEqualTo(ZonedDateTime.parse("2025-06-15T15:30:00+01:00[Europe/London]"))
+    }
+
+    @Test
+    fun `received event has no date time when ESUP-2223 is off`() {
+      whenever(appConfig.enabledFeatures).thenReturn(emptySet())
+      val uuid = UUID.randomUUID()
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(createCheckin(uuid, createOffender(UUID.randomUUID()))))
+
+      assertThat(service.getEventDetail("/v2/events/checkin-submitted/$uuid")!!.dateTime).isNull()
+    }
+
+    @Test
+    fun `reviewed and expired events never have a date time`() {
+      whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2223))
+      val uuid = UUID.randomUUID()
+      whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(createCheckin(uuid, createOffender(UUID.randomUUID()), reviewedAt = Instant.now())))
+
+      assertThat(service.getEventDetail("/v2/events/checkin-reviewed/$uuid")!!.dateTime).isNull()
+      assertThat(service.getEventDetail("/v2/events/checkin-expired/$uuid")!!.dateTime).isNull()
+    }
+  }
+
+  @Nested
+  inner class CheckinDeliusEvents {
+
+    @Test
+    fun `scheduled event detail comes from the recorded event, with its date`() {
+      val checkinUuid = UUID.randomUUID()
+      val offender = createOffender(UUID.randomUUID())
+      whenever(checkinRepository.findByUuid(checkinUuid)).thenReturn(Optional.of(createCheckin(checkinUuid, offender, status = CheckinStatus.SCHEDULED, sensitive = true)))
+      val event = deliusEvent(DomainEventType.V2_CHECKIN_SCHEDULED, checkinUuid, dateTime = Instant.parse("2025-06-22T08:00:00Z"))
+      whenever(checkinDeliusEventRepository.findByEventId(event.eventId)).thenReturn(Optional.of(event))
+
+      val result = service.getEventDetail("/v2/events/checkin-scheduled/${event.eventId}")!!
+
+      assertThat(result.eventType).isEqualTo("CHECKIN_SCHEDULED")
+      assertThat(result.eventReferenceId).isEqualTo("CHECKIN_SCHEDULED-${event.eventId}")
+      assertThat(result.checkinUuid).isEqualTo(checkinUuid)
+      assertThat(result.offenderUuid).isEqualTo(offender.uuid)
+      assertThat(result.crn).isEqualTo("X123456")
+      assertThat(result.notes).isEqualTo(event.notes)
+      assertThat(result.timestamp).isEqualTo(event.occurredAt)
+      assertThat(result.sensitive).isTrue()
+      assertThat(result.dateTime).isEqualTo(ZonedDateTime.parse("2025-06-22T09:00:00+01:00[Europe/London]"))
+    }
+
+    @Test
+    fun `cancelled event detail has no date time`() {
+      val checkinUuid = UUID.randomUUID()
+      whenever(checkinRepository.findByUuid(checkinUuid)).thenReturn(Optional.of(createCheckin(checkinUuid, createOffender(UUID.randomUUID()), status = CheckinStatus.CANCELLED)))
+      val event = deliusEvent(DomainEventType.V2_CHECKIN_CANCELLED, checkinUuid)
+      whenever(checkinDeliusEventRepository.findByEventId(event.eventId)).thenReturn(Optional.of(event))
+
+      val result = service.getEventDetail("/v2/events/checkin-cancelled/${event.eventId}")!!
+
+      assertThat(result.eventType).isEqualTo("CHECKIN_CANCELLED")
+      assertThat(result.dateTime).isNull()
+    }
+
+    @Test
+    fun `returns null when the event is fetched under another event type`() {
+      val event = deliusEvent(DomainEventType.V2_CHECKIN_SCHEDULED, UUID.randomUUID())
+      whenever(checkinDeliusEventRepository.findByEventId(event.eventId)).thenReturn(Optional.of(event))
+
+      assertThat(service.getEventDetail("/v2/events/checkin-cancelled/${event.eventId}")).isNull()
+    }
+
+    @Test
+    fun `returns null for an unknown event`() {
+      whenever(checkinDeliusEventRepository.findByEventId(org.mockito.kotlin.any())).thenReturn(Optional.empty())
+
+      assertThat(service.getEventDetail("/v2/events/checkin-link-delivered/${UUID.randomUUID()}")).isNull()
+    }
+
+    private fun deliusEvent(type: DomainEventType, checkinUuid: UUID, dateTime: Instant? = null, eventId: UUID = UUID.randomUUID()) = CheckinDeliusEvent(
+      eventId = eventId,
+      eventType = type,
+      detailId = eventId,
+      checkinUuid = checkinUuid,
+      crn = "X123456",
+      eventNumber = 2,
+      dateTime = dateTime,
+      notes = "Some notes",
+      occurredAt = Instant.parse("2025-06-15T10:00:00Z"),
+    )
   }
 
   @Nested

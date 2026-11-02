@@ -176,4 +176,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/88_scheduled_checkin_activation.sql
   - include:
-      file: db/changelog/changesets/89_one_created_checkin_per_day.sql
+      file: db/changelog/changesets/89_checkin_delius_events.sql
+  - include:
+      file: db/changelog/changesets/90_one_created_checkin_per_day.sql
