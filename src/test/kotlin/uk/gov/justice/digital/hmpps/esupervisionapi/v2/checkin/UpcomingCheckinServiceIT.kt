@@ -253,7 +253,11 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     val created = transactionTemplate.execute { checkinCreationService.createCheckinForOffender(unscheduled, today, "PRACT001", contactDetails(unscheduled)) }!!
     val activated = transactionTemplate.execute { checkinCreationService.createCheckinForOffender(scheduled, today, "PRACT001", contactDetails(scheduled)) }!!
 
-    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(created.uuid).map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(created.uuid)).singleElement().satisfies({
+      assertThat(it.eventType).isEqualTo(DomainEventType.V2_CHECKIN_SCHEDULED)
+      // none on record: the one from the contact details
+      assertThat(it.eventNumber).isEqualTo(1)
+    })
     assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(activated.uuid).map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
   }
 
@@ -281,7 +285,10 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
 
     checkinPersistenceService.checkinSubmission(checkin, event)
 
-    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusWeeks(1))
+    val next = scheduledCheckins(offender).single()
+    assertThat(next.dueDate).isEqualTo(today.plusWeeks(1))
+    // none on record: the one from the contact details
+    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(next.uuid).single().eventNumber).isEqualTo(1)
   }
 
   @Test

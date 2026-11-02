@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -55,7 +56,9 @@ class CheckinPersistenceService(
     val notScheduledBefore = checkin.status == CheckinStatus.CREATED && checkin.id == 0L
     val savedCheckin = checkinRepository.saveAndFlush(checkin)
     if (notScheduledBefore && upcomingCheckinService.enabled()) {
-      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, savedCheckin, CheckinDeliusEventNotes.scheduled(savedCheckin.dueDate), event.currentEvent, savedCheckin.dueDate)
+      // the event's number is the one on record, which can be unset when the caller has NDelius's
+      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(savedCheckin.offender, it) }
+      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, savedCheckin, CheckinDeliusEventNotes.scheduled(savedCheckin.dueDate), eventNumber, savedCheckin.dueDate)
     }
     val finalisedEvent = event.finalise(savedCheckin)
     eventAuditService.recordCheckinCreated(savedCheckin, finalisedEvent)
@@ -68,7 +71,7 @@ class CheckinPersistenceService(
   fun checkinSubmission(checkin: OffenderCheckin, event: CheckinSubmittedEvent) {
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
-    upcomingCheckinService.scheduleNext(checkin.offender.id)
+    upcomingCheckinService.scheduleNext(checkin.offender.id, event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it) })
     if (checkinDeliusEventService.enabled()) {
       checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin)
     }
