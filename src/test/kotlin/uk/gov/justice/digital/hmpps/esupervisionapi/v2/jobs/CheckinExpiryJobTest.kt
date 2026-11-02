@@ -5,6 +5,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionCallback
@@ -53,6 +54,7 @@ class CheckinExpiryJobTest {
   private val checkinDeliusEventService: CheckinDeliusEventService = mock {
     on { enabled() } doAnswer { true }
   }
+  private val eventAuditService: EventAuditService = mock()
   private val appConfig: AppConfig = mock {
     on { esup2305DeliusEventSelection } doAnswer { true }
   }
@@ -64,7 +66,7 @@ class CheckinExpiryJobTest {
     jobLogRepository = jobLogRepository,
     transactionTemplate = transactionTemplate,
     gracePeriodDays = 3,
-    eventAuditService = mock<EventAuditService>(),
+    eventAuditService = eventAuditService,
     checkinDeliusEventService = checkinDeliusEventService,
     appConfig = appConfig,
   )
@@ -83,6 +85,7 @@ class CheckinExpiryJobTest {
       ),
     )
     whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(checkin.offender.crn))).thenReturn(listOf(details))
+    whenever(checkinRepository.updateStatusForCheckinId(checkin.id, CheckinStatus.CREATED, CheckinStatus.EXPIRED)).thenReturn(1)
 
     job.process()
 
@@ -92,6 +95,28 @@ class CheckinExpiryJobTest {
       detailId = eq(checkin.uuid),
       eventNumber = eq(2L),
     )
+    verify(notificationService).sendCheckinExpiredNotifications(checkin, details)
+  }
+
+  @Test
+  fun `does not expire or emit side effects when a checkin changed during the Delius lookup`() {
+    val checkin = checkin()
+    whenever(checkinRepository.findEligibleForExpiry(any())).thenAnswer { Stream.of(checkin) }
+    val details = ContactDetails(
+      crn = checkin.offender.crn,
+      name = Name("First", "Last"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(event(1L, LocalDate.of(2028, 1, 1))),
+    )
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(checkin.offender.crn))).thenReturn(listOf(details))
+    whenever(checkinRepository.updateStatusForCheckinId(checkin.id, CheckinStatus.CREATED, CheckinStatus.EXPIRED)).thenReturn(0)
+
+    job.process()
+
+    verify(checkinRepository).updateStatusForCheckinId(checkin.id, CheckinStatus.CREATED, CheckinStatus.EXPIRED)
+    verify(checkinDeliusEventService, never()).recordCheckinUpdate(any(), any(), any(), any())
+    verify(notificationService, never()).sendCheckinExpiredNotifications(any(), any())
+    verify(eventAuditService, never()).recordCheckinExpired(any())
   }
 
   private fun checkin(): OffenderCheckin {

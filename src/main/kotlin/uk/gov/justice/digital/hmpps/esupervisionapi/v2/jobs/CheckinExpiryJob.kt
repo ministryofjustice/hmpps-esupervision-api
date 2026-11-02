@@ -92,56 +92,66 @@ class CheckinExpiryJob(
           }
         }
 
-        // Batch update all checkin statuses to EXPIRED - separate transaction
-        transactionTemplate.execute {
-          checkins.forEach { it.status = CheckinStatus.EXPIRED }
-          checkinRepository.saveAll(checkins)
-          if (checkinDeliusEventService.enabled()) {
-            checkins.forEach { checkin ->
-              val eventNumber = checkin.offender.currentEvent
-                ?: contactDetailsMap[checkin.offender.crn]?.let {
-                  activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection)
-                }
-              checkinDeliusEventService.recordCheckinUpdate(
-                DomainEventType.V2_CHECKIN_EXPIRED,
-                checkin,
-                eventNumber = eventNumber,
-              )
+        // Expire only rows that are still CREATED; another request may have submitted or cancelled them.
+        val expiredCheckins = transactionTemplate.execute {
+          val relayEnabled = checkinDeliusEventService.enabled()
+          checkins.filter { checkin ->
+            val updated = checkinRepository.updateStatusForCheckinId(
+              checkin.id,
+              CheckinStatus.CREATED,
+              CheckinStatus.EXPIRED,
+            ) == 1
+            if (updated) {
+              checkin.status = CheckinStatus.EXPIRED
+              if (relayEnabled) {
+                val eventNumber = checkin.offender.currentEvent
+                  ?: contactDetailsMap[checkin.offender.crn]?.let {
+                    activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection)
+                  }
+                checkinDeliusEventService.recordCheckinUpdate(
+                  DomainEventType.V2_CHECKIN_EXPIRED,
+                  checkin,
+                  eventNumber = eventNumber,
+                )
+              }
             }
+            updated
           }
-        }
-        totalExpired = checkins.size
+        } ?: emptyList()
+        totalExpired = expiredCheckins.size
 
-        LOGGER.info("Marked {} checkins as EXPIRED", totalExpired)
+        if (expiredCheckins.isNotEmpty()) {
+          LOGGER.info("Marked {} checkins as EXPIRED", totalExpired)
 
-        // Send notifications with pre-fetched contact details - NO transaction
-        val sentNotifications = mutableListOf<Pair<OffenderCheckin, ContactDetails>>()
-        val notSentNotifications = mutableSetOf<Int>()
-        checkins.forEachIndexed { index, checkin ->
-          try {
-            val contactDetails = contactDetailsMap[checkin.offender.crn]
-            if (contactDetails != null) {
-              notificationService.sendCheckinExpiredNotifications(checkin, contactDetails)
-              sentNotifications.add(Pair(checkin, contactDetails))
-            } else {
+          // Send notifications with pre-fetched contact details - NO transaction
+          val sentNotifications = mutableListOf<Pair<OffenderCheckin, ContactDetails>>()
+          val notSentNotifications = mutableSetOf<Int>()
+          expiredCheckins.forEachIndexed { index, checkin ->
+            try {
+              val contactDetails = contactDetailsMap[checkin.offender.crn]
+              if (contactDetails != null) {
+                notificationService.sendCheckinExpiredNotifications(checkin, contactDetails)
+                sentNotifications.add(Pair(checkin, contactDetails))
+              } else {
+                notSentNotifications.add(index)
+              }
+
+              LOGGER.info(
+                "Expiry notifications for checkin {} (offender {}, due date was {}): {}",
+                checkin.uuid,
+                checkin.offender.crn,
+                checkin.dueDate,
+                if (contactDetails == null) "not sent (missing details)" else "sent",
+              )
+            } catch (e: Exception) {
+              LOGGER.warn("Failed to send expiry notifications for checkin {}", checkin.uuid, e)
               notSentNotifications.add(index)
             }
-
-            LOGGER.info(
-              "Expiry notifications for checkin {} (offender {}, due date was {}): {}",
-              checkin.uuid,
-              checkin.offender.crn,
-              checkin.dueDate,
-              if (contactDetails == null) "not sent (missing details)" else "sent",
-            )
-          } catch (e: Exception) {
-            LOGGER.warn("Failed to send expiry notifications for checkin {}", checkin.uuid, e)
-            notSentNotifications.add(index)
           }
-        }
 
-        eventAuditService.recordCheckinExpired(sentNotifications)
-        eventAuditService.recordCheckinExpired(notSentNotifications.map { Pair(checkins[it], null) })
+          eventAuditService.recordCheckinExpired(sentNotifications)
+          eventAuditService.recordCheckinExpired(notSentNotifications.map { Pair(expiredCheckins[it], null) })
+        }
       }
     } catch (e: Exception) {
       LOGGER.error("V2 Checkin Expiry Job failed", e)

@@ -103,6 +103,26 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `conditional expiry update changes only checkins that are still CREATED`() {
+    val created = saveCheckin().apply { status = CheckinStatus.CREATED }
+    checkinRepository.saveAndFlush(created)
+    val submitted = saveCheckin().apply { status = CheckinStatus.SUBMITTED }
+    checkinRepository.saveAndFlush(submitted)
+
+    val updatedCreated = transactionTemplate.execute {
+      checkinRepository.updateStatusForCheckinId(created.id, CheckinStatus.CREATED, CheckinStatus.EXPIRED)
+    }
+    val updatedSubmitted = transactionTemplate.execute {
+      checkinRepository.updateStatusForCheckinId(submitted.id, CheckinStatus.CREATED, CheckinStatus.EXPIRED)
+    }
+
+    assertThat(updatedCreated).isEqualTo(1)
+    assertThat(updatedSubmitted).isEqualTo(0)
+    assertThat(checkinRepository.findByUuid(created.uuid).orElseThrow().status).isEqualTo(CheckinStatus.EXPIRED)
+    assertThat(checkinRepository.findByUuid(submitted.uuid).orElseThrow().status).isEqualTo(CheckinStatus.SUBMITTED)
+  }
+
+  @Test
   fun `record stores the event with the check-in date at 9am London time`() {
     val checkin = saveCheckin()
     val dueDate = LocalDate.of(2026, 11, 3)
