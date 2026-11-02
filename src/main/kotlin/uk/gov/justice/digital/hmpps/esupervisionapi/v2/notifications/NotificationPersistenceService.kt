@@ -35,6 +35,9 @@ class NotificationPersistenceService(
   @param:Value("\${app.env}") private val env: String,
 ) {
   /** Build notification records for offender (SMS and/or Email) */
+  /** Whether notifications to offenders are switched on for [contactPreference] */
+  fun offenderChannelEnabled(contactPreference: ContactPreference) = templateConfig.channels.enabledFor(contactPreference)
+
   fun buildOffenderNotifications(
     offenderId: Long,
     crn: CRN,
