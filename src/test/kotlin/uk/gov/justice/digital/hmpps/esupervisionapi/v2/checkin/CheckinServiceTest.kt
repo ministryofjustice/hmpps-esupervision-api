@@ -1360,6 +1360,38 @@ class CheckinServiceTest {
     verify(checkinCreationService).createCheckin(offender.uuid, dueDate, "PRACT001")
   }
 
+  @Test
+  fun `createCheckin - returns 422 when a CREATED check-in already exists for the due date`() {
+    val dueDate = LocalDate.now(clock)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001")).thenReturn(null)
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, dueDate))
+    }
+
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, ex.statusCode)
+  }
+
+  @Test
+  fun `createCheckinByCrn - returns 422 when a CREATED check-in already exists for the due date`() {
+    val dueDate = LocalDate.now(clock)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001")).thenReturn(null)
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.createCheckinByCrn(CreateCheckinByCrnRequest("PRACT001", offender.crn, dueDate))
+    }
+
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, ex.statusCode)
+  }
+
   private fun contactDetails(offender: Offender) = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
     crn = offender.crn,
     name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
