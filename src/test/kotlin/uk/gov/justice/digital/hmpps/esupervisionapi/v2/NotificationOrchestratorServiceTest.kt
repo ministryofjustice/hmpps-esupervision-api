@@ -5,6 +5,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
@@ -271,6 +273,18 @@ class NotificationOrchestratorServiceTest {
 
       verify(checkinLinkService).linkSent(checkin.id, "SMS")
       verify(checkinLinkService, never()).linkFailed(any(), any())
+    }
+
+    @Test
+    fun `an invite Notify accepts is marked sent even if recording the notification fails`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      doThrow(RuntimeException("database unavailable")).whenever(notificationPersistence).updateSingleNotificationStatus(any(), eq(true), any(), anyOrNull())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkSent(checkin.id, "SMS")
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+      verify(checkinLinkService, never()).linkMaybeSent(any())
     }
 
     @Test
