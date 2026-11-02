@@ -110,10 +110,12 @@ class CheckinCreationJob(
         LOGGER.info("Processing page {} with {} offenders", metrics.chunks, chunk.size)
 
         try {
+          // Before the NDelius call: if check-ins are stopped during it, the upcoming check-in is then
+          // activated, and refused as cancelled, rather than missed and a new check-in created.
+          val scheduledByOffenderId = checkinRepository.findScheduledForOffenders(chunk.map { it.id }, today).associateBy { it.offender.id }
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
           val checkinsToCreate = ArrayList<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>(contactDetailsMap.size)
           val infoByCrn = chunk.associateBy { it.crn }
-          val scheduledByOffenderId = checkinRepository.findScheduledForOffenders(chunk.map { it.id }, today).associateBy { it.offender.id }
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!

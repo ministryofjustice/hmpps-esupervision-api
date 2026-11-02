@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
+import jakarta.persistence.EntityManager
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -28,6 +29,7 @@ class CheckinPersistenceService(
   private val clock: Clock,
   private val checkinDeliusEventService: CheckinDeliusEventService,
   private val upcomingCheckinService: UpcomingCheckinService,
+  private val entityManager: EntityManager,
 ) {
 
   @Transactional
@@ -44,6 +46,9 @@ class CheckinPersistenceService(
     // Locking it also makes stopping check-ins wait until this commits, then cancel it as created.
     if (checkin.id != 0L && checkinRepository.lockAndGetStatus(checkin.id) != CheckinStatus.SCHEDULED.name) {
       LOGGER.info("Not activating checkin {}: it is no longer scheduled", checkin.uuid)
+      // With open-in-view the caller may have activated a managed copy, which committing this
+      // transaction would write back over the cancellation.
+      if (entityManager.contains(checkin)) entityManager.refresh(checkin)
       return false
     }
     // an activated check-in was recorded in NDelius when it was scheduled
