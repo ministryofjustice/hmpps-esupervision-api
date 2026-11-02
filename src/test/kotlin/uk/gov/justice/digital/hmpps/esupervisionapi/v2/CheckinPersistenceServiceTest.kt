@@ -18,12 +18,14 @@ class CheckinPersistenceServiceTest {
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val service = CheckinPersistenceService(
     checkinRepository = checkinRepository,
+    offenderRepository = mock(),
     eventAuditService = mock(),
     appEventPublisher = mock(),
     offenderEventLogRepository = mock(),
     clock = Clock.systemUTC(),
     checkinDeliusEventService = mock(),
     entityManager = mock(),
+    upcomingCheckinService = mock(),
   )
 
   private fun newCheckin() = OffenderCheckin(

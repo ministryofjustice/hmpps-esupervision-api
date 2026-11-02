@@ -43,6 +43,10 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select o from Offender o where o.id = :id")
+  fun findByIdForUpdate(id: Long): Offender?
+
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
@@ -350,6 +354,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   // their check-ins and another created by restarting them, so lookups by day never assume one row.
   fun findAllByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
 
+  fun findAllByOffenderAndDueDateGreaterThanEqual(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
+
   @Query(
     """
     SELECT c FROM OffenderCheckin c
@@ -370,6 +376,10 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findScheduledForOffenders(offenderIds: Collection<Long>, dueDate: LocalDate): List<OffenderCheckin>
+
+  /** Offenders whose upcoming (SCHEDULED) check-in's due date has passed without it being created. */
+  @Query("SELECT c.offender.id FROM OffenderCheckin c WHERE c.status = 'SCHEDULED' AND c.dueDate < :today")
+  fun findOffenderIdsWithScheduledBefore(today: LocalDate): List<Long>
 
   /**
    * ESUP-2223: locks the check-in row and returns its status in the database, not a cached entity's.
@@ -524,7 +534,9 @@ interface EventAuditRepository : JpaRepository<EventAudit, Long> {
  * Separate from V1 job_log for complete decoupling
  */
 @Repository
-interface JobLogRepository : JpaRepository<JobLog, Long>
+interface JobLogRepository : JpaRepository<JobLog, Long> {
+  fun existsByJobTypeAndCreatedAtGreaterThanEqual(jobType: String, createdAt: Instant): Boolean
+}
 
 enum class LogEntryType {
   OFFENDER_SETUP_COMPLETE,

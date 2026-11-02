@@ -66,6 +66,7 @@ class CheckinCreationJobTest {
     ndiliusApiClient,
     checkinCreationService,
     deactivationService,
+    mock(),
     jobLogRepository,
     entityManager,
     chunkSize = 100,
