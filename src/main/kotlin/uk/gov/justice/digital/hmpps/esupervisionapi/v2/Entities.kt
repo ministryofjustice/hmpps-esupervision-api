@@ -338,7 +338,10 @@ enum class CheckinLinkStatus {
   /** The check-in is live, the invite not yet accepted by Notify. */
   SENDING,
 
-  /** Notify accepted the invite. Published to NDelius as `link.delivered`. */
+  /**
+   * Notify accepted the invite. Published to NDelius as `link.delivered`. Also used, without telling
+   * NDelius, when it's unknown whether Notify sent it (see CheckinLinkService.linkMaybeSent).
+   */
   SENT,
 
   /** Notify rejected the invite, or it couldn't be sent (for example no contact details). Published to NDelius as `link.not_delivered`. */

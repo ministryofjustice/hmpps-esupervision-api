@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyOutcomeUnknown
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyRetryableFailure
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyTransientFailure
 import uk.gov.service.notify.NotificationClientException
@@ -19,6 +20,7 @@ class NotifyFailurePredicatesTest {
 
   private val recorded = NotifyTransientFailure()
   private val retried = NotifyRetryableFailure()
+  private val unknown = NotifyOutcomeUnknown()
 
   @Nested
   inner class HttpStatuses {
@@ -72,6 +74,29 @@ class NotifyFailurePredicatesTest {
           assertEquals(false, retried.test(e), "retried: $it")
           assertEquals(true, recorded.test(e), "recorded: $it")
         }
+    }
+  }
+
+  @Nested
+  inner class OutcomeUnknown {
+    @ParameterizedTest
+    @ValueSource(ints = [502, 504])
+    fun `a gateway error leaves unknown whether Notify sent it`(status: Int) {
+      assertEquals(true, unknown.test(notifyFailure(status)))
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = [400, 403, 429, 500, 503])
+    fun `other HTTP errors mean it wasn't sent`(status: Int) {
+      assertEquals(false, unknown.test(notifyFailure(status)))
+    }
+
+    @Test
+    fun `failing after the request may have been sent leaves it unknown, failing to connect doesn't`() {
+      assertEquals(true, unknown.test(NotificationClientException(SocketTimeoutException("Read timed out"))))
+      assertEquals(false, unknown.test(NotificationClientException(ConnectException("Connection refused"))))
+      assertEquals(false, unknown.test(NotificationClientException("Invalid phone number")))
+      assertEquals(false, unknown.test(IllegalStateException("boom")))
     }
   }
 
