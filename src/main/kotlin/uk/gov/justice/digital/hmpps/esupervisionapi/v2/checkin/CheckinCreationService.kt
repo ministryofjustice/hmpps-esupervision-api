@@ -113,7 +113,7 @@ class CheckinCreationService(
     )
 
     if (!checkinPersistenceService.checkinCreation(checkin, event)) {
-      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in ${checkin.uuid} was cancelled before it could be created")
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in ${checkin.uuid} was cancelled or moved before it could be created")
     }
 
     LOGGER.info(

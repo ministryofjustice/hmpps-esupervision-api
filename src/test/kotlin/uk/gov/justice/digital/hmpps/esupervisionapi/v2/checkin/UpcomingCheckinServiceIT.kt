@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import org.assertj.core.api.Assertions.assertThat
+import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -28,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.checkinDateTime
@@ -38,8 +40,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.Dom
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinExpiryJob
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * ESUP-2223: scheduling the next check-in. The feature flag is switched on per test, so this
@@ -404,6 +410,54 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     checkinCreationJob.process()
 
     assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusDays(2))
+  }
+
+  @Test
+  fun `an upcoming check-in moved after it was read is not activated`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), today).single()
+    // the schedule changed while the creation job was getting contact details
+    jdbcTemplate.update("update offender_checkin_v2 set due_date = ? where id = ?", today.plusDays(1), scheduled.id)
+
+    val checkin = checkinCreationService.prepareCheckinForOffender(offender, today, scheduled)
+    val event = PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = "SYSTEM",
+      checkin = checkin.dto(contactDetails(offender), clock = clock, checkinWindow = Period.ofDays(3)),
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = 1L,
+      checkinMode = offender.mode,
+    )
+    checkinCreationService.createCheckins(listOf(checkin to event))
+
+    val after = checkinRepository.findByUuid(scheduled.uuid).get()
+    assertThat(after.status).isEqualTo(CheckinStatus.SCHEDULED)
+    assertThat(after.dueDate).isEqualTo(today.plusDays(1))
+  }
+
+  @Test
+  fun `a schedule change while today's upcoming check-in is being activated leaves it activated`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    jdbcTemplate.update("update offender_v2 set first_checkin = ? where id = ?", today.plusDays(1), offender.id)
+
+    lateinit var rescheduling: CompletableFuture<Unit>
+    transactionTemplate.executeWithoutResult {
+      // activation locks the check-in, then changes it
+      checkinRepository.lockAndGetStatus(scheduled.id)
+      rescheduling = CompletableFuture.supplyAsync { service.scheduleNext(offender.id) }
+      await().atMost(Duration.ofSeconds(10)).until {
+        jdbcTemplate.queryForObject("select count(*) from pg_locks where not granted", Int::class.java)!! > 0
+      }
+      jdbcTemplate.update("update offender_checkin_v2 set status = 'CREATED' where id = ?", scheduled.id)
+    }
+    rescheduling.get(10, TimeUnit.SECONDS)
+
+    val after = checkinRepository.findByUuid(scheduled.uuid).get()
+    assertThat(after.status).isEqualTo(CheckinStatus.CREATED)
+    assertThat(after.dueDate).isEqualTo(today)
   }
 
   private fun setFeatures(features: Set<Feature>) = ReflectionTestUtils.setField(appConfig, "enabledFeatures", features)
