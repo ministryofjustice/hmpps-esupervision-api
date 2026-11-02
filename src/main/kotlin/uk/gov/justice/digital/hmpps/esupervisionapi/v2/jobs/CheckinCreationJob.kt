@@ -108,18 +108,16 @@ class CheckinCreationJob(
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
           val checkinsToCreate = ArrayList<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>(contactDetailsMap.size)
           val infoByCrn = chunk.associateBy { it.crn }
+          val newEligibilityRulesEnabled = appConfig.enabledFeatures.contains(Feature.ESUP_2082)
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!
-            if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
-              prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
+            val ineligibility = checkinIneligibilityReason(info, contactDetails)
+            val savedSelectionIsInactive = info.currentEvent != null && contactDetails.events.none { it.number == info.currentEvent }
+            if (ineligibility != null && (!newEligibilityRulesEnabled || savedSelectionIsInactive)) {
+              deactivateOffender(ineligibility, info, contactDetails, metrics)
             } else {
-              val ineligibility = checkinIneligibilityReason(info, contactDetails)
-              if (ineligibility != null) {
-                deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
-              } else {
-                prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
-              }
+              prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
             }
           }
 

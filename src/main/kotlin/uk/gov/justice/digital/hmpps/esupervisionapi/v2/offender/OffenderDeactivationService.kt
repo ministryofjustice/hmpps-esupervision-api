@@ -110,8 +110,14 @@ class OffenderDeactivationService(
       checkEvent = checkEvent,
       updatedAt = updatedAt,
     ) { persisted ->
+      val snapshot = persisted.copy(personalDetails = event.offender.personalDetails, updatedAt = updatedAt)
+      val setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) }
       event.copy(
-        offender = persisted.copy(personalDetails = event.offender.personalDetails, updatedAt = updatedAt),
+        offender = snapshot,
+        setup = setup,
+        activeEventNumber = snapshot.personalDetails?.let {
+          activeEventNumber(snapshot.currentEvent, it, appConfig.esup2305DeliusEventSelection)
+        } ?: snapshot.currentEvent.takeIf { setup == null },
         expectedCurrentEvent = event.expectedCurrentEvent,
       )
     }

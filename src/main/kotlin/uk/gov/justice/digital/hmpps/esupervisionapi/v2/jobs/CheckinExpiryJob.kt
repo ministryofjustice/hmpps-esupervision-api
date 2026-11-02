@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -14,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
@@ -35,6 +37,7 @@ class CheckinExpiryJob(
   private val gracePeriodDays: Int,
   private val eventAuditService: EventAuditService,
   private val checkinDeliusEventService: CheckinDeliusEventService,
+  private val appConfig: AppConfig,
 ) {
   @Scheduled(cron = "\${app.scheduling.v2-checkin-expiry.cron}")
   @SchedulerLock(
@@ -73,20 +76,8 @@ class CheckinExpiryJob(
       LOGGER.info("Found {} checkins eligible for expiry", checkins.size)
 
       if (checkins.isNotEmpty()) {
-        // Batch update all checkin statuses to EXPIRED - separate transaction
-        transactionTemplate.execute {
-          checkins.forEach { it.status = CheckinStatus.EXPIRED }
-          checkinRepository.saveAll(checkins)
-          if (checkinDeliusEventService.enabled()) {
-            checkins.forEach { checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_EXPIRED, it) }
-          }
-        }
-        totalExpired = checkins.size
-
-        LOGGER.info("Marked {} checkins as EXPIRED", totalExpired)
-
-        // Fetch contact details in batches for notifications (practitioner emails only) - NO
-        // transaction
+        // Fetch details before recording the durable event so it carries the same event number
+        // that the legacy direct-publication path would have sent.
         val crns = checkins.map { it.offender.crn }.distinct()
         val contactDetailsMap = mutableMapOf<String, ContactDetails>()
 
@@ -100,6 +91,28 @@ class CheckinExpiryJob(
             LOGGER.warn("Failed to fetch contact details for batch {}", batchIndex + 1, e)
           }
         }
+
+        // Batch update all checkin statuses to EXPIRED - separate transaction
+        transactionTemplate.execute {
+          checkins.forEach { it.status = CheckinStatus.EXPIRED }
+          checkinRepository.saveAll(checkins)
+          if (checkinDeliusEventService.enabled()) {
+            checkins.forEach { checkin ->
+              val eventNumber = checkin.offender.currentEvent
+                ?: contactDetailsMap[checkin.offender.crn]?.let {
+                  activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection)
+                }
+              checkinDeliusEventService.recordCheckinUpdate(
+                DomainEventType.V2_CHECKIN_EXPIRED,
+                checkin,
+                eventNumber = eventNumber,
+              )
+            }
+          }
+        }
+        totalExpired = checkins.size
+
+        LOGGER.info("Marked {} checkins as EXPIRED", totalExpired)
 
         // Send notifications with pre-fetched contact details - NO transaction
         val sentNotifications = mutableListOf<Pair<OffenderCheckin, ContactDetails>>()

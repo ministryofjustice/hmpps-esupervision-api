@@ -1,8 +1,10 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -17,6 +19,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
+import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
 /** One-off batch to backfill existing verified offenders' selected Delius event. */
@@ -30,6 +33,8 @@ class CurrentEventBackfillJob(
   private val jobLogRepository: JobLogRepository,
   @param:Value("\${app.scheduling.current-event-backfill.chunk-size:100}") private val chunkSize: Int,
   @param:Value("\${app.scheduling.current-event-backfill.dry-run:true}") private val dryRun: Boolean,
+  @param:Qualifier("offenderEventExecutor") private val offenderEventExecutor: ThreadPoolTaskExecutor,
+  @param:Value("\${app.batch.enabled:false}") private val batchEnabled: Boolean,
 ) {
   fun process() {
     check(appConfig.esup2305DeliusEventSelection) { "Current event backfill requires ESUP-2305 to be enabled" }
@@ -45,6 +50,7 @@ class CurrentEventBackfillJob(
     var failed = 0
     var skipped = 0
     var lastOffenderId = 0L
+    var processingFailure: Throwable? = null
 
     LOGGER.info("Current event backfill started: dryRun={}, chunkSize={}", dryRun, pageSize)
     try {
@@ -110,7 +116,23 @@ class CurrentEventBackfillJob(
           }
         }
       }
+    } catch (e: Throwable) {
+      processingFailure = e
+      throw e
     } finally {
+      if (batchEnabled) {
+        try {
+          drainOffenderEvents()
+        } catch (e: Exception) {
+          LOGGER.error("Current event backfill failed to drain offender events", e)
+          if (processingFailure != null) {
+            processingFailure.addSuppressed(e)
+            throw processingFailure
+          }
+          throw e
+        }
+      }
+
       jobLog.endedAt = clock.instant()
       jobLogRepository.saveAndFlush(jobLog)
       LOGGER.info(
@@ -172,6 +194,21 @@ class CurrentEventBackfillJob(
       }
       LOGGER.info("Skipped deactivation for CRN {} because the offender changed during the Delius lookup", offender.crn)
       return false
+    }
+  }
+
+  private fun drainOffenderEvents() {
+    // Deactivation commits before its AFTER_COMMIT listener submits work to this executor.
+    val pool = offenderEventExecutor.threadPoolExecutor
+    LOGGER.info("Waiting for queued and running offender events before completing the backfill batch")
+    pool.shutdown()
+    try {
+      check(pool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)) {
+        "Offender event executor did not terminate"
+      }
+    } catch (e: InterruptedException) {
+      Thread.currentThread().interrupt()
+      throw e
     }
   }
 

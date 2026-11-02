@@ -226,7 +226,9 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
   fun `a check-in update is published in order, pointing at the check-in's detail`() {
     val checkin = saveCheckin()
     record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, date = clock.today())
-    transactionTemplate.execute { service.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin) }
+    transactionTemplate.execute {
+      service.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin, eventNumber = 2L)
+    }
 
     service.publishPending(10, minGap)
     clock.advanceBy(minGap.plusSeconds(1))
@@ -235,7 +237,18 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
     val published = argumentCaptor<DomainEvent>().also { verify(publisher, times(2)).publishOrThrow(it.capture()) }.allValues
     assertThat(published.map { it.eventType }).containsExactly("esupervision.check-in.scheduled", "esupervision.check-in.received")
     assertThat(published[1].detailUrl).isEqualTo("http://localhost:8080/v2/events/checkin-submitted/${checkin.uuid}")
-    assertThat(published[1].additionalInformation?.eventNumber).isNull()
+    assertThat(published[1].additionalInformation?.eventNumber).isEqualTo(2L)
+  }
+
+  @Test
+  fun `a check-in update stores the saved event number for the relay`() {
+    val checkin = saveCheckin()
+
+    transactionTemplate.execute {
+      service.recordCheckinUpdate(DomainEventType.V2_CHECKIN_EXPIRED, checkin, eventNumber = 2L)
+    }
+
+    assertThat(repository.findAllByCheckinUuidOrderById(checkin.uuid).single().eventNumber).isEqualTo(2L)
   }
 
   @Test
@@ -264,11 +277,20 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
       val checkin = saveCheckin()
       checkin.status = CheckinStatus.SUBMITTED
       checkin.submittedAt = clock.instant()
-      val event = CheckinSubmittedEvent(checkin.id, checkin.offender.id, "PRACT001", checkin.dto(), checkin.offender.contactPreference)
+      val event = CheckinSubmittedEvent(
+        checkin.id,
+        checkin.offender.id,
+        "PRACT001",
+        checkin.dto(),
+        checkin.offender.contactPreference,
+        currentEvent = 3L,
+      )
 
       checkinPersistenceService.checkinSubmission(checkin, event)
 
-      assertThat(repository.findAllByCheckinUuidOrderById(checkin.uuid).single().eventType).isEqualTo(DomainEventType.V2_CHECKIN_SUBMITTED)
+      val recorded = repository.findAllByCheckinUuidOrderById(checkin.uuid).single()
+      assertThat(recorded.eventType).isEqualTo(DomainEventType.V2_CHECKIN_SUBMITTED)
+      assertThat(recorded.eventNumber).isEqualTo(3L)
       verify(publisher, after(1000).never()).publish(any())
     } finally {
       ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore)

@@ -15,6 +15,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.test.util.ReflectionTestUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -169,6 +170,27 @@ class CheckinCreationJobTest {
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
       expectedCurrentEvent = eq(1L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())
+  }
+
+  @Test
+  fun `stale selected event deactivates when new eligibility rules are enabled`() {
+    val offender = offender("X000008").apply { currentEvent = 2L }
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent))))
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      anyOrNull(),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      expectedCurrentEvent = eq(2L),
       deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any())

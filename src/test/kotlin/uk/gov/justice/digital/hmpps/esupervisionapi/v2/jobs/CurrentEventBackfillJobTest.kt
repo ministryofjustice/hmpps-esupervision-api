@@ -12,6 +12,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.domain.Pageable
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -109,6 +110,15 @@ class CurrentEventBackfillJobTest {
   }
 
   @Test
+  fun `drains offender events when running in batch mode`() {
+    val executor = ThreadPoolTaskExecutor().apply { initialize() }
+
+    job(dryRun = true, batchEnabled = true, executor = executor).process()
+
+    assertThat(executor.threadPoolExecutor.isShutdown).isTrue()
+  }
+
+  @Test
   fun `deactivates a verified offender when Delius returns no active sentence`() {
     val offender = offender("X123456")
     stubCandidates(offender)
@@ -177,7 +187,11 @@ class CurrentEventBackfillJobTest {
     verify(offenderRepository, never()).save(any())
   }
 
-  private fun job(dryRun: Boolean) = CurrentEventBackfillJob(
+  private fun job(
+    dryRun: Boolean,
+    batchEnabled: Boolean = false,
+    executor: ThreadPoolTaskExecutor = mock(),
+  ) = CurrentEventBackfillJob(
     appConfig = appConfig,
     clock = clock,
     offenderRepository = offenderRepository,
@@ -186,6 +200,8 @@ class CurrentEventBackfillJobTest {
     jobLogRepository = jobLogRepository,
     chunkSize = 10,
     dryRun = dryRun,
+    offenderEventExecutor = executor,
+    batchEnabled = batchEnabled,
   )
 
   private fun stubCandidates(offender: Offender) {

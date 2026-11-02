@@ -178,6 +178,33 @@ class OffenderDeactivationServiceTest {
   }
 
   @Test
+  fun `event deactivation resolves setup and event number from the persisted snapshot`() {
+    val offender = offender(OffenderStatus.VERIFIED).apply { currentEvent = 101L }
+    val oldSetup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, clock.instant().minusSeconds(60))
+    val latestSetup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, clock.instant())
+    val details = contactDetails.copy(events = listOf(Event(202L, CodedDescription("X", "Current offence"), sentence = null)))
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(latestSetup))
+    stubSuccessfulPersistence()
+    val event = OffenderDeactivatedEvent(
+      offenderId = offender.id,
+      offender = offender.dto(details),
+      auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
+      setup = SetupInfo.from(oldSetup),
+      activeEventNumber = 101L,
+    )
+
+    service.deactivateOffender(offender, event)
+
+    val factory = argumentCaptor<(OffenderDto) -> OffenderDeactivatedEvent>()
+    verify(offenderPersistenceService).offenderDeactivation(eq(offender.id), eq(101L), eq(false), eq(clock.instant()), factory.capture())
+    val snapshot = offender.dto(details).copy(status = OffenderStatus.INACTIVE, currentEvent = 202L)
+    val refreshedEvent = factory.firstValue(snapshot)
+    assertEquals(snapshot, refreshedEvent.offender)
+    assertEquals(SetupInfo.from(latestSetup), refreshedEvent.setup)
+    assertEquals(202L, refreshedEvent.activeEventNumber)
+  }
+
+  @Test
   fun `is a no-op when offender is not VERIFIED`() {
     val offender = offender(OffenderStatus.INACTIVE)
     val result = service.deactivateOffender(offender, "in reset", practitionerMessageFragment = null, contactDetails = contactDetails)
