@@ -262,15 +262,19 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     val scheduled = saveOffender(firstCheckin = today)
     service.scheduleNext(scheduled.id)
 
-    val created = transactionTemplate.execute { checkinCreationService.createCheckinForOffender(unscheduled, today, "PRACT001", contactDetails(unscheduled)) }!!
-    val activated = transactionTemplate.execute { checkinCreationService.createCheckinForOffender(scheduled, today, "PRACT001", contactDetails(scheduled)) }!!
+    // rolled back: committing would send the invites, which record link events in the background
+    transactionTemplate.executeWithoutResult { status ->
+      val created = checkinCreationService.createCheckinForOffender(unscheduled, today, "PRACT001", contactDetails(unscheduled))!!
+      val activated = checkinCreationService.createCheckinForOffender(scheduled, today, "PRACT001", contactDetails(scheduled))!!
 
-    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(created.uuid)).singleElement().satisfies({
-      assertThat(it.eventType).isEqualTo(DomainEventType.V2_CHECKIN_SCHEDULED)
-      // none on record: the one from the contact details
-      assertThat(it.eventNumber).isEqualTo(1)
-    })
-    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(activated.uuid).map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+      assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(created.uuid)).singleElement().satisfies({
+        assertThat(it.eventType).isEqualTo(DomainEventType.V2_CHECKIN_SCHEDULED)
+        // none on record: the one from the contact details
+        assertThat(it.eventNumber).isEqualTo(1)
+      })
+      assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(activated.uuid).map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+      status.setRollbackOnly()
+    }
   }
 
   @Test
@@ -289,22 +293,21 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
       checkinMode = offender.mode,
     )
 
-    val created = checkinCreationService.createCheckins(listOf(checkin to event)).single()
+    // rolled back: committing would send the invite, which records link events in the background
+    transactionTemplate.executeWithoutResult { status ->
+      val created = checkinCreationService.createCheckins(listOf(checkin to event)).single()
 
-    assertThat(created.checkinId).isEqualTo(scheduled.id)
-    assertThat(created.checkin.uuid).isEqualTo(scheduled.uuid)
-    // Only today's: the invite is sent in the background, and if it fails the next check-in is scheduled.
-    assertThat(checkinRepository.findAllByOffenderAndDueDate(offender, today)).singleElement().satisfies({
-      assertThat(it.uuid).isEqualTo(scheduled.uuid)
-      // CANCELLED if the invite has already failed
-      assertThat(it.status).isNotEqualTo(CheckinStatus.SCHEDULED)
-    })
-    // recorded once, when it was scheduled
-    assertThat(
-      deliusEventRepository.findAll()
-        .filter { it.eventType == DomainEventType.V2_CHECKIN_SCHEDULED && it.dateTime == checkinDateTime(today).toInstant() }
-        .map { it.checkinUuid },
-    ).containsExactly(scheduled.uuid)
+      assertThat(created.checkinId).isEqualTo(scheduled.id)
+      assertThat(created.checkin.uuid).isEqualTo(scheduled.uuid)
+      assertThat(checkinRepository.findAll()).singleElement().satisfies({
+        assertThat(it.uuid).isEqualTo(scheduled.uuid)
+        assertThat(it.status).isEqualTo(CheckinStatus.CREATED)
+      })
+      // recorded once, when it was scheduled
+      assertThat(deliusEventRepository.findAll().map { it.eventType to it.checkinUuid })
+        .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED to scheduled.uuid)
+      status.setRollbackOnly()
+    }
   }
 
   @Test
