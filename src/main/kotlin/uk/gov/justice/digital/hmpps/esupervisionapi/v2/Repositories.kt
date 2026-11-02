@@ -415,6 +415,14 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Modifying
   fun markLinkFailed(id: Long, at: Instant): Int
 
+  /** An activated upcoming check-in's invite is about to be sent. */
+  @Query(
+    "update offender_checkin_v2 set link_status = 'SENDING', link_status_updated_at = :at where id = :id",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun markLinkSending(id: Long, at: Instant): Int
+
   /** Offenders whose upcoming (SCHEDULED) check-in's due date has passed without it being created. */
   @Query("SELECT c.offender.id FROM OffenderCheckin c WHERE c.status = 'SCHEDULED' AND c.dueDate < :today")
   fun findOffenderIdsWithScheduledBefore(today: LocalDate): List<Long>
@@ -426,6 +434,22 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Query("select cast(status as text) from offender_checkin_v2 where id = :id for update", nativeQuery = true)
   @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
   fun lockAndGetStatus(id: Long): String?
+
+  /**
+   * ESUP-2223: locks the check-in row and returns its due date in the database if it's still
+   * upcoming (SCHEDULED), else null. Doesn't flush first, as [lockAndGetStatus].
+   */
+  @Query("select due_date from offender_checkin_v2 where id = :id and status = 'SCHEDULED' for update", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun lockAndGetScheduledDueDate(id: Long): LocalDate?
+
+  /**
+   * ESUP-2223: the offender's upcoming check-in, locked, so moving or cancelling it and activating
+   * it (which locks it too) take turns. Refresh it: a cached copy may be out of date.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select c from OffenderCheckin c where c.offender = :offender and c.status = 'SCHEDULED'")
+  fun findScheduledForUpdate(offender: Offender): OffenderCheckin?
 
   /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(

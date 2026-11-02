@@ -104,7 +104,8 @@ class UpcomingCheckinService(
     val today = clock.today()
     val event = eventNumber ?: offender.currentEvent
 
-    var scheduled = checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.SCHEDULED).singleOrNull()
+    // Locked: activation may be about to make it today's check-in. If it has, it's no longer SCHEDULED.
+    var scheduled = checkinRepository.findScheduledForUpdate(offender)?.also { entityManager.refresh(it) }
     if (scheduled != null && scheduled.dueDate < today) {
       // Its due date passed without it being created: no active event, or the schedule changed.
       cancel(scheduled, NOT_CREATED_REASON)

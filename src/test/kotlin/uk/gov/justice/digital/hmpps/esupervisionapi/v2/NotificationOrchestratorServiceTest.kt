@@ -262,11 +262,6 @@ class NotificationOrchestratorServiceTest {
       checkinMode = offender.mode,
     )
 
-    @BeforeEach
-    fun setUp() {
-      whenever(appConfig.dashboardUrl()).thenReturn(URI("https://example.com/dashboard"))
-    }
-
     @Test
     fun `an invite Notify accepts marks the link sent`() {
       stubReactivationSending(offender, invite, "07700900123")
@@ -288,6 +283,8 @@ class NotificationOrchestratorServiceTest {
 
       verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NOTIFY_FAILED)
       verify(notificationPersistence).buildPractitionerNotifications(any(), any(), any(), any(), eq(NotificationType.PractitionerInviteIssueGeneric), any())
+      // the email links to the person's activity log in MPoP
+      verify(appConfig).contactsUrl(offender.crn)
     }
 
     @Test

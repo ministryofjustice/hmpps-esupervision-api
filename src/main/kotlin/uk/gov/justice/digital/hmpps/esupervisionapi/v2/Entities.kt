@@ -274,12 +274,17 @@ open class OffenderCheckin(
   @Column(name = "image_deleted_at", nullable = true)
   open var imageDeletedAt: Instant? = null,
 
-  /** Null for check-ins created before ESUP-2223; those are not subject to the link-sent gate. */
-  @Column(name = "link_status", nullable = true)
+  /**
+   * Null for check-ins created before ESUP-2223; those are not subject to the link-sent gate.
+   *
+   * Written on insert, and after that only by the repository's conditional updates (markLink*):
+   * not updatable, so saving a check-in read before one of those can't write back its old value.
+   */
+  @Column(name = "link_status", nullable = true, updatable = false)
   @Enumerated(EnumType.STRING)
   open var linkStatus: CheckinLinkStatus? = null,
 
-  @Column(name = "link_status_updated_at", nullable = true)
+  @Column(name = "link_status_updated_at", nullable = true, updatable = false)
   open var linkStatusUpdatedAt: Instant? = null,
 ) : V2BaseEntity() {
   fun dto(

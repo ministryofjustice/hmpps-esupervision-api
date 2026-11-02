@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -36,18 +37,19 @@ class CheckinPersistenceService(
   fun findCheckin(uuid: UUID): OffenderCheckin? = checkinRepository.findByUuid(uuid).orElse(null)
 
   /**
-   * @return false if [checkin] activates an upcoming check-in that was cancelled after the caller
-   *   read it (check-ins were stopped), so nothing was created
+   * @return false if [checkin] activates an upcoming check-in that was cancelled (check-ins were
+   *   stopped) or moved after the caller read it, so nothing was created
    */
   @Transactional
   fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): Boolean {
     // Activating: the caller read the upcoming check-in before this transaction, and stopping
     // check-ins may have cancelled it since. Saving the stale copy would undo the cancellation.
-    // Locking it also makes stopping check-ins wait until this commits, then cancel it as created.
-    if (checkin.id != 0L && checkinRepository.lockAndGetStatus(checkin.id) != CheckinStatus.SCHEDULED.name) {
-      LOGGER.info("Not activating checkin {}: it is no longer scheduled", checkin.uuid)
+    // Or a schedule change may have moved it to another date. Locking it also makes stopping
+    // check-ins, or moving it, wait until this commits, then find it created.
+    if (checkin.id != 0L && checkinRepository.lockAndGetScheduledDueDate(checkin.id) != checkin.dueDate) {
+      LOGGER.info("Not activating checkin {}: it is no longer scheduled for {}", checkin.uuid, checkin.dueDate)
       // With open-in-view the caller may have activated a managed copy, which committing this
-      // transaction would write back over the cancellation.
+      // transaction would write back over the cancellation or move.
       if (entityManager.contains(checkin)) entityManager.refresh(checkin)
       return false
     }
@@ -59,8 +61,14 @@ class CheckinPersistenceService(
       checkin.linkStatusUpdatedAt = clock.instant()
     }
     val savedCheckin = checkinRepository.saveAndFlush(checkin)
+    if (!notScheduledBefore && upcomingCheckinService.enabled()) {
+      // the link columns are only written on insert (see OffenderCheckin.linkStatus)
+      checkinRepository.markLinkSending(savedCheckin.id, savedCheckin.linkStatusUpdatedAt!!)
+    }
     if (notScheduledBefore && upcomingCheckinService.enabled()) {
-      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, savedCheckin, CheckinDeliusEventNotes.scheduled(savedCheckin.dueDate), event.currentEvent, savedCheckin.dueDate)
+      // the event's number is the one on record, which can be unset when the caller has NDelius's
+      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(savedCheckin.offender, it) }
+      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, savedCheckin, CheckinDeliusEventNotes.scheduled(savedCheckin.dueDate), eventNumber, savedCheckin.dueDate)
     }
     val finalisedEvent = event.finalise(savedCheckin)
     eventAuditService.recordCheckinCreated(savedCheckin, finalisedEvent)
@@ -73,7 +81,7 @@ class CheckinPersistenceService(
   fun checkinSubmission(checkin: OffenderCheckin, event: CheckinSubmittedEvent) {
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
-    upcomingCheckinService.scheduleNext(checkin.offender.id)
+    upcomingCheckinService.scheduleNext(checkin.offender.id, event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it) })
     if (checkinDeliusEventService.enabled()) {
       checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin)
     }
