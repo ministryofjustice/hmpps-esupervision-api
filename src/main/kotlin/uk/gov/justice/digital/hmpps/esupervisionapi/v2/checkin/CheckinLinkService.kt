@@ -35,10 +35,11 @@ class CheckinLinkService(
   fun linkSent(checkinId: Long, channel: String): Boolean = transactionTemplate.execute {
     val now = clock.instant()
     if (checkinRepository.markLinkSent(checkinId, now) == 0) return@execute false
-    val checkin = checkinRepository.findById(checkinId).orElseThrow()
     // Check-ins were stopped while the invite was sending. NDelius has the check-in as cancelled,
-    // which a link event after it would overwrite.
-    if (checkin.status != CheckinStatus.CREATED) return@execute true
+    // which a link event after it would overwrite. The database's status: under open-in-view a
+    // cached entity can be from before the invite was sent.
+    if (checkinRepository.lockAndGetStatus(checkinId) != CheckinStatus.CREATED.name) return@execute true
+    val checkin = checkinRepository.findById(checkinId).orElseThrow()
     checkinDeliusEventService.record(
       DomainEventType.V2_CHECKIN_LINK_DELIVERED,
       checkin,
