@@ -307,7 +307,8 @@ class NotificationOrchestratorService(
           notificationType = NotificationType.OffenderCheckinInvite,
         )
       if (notificationsWithRecipients.isEmpty()) {
-        inviteFailed(event, CheckinLinkService.NO_ADDRESS)
+        val reason = if (notificationPersistence.offenderChannelEnabled(event.offenderContactPreference)) CheckinLinkService.NO_ADDRESS else CheckinLinkService.CHANNEL_DISABLED
+        inviteFailed(event, reason)
         return
       }
 

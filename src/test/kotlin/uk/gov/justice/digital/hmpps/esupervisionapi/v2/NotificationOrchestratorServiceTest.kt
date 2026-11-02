@@ -333,12 +333,23 @@ class NotificationOrchestratorServiceTest {
 
     @Test
     fun `the practitioner isn't told when the link status didn't change`() {
+      whenever(notificationPersistence.offenderChannelEnabled(any())).thenReturn(true)
       whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
 
       service.sendCheckinCreatedNotifications(event())
 
       verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ADDRESS)
       verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `an invite by a switched-off channel fails with that reason, not a missing address`() {
+      whenever(notificationPersistence.offenderChannelEnabled(any())).thenReturn(false)
+      whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.CHANNEL_DISABLED)
     }
 
     @Test
