@@ -138,8 +138,11 @@ class UpcomingCheckinService(
       CheckinMode.AD_HOC -> firstCheckin.takeIf { it >= from && !hasCheckin(offender, it) }
       CheckinMode.SCHEDULED -> {
         if (offender.checkinInterval == null) return null
-        val next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
-        if (hasCheckin(offender, next)) nextCheckinDay(offender, next) else next
+        val taken = checkinRepository.findAllByOffenderAndDueDateGreaterThanEqual(offender, from)
+          .filter { it.status in STATUSES_HOLDING_DATE }.map { it.dueDate }.toSet()
+        var next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
+        while (next in taken) next = nextCheckinDay(offender, next)
+        next
       }
     }
   }

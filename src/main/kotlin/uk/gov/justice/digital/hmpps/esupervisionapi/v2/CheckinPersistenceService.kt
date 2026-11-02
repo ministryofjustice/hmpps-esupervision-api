@@ -24,6 +24,7 @@ import java.util.UUID
 @Service
 class CheckinPersistenceService(
   private val checkinRepository: OffenderCheckinRepository,
+  private val offenderRepository: OffenderRepository,
   private val eventAuditService: EventAuditService,
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderEventLogRepository: OffenderEventLogRepository,
@@ -46,6 +47,21 @@ class CheckinPersistenceService(
   @Transactional
   fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
     require(checkin.status == CheckinStatus.CREATED)
+    if (checkin.id == 0L && upcomingCheckinService.enabled()) {
+      // Locking the offender serialises this with scheduling, which may have scheduled this date
+      // after the caller looked for an upcoming check-in: activate that one rather than creating a
+      // second check-in NDelius would also record. It also loads the offender in this transaction,
+      // as recording the check-in reads it and the caller's may be detached (the creation job's).
+      checkin.offender = offenderRepository.findByIdForUpdate(checkin.offender.id)!!
+      val scheduled = checkinRepository.findScheduledForOffenders(listOf(checkin.offender.id), checkin.dueDate).singleOrNull()
+      if (scheduled != null) {
+        LOGGER.info("Activating checkin {}, scheduled after the caller looked for it, instead of creating checkin {}", scheduled.uuid, checkin.uuid)
+        scheduled.status = CheckinStatus.CREATED
+        scheduled.createdAt = checkin.createdAt
+        scheduled.createdBy = checkin.createdBy
+        return checkinCreation(scheduled, event.copy(checkin = event.checkin.copy(uuid = scheduled.uuid)))
+      }
+    }
     val activating = checkin.id != 0L
     val id = (if (activating) activate(checkin) else insert(checkin)) ?: return null
     // an activated check-in was recorded in NDelius when it was scheduled

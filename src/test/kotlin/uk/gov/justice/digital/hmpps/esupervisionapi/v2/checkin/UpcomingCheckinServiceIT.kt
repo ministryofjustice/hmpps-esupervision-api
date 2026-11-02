@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.checkinDateTime
@@ -173,6 +174,17 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `skips every date that already has a check-in`() {
+    val offender = saveOffender(firstCheckin = today.minusWeeks(1))
+    saveCheckin(offender, CheckinStatus.SUBMITTED, today)
+    saveCheckin(offender, CheckinStatus.REVIEWED, today.plusWeeks(1))
+
+    service.scheduleNext(offender.id)
+
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusWeeks(2))
+  }
+
+  @Test
   fun `schedules today when today's check-in hasn't been created yet`() {
     val offender = saveOffender(firstCheckin = today.minusWeeks(1))
 
@@ -259,6 +271,33 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
       assertThat(it.eventNumber).isEqualTo(1)
     })
     assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(activated.uuid).map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+  }
+
+  @Test
+  fun `creating a check-in for a date scheduled after the caller looked for one activates the scheduled check-in`() {
+    val offender = saveOffender(firstCheckin = today)
+    // as the creation job does: it found no upcoming check-in, then the date was scheduled
+    val checkin = checkinCreationService.prepareCheckinForOffender(offender, today, scheduled = null)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    val event = PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = offender.practitionerId,
+      checkin = checkin.dto(contactDetails(offender)),
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = null,
+      checkinMode = offender.mode,
+    )
+
+    val created = checkinCreationService.createCheckins(listOf(checkin to event)).single()
+
+    assertThat(created.checkinId).isEqualTo(scheduled.id)
+    assertThat(created.checkin.uuid).isEqualTo(scheduled.uuid)
+    assertThat(checkinRepository.findAll()).singleElement().satisfies({
+      assertThat(it.uuid).isEqualTo(scheduled.uuid)
+      assertThat(it.status).isEqualTo(CheckinStatus.CREATED)
+    })
+    assertThat(deliusEventRepository.findAll().map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
   }
 
   @Test

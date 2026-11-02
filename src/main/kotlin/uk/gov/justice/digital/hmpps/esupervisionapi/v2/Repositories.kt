@@ -354,6 +354,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   // their check-ins and another created by restarting them, so lookups by day never assume one row.
   fun findAllByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
 
+  fun findAllByOffenderAndDueDateGreaterThanEqual(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
+
   @Query(
     """
     SELECT c FROM OffenderCheckin c
