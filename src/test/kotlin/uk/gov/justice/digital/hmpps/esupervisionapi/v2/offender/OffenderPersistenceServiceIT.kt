@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
@@ -59,6 +60,8 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
   @Autowired
   private lateinit var clock: Clock
 
+  // Before as well as after: the outbox assertions count every item, so one left by another test class would fail them.
+  @BeforeEach
   @AfterEach
   fun cleanUp() {
     questionListAssignmentRepository.deleteAll()

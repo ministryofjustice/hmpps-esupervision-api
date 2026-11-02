@@ -103,8 +103,9 @@ class OffenderPersistenceServiceTest {
       if (hasSetup) {
         verify(outboxItemRepository).addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, setup.primaryKey)
       }
-      verify(questionListAssignmentRepository).deleteUpcomingAssignment(offender.id)
+      verify(checkinRepository).updateStatusForOffender(offender, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED)
       verify(checkinRepository).updateStatusForOffender(offender, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
+      verify(questionListAssignmentRepository).deleteUpcomingAssignment(offender.id)
       verify(eventAuditService).recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
       verify(appEventPublisher).publishEvent(deactivationEvent)
       verify(offenderRepository).deactivateIfVerified(offender.id)

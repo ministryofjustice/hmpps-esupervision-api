@@ -384,8 +384,9 @@ class OffenderRepositoryTest : IntegrationTestBase() {
     assertEquals(existingCheckinUuid, checkins[0].uuid)
   }
 
+  // SCHEDULED: an offender has at most one upcoming check-in (ESUP-2223), so there are no duplicates
   @ParameterizedTest
-  @EnumSource(CheckinStatus::class, names = ["CREATED"], mode = EnumSource.Mode.EXCLUDE)
+  @EnumSource(CheckinStatus::class, names = ["CREATED", "SCHEDULED"], mode = EnumSource.Mode.EXCLUDE)
   @Transactional
   fun `maybeInsert should allow historical duplicates in other statuses`(status: CheckinStatus) {
     val dueDate = LocalDate.now()
