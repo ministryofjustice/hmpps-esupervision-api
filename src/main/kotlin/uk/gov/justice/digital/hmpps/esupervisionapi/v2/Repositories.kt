@@ -449,6 +449,14 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Query("select c from OffenderCheckin c where c.offender = :offender and c.status = 'SCHEDULED'")
   fun findScheduledForUpdate(offender: Offender): OffenderCheckin?
 
+  /** Whether the offender has a CREATED check-in for [dueDate] in the database. Doesn't flush first, as [lockAndGetStatus]. */
+  @Query(
+    "select exists(select 1 from offender_checkin_v2 where offender_id = :offenderId and due_date = :dueDate and status = 'CREATED')",
+    nativeQuery = true,
+  )
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun existsCreated(offenderId: Long, dueDate: LocalDate): Boolean
+
   /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(
     """
@@ -527,6 +535,20 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
 """,
   )
   fun findMigratedByStatus(status: CheckinStatus, pageable: Pageable): List<OffenderCheckin>
+
+  /** Returns the inserted checkin, or null if a CREATED checkin already exists for this offender and due date. */
+  @Query(
+    """
+    INSERT INTO offender_checkin_v2 (uuid, offender_id, status, due_date, created_at, created_by, link_status, link_status_updated_at)
+    VALUES (:#{#checkin.uuid}, :#{#checkin.offender.id}, :#{#checkin.status.name()}, :#{#checkin.dueDate}, :#{#checkin.createdAt}, :#{#checkin.createdBy},
+      :#{#checkin.linkStatus?.name()}, :#{#checkin.linkStatusUpdatedAt})
+    ON CONFLICT (offender_id, due_date) WHERE status = 'CREATED'
+    DO NOTHING
+    RETURNING id
+    """,
+    nativeQuery = true,
+  )
+  fun maybeInsert(checkin: OffenderCheckin): Long?
 }
 
 /**

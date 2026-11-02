@@ -129,7 +129,7 @@ class ScheduledCheckinSchemaIT : IntegrationTestBase() {
   @Test
   fun `link status round-trips and defaults to null`() {
     val offender = saveOffender()
-    val legacy = checkinRepository.save(checkin(offender, CheckinStatus.CREATED, clock.today()))
+    val legacy = checkinRepository.save(checkin(offender, CheckinStatus.CREATED, clock.today().minusDays(1)))
     val withLink = checkin(offender, CheckinStatus.CREATED, clock.today()).apply {
       linkStatus = CheckinLinkStatus.FAILED
       linkStatusUpdatedAt = clock.instant()

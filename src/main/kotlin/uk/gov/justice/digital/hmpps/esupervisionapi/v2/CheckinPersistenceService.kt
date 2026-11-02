@@ -37,44 +37,93 @@ class CheckinPersistenceService(
   fun findCheckin(uuid: UUID): OffenderCheckin? = checkinRepository.findByUuid(uuid).orElse(null)
 
   /**
-   * @return false if [checkin] activates an upcoming check-in that was cancelled (check-ins were
-   *   stopped) or moved after the caller read it, so nothing was created
+   * Creates [checkin], or, if it has an id, activates it: an upcoming (SCHEDULED) check-in the
+   * caller read and made CREATED.
+   *
+   * @return null if nothing was created: its offender already has a CREATED check-in for the due
+   *   date, or the upcoming check-in was cancelled (check-ins were stopped) or moved after the
+   *   caller read it
    */
   @Transactional
-  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): Boolean {
-    // Activating: the caller read the upcoming check-in before this transaction, and stopping
-    // check-ins may have cancelled it since. Saving the stale copy would undo the cancellation.
-    // Or a schedule change may have moved it to another date. Locking it also makes stopping
-    // check-ins, or moving it, wait until this commits, then find it created.
-    if (checkin.id != 0L && checkinRepository.lockAndGetScheduledDueDate(checkin.id) != checkin.dueDate) {
-      LOGGER.info("Not activating checkin {}: it is no longer scheduled for {}", checkin.uuid, checkin.dueDate)
-      // With open-in-view the caller may have activated a managed copy, which committing this
-      // transaction would write back over the cancellation or move.
-      if (entityManager.contains(checkin)) entityManager.refresh(checkin)
-      return false
-    }
-    // an activated check-in was recorded in NDelius when it was scheduled
-    val notScheduledBefore = checkin.status == CheckinStatus.CREATED && checkin.id == 0L
+  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
+    require(checkin.status == CheckinStatus.CREATED)
+    val activating = checkin.id != 0L
     if (upcomingCheckinService.enabled()) {
       // the invite is sent once this commits; the link-sent gate holds submission until then
       checkin.linkStatus = CheckinLinkStatus.SENDING
       checkin.linkStatusUpdatedAt = clock.instant()
     }
-    val savedCheckin = checkinRepository.saveAndFlush(checkin)
-    if (!notScheduledBefore && upcomingCheckinService.enabled()) {
-      // the link columns are only written on insert (see OffenderCheckin.linkStatus)
-      checkinRepository.markLinkSending(savedCheckin.id, savedCheckin.linkStatusUpdatedAt!!)
-    }
-    if (notScheduledBefore && upcomingCheckinService.enabled()) {
+    val id = (if (activating) activate(checkin) else insert(checkin)) ?: return null
+    // an activated check-in was recorded in NDelius when it was scheduled
+    if (!activating && upcomingCheckinService.enabled()) {
       // the event's number is the one on record, which can be unset when the caller has NDelius's
-      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(savedCheckin.offender, it) }
-      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, savedCheckin, CheckinDeliusEventNotes.scheduled(savedCheckin.dueDate), eventNumber, savedCheckin.dueDate)
+      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it) }
+      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, CheckinDeliusEventNotes.scheduled(checkin.dueDate), eventNumber, checkin.dueDate)
     }
-    val finalisedEvent = event.finalise(savedCheckin)
-    eventAuditService.recordCheckinCreated(savedCheckin, finalisedEvent)
+    val finalisedEvent = event.finalise(checkin, id)
+    eventAuditService.recordCheckinCreated(checkin, finalisedEvent)
 
     appEventPublisher.publishEvent(finalisedEvent)
-    return true
+    return finalisedEvent
+  }
+
+  /** @return the new check-in's id, or null if a CREATED check-in already exists for its offender and due date */
+  private fun insert(checkin: OffenderCheckin): Long? {
+    requireOnlyInsertedFieldsSet(checkin)
+    return checkinRepository.maybeInsert(checkin)
+  }
+
+  /**
+   * [checkin] is an upcoming check-in the caller read and activated.
+   * @return its id, or null if it can't be activated
+   */
+  private fun activate(checkin: OffenderCheckin): Long? {
+    // The caller read the upcoming check-in before this transaction, and stopping check-ins may
+    // have cancelled it since, or a schedule change moved it to another date. Saving the stale copy
+    // would undo that. Locking it also makes stopping check-ins, or moving it, wait until this
+    // commits, then find it created.
+    // A check-in created for its date meanwhile would make activating it break the one-per-day index.
+    if (checkinRepository.lockAndGetScheduledDueDate(checkin.id) != checkin.dueDate ||
+      checkinRepository.existsCreated(checkin.offender.id, checkin.dueDate)
+    ) {
+      LOGGER.info("Not activating checkin {}: it is no longer scheduled for {}, or that date already has a check-in", checkin.uuid, checkin.dueDate)
+      // With open-in-view the caller may have activated a managed copy, which committing this
+      // transaction would write back over the cancellation or move.
+      if (entityManager.contains(checkin)) entityManager.refresh(checkin)
+      return null
+    }
+    val id = checkinRepository.saveAndFlush(checkin).id
+    // the link columns are only written on insert (see OffenderCheckin.linkStatus)
+    checkin.linkStatusUpdatedAt?.let { checkinRepository.markLinkSending(id, it) }
+    return id
+  }
+
+  /**
+   * [OffenderCheckinRepository.maybeInsert] writes only uuid, offender, status, due date, created at,
+   * created by and link status. Anything else set on a new check-in would be silently dropped, so refuse it: extend
+   * the INSERT before setting another field at creation time.
+   */
+  private fun requireOnlyInsertedFieldsSet(checkin: OffenderCheckin) {
+    val unsupported = buildList {
+      if (checkin.id != 0L) add("id")
+      if (checkin.surveyResponse != null) add("surveyResponse")
+      if (checkin.submittedAt != null) add("submittedAt")
+      if (checkin.reviewStartedAt != null) add("reviewStartedAt")
+      if (checkin.reviewStartedBy != null) add("reviewStartedBy")
+      if (checkin.reviewedAt != null) add("reviewedAt")
+      if (checkin.reviewedBy != null) add("reviewedBy")
+      if (checkin.checkinStartedAt != null) add("checkinStartedAt")
+      if (checkin.autoIdCheck != null) add("autoIdCheck")
+      if (checkin.autoIdCheckScore != null) add("autoIdCheckScore")
+      if (checkin.livenessResult != null) add("livenessResult")
+      if (checkin.livenessConfidence != null) add("livenessConfidence")
+      if (checkin.livenessEnabled) add("livenessEnabled")
+      if (checkin.manualIdCheck != null) add("manualIdCheck")
+      if (checkin.riskFeedback != null) add("riskFeedback")
+      if (checkin.sensitive) add("sensitive")
+      if (checkin.imageDeletedAt != null) add("imageDeletedAt")
+    }
+    require(unsupported.isEmpty()) { "Check-in creation does not persist $unsupported; extend OffenderCheckinRepository.maybeInsert" }
   }
 
   @Transactional

@@ -129,7 +129,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
     job.process()
 
     await()
-      .atMost(Duration.ofSeconds(10000))
+      .atMost(Duration.ofSeconds(30))
       .pollInterval(100, TimeUnit.MILLISECONDS)
       .untilAsserted {
         val checkins = checkinRepository.findAll().associateBy { it.offender.crn }

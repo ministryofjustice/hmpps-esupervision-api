@@ -125,7 +125,7 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
       // check-ins stopped meanwhile
       CompletableFuture.runAsync { jdbcTemplate.update("update offender_checkin_v2 set status = 'CANCELLED' where id = ?", saved.id) }.get()
 
-      assertThat(checkinPersistenceService.checkinCreation(checkin, createdEvent(offender, checkin))).isFalse()
+      assertThat(checkinPersistenceService.checkinCreation(checkin, createdEvent(offender, checkin))).isNull()
     }
 
     assertThat(checkinRepository.findByUuid(saved.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
@@ -153,6 +153,21 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
 
     assertThat(stopping.get(10, TimeUnit.SECONDS)).isNotNull
     assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+  }
+
+  @Test
+  fun `an upcoming check-in isn't activated when its date already has a check-in`() {
+    val offender = saveOffender()
+    val scheduled = saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today())
+    val existing = saveCheckin(offender, CheckinStatus.CREATED, clock.today())
+
+    val created = transactionTemplate.execute {
+      checkinCreationService.createCheckinForOffender(offender, clock.today(), "PRACT001", contactDetails(offender))
+    }
+
+    assertThat(created).isNull()
+    assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.SCHEDULED)
+    assertThat(checkinRepository.findByUuid(existing.uuid).get().status).isEqualTo(CheckinStatus.CREATED)
   }
 
   @Test
