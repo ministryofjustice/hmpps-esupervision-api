@@ -39,9 +39,13 @@ class OffenderPersistenceService(
     if (event.setup != null) {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
+    // In the order activating an upcoming check-in (SCHEDULED -> CREATED) locks rows: the check-in,
+    // then (by trigger) the upcoming question assignment, so the two wait rather than deadlock.
+    // SCHEDULED first: if an activation holds the row, this waits for it and then skips it, and the
+    // CREATED update, a later statement, sees it as created and cancels it.
+    val cancelledCheckins = checkinRepository.updateStatusForOffender(updated, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) +
+      checkinRepository.updateStatusForOffender(updated, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(updated.id)
-    val cancelledCheckins = checkinRepository.updateStatusForOffender(updated, CheckinStatus.CREATED, CheckinStatus.CANCELLED) +
-      checkinRepository.updateStatusForOffender(updated, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
       LOGGER.info("Cancelled {} created/scheduled check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, offender.crn)
     }
