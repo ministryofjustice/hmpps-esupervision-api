@@ -158,7 +158,7 @@ data class PartialCheckinCreatedEvent(
   IPartialEvent,
   ActiveEvent {
   fun finalise(checkin: OffenderCheckin, id: Long): CheckinCreatedEvent {
-    require(checkin.id != 0L) { "Checkin ID must be set after DB insert" }
+    require(id != 0L) { "Checkin ID must be set after DB insert" }
     return CheckinCreatedEvent(
       checkinId = id,
       offenderId = offenderId,
