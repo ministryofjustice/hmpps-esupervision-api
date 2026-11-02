@@ -41,16 +41,20 @@ class OffenderPersistenceService(
     if (event.setup != null) {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, event.setup.primaryKey)
     }
-    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(updated.id)
     // ESUP-2223: NDelius has the upcoming check-in, and the open one, so it's told they're cancelled.
     val checkinsToCancel = if (checkinDeliusEventService.enabled()) {
       checkinRepository.findAllByOffenderAndStatusIn(updated, listOf(CheckinStatus.CREATED, CheckinStatus.SCHEDULED))
     } else {
       emptyList()
     }
-    val cancelledCheckins = checkinRepository.updateStatusForOffender(updated, CheckinStatus.CREATED, CheckinStatus.CANCELLED) +
-      checkinRepository.updateStatusForOffender(updated, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED)
+    // In the order activating an upcoming check-in (SCHEDULED -> CREATED) locks rows: the check-in,
+    // then (by trigger) the upcoming question assignment, so the two wait rather than deadlock.
+    // SCHEDULED first: if an activation holds the row, this waits for it and then skips it, and the
+    // CREATED update, a later statement, sees it as created and cancels it.
+    val cancelledCheckins = checkinRepository.updateStatusForOffender(updated, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) +
+      checkinRepository.updateStatusForOffender(updated, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     checkinsToCancel.forEach { checkinDeliusEventService.recordCancelledIfRecorded(it, CHECKINS_STOPPED_REASON) }
+    val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(updated.id)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
       LOGGER.info("Cancelled {} created/scheduled check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, offender.crn)
     }

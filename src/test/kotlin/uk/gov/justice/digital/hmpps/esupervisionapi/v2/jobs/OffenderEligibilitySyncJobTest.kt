@@ -3,17 +3,20 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.same
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.test.util.ReflectionTestUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
@@ -42,6 +45,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 class OffenderEligibilitySyncJobTest {
 
@@ -55,13 +60,17 @@ class OffenderEligibilitySyncJobTest {
   private val eligibilityChecker: EligibilityChecker = mock()
   private val deactivationService: OffenderDeactivationService = mock()
   private val appConfig: AppConfig = mock()
+  private val offenderEventExecutor: ThreadPoolTaskExecutor = mock()
+  private val eventPool: ThreadPoolExecutor = mock()
 
   @BeforeEach
   fun setUp() {
     whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(offenderEventExecutor.threadPoolExecutor).thenReturn(eventPool)
+    whenever(eventPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)).thenReturn(true)
   }
 
-  private val job = OffenderEligibilitySyncJob(
+  private fun job(batchEnabled: Boolean = true) = OffenderEligibilitySyncJob(
     clock = clock,
     jobLogRepository = jobLogRepository,
     offenderRepository = offenderRepository,
@@ -71,7 +80,92 @@ class OffenderEligibilitySyncJobTest {
     offenderDeactivationService = deactivationService,
     chunkSize = 100,
     appConfig = appConfig,
+    offenderEventExecutor = offenderEventExecutor,
+    batchEnabled = batchEnabled,
   )
+
+  private val job get() = job()
+
+  @Test
+  fun `batch drains event tasks before recording completion`() {
+    job.process()
+
+    inOrder(jobLogRepository, eventPool) {
+      verify(jobLogRepository).saveAndFlush(any<JobLog>())
+      verify(eventPool).shutdown()
+      verify(eventPool).awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
+      verify(jobLogRepository).saveAndFlush(any<JobLog>())
+    }
+  }
+
+  @Test
+  fun `batch drains submitted event tasks when processing fails`() {
+    val failure = IllegalStateException("database unavailable")
+    whenever(offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(any(), any(), any()))
+      .thenThrow(failure)
+
+    assertThat(assertThrows<IllegalStateException> { job.process() }).isSameAs(failure)
+
+    inOrder(eventPool, jobLogRepository) {
+      verify(eventPool).shutdown()
+      verify(eventPool).awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
+      verify(jobLogRepository).saveAndFlush(any<JobLog>())
+    }
+  }
+
+  @Test
+  fun `interrupted drain restores interrupt flag and does not record completion`() {
+    whenever(eventPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS))
+      .thenThrow(InterruptedException("interrupted drain"))
+
+    try {
+      assertThrows<InterruptedException> { job.process() }
+      assertThat(Thread.currentThread().isInterrupted).isTrue()
+      val log = argumentCaptor<JobLog>()
+      verify(jobLogRepository).saveAndFlush(log.capture())
+      assertThat(log.firstValue.endedAt).isNull()
+    } finally {
+      Thread.interrupted()
+    }
+  }
+
+  @Test
+  fun `drain failure does not replace the original processing failure`() {
+    val processingFailure = IllegalStateException("database unavailable")
+    val drainFailure = InterruptedException("interrupted drain")
+    whenever(offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(any(), any(), any()))
+      .thenThrow(processingFailure)
+    whenever(eventPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)).thenThrow(drainFailure)
+
+    try {
+      val failure = assertThrows<IllegalStateException> { job.process() }
+      assertThat(failure).isSameAs(processingFailure)
+      assertThat(failure.suppressed).containsExactly(drainFailure)
+      assertThat(Thread.currentThread().isInterrupted).isTrue()
+      verify(jobLogRepository).saveAndFlush(any<JobLog>())
+    } finally {
+      Thread.interrupted()
+    }
+  }
+
+  @Test
+  fun `manual non-batch runs leave the event executor open`() {
+    job(batchEnabled = false).process()
+
+    verify(offenderEventExecutor, never()).threadPoolExecutor
+    verify(eventPool, never()).shutdown()
+    verify(jobLogRepository, times(2)).saveAndFlush(any<JobLog>())
+  }
+
+  @Test
+  fun `disabled feature does not shut down the event executor`() {
+    whenever(appConfig.enabledFeatures).thenReturn(emptySet())
+
+    job.process()
+
+    verify(offenderEventExecutor, never()).threadPoolExecutor
+    verify(jobLogRepository, never()).saveAndFlush(any<JobLog>())
+  }
 
   @Test
   fun `process records a job log with the expected type and end time`() {
