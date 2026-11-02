@@ -93,7 +93,8 @@ class CheckinCreationService(
    * @param dueDate Due date for checkin
    * @param createdBy Who created the checkin
    * @param contactDetails Contact details for offender
-   * @return Created checkin
+   * @return the created check-in, or null if the offender already has one for [dueDate]
+   * @throws ResponseStatusException 409 if the upcoming check-in it would activate was cancelled meanwhile
    */
   fun createCheckinForOffender(
     offender: Offender,
@@ -114,6 +115,11 @@ class CheckinCreationService(
     )
 
     val finalisedEvent = checkinPersistenceService.checkinCreation(checkin, event)
+    // Not activated, and not because the date already has a check-in: the upcoming check-in was
+    // cancelled (check-ins were stopped) after it was read above.
+    if (finalisedEvent == null && scheduled != null && !checkinRepository.existsCreated(offender.id, dueDate)) {
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in ${checkin.uuid} was cancelled before it could be created")
+    }
     LOGGER.info(
       "{} checkin {} for offender CRN={} with due date {} by {}",
       if (finalisedEvent != null) "Created" else "Did not create",
