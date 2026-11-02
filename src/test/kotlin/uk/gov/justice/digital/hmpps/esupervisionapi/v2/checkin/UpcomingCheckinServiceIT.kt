@@ -297,7 +297,9 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
       assertThat(it.uuid).isEqualTo(scheduled.uuid)
       assertThat(it.status).isEqualTo(CheckinStatus.CREATED)
     })
-    assertThat(deliusEventRepository.findAll().map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+    // recorded once, when it was scheduled
+    assertThat(deliusEventRepository.findAll().filter { it.eventType == DomainEventType.V2_CHECKIN_SCHEDULED }.map { it.checkinUuid })
+      .containsExactly(scheduled.uuid)
   }
 
   @Test
