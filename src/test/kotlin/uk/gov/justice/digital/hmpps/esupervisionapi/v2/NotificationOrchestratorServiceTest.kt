@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.Notificatio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationWithRecipient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
+import uk.gov.service.notify.NotificationClientException
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -285,6 +286,22 @@ class NotificationOrchestratorServiceTest {
       verify(notificationPersistence).buildPractitionerNotifications(any(), any(), any(), any(), eq(NotificationType.PractitionerInviteIssueGeneric), any())
       // the email links to the person's activity log in MPoP
       verify(appConfig).contactsUrl(offender.crn)
+    }
+
+    @Test
+    fun `an invite Notify may have sent keeps the check-in open, without telling the practitioner`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      val gatewayTimeout = NotificationClientException::class.java
+        .getDeclaredConstructor(Int::class.javaPrimitiveType, String::class.java)
+        .apply { isAccessible = true }
+        .newInstance(504, "Status code: 504")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenAnswer { throw gatewayTimeout }
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkMaybeSent(checkin.id)
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+      verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
     }
 
     @Test

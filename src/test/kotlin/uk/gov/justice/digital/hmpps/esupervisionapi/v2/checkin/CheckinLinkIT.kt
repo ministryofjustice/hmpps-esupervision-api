@@ -188,6 +188,18 @@ class CheckinLinkIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `a link that may have been sent opens the check-in without telling NDelius`() {
+    val checkin = saveCheckin(saveOffender(), CheckinLinkStatus.SENDING)
+
+    assertThat(linkService.linkMaybeSent(checkin.id)).isTrue()
+
+    val opened = checkinRepository.findByUuid(checkin.uuid).get()
+    assertThat(opened.status).isEqualTo(CheckinStatus.CREATED)
+    assertThat(opened.linkStatus).isEqualTo(CheckinLinkStatus.SENT)
+    assertThat(deliusEventRepository.findAll()).isEmpty()
+  }
+
+  @Test
   fun `check-ins created before the feature are left alone`() {
     val checkin = saveCheckin(saveOffender(), linkStatus = null)
 
