@@ -21,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -195,13 +196,18 @@ class CheckinCreationJobIT : IntegrationTestBase() {
   fun `with ESUP_2223 on, a check-in that wasn't scheduled is created and recorded as scheduled`() {
     val featuresBefore = appConfig.enabledFeatures
     ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
-    try {
+    val checkins = try {
       job.process()
+      // the invites are sent asynchronously and record link events: let them finish before cleanup
+      await()
+        .atMost(Duration.ofSeconds(30))
+        .pollInterval(100, TimeUnit.MILLISECONDS)
+        .until { checkinRepository.findAll().let { it.size == 2 && it.all { checkin -> checkin.linkStatus == CheckinLinkStatus.SENT } } }
+      checkinRepository.findAll()
     } finally {
       ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore)
     }
 
-    val checkins = checkinRepository.findAll()
     assertEquals(listOf(CheckinStatus.CREATED, CheckinStatus.CREATED), checkins.map { it.status })
     assertEquals(
       checkins.map { it.uuid to DomainEventType.V2_CHECKIN_SCHEDULED }.toSet(),
