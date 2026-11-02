@@ -370,6 +370,7 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Query(
     """
     SELECT c FROM OffenderCheckin c
+    JOIN FETCH c.offender
     WHERE c.offender.id IN :offenderIds
       AND c.dueDate = :dueDate
       AND c.status = 'SCHEDULED'

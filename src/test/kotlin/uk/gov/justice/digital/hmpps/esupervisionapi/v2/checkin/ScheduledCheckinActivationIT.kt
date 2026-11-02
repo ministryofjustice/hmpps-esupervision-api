@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import org.assertj.core.api.Assertions.assertThat
+import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -12,6 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -28,9 +30,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDate
 import java.time.Period
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * ESUP-2223: creating a check-in activates the offender's upcoming (SCHEDULED) check-in for that
@@ -40,6 +45,9 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var checkinCreationService: CheckinCreationService
+
+  @Autowired
+  private lateinit var checkinPersistenceService: CheckinPersistenceService
 
   @Autowired
   private lateinit var offenderDeactivationService: OffenderDeactivationService
@@ -99,18 +107,52 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
     transactionTemplate.execute { checkinRepository.updateStatusForOffender(offender, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) }
 
     val checkin = checkinCreationService.prepareCheckinForOffender(offender, clock.today(), scheduled)
-    val event = PartialCheckinCreatedEvent(
-      offenderId = offender.id,
-      practitionerId = "SYSTEM",
-      checkin = checkin.dto(contactDetails(offender), clock = clock, checkinWindow = Period.ofDays(3)),
-      offenderContactPreference = offender.contactPreference,
-      currentEvent = 1L,
-      checkinMode = offender.mode,
-    )
-    checkinCreationService.createCheckins(listOf(checkin to event))
+    checkinCreationService.createCheckins(listOf(checkin to createdEvent(offender, checkin)))
 
     assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
     assertThat(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, scheduled.id)).isEmpty
+  }
+
+  @Test
+  fun `a refused activation doesn't write back the caller's activated copy`() {
+    val offender = saveOffender()
+    val saved = saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today())
+
+    // as with open-in-view: the upcoming check-in is read and activated in the caller's persistence context
+    transactionTemplate.executeWithoutResult {
+      val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), clock.today()).single()
+      val checkin = checkinCreationService.prepareCheckinForOffender(offender, clock.today(), scheduled)
+      // check-ins stopped meanwhile
+      CompletableFuture.runAsync { jdbcTemplate.update("update offender_checkin_v2 set status = 'CANCELLED' where id = ?", saved.id) }.get()
+
+      assertThat(checkinPersistenceService.checkinCreation(checkin, createdEvent(offender, checkin))).isFalse()
+    }
+
+    assertThat(checkinRepository.findByUuid(saved.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+  }
+
+  @Test
+  fun `stopping check-ins while an upcoming check-in is being activated cancels it`() {
+    val offender = saveOffender()
+    val scheduled = saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today())
+    jdbcTemplate.update("insert into question_list_assignment (question_list_id, offender_id) select id, ? from question_list where name = 'Default'", offender.id)
+
+    lateinit var stopping: CompletableFuture<Offender?>
+    transactionTemplate.executeWithoutResult {
+      // activation locks the check-in, then changes it
+      checkinRepository.lockAndGetStatus(scheduled.id)
+      stopping = CompletableFuture.supplyAsync {
+        offenderDeactivationService.deactivateOffender(offender, "stopped", practitionerMessageFragment = null, contactDetails = contactDetails(offender))
+      }
+      await().atMost(Duration.ofSeconds(10)).until {
+        jdbcTemplate.queryForObject("select count(*) from pg_locks where not granted", Int::class.java)!! > 0
+      }
+      // fires the question assignment trigger
+      jdbcTemplate.update("update offender_checkin_v2 set status = 'CREATED' where id = ?", scheduled.id)
+    }
+
+    assertThat(stopping.get(10, TimeUnit.SECONDS)).isNotNull
+    assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
   }
 
   @Test
@@ -188,6 +230,15 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
       createdAt = clock.instant(),
       createdBy = "SYSTEM",
     ),
+  )
+
+  private fun createdEvent(offender: Offender, checkin: OffenderCheckin) = PartialCheckinCreatedEvent(
+    offenderId = offender.id,
+    practitionerId = "SYSTEM",
+    checkin = checkin.dto(contactDetails(offender), clock = clock, checkinWindow = Period.ofDays(3)),
+    offenderContactPreference = offender.contactPreference,
+    currentEvent = 1L,
+    checkinMode = offender.mode,
   )
 
   private fun contactDetails(offender: Offender) = ContactDetails(
