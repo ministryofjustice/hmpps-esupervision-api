@@ -21,6 +21,9 @@ class TestContainersSessionListener : LauncherSessionListener {
       withUsername("postgres")
       withExposedPorts(5432)
       setWaitStrategy(Wait.forListeningPort())
+      // Each cached Spring test context keeps its own connection pool open (up to 10), and the
+      // default of 100 connections runs out once enough contexts are cached ("too many clients").
+      withCommand("postgres", "-c", "max_connections=300")
     }
   }
 }

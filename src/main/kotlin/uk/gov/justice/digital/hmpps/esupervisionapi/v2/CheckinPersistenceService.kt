@@ -4,6 +4,8 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Clock
 import java.util.UUID
 
@@ -21,6 +23,7 @@ class CheckinPersistenceService(
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val clock: Clock,
+  private val checkinDeliusEventService: CheckinDeliusEventService,
 ) {
 
   @Transactional
@@ -39,6 +42,9 @@ class CheckinPersistenceService(
   fun checkinSubmission(checkin: OffenderCheckin, event: CheckinSubmittedEvent) {
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin)
+    }
 
     appEventPublisher.publishEvent(event)
   }
@@ -48,6 +54,9 @@ class CheckinPersistenceService(
     require(event.checkin.reviewedBy != null)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinReviewed(checkin, event)
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_REVIEWED, checkin)
+    }
     offenderEventLogRepository.save(
       OffenderEventLog(
         comment = reviewInfo.comment,
@@ -79,6 +88,9 @@ class CheckinPersistenceService(
         checkin = checkin.id,
       ),
     )
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_ANNOTATED, checkin, detailId = logEntry.uuid)
+    }
 
     appEventPublisher.publishEvent(event.finalise(logEntry))
   }

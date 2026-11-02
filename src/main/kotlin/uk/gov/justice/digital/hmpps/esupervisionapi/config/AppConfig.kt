@@ -14,10 +14,12 @@ class AppConfig(
   @Value("\${app.features.esup-1239}") val esup1239ProxyLinks: Boolean,
   @Value("\${app.features.esup-1763}") val esup1763RemoveSnapshots: Boolean,
   @Value($$"${app.features.esup-2082:false}") val esup2082NewEligibilityRules: Boolean,
+  @Value($$"${app.features.esup-2223:false}") val esup2223UpcomingCheckins: Boolean,
   val enabledFeatures: Set<Feature> = listOfNotNull(
     if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
     if (esup1763RemoveSnapshots) Feature.ESUP_1763 else null,
     if (esup2082NewEligibilityRules) Feature.ESUP_2082 else null,
+    if (esup2223UpcomingCheckins) Feature.ESUP_2223 else null,
   ).toSet(),
 ) {
 

@@ -15,4 +15,9 @@ enum class Feature {
    * ESUP-2082: New eligibility rules
    */
   ESUP_2082,
+
+  /**
+   * ESUP-2223: Record the next upcoming check-in in NDelius
+   */
+  ESUP_2223,
 }

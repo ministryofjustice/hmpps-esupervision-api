@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
@@ -368,7 +369,7 @@ class NotificationOrchestratorService(
 
   /** Send notifications for checkin submitted event */
   fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
-    event.publish(domainEventService)
+    if (!checkinEventsRelayed()) event.publish(domainEventService)
 
     val checkin = event.checkin
     if (event.checkin.personalDetails == null) {
@@ -441,7 +442,9 @@ class NotificationOrchestratorService(
   }
 
   /** Send notifications for checkin reviewed event */
-  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) = event.publish(domainEventService)
+  fun sendCheckinReviewedNotifications(event: CheckinReviewedEvent) {
+    if (!checkinEventsRelayed()) event.publish(domainEventService)
+  }
 
   /** Send notifications for checkin expired event */
   fun sendCheckinExpiredNotifications(
@@ -462,12 +465,14 @@ class NotificationOrchestratorService(
 
     processAndSendNotifications(notificationsWithRecipients, personalisation)
 
-    domainEventService.publishDomainEvent(
-      eventType = DomainEventType.V2_CHECKIN_EXPIRED,
-      uuid = checkin.uuid,
-      crn = checkin.offender.crn,
-      description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
-    )
+    if (!checkinEventsRelayed()) {
+      domainEventService.publishDomainEvent(
+        eventType = DomainEventType.V2_CHECKIN_EXPIRED,
+        uuid = checkin.uuid,
+        crn = checkin.offender.crn,
+        description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
+      )
+    }
   }
 
   private fun checkinExpiredPersonalisationDetails(
@@ -480,7 +485,15 @@ class NotificationOrchestratorService(
   )
 
   /** Send notifications for checkin updated event */
-  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) = event.publish(domainEventService)
+  fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
+    if (!checkinEventsRelayed()) event.publish(domainEventService)
+  }
+
+  /**
+   * ESUP-2223: with the feature on, check-in events for NDelius are recorded with the change and
+   * published in order by CheckinDeliusEventRelayJob instead of here.
+   */
+  private fun checkinEventsRelayed() = appConfig.enabledFeatures.contains(Feature.ESUP_2223)
 
   /** Send reminder for practitioner to add custom questions */
   fun sendPractitionerCustomQuestionsReminder(info: QuestionsReminderInfo) {
