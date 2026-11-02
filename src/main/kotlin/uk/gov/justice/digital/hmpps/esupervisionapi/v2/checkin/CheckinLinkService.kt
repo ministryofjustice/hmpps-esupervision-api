@@ -92,6 +92,7 @@ class CheckinLinkService(
     const val NO_ACTIVE_EVENT = "They have no active event"
     const val NO_CONTACT_DETAILS = "Their contact details could not be found"
     const val NO_ADDRESS = "They have no mobile number or email address for their contact preference"
+    const val CHANNEL_DISABLED = "Sending check in links by their contact preference is switched off"
     const val NOTIFY_FAILED = "GOV.UK Notify could not send it"
   }
 }
