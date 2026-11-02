@@ -3,8 +3,10 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Clock
 import java.util.UUID
@@ -19,6 +21,7 @@ import java.util.UUID
 @Service
 class CheckinPersistenceService(
   private val checkinRepository: OffenderCheckinRepository,
+  private val offenderRepository: OffenderRepository,
   private val eventAuditService: EventAuditService,
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderEventLogRepository: OffenderEventLogRepository,
@@ -29,13 +32,25 @@ class CheckinPersistenceService(
   @Transactional
   fun findCheckin(uuid: UUID): OffenderCheckin? = checkinRepository.findByUuid(uuid).orElse(null)
 
+  /**
+   * @return false if the offender's check-ins were stopped after the caller read the offender, so
+   *   nothing was created
+   */
   @Transactional
-  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent) {
+  fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): Boolean {
+    // The caller (e.g. the creation job) read the offender before this transaction, and their
+    // check-ins may have been stopped since. Locking the offender also makes stopping check-ins
+    // wait until this commits, then cancel the new check-in along with the others.
+    if (offenderRepository.lockAndGetStatus(checkin.offender.id) != OffenderStatus.VERIFIED.name) {
+      LOGGER.info("Not creating checkin {}: the offender's check-ins have been stopped", checkin.uuid)
+      return false
+    }
     val savedCheckin = checkinRepository.saveAndFlush(checkin)
     val finalisedEvent = event.finalise(savedCheckin)
     eventAuditService.recordCheckinCreated(savedCheckin, finalisedEvent)
 
     appEventPublisher.publishEvent(finalisedEvent)
+    return true
   }
 
   @Transactional
@@ -93,5 +108,9 @@ class CheckinPersistenceService(
     }
 
     appEventPublisher.publishEvent(event.finalise(logEntry))
+  }
+
+  companion object {
+    private val LOGGER = logger<CheckinPersistenceService>()
   }
 }

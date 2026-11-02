@@ -118,7 +118,9 @@ class CheckinCreationService(
       checkinMode = offender.mode,
     )
 
-    checkinPersistenceService.checkinCreation(checkin, event)
+    if (!checkinPersistenceService.checkinCreation(checkin, event)) {
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-ins have been stopped for CRN=${offender.crn}")
+    }
 
     LOGGER.info(
       "Created checkin {} for offender CRN={} with due date {} by {}",
@@ -133,16 +135,14 @@ class CheckinCreationService(
 
   /**
    * @param checkins List of checkins to create
-   * @return List of saved checkins
+   * @return the check-ins created: those for offenders whose check-ins were stopped are skipped
    * @throws BatchCheckinCreationException
    */
   @Transactional
-  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>) {
-    if (checkins.isEmpty()) return
+  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>): List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>> {
+    if (checkins.isEmpty()) return emptyList()
     try {
-      for ((checkin, event) in checkins) {
-        checkinPersistenceService.checkinCreation(checkin, event)
-      }
+      return checkins.filter { (checkin, event) -> checkinPersistenceService.checkinCreation(checkin, event) }
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)
     }

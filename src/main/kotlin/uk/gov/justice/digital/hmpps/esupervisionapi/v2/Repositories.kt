@@ -58,6 +58,13 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun deactivateIfVerified(offenderId: Long): Optional<Offender>
 
   /**
+   * Locks the offender's row until the transaction ends, so stopping check-ins (which updates it)
+   * waits for this transaction, and returns the offender's current status.
+   */
+  @Query("select cast(status as text) from offender_v2 where id = :id for share", nativeQuery = true)
+  fun lockAndGetStatus(id: Long): String?
+
+  /**
    * Update an offender based on new due_date and today's date.
    *
    * If update didn't happen, we should  not be creating a check-in

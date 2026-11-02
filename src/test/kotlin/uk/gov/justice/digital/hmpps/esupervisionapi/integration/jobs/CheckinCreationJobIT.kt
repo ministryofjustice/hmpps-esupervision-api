@@ -14,21 +14,26 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -39,7 +44,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactiva
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 @TestPropertySource(properties = ["app.scheduling.v2-checkin-creation.chunk-size=1"])
@@ -74,6 +81,9 @@ class CheckinCreationJobIT : IntegrationTestBase() {
 
   @Autowired
   lateinit var entityManager: EntityManager
+
+  @Autowired
+  lateinit var transactionTemplate: TransactionTemplate
 
   @Autowired
   lateinit var job: CheckinCreationJob
@@ -172,5 +182,52 @@ class CheckinCreationJobIT : IntegrationTestBase() {
           .orElseThrow()
           .let { assertEquals(OutboxItemStatus.SENT, it.status) }
       }
+  }
+
+  @Test
+  fun `no check-in is created for an offender whose check-ins were stopped after the job read them`() {
+    val offender = offenderRepository.findByCrn("A000001").orElseThrow()
+    val checkin = prepareCheckin(offender)
+    // check-ins stopped while the job was getting contact details
+    jdbcTemplate.update("update offender_v2 set status = 'INACTIVE' where id = ?", offender.id)
+
+    val created = checkinCreationService.createCheckins(listOf(checkin))
+
+    assertEquals(0, created.size)
+    assertEquals(0, checkinRepository.count())
+  }
+
+  @Test
+  fun `stopping check-ins while a check-in is being created cancels it`() {
+    val offender = offenderRepository.findByCrn("A000001").orElseThrow()
+    val checkin = prepareCheckin(offender)
+
+    lateinit var stopping: CompletableFuture<Offender?>
+    transactionTemplate.executeWithoutResult {
+      assertEquals(1, checkinCreationService.createCheckins(listOf(checkin)).size)
+      stopping = CompletableFuture.supplyAsync {
+        offenderDeactivationService.deactivateOffender(offender, "stopped", practitionerMessageFragment = null)
+      }
+      // stopping waits for the creation to commit
+      await().atMost(Duration.ofSeconds(10)).until {
+        jdbcTemplate.queryForObject("select count(*) from pg_locks where not granted", Int::class.java)!! > 0
+      }
+    }
+
+    assertEquals(offender.id, stopping.get(10, TimeUnit.SECONDS)?.id)
+    assertEquals(CheckinStatus.CANCELLED, checkinRepository.findByUuid(checkin.first.uuid).orElseThrow().status)
+  }
+
+  private fun prepareCheckin(offender: Offender): Pair<OffenderCheckin, PartialCheckinCreatedEvent> {
+    val checkin = checkinCreationService.prepareCheckinForOffender(offender, clock.today())
+    val contactDetails = ndeliusApiClient.getContactDetailsForMultiple(listOf(offender.crn)).single()
+    return checkin to PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = "SYSTEM",
+      checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = Period.ofDays(3)),
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = 1L,
+      checkinMode = offender.mode,
+    )
   }
 }
