@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
@@ -29,12 +30,14 @@ import java.time.Clock
 @Service
 class OffenderDeactivationService(
   private val clock: Clock,
-  private val offenderSetupRepository: OffenderSetupRepository,
+  private val appConfig: AppConfig,
   private val offenderPersistenceService: OffenderPersistenceService,
+  private val offenderSetupRepository: OffenderSetupRepository,
 ) {
 
   /**
-   * Deactivate a VERIFIED offender. Idempotent: a no-op if the offender is not VERIFIED.
+   * Deactivate a VERIFIED offender. Idempotent: a no-op if the offender is not VERIFIED, or if the stored
+   * status or event selection changed since the caller read it (the decision is then stale).
    *
    * @param reason recorded against the deactivation audit event
    * @param contactDetails Delius details fetched by the caller; downstream audit/notifications are skipped when null
@@ -42,7 +45,8 @@ class OffenderDeactivationService(
    * @param auditEventType the audit event type to record; defaults to a manual practitioner
    *   deactivation. Scheduled jobs pass a criterion-specific automated type so the reason an offender
    *   was stopped (in reset vs no active events) is queryable via the audit event_type.
-   * @return the (possibly unchanged) offender
+   * @param expectedCurrentEvent the event selection the caller based its decision on
+   * @return true if the offender was deactivated
    *
    * Spins its own transaction (REQUIRES_NEW) so that a deactivation commits independently of any
    * surrounding work. In particular, when called from [V2CheckinCreationJob]'s long-lived job
@@ -58,30 +62,46 @@ class OffenderDeactivationService(
     contactDetails: ContactDetails? = null,
     sensitive: Boolean = false,
     auditEventType: OffenderAuditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+    expectedCurrentEvent: Long? = offender.currentEvent,
     deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
-  ): Offender? {
-    if (!canDeactivate(offender)) return null
+  ): Boolean {
+    if (!canDeactivate(offender)) return false
 
-    val setup = offenderSetupRepository.findByOffender(offender).orElse(null)
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(contactDetails),
       auditEventType = auditEventType,
-      setup = setup?.let { SetupInfo.from(it) },
-      activeEventNumber = contactDetails?.let { activeEventNumber(offender, it) },
+      setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) },
+      activeEventNumber = null,
       reason = reason,
       sensitive = sensitive,
+      expectedCurrentEvent = expectedCurrentEvent,
       deliusOutcomeCode = deliusOutcomeCode ?: auditEventType.deliusOutcomeCode,
       practitionerMessageFragment = practitionerMessageFragment,
     )
-
-    return offenderPersistenceService.offenderDeactivation(offender, event)
+    return offenderPersistenceService.offenderDeactivation(finalise(event))
   }
 
-  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
-    if (!canDeactivate(offender)) return offender
+  /** Deactivate using an event built by the caller, which is expected to have looked up [OffenderDeactivatedEvent.setup]. */
+  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Boolean {
+    if (!canDeactivate(offender)) return false
 
-    return offenderPersistenceService.offenderDeactivation(offender, event.copy(offender = offender.dto(event.offender.personalDetails)))
+    return offenderPersistenceService.offenderDeactivation(finalise(event))
+  }
+
+  /**
+   * Fills in the parts of the event that describe the deactivated offender. The guarded update only
+   * succeeds if the saved selection still equals [OffenderDeactivatedEvent.expectedCurrentEvent], so
+   * that is the selection the event reports.
+   */
+  private fun finalise(event: OffenderDeactivatedEvent): OffenderDeactivatedEvent {
+    val currentEvent = event.expectedCurrentEvent
+    return event.copy(
+      offender = event.offender.copy(status = OffenderStatus.INACTIVE, currentEvent = currentEvent, updatedAt = clock.instant()),
+      activeEventNumber = event.offender.personalDetails?.let {
+        activeEventNumber(currentEvent, it, appConfig.esup2305DeliusEventSelection)
+      } ?: currentEvent.takeIf { event.setup == null },
+    )
   }
 
   private fun canDeactivate(offender: Offender): Boolean {

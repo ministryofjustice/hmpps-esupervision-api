@@ -26,6 +26,7 @@ class CheckinPersistenceServiceTest {
     checkinDeliusEventService = mock(),
     entityManager = mock(),
     upcomingCheckinService = mock(),
+    appConfig = mock(),
   )
 
   private fun newCheckin() = OffenderCheckin(

@@ -17,6 +17,11 @@ enum class Feature {
   ESUP_2082,
 
   /**
+   * ESUP-2305: Delius event selection for online check-ins
+   */
+  ESUP_2305,
+
+  /**
    * ESUP-2223: Record the next upcoming check-in in NDelius
    */
   ESUP_2223,

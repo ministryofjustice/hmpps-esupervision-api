@@ -43,9 +43,15 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select o from Offender o where o.id = :id")
-  fun findByIdForUpdate(id: Long): Offender?
+  @Query("SELECT o.id AS id, o.uuid AS uuid, o.crn AS crn, o.status AS status FROM Offender o WHERE o.uuid = :uuid")
+  fun findUpdateInfoByUuid(@Param("uuid") uuid: UUID): Optional<IOffenderUpdateInfo>
+
+  interface IOffenderUpdateInfo {
+    val id: Long
+    val uuid: UUID
+    val crn: CRN
+    val status: OffenderStatus
+  }
 
   /**
    * ESUP-2223 backfill: verified offenders with neither an upcoming (SCHEDULED) nor an open
@@ -66,18 +72,67 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
-  fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT o FROM Offender o WHERE o.id = :offenderId")
+  fun findByIdForUpdate(@Param("offenderId") offenderId: Long): Optional<Offender>
+
+  @Modifying
+  @Transactional
+  @Query(
+    nativeQuery = true,
+    value = """
+    UPDATE offender_v2 SET status = 'INACTIVE', updated_at = :updatedAt
+    WHERE id = :id AND status = 'VERIFIED'
+      AND current_event IS NOT DISTINCT FROM :expectedEvent
+      AND (
+        SELECT s.id FROM offender_setup_v2 s
+        WHERE s.offender_id = :id
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT 1
+      ) IS NOT DISTINCT FROM :expectedSetupId
+    """,
+  )
+  fun deactivateIfUnchanged(
+    @Param("id") id: Long,
+    @Param("expectedEvent") expectedEvent: Long?,
+    @Param("expectedSetupId") expectedSetupId: Long?,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
+
+  @Modifying
+  @Transactional
+  @Query(
+    """
+    UPDATE Offender o
+    SET o.currentEvent = :eventNumber, o.updatedAt = :updatedAt
+    WHERE o.id = :offenderId
+      AND o.status = :status
+      AND o.currentEvent IS NULL
+    """,
+  )
+  fun setCurrentEventIfMissing(
+    @Param("offenderId") offenderId: Long,
+    @Param("status") status: OffenderStatus,
+    @Param("eventNumber") eventNumber: Long,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
 
   @Query(
     """
-    UPDATE offender_v2
-    SET status = 'INACTIVE', updated_at = now()
-    WHERE id = :offenderId AND status = 'VERIFIED'
-    RETURNING *
+    SELECT o FROM Offender o
+    WHERE o.status = :status
+      AND o.currentEvent IS NULL
+      AND o.id > :afterId
+    ORDER BY o.id ASC
     """,
-    nativeQuery = true,
   )
-  fun deactivateIfVerified(offenderId: Long): Optional<Offender>
+  fun findVerifiedWithoutCurrentEventAfterId(
+    @Param("status") status: OffenderStatus,
+    @Param("afterId") afterId: Long,
+    pageable: Pageable,
+  ): List<Offender>
+
+  fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
 
   /**
    * Update an offender based on new due_date and today's date.
@@ -241,7 +296,7 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
     """
     SELECT s FROM OffenderSetup s
     WHERE s.offender = :offender
-    ORDER BY s.createdAt DESC
+    ORDER BY s.createdAt DESC, s.id DESC
     LIMIT 1
   """,
   )
@@ -328,12 +383,23 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """
     UPDATE OffenderCheckin c
     SET c.status = :newStatus
-    WHERE c.offender = :offender
+    WHERE c.offender.id = :offenderId
       AND c.status = :currentStatus
     """,
   )
   @Modifying
-  fun updateStatusForOffender(offender: Offender, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
+  fun updateStatusForOffenderId(offenderId: Long, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
+
+  @Query(
+    """
+    UPDATE OffenderCheckin c
+    SET c.status = :newStatus
+    WHERE c.id = :checkinId
+      AND c.status = :currentStatus
+    """,
+  )
+  @Modifying
+  fun updateStatusForCheckinId(checkinId: Long, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
 
   @Query(
     """

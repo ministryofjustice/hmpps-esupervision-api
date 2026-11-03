@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
@@ -32,6 +33,7 @@ class CheckinPersistenceService(
   private val checkinDeliusEventService: CheckinDeliusEventService,
   private val upcomingCheckinService: UpcomingCheckinService,
   private val entityManager: EntityManager,
+  private val appConfig: AppConfig,
 ) {
 
   @Transactional
@@ -53,7 +55,7 @@ class CheckinPersistenceService(
       // after the caller looked for an upcoming check-in: activate that one rather than creating a
       // second check-in NDelius would also record. It also loads the offender in this transaction,
       // as recording the check-in reads it and the caller's may be detached (the creation job's).
-      checkin.offender = offenderRepository.findByIdForUpdate(checkin.offender.id)!!
+      checkin.offender = offenderRepository.findByIdForUpdate(checkin.offender.id).orElseThrow()
       val scheduled = checkinRepository.findScheduledForOffenders(listOf(checkin.offender.id), checkin.dueDate).singleOrNull()
       if (scheduled != null) {
         LOGGER.info("Activating checkin {}, scheduled after the caller looked for it, instead of creating checkin {}", scheduled.uuid, checkin.uuid)
@@ -80,7 +82,7 @@ class CheckinPersistenceService(
     // an activated check-in was recorded in NDelius when it was scheduled
     if (!activating && upcomingCheckinService.enabled()) {
       // the event's number is the one on record, which can be unset when the caller has NDelius's
-      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it) }
+      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) }
       checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, CheckinDeliusEventNotes.scheduled(checkin.dueDate), eventNumber, checkin.dueDate)
     }
     val finalisedEvent = event.finalise(checkin, id)
@@ -153,9 +155,13 @@ class CheckinPersistenceService(
   fun checkinSubmission(checkin: OffenderCheckin, event: CheckinSubmittedEvent) {
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
-    upcomingCheckinService.scheduleNext(checkin.offender.id, event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it) })
+    upcomingCheckinService.scheduleNext(checkin.offender.id, event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) })
     if (checkinDeliusEventService.enabled()) {
-      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin)
+      checkinDeliusEventService.recordCheckinUpdate(
+        DomainEventType.V2_CHECKIN_SUBMITTED,
+        checkin,
+        eventNumber = event.currentEvent,
+      )
     }
 
     appEventPublisher.publishEvent(event)

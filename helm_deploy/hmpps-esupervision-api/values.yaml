@@ -90,6 +90,10 @@ generic-service:
       type: UPCOMING_CHECKIN_BACKFILL
       schedule: "0 12 * * *"
       suspend: true
+    - name: current-event-backfill
+      type: CURRENT_EVENT_BACKFILL
+      schedule: "0 0 1 1 *"
+      suspend: true
 
 generic-prometheus-alerts:
   targetApplication: hmpps-esupervision-api
