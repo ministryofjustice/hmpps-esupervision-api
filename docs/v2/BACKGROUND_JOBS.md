@@ -231,12 +231,14 @@ where event 2 has the later expected end date.
 ```bash
 # Locally, using the stub profile:
 SPRING_PROFILES_ACTIVE=dev,stubrekog,local,stubndilius,stubtier,stubarns \
+APP_FEATURES_ESUP_2305=true \
 BATCH_ENABLED=true \
 BATCH_TYPE=CURRENT_EVENT_BACKFILL \
 CURRENT_EVENT_BACKFILL_DRY_RUN=true \
 ./gradlew bootRun
 
-# In a deployed namespace:
+# In a deployed namespace, enable the required feature on the suspended CronJob first:
+kubectl set env cronjob/batch-current-event-backfill APP_FEATURES_ESUP_2305=true -n <namespace>
 kubectl create job --from=cronjob/batch-current-event-backfill current-event-backfill-dry-run-$(date +%s) -n <namespace>
 kubectl logs -f job/current-event-backfill-dry-run-<timestamp> -n <namespace>
 ```

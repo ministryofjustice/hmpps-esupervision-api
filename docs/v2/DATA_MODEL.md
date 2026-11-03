@@ -227,6 +227,13 @@ stateDiagram-v2
     REVIEWED --> [*]
 ```
 
+An offender has at most one SCHEDULED check-in (`uk_checkin_v2_one_scheduled_per_offender`).
+Creating a check-in (daily job, setup, restart, schedule change, ad hoc) activates the
+offender's SCHEDULED check-in for that date, if there is one, instead of inserting a new row,
+so the check-in keeps the UUID NDelius already knows it by. Activation fires the same
+triggers as an insert (outbox item, question assignment). A SCHEDULED check-in never counts
+as occupying its date.
+
 ---
 
 ## Indexes
@@ -243,6 +250,7 @@ CREATE INDEX idx_offender_v2_practitioner ON offender_v2(practitioner_id);
 CREATE INDEX idx_checkin_v2_offender ON offender_checkin_v2(offender_id);
 CREATE INDEX idx_checkin_v2_status ON offender_checkin_v2(status);
 CREATE INDEX idx_checkin_v2_due_date ON offender_checkin_v2(due_date);
+CREATE UNIQUE INDEX uk_checkin_v2_one_scheduled_per_offender ON offender_checkin_v2(offender_id) WHERE status = 'SCHEDULED';
 CREATE INDEX idx_checkin_v2_status_due_date ON offender_checkin_v2(status, due_date);
 
 -- Audit queries

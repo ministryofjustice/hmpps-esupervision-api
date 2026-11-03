@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset hmpps:91_add_current_event_backfill_job_type runInTransaction:false
+-- changeset hmpps:92_add_current_event_backfill_job_type runInTransaction:false
 ALTER TYPE job_type_v2 ADD VALUE IF NOT EXISTS 'V2_CURRENT_EVENT_BACKFILL';
 
 -- rollback:

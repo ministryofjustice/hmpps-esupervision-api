@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
@@ -77,6 +78,8 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
   @Autowired
   private lateinit var jdbcTemplate: JdbcTemplate
 
+  // Before as well as after: the outbox assertions count every item, so one left by another test class would fail them.
+  @BeforeEach
   @AfterEach
   fun cleanUp() {
     questionListAssignmentRepository.deleteAll()
@@ -112,6 +115,8 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     assertEquals(OffenderStatus.INACTIVE, offenderRepository.findById(offender.id).orElseThrow().status)
     assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, null, null, updatedAt))
   }
+
+  @Test
   fun `batch setup lookup returns the latest setup for each requested offender`() {
     val offenders = (1..4).map {
       offenderRepository.save(offenderTemplate.copy(uuid = randomUUID(), crn = "X00000$it").toEntity())

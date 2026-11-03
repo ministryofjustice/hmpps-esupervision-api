@@ -41,10 +41,12 @@ class OffenderPersistenceService(
     event.setup?.let {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, it.primaryKey)
     }
+    // Cancel scheduled rows before created rows to match the check-in/question-assignment lock order.
+    val cancelledCheckins = checkinRepository.updateStatusForOffenderId(event.offenderId, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) +
+      checkinRepository.updateStatusForOffenderId(event.offenderId, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(event.offenderId)
-    val cancelledCheckins = checkinRepository.updateStatusForOffenderId(event.offenderId, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
-      LOGGER.info("Cancelled {} created/pending check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, event.offender.crn)
+      LOGGER.info("Cancelled {} created/scheduled check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, event.offender.crn)
     }
     eventAuditService.recordOffenderEvent(event.auditEventType, event.offender, event.offender.personalDetails, event.reason, event.sensitive)
 

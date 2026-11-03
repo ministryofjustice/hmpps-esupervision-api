@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset hmpps:92_update_monthly_stats_for_selected_event_deactivation splitStatements:false
+-- changeset hmpps:93_update_monthly_stats_for_selected_event_deactivation splitStatements:false
 -- Selected-event deactivations also reduce the active PoP count.
 CREATE OR REPLACE FUNCTION refresh_monthly_stats(
     p_month DATE,
