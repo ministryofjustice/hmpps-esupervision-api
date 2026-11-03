@@ -65,7 +65,7 @@ We don't get delivery receipts from GOV.UK Notify, so "sent" means Notify accept
 |---------|-------------|----------|---------|
 | Notify accepted the invite | SENT | unchanged | `link.delivered` |
 | Unknown whether Notify sent it (timeout, or 502/504 from its gateway: `NotifyOutcomeUnknown`) | SENT, so they can use the link if they got it | unchanged; missed (EXPIRED) if they didn't get it | nothing: the contact has no link outcome (`CheckinLinkService.linkMaybeSent`) |
-| Notify rejected it, or it couldn't be sent (no active event, no contact details, no mobile number or email address for their preference, or invites by that channel switched off in config) | FAILED | CANCELLED: not missed, no reminders; questions assigned to it carry over; the practitioner is emailed (`PRACTITIONER_INVITE_ISSUE_GENERIC`); the next check-in is scheduled | `link.not_delivered` |
+| Notify rejected it, or it couldn't be sent (no active event, no contact details, no mobile number or email address for their preference, or invites by that channel switched off in config) | FAILED | CANCELLED: not missed, no reminders; questions assigned to it stay with it; the practitioner is emailed (`PRACTITIONER_INVITE_ISSUE_GENERIC`); the next check-in is scheduled | `link.not_delivered` |
 
 **Link-sent gate**: a check-in can't be started (identity check) or submitted while it is
 SCHEDULED or its link is SENDING (409), so NDelius records the link before the check-in is

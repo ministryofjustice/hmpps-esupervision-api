@@ -164,7 +164,7 @@ class UpcomingCheckinService(
      */
     private val STATUSES_HOLDING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED, CheckinStatus.EXPIRED)
 
-    // TODO ESUP-2223: wording to be agreed with product
+    // TODO ESUP-2223: agreed for now; to change or remove if probation integration take over the NDelius note text
     const val NOT_CREATED_REASON = "The check in was not opened on its due date"
   }
 }
