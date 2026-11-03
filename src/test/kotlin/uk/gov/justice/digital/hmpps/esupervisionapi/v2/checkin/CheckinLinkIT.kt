@@ -211,7 +211,7 @@ class CheckinLinkIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `a failed link cancels the check-in, keeps its questions for the next one and schedules it`() {
+  fun `a failed link cancels the check-in, which keeps its questions, and schedules the next`() {
     val offender = saveOffender()
     val listId = debugQuestionsRepository.findDefaultListId()!!
     val checkin = saveCheckin(offender, CheckinLinkStatus.SENDING)
@@ -222,7 +222,8 @@ class CheckinLinkIT : IntegrationTestBase() {
     val failed = checkinRepository.findByUuid(checkin.uuid).get()
     assertThat(failed.status).isEqualTo(CheckinStatus.CANCELLED)
     assertThat(failed.linkStatus).isEqualTo(CheckinLinkStatus.FAILED)
-    assertThat(questionListAssignmentRepository.checkinAssignment(checkin.id)).isNull()
+    // not carried over to the next check-in
+    assertThat(questionListAssignmentRepository.checkinAssignment(checkin.id)).isNotNull()
     val event = deliusEventRepository.findAllByCheckinUuidOrderById(checkin.uuid).single()
     assertThat(event.eventType).isEqualTo(DomainEventType.V2_CHECKIN_LINK_NOT_DELIVERED)
     assertThat(event.notes).isEqualTo("Reason the link was not sent: ${CheckinLinkService.NOTIFY_FAILED}")
