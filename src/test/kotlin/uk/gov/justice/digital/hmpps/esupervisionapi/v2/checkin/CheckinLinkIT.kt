@@ -28,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
@@ -241,6 +242,25 @@ class CheckinLinkIT : IntegrationTestBase() {
     val eligible = offenderRepository.findEligibleForCheckinCreation(today, today.plusDays(1), chunkSize = 10).map { it.id }
 
     assertThat(eligible).containsExactly(cancelled.id)
+  }
+
+  @Test
+  fun `a check-in isn't created for a day whose invite failed after the caller looked`() {
+    val offender = saveOffender()
+    // prepared as the creation job does, before the day's check-in was created elsewhere and its invite failed
+    val checkin = checkinCreationService.prepareCheckinForOffender(offender, today)
+    val event = PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = offender.practitionerId,
+      checkin = checkin.dto(contactDetails(offender)),
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = null,
+      checkinMode = offender.mode,
+    )
+    saveCheckin(offender, CheckinLinkStatus.FAILED, CheckinStatus.CANCELLED)
+
+    assertThat(checkinCreationService.createCheckins(listOf(checkin to event))).isEmpty()
+    assertThat(checkinRepository.findAllByOffenderAndDueDate(offender, today).map { it.status }).containsExactly(CheckinStatus.CANCELLED)
   }
 
   @Test
