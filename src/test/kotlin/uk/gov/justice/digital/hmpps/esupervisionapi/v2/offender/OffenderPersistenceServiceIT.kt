@@ -106,11 +106,11 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity())
     val updatedAt = clock.instant()
 
-    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, 101L, updatedAt))
+    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, 101L, null, updatedAt))
     assertEquals(OffenderStatus.VERIFIED, offenderRepository.findById(offender.id).orElseThrow().status)
-    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, null, updatedAt))
+    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, null, null, updatedAt))
     assertEquals(OffenderStatus.INACTIVE, offenderRepository.findById(offender.id).orElseThrow().status)
-    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, null, updatedAt))
+    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, null, null, updatedAt))
   }
   fun `batch setup lookup returns the latest setup for each requested offender`() {
     val offenders = (1..4).map {
@@ -402,7 +402,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
   fun `deactivation resolves the latest setup after a stop and reactivation with the same event`() {
     val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity().apply { currentEvent = 101L })
     val originalSetup = offenderSetupRepository.save(OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant().minusSeconds(60)))
-    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, 101L, clock.instant()))
+    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, 101L, originalSetup.id, clock.instant()))
     val reactivated = offenderPersistenceService.offenderReactivation(
       offender.id,
       PartialOffenderReactivatedEvent(offender.id, offender.dto().copy(status = OffenderStatus.INACTIVE), 101L, "Reactivate"),
@@ -416,6 +416,31 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     assertEquals(reactivated.setup, event.setup)
     assertTrue(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, reactivated.setup.primaryKey).isPresent)
     assertTrue(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, originalSetup.id).isEmpty)
+  }
+
+  @Test
+  fun `deactivation is rejected when the offender was stopped and reactivated after its setup was read`() {
+    val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity().apply { currentEvent = 101L })
+    val originalSetup = offenderSetupRepository.save(OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant().minusSeconds(60)))
+    val staleEvent = deactivationEvent(offender).copy(
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
+      setup = SetupInfo.from(originalSetup),
+    )
+
+    // stopped and reactivated with the same event after the stale event was built
+    assertEquals(true, deactivate(staleEvent))
+    val reactivated = offenderPersistenceService.offenderReactivation(
+      offender.id,
+      PartialOffenderReactivatedEvent(offender.id, offender.dto().copy(status = OffenderStatus.INACTIVE), 101L, "Reactivate"),
+    )
+    assertNotNull(reactivated)
+    applicationEvents.clear()
+
+    assertEquals(false, deactivate(staleEvent))
+
+    assertEquals(OffenderStatus.VERIFIED, offenderRepository.findById(offender.id).orElseThrow().status)
+    assertTrue(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, reactivated.setup.primaryKey).isEmpty)
+    assertEquals(0, applicationEvents.stream(OffenderDeactivatedEvent::class.java).count())
   }
 
   @Test

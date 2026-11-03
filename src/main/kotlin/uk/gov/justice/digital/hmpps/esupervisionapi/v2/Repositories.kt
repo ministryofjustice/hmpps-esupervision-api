@@ -66,11 +66,18 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     UPDATE offender_v2 SET status = 'INACTIVE', updated_at = :updatedAt
     WHERE id = :id AND status = 'VERIFIED'
       AND current_event IS NOT DISTINCT FROM :expectedEvent
+      AND (
+        SELECT s.id FROM offender_setup_v2 s
+        WHERE s.offender_id = :id
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT 1
+      ) IS NOT DISTINCT FROM :expectedSetupId
     """,
   )
   fun deactivateIfUnchanged(
     @Param("id") id: Long,
     @Param("expectedEvent") expectedEvent: Long?,
+    @Param("expectedSetupId") expectedSetupId: Long?,
     @Param("updatedAt") updatedAt: Instant,
   ): Int
 
@@ -266,7 +273,7 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
     """
     SELECT s FROM OffenderSetup s
     WHERE s.offender = :offender
-    ORDER BY s.createdAt DESC
+    ORDER BY s.createdAt DESC, s.id DESC
     LIMIT 1
   """,
   )

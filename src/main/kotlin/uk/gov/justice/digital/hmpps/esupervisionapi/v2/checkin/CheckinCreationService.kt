@@ -158,7 +158,7 @@ class CheckinCreationService(
   private fun resolveEventNumber(currentEvent: Long?, contactDetails: ContactDetails?): Long? {
     val enabled = appConfig.esup2305DeliusEventSelection
     val eventNumber = contactDetails?.let { activeEventNumber(currentEvent, it, enabled) }
-    if (eventNumber == null && currentEvent != null) {
+    if (eventNumber == null && currentEvent != null && contactDetails != null) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because ${CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.description}.")
     }
     if (eventNumber == null && enabled) {

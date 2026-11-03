@@ -23,13 +23,17 @@ class OffenderPersistenceService(
 
   /**
    * Deactivates the offender only if it is still VERIFIED with the event selection the caller evaluated
-   * ([OffenderDeactivatedEvent.expectedCurrentEvent]). Otherwise the decision is stale and nothing happens.
+   * ([OffenderDeactivatedEvent.expectedCurrentEvent]) and the same latest setup ([OffenderDeactivatedEvent.setup]).
+   * Otherwise the decision is stale (e.g. the offender was stopped and reactivated meanwhile) and nothing happens.
+   *
+   * The event is persisted and published as given, including `offender.updatedAt` as the deactivation time,
+   * so build it with [uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService].
    *
    * @return true if the offender was deactivated
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   fun offenderDeactivation(event: OffenderDeactivatedEvent): Boolean {
-    if (offenderRepository.deactivateIfUnchanged(event.offenderId, event.expectedCurrentEvent, event.offender.updatedAt) == 0) {
+    if (offenderRepository.deactivateIfUnchanged(event.offenderId, event.expectedCurrentEvent, event.setup?.primaryKey, event.offender.updatedAt) == 0) {
       LOGGER.info("Skipping stale deactivation for CRN {}", event.offender.crn)
       return false
     }
