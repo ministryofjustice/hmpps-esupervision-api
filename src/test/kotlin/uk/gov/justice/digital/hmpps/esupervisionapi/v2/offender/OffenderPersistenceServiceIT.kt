@@ -8,7 +8,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
-import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
@@ -37,7 +36,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignment
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Clock
 import java.time.Duration
@@ -107,25 +105,15 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `deactivation projection contains the persisted offender snapshot`() {
-    val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity())
-
-    val snapshot = offenderRepository.findDeactivationSnapshot(offender.id).orElseThrow().dto()
-
-    assertEquals(offenderRepository.findById(offender.id).orElseThrow().dto(), snapshot)
-    assertTrue(offenderRepository.findDeactivationSnapshot(Long.MAX_VALUE).isEmpty)
-  }
-
-  @Test
   fun `guarded deactivation matches null selections and only updates verified offenders`() {
     val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity())
     val updatedAt = clock.instant()
 
-    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, 101L, true, updatedAt))
+    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, 101L, null, updatedAt))
     assertEquals(OffenderStatus.VERIFIED, offenderRepository.findById(offender.id).orElseThrow().status)
-    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, null, true, updatedAt))
+    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, null, null, updatedAt))
     assertEquals(OffenderStatus.INACTIVE, offenderRepository.findById(offender.id).orElseThrow().status)
-    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, null, true, updatedAt))
+    assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, null, null, updatedAt))
   }
 
   @Test
@@ -188,7 +176,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       activeEventNumber = null,
     )
 
-    assertEquals(true, deactivate(event, checkEvent = false))
+    assertEquals(true, deactivate(event))
 
     val updatedOffender = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(OffenderStatus.INACTIVE, updatedOffender.status)
@@ -216,7 +204,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offender.updatedAt = originalUpdatedAt.plusSeconds(60)
     val event = deactivationEvent(offender).copy(setup = SetupInfo.from(setup))
 
-    assertEquals(false, deactivate(event, checkEvent = false))
+    assertEquals(false, deactivate(event))
 
     val persistedOffender = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(status, persistedOffender.status)
@@ -235,7 +223,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offenderRepository.saveAndFlush(latestOffender)
     offender.status = OffenderStatus.INACTIVE
 
-    assertEquals(true, deactivate(deactivationEvent(offender), checkEvent = false))
+    assertEquals(true, deactivate(deactivationEvent(offender)))
 
     val persistedOffender = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(OffenderStatus.INACTIVE, persistedOffender.status)
@@ -249,12 +237,12 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     offender.status = OffenderStatus.INACTIVE
     offender.updatedAt = Instant.parse("2026-10-29T10:00:00Z")
     val event = deactivationEvent(offender)
-    assertEquals(true, deactivate(event, checkEvent = false))
+    assertEquals(true, deactivate(event))
     val firstDeactivatedAt = offenderRepository.findById(offender.id).orElseThrow().updatedAt
     val (checkin, assignment) = savePendingWork(offender)
     offender.updatedAt = offender.updatedAt.plusSeconds(60)
 
-    assertEquals(false, deactivate(event, checkEvent = false))
+    assertEquals(false, deactivate(event))
 
     val persistedOffender = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(OffenderStatus.INACTIVE, persistedOffender.status)
@@ -309,7 +297,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       reason = "Automatically deactivated: no active sentence in NDelius",
     )
 
-    assertEquals(false, deactivate(staleEvent, checkEvent = true))
+    assertEquals(false, deactivate(staleEvent))
 
     val persisted = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(OffenderStatus.VERIFIED, persisted.status)
@@ -332,7 +320,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       reason = "Automatically deactivated: the selected probation event is no longer active in NDelius",
     )
 
-    assertEquals(false, deactivate(staleEvent, checkEvent = true))
+    assertEquals(false, deactivate(staleEvent))
 
     val persisted = offenderRepository.findById(offender.id).orElseThrow()
     assertEquals(OffenderStatus.VERIFIED, persisted.status)
@@ -381,9 +369,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       reason = "Automatically deactivated: the selected probation event is no longer active in NDelius",
     )
 
-    val deactivated = offenderPersistenceService.offenderDeactivation(offender.id, staleEvent.expectedCurrentEvent, true, clock.instant()) {
-      error("A rejected deactivation must not build or publish an event")
-    }
+    val deactivated = deactivate(staleEvent)
 
     assertEquals(false, deactivated)
     val persisted = offenderRepository.findById(offender.id).orElseThrow()
@@ -394,53 +380,34 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
 
   @ParameterizedTest
   @EnumSource(OffenderAuditEventType::class, names = ["OFFENDER_DEACTIVATED", "OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED"])
-  fun `event-independent deactivation publishes the persisted selection and contact preference`(auditEventType: OffenderAuditEventType) {
+  fun `deactivation is rejected when the selection changed after the offender was read`(auditEventType: OffenderAuditEventType) {
     val offender = offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity().apply {
       currentEvent = 101L
-      contactPreference = ContactPreference.PHONE
     }
     offenderRepository.save(offender)
-    jdbcTemplate.update("UPDATE offender_v2 SET current_event = ?, contact_preference = ? WHERE id = ?", 202L, "EMAIL", offender.id)
-    val details = ContactDetails(
-      crn = offender.crn,
-      name = Name("John", "Doe"),
-      dateOfBirth = LocalDate.of(1980, 1, 1),
-    )
+    jdbcTemplate.update("UPDATE offender_v2 SET current_event = ? WHERE id = ?", 202L, offender.id)
 
     assertEquals(
-      true,
+      false,
       offenderDeactivationService.deactivateOffender(
         offender,
         "Stop check-ins",
         practitionerMessageFragment = null,
-        contactDetails = details,
-        sensitive = true,
         auditEventType = auditEventType,
       ),
     )
 
     val persisted = offenderRepository.findById(offender.id).orElseThrow()
-    assertEquals(OffenderStatus.INACTIVE, persisted.status)
+    assertEquals(OffenderStatus.VERIFIED, persisted.status)
     assertEquals(202L, persisted.currentEvent)
-    val event = applicationEvents.stream(OffenderDeactivatedEvent::class.java).findFirst().orElseThrow()
-    assertEquals(202L, event.offender.currentEvent)
-    assertEquals(202L, event.activeEventNumber)
-    assertEquals(ContactPreference.EMAIL, event.offender.contactPreference)
-    assertEquals(details, event.offender.personalDetails)
-    assertEquals("Stop check-ins", event.reason)
-    assertEquals(true, event.sensitive)
-    assertEquals(auditEventType, event.auditEventType)
-    assertTrue(Duration.between(event.offender.updatedAt, persisted.updatedAt).abs() <= Duration.ofNanos(1_000))
-    assertEquals(101L, offender.currentEvent)
-    assertEquals(ContactPreference.PHONE, offender.contactPreference)
-    assertEquals(OffenderStatus.VERIFIED, offender.status)
+    assertEquals(0, applicationEvents.stream(OffenderDeactivatedEvent::class.java).count())
   }
 
   @Test
   fun `deactivation resolves the latest setup after a stop and reactivation with the same event`() {
     val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity().apply { currentEvent = 101L })
     val originalSetup = offenderSetupRepository.save(OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant().minusSeconds(60)))
-    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, 101L, true, clock.instant()))
+    assertEquals(1, offenderRepository.deactivateIfUnchanged(offender.id, 101L, originalSetup.id, clock.instant()))
     val reactivated = offenderPersistenceService.offenderReactivation(
       offender.id,
       PartialOffenderReactivatedEvent(offender.id, offender.dto().copy(status = OffenderStatus.INACTIVE), 101L, "Reactivate"),
@@ -457,18 +424,27 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `event construction failure rolls back the guarded deactivation`() {
-    val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity())
-    val before = offenderRepository.findById(offender.id).orElseThrow().dto()
+  fun `deactivation is rejected when the offender was stopped and reactivated after its setup was read`() {
+    val offender = offenderRepository.save(offenderTemplate.copy(status = OffenderStatus.VERIFIED).toEntity().apply { currentEvent = 101L })
+    val originalSetup = offenderSetupRepository.save(OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant().minusSeconds(60)))
+    val staleEvent = deactivationEvent(offender).copy(
+      offender = offender.dto().copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()),
+      setup = SetupInfo.from(originalSetup),
+    )
 
-    assertThrows<IllegalStateException> {
-      offenderPersistenceService.offenderDeactivation(offender.id, null, false, clock.instant()) {
-        error("Event construction failed")
-      }
-    }
+    // stopped and reactivated with the same event after the stale event was built
+    assertEquals(true, deactivate(staleEvent))
+    val reactivated = offenderPersistenceService.offenderReactivation(
+      offender.id,
+      PartialOffenderReactivatedEvent(offender.id, offender.dto().copy(status = OffenderStatus.INACTIVE), 101L, "Reactivate"),
+    )
+    assertNotNull(reactivated)
+    applicationEvents.clear()
 
-    assertEquals(before, offenderRepository.findById(offender.id).orElseThrow().dto())
-    assertTrue(outboxItemRepository.findAll().isEmpty())
+    assertEquals(false, deactivate(staleEvent))
+
+    assertEquals(OffenderStatus.VERIFIED, offenderRepository.findById(offender.id).orElseThrow().status)
+    assertTrue(outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, reactivated.setup.primaryKey).isEmpty)
     assertEquals(0, applicationEvents.stream(OffenderDeactivatedEvent::class.java).count())
   }
 
@@ -536,7 +512,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
       activeEventNumber = 101L,
       reason = "deactivate 1",
     )
-    deactivate(deactivationEvent, checkEvent = false)
+    deactivate(deactivationEvent)
 
     val dtoAfterDeactivation = deactivationEvent.offender
     val dtoForReactivation = dtoAfterDeactivation.copy(firstCheckin = dtoAfterDeactivation.firstCheckin?.plusWeeks(1))
@@ -560,7 +536,6 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
         setup = SetupInfo.from(setup2),
         reason = "deactivate 2",
       ),
-      checkEvent = false,
     )
 
     val offenderAfterSecondDeactivation = offenderRepository.findById(offender.id).orElseThrow()
@@ -568,10 +543,5 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     assertNotNull(reactivation)
   }
 
-  private fun deactivate(event: OffenderDeactivatedEvent, checkEvent: Boolean): Boolean = offenderPersistenceService.offenderDeactivation(
-    event.offenderId,
-    event.expectedCurrentEvent,
-    checkEvent,
-    event.offender.updatedAt,
-  ) { snapshot -> event.copy(offender = snapshot.copy(personalDetails = event.offender.personalDetails, updatedAt = event.offender.updatedAt)) }
+  private fun deactivate(event: OffenderDeactivatedEvent): Boolean = offenderPersistenceService.offenderDeactivation(event)
 }

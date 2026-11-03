@@ -21,7 +21,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEven
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -47,7 +46,6 @@ class CheckinCreationService(
   private val transactionTemplate: TransactionTemplate,
   private val checkinPersistenceService: CheckinPersistenceService,
   private val appConfig: AppConfig,
-  private val offenderDeactivationService: OffenderDeactivationService,
 ) {
 
   val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -106,19 +104,7 @@ class CheckinCreationService(
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
   ): OffenderCheckin? {
-    val savedEvent = offender.currentEvent
-    if (savedEvent != null && contactDetails.events.none { it.number == savedEvent }) {
-      val reason = CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE
-      offenderDeactivationService.deactivateOffender(
-        offender = offender,
-        reason = reason.auditNote,
-        practitionerMessageFragment = null,
-        contactDetails = contactDetails,
-        auditEventType = reason.auditEventType,
-        expectedCurrentEvent = savedEvent,
-      )
-    }
-    val eventNumber = resolveEventNumber(savedEvent, contactDetails)
+    val eventNumber = resolveEventNumber(offender.currentEvent, contactDetails)
     val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), dueDate).singleOrNull()
     val checkin = newOrActivatedCheckin(offender, dueDate, createdBy, scheduled)
 
@@ -172,7 +158,10 @@ class CheckinCreationService(
   private fun resolveEventNumber(currentEvent: Long?, contactDetails: ContactDetails?): Long? {
     val enabled = appConfig.esup2305DeliusEventSelection
     val eventNumber = contactDetails?.let { activeEventNumber(currentEvent, it, enabled) }
-    if (eventNumber == null && (enabled || currentEvent != null)) {
+    if (eventNumber == null && currentEvent != null && contactDetails != null) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because ${CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.description}.")
+    }
+    if (eventNumber == null && enabled) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because a probation event must be selected.")
     }
     return eventNumber

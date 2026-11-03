@@ -101,9 +101,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       setup = SetupInfo.from(setup),
       activeEventNumber = null,
     )
-    offenderPersistenceService.offenderDeactivation(offender.id, event.expectedCurrentEvent, false, event.offender.updatedAt) { snapshot ->
-      event.copy(offender = snapshot)
-    }
+    offenderPersistenceService.offenderDeactivation(event)
 
     await().atMost(5, TimeUnit.SECONDS).untilAsserted {
       val outboxItem = outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, event.setup!!.primaryKey).orElseThrow()

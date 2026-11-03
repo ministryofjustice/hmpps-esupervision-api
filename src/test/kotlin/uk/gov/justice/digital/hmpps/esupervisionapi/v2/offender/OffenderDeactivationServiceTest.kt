@@ -4,10 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatcher
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
@@ -17,7 +16,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
@@ -77,7 +75,7 @@ class OffenderDeactivationServiceTest {
     assertEquals(true, result)
     assertEquals(OffenderStatus.VERIFIED, offender.status)
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
-    assertEquals(true, matcher.matches(capturedEvent(offender, checkEvent = false)))
+    assertEquals(true, matcher.matches(capturedEvent()))
   }
 
   @Test
@@ -94,7 +92,7 @@ class OffenderDeactivationServiceTest {
     )
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS, "no active events")
-    assertEquals(true, matcher.matches(capturedEvent(offender, checkEvent = true)))
+    assertEquals(true, matcher.matches(capturedEvent()))
   }
 
   @Test
@@ -111,7 +109,7 @@ class OffenderDeactivationServiceTest {
     )
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED, "contact suspended")
-    assertEquals(true, matcher.matches(capturedEvent(offender, checkEvent = false)))
+    assertEquals(true, matcher.matches(capturedEvent()))
   }
 
   @Test
@@ -130,7 +128,7 @@ class OffenderDeactivationServiceTest {
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
     )
 
-    val event = capturedEvent(offender, checkEvent = true)
+    val event = capturedEvent()
     assertEquals(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE, event.auditEventType)
     assertEquals("Automatically deactivated: the selected probation event is no longer active in NDelius", event.reason)
     assertEquals(null, event.setup)
@@ -152,7 +150,7 @@ class OffenderDeactivationServiceTest {
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
     )
 
-    val event = capturedEvent(offender, checkEvent = true)
+    val event = capturedEvent()
     assertEquals(SetupInfo.from(setup), event.setup)
     assertEquals(null, event.activeEventNumber)
     assertEquals(clock.instant(), event.offender.updatedAt)
@@ -171,37 +169,35 @@ class OffenderDeactivationServiceTest {
       expectedCurrentEvent = 101L,
     )
 
-    verify(offenderPersistenceService).offenderDeactivation(eq(offender.id), eq(101L), eq(true), eq(clock.instant()), any())
+    assertEquals(101L, capturedEvent().expectedCurrentEvent)
+    assertEquals(101L, capturedEvent().offender.currentEvent)
     assertEquals(false, result)
     assertEquals(202L, offender.currentEvent)
     assertEquals(OffenderStatus.VERIFIED, offender.status)
   }
 
   @Test
-  fun `event deactivation resolves setup and event number from the persisted snapshot`() {
+  fun `event deactivation keeps the caller's setup and resolves the event number from the evaluated selection`() {
     val offender = offender(OffenderStatus.VERIFIED).apply { currentEvent = 101L }
-    val oldSetup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, clock.instant().minusSeconds(60))
-    val latestSetup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, clock.instant())
-    val details = contactDetails.copy(events = listOf(Event(202L, CodedDescription("X", "Current offence"), sentence = null)))
-    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(latestSetup))
+    val setup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, clock.instant())
+    val details = contactDetails.copy(events = listOf(Event(101L, CodedDescription("X", "Current offence"), sentence = null)))
     stubSuccessfulPersistence()
     val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
       offender = offender.dto(details),
       auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
-      setup = SetupInfo.from(oldSetup),
-      activeEventNumber = 101L,
+      setup = SetupInfo.from(setup),
+      activeEventNumber = null,
     )
 
-    service.deactivateOffender(offender, event)
+    assertEquals(true, service.deactivateOffender(offender, event))
 
-    val factory = argumentCaptor<(OffenderDto) -> OffenderDeactivatedEvent>()
-    verify(offenderPersistenceService).offenderDeactivation(eq(offender.id), eq(101L), eq(false), eq(clock.instant()), factory.capture())
-    val snapshot = offender.dto(details).copy(status = OffenderStatus.INACTIVE, currentEvent = 202L)
-    val refreshedEvent = factory.firstValue(snapshot)
-    assertEquals(snapshot, refreshedEvent.offender)
-    assertEquals(SetupInfo.from(latestSetup), refreshedEvent.setup)
-    assertEquals(202L, refreshedEvent.activeEventNumber)
+    val persisted = capturedEvent()
+    assertEquals(offender.dto(details).copy(status = OffenderStatus.INACTIVE, updatedAt = clock.instant()), persisted.offender)
+    assertEquals(SetupInfo.from(setup), persisted.setup)
+    assertEquals(101L, persisted.expectedCurrentEvent)
+    assertEquals(101L, persisted.activeEventNumber)
+    verify(offenderSetupRepository, never()).findByOffender(any())
   }
 
   @Test
@@ -219,7 +215,7 @@ class OffenderDeactivationServiceTest {
     service.deactivateOffender(offender, "no active events", null)
 
     val matcher = OffenderDeactivatedEventMatcher(offender, OffenderAuditEventType.OFFENDER_DEACTIVATED, "no active events")
-    val event = capturedEvent(offender, checkEvent = false)
+    val event = capturedEvent()
     assertEquals(true, matcher.matches(event))
     assertEquals(null, event.offender.personalDetails)
   }
@@ -238,12 +234,12 @@ class OffenderDeactivationServiceTest {
   )
 
   private fun stubSuccessfulPersistence() {
-    whenever(offenderPersistenceService.offenderDeactivation(any(), anyOrNull(), any(), any(), any())).thenReturn(true)
+    whenever(offenderPersistenceService.offenderDeactivation(any())).thenReturn(true)
   }
 
-  private fun capturedEvent(offender: Offender, checkEvent: Boolean): OffenderDeactivatedEvent {
-    val factory = argumentCaptor<(OffenderDto) -> OffenderDeactivatedEvent>()
-    verify(offenderPersistenceService).offenderDeactivation(eq(offender.id), eq(offender.currentEvent), eq(checkEvent), eq(clock.instant()), factory.capture())
-    return factory.firstValue(offender.dto().copy(status = OffenderStatus.INACTIVE))
+  private fun capturedEvent(): OffenderDeactivatedEvent {
+    val captor = argumentCaptor<OffenderDeactivatedEvent>()
+    verify(offenderPersistenceService).offenderDeactivation(captor.capture())
+    return captor.firstValue
   }
 }
