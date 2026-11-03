@@ -112,7 +112,11 @@ class CheckinPersistenceService(
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
     if (checkinDeliusEventService.enabled()) {
-      checkinDeliusEventService.recordCheckinUpdate(DomainEventType.V2_CHECKIN_SUBMITTED, checkin)
+      checkinDeliusEventService.recordCheckinUpdate(
+        DomainEventType.V2_CHECKIN_SUBMITTED,
+        checkin,
+        eventNumber = event.currentEvent,
+      )
     }
 
     appEventPublisher.publishEvent(event)

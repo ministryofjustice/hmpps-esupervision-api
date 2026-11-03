@@ -19,7 +19,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
@@ -143,14 +142,14 @@ class OffenderEligibilitySyncJob(
               offender = offender.dto(contactDetails),
               auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
               setup = setupsByOffenderId[offender.id]?.let { SetupInfo.from(it) },
-              activeEventNumber = activeEventNumber(offender, contactDetails),
+              activeEventNumber = null, // resolved by OffenderDeactivationService
               reason = reason,
               sensitive = false,
               deliusOutcomeCode = result.deliusOutcomeCode,
               practitionerMessageFragment = result.messageFragment,
             )
 
-            if (offenderDeactivationService.deactivateOffender(offender, event) != null) {
+            if (offenderDeactivationService.deactivateOffender(offender, event)) {
               deactivated += 1
               LOGGER.info("Stopped online check-ins for CRN {}: triggered rule code={}, outcome={}", offender.crn, result.triggeredRuleCode, result.outcome)
             }

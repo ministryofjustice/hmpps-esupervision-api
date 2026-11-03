@@ -113,12 +113,16 @@ class CheckinReminderJob(
           try {
             val contactDetails = contactDetailsMap[checkin.offender.crn]
             val ineligibility = contactDetails?.let { checkinIneligibilityReason(checkin.offender, it) }
+            val savedSelectionIsInactive =
+              contactDetails != null &&
+                checkin.offender.currentEvent != null &&
+                contactDetails.events.none { it.number == checkin.offender.currentEvent }
             val outcome = when {
               contactDetails == null -> {
                 notSentNotifications.add(index)
                 "not sent (missing details)"
               }
-              ineligibility != null && !newEligibilityRulesEnabled -> {
+              ineligibility != null && (!newEligibilityRulesEnabled || savedSelectionIsInactive) -> {
                 // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
                 // Deactivation cancels this check-in, so it is NOT recorded as a reminder (notSent) below.
                 val deactivated = offenderDeactivationService.deactivateOffender(
@@ -130,8 +134,8 @@ class CheckinReminderJob(
                   practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
                   contactDetails = contactDetails,
                   auditEventType = ineligibility.auditEventType,
-                ) != null
-                totalDeactivated += if (deactivated) 1 else 0
+                )
+                if (deactivated) totalDeactivated += 1
                 "not sent (${if (deactivated) "deactivated" else "could not deactivate"}: ${ineligibility.name})"
               }
               else -> {

@@ -70,11 +70,11 @@ class CheckinCreationJob(
   private val ndiliusApiClient: INdiliusApiClient,
   private val checkinCreationService: CheckinCreationService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val appConfig: AppConfig,
   private val jobLogRepository: JobLogRepository,
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
-  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -113,18 +113,16 @@ class CheckinCreationJob(
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
           val checkinsToCreate = ArrayList<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>(contactDetailsMap.size)
           val infoByCrn = chunk.associateBy { it.crn }
+          val newEligibilityRulesEnabled = appConfig.enabledFeatures.contains(Feature.ESUP_2082)
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!
-            if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
-              prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id])?.let { checkinsToCreate.add(it) }
+            val ineligibility = checkinIneligibilityReason(info, contactDetails)
+            val savedSelectionIsInactive = info.currentEvent != null && contactDetails.events.none { it.number == info.currentEvent }
+            if (ineligibility != null && (!newEligibilityRulesEnabled || savedSelectionIsInactive)) {
+              deactivateOffender(ineligibility, info, contactDetails, metrics)
             } else {
-              val ineligibility = checkinIneligibilityReason(info, contactDetails)
-              if (ineligibility != null) {
-                deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
-              } else {
-                prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id])?.let { checkinsToCreate.add(it) }
-              }
+              prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id])?.let { checkinsToCreate.add(it) }
             }
           }
 
@@ -162,7 +160,7 @@ class CheckinCreationJob(
   ): Pair<OffenderCheckin, PartialCheckinCreatedEvent>? {
     val offenderRef = offenderRepository.getReferenceById(info.id)
     val checkin = checkinCreationService.prepareCheckinForOffender(offenderRef, today, scheduled)
-    val eventNumber = activeEventNumber(info, contactDetails)
+    val eventNumber = activeEventNumber(info, contactDetails, appConfig.esup2305DeliusEventSelection)
     var result: Pair<OffenderCheckin, PartialCheckinCreatedEvent>? = null
     if (eventNumber != null) {
       val event = PartialCheckinCreatedEvent(
@@ -204,16 +202,15 @@ class CheckinCreationJob(
     LOGGER.info("Deactivating CRN {} instead of creating checkin: {}", offenderInfo.crn, ineligibility.name)
     val offender = offenderRepository.findById(offenderInfo.id).getOrNull() ?: return
     try {
-      offenderDeactivationService.deactivateOffender(
+      val deactivated = offenderDeactivationService.deactivateOffender(
         offender = offender,
         reason = ineligibility.auditNote,
-        // "old" rules are a special case, so we massage the the wording a bit so it fits
-        // '..., because ((name)) ((reason))', `practitionerMessageFragment` is used as ((reason))
-        // Ugly, but once eligibility is live, we will can delete this whole method.
-        practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
         contactDetails = contactDetails,
+        practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
         auditEventType = ineligibility.auditEventType,
-      )?.let { metrics.deactivated += 1 }
+        expectedCurrentEvent = offenderInfo.currentEvent,
+      )
+      if (deactivated) metrics.deactivated += 1
     } catch (e: Exception) {
       LOGGER.warn("Failed to deactivate CRN {} in chunk {}", offenderInfo.crn, metrics.chunks, e)
       metrics.errors += 1

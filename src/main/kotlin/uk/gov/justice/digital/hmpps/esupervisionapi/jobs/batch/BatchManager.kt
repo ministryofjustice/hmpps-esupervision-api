@@ -9,6 +9,7 @@ import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.event.ContextRefreshedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CurrentEventBackfillJob
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.OffenderEligibilitySyncJob
 
 /**
@@ -24,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.OffenderEligibilityS
 @ConditionalOnProperty(name = ["app.batch.enabled"], havingValue = "true")
 class BatchManager(
   private val offenderEligibilitySyncJob: OffenderEligibilitySyncJob,
+  private val currentEventBackfillJob: CurrentEventBackfillJob,
   private val context: ConfigurableApplicationContext,
   @Value("\${app.batch.type}") private val batchType: String,
 ) {
@@ -40,6 +42,7 @@ class BatchManager(
     return try {
       when (type) {
         BatchType.OFFENDER_ELIGIBILITY_SYNC -> offenderEligibilitySyncJob.process()
+        BatchType.CURRENT_EVENT_BACKFILL -> currentEventBackfillJob.process()
       }
       LOGGER.info("Batch job {} completed", type)
       0

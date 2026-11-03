@@ -14,6 +14,8 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.test.util.ReflectionTestUtils
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -54,6 +56,7 @@ class CheckinCreationJobTest {
   private val checkinCreationService: CheckinCreationService = mock()
 
   private val deactivationService: OffenderDeactivationService = mock()
+  private val appConfig: AppConfig = mock()
   private val jobLogRepository: JobLogRepository = mock {
     on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
   }
@@ -66,14 +69,18 @@ class CheckinCreationJobTest {
     ndiliusApiClient,
     checkinCreationService,
     deactivationService,
+    appConfig,
     jobLogRepository,
     entityManager,
     chunkSize = 100,
     Duration.ofDays(3),
-    appConfig = mock(),
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
+
+  init {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
+  }
 
   @Test
   fun `eligible offender - creates checkin, notifies, does not deactivate`() {
@@ -84,7 +91,10 @@ class CheckinCreationJobTest {
 
     verify(checkinCreationService).prepareCheckinForOffender(eq(offender), any(), anyOrNull())
     verify(checkinCreationService).createCheckins(any())
-    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
+    verify(
+      deactivationService,
+      never(),
+    ).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
   @Test
@@ -119,10 +129,11 @@ class CheckinCreationJobTest {
       eq(offender),
       any(),
       anyOrNull(),
-      any(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
-      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
   }
@@ -138,10 +149,52 @@ class CheckinCreationJobTest {
       eq(offender),
       any(),
       anyOrNull(),
-      any(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
-      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `ineligible (selected event no longer active) - deactivates even when another event is active`() {
+    val offender = offender("X000004").apply { currentEvent = 1L }
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent.copy(number = 2L)))))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      anyOrNull(),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      expectedCurrentEvent = eq(1L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `stale selected event deactivates when new eligibility rules are enabled`() {
+    val offender = offender("X000008").apply { currentEvent = 2L }
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent))))
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      anyOrNull(),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      expectedCurrentEvent = eq(2L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
   }
@@ -157,7 +210,7 @@ class CheckinCreationJobTest {
         eligible.crn to details(eligible.crn, events = listOf(anEvent)),
       ),
     )
-    whenever(deactivationService.deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>()))
+    whenever(deactivationService.deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull()))
       .thenThrow(RuntimeException("boom"))
 
     job.process()
@@ -165,7 +218,7 @@ class CheckinCreationJobTest {
     // the failure on the ineligible offender is isolated; the eligible offender is still processed.
     // NB: V2BaseEntity.equals() is id-based and unsaved test offenders share id=0, so match by
     // reference identity (same()) rather than eq() to assert the correct offender each time.
-    verify(deactivationService).deactivateOffender(same(ineligible), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
+    verify(deactivationService).deactivateOffender(same(ineligible), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(checkinCreationService, times(1)).prepareCheckinForOffender(any(), any(), anyOrNull())
   }
 
@@ -177,7 +230,7 @@ class CheckinCreationJobTest {
 
     job.process()
 
-    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
   }
 
@@ -238,12 +291,13 @@ class CheckinCreationJobTest {
         any(),
         any(),
         anyOrNull(),
+        anyOrNull(),
         any(),
-        any(),
+        anyOrNull(),
         anyOrNull(),
         anyOrNull<String>(),
       ),
-    ).thenAnswer { it.getArgument<Offender>(0) }
+    ).thenReturn(true)
   }
 
   private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(
