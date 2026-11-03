@@ -4,7 +4,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -19,7 +18,6 @@ import java.time.Clock
 @Service
 class CheckinLinkService(
   private val checkinRepository: OffenderCheckinRepository,
-  private val questionListAssignmentRepository: QuestionListAssignmentRepository,
   private val checkinDeliusEventService: CheckinDeliusEventService,
   private val upcomingCheckinService: UpcomingCheckinService,
   private val transactionTemplate: TransactionTemplate,
@@ -59,15 +57,14 @@ class CheckinLinkService(
   }!!
 
   /**
-   * The invite couldn't be sent. The check-in is cancelled, not left to be missed; questions
-   * assigned to it carry over; and the next check-in is scheduled.
+   * The invite couldn't be sent. The check-in is cancelled, not left to be missed, and the next
+   * check-in is scheduled. Questions assigned to it stay with it.
    * @param reason why, for the NDelius contact
    * @return true if this changed the check-in
    */
   fun linkFailed(checkinId: Long, reason: String): Boolean = transactionTemplate.execute {
     if (checkinRepository.markLinkFailed(checkinId, clock.instant()) == 0) return@execute false
     val checkin = checkinRepository.findById(checkinId).orElseThrow()
-    questionListAssignmentRepository.releaseCheckinAssignment(checkin.offender.id, checkinId)
     checkinDeliusEventService.record(
       DomainEventType.V2_CHECKIN_LINK_NOT_DELIVERED,
       checkin,
@@ -88,7 +85,7 @@ class CheckinLinkService(
   companion object {
     private val LOGGER = logger<CheckinLinkService>()
 
-    // TODO ESUP-2223: wording to be agreed with product
+    // TODO ESUP-2223: agreed for now; to change or remove if probation integration take over the NDelius note text
     const val NO_ACTIVE_EVENT = "They have no active event"
     const val NO_CONTACT_DETAILS = "Their contact details could not be found"
     const val NO_ADDRESS = "They have no mobile number or email address for their contact preference"

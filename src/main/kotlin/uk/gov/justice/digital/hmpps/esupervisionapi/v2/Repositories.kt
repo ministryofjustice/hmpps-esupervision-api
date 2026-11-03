@@ -1040,21 +1040,6 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   @Modifying
   fun createAssignment(offenderId: Long, listId: Long, checkinId: Long? = null): Int
 
-  /**
-   * Unbind the questions assigned to a check-in that never reached the person, so they carry over
-   * to the next one. Kept bound if the practitioner has since assigned questions for the next one.
-   */
-  @Query(
-    """
-    update question_list_assignment set checkin_id = null, updated_at = now()
-    where checkin_id = :checkinId
-      and not exists (select 1 from question_list_assignment a where a.offender_id = :offenderId and a.checkin_id is null)
-  """,
-    nativeQuery = true,
-  )
-  @Modifying
-  fun releaseCheckinAssignment(offenderId: Long, checkinId: Long): Int
-
   @Query(
     """
     update question_list_assignment
