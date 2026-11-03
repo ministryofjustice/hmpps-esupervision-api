@@ -6,8 +6,10 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
@@ -92,6 +94,11 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   @Autowired
   private lateinit var clock: Clock
 
+  // runs the check-in event listeners (invites, submission notifications)
+  @Autowired
+  @Qualifier("taskExecutor")
+  private lateinit var taskExecutor: ThreadPoolTaskExecutor
+
   private lateinit var featuresBefore: Set<Feature>
 
   private val today get() = clock.today()
@@ -104,6 +111,9 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
 
   @AfterEach
   fun tearDown() {
+    // Committed changes start listeners in the background; let them finish before cleaning up,
+    // or they write to the tables after they're truncated.
+    await().atMost(Duration.ofSeconds(30)).until { taskExecutor.activeCount == 0 && taskExecutor.threadPoolExecutor.queue.isEmpty() }
     setFeatures(featuresBefore)
     jdbcTemplate.update("TRUNCATE TABLE checkin_delius_event_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
