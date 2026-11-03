@@ -127,6 +127,7 @@ class OffenderPersistenceServiceIT : IntegrationTestBase() {
     assertEquals(OffenderStatus.INACTIVE, offenderRepository.findById(offender.id).orElseThrow().status)
     assertEquals(0, offenderRepository.deactivateIfUnchanged(offender.id, null, true, updatedAt))
   }
+
   @Test
   fun `batch setup lookup returns the latest setup for each requested offender`() {
     val offenders = (1..4).map {
