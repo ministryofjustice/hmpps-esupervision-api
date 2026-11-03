@@ -2,13 +2,17 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import jakarta.persistence.EntityManager
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Clock
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -109,8 +113,18 @@ class CheckinPersistenceService(
     require(unsupported.isEmpty()) { "Check-in creation does not persist $unsupported; extend OffenderCheckinRepository.maybeInsert" }
   }
 
+  /**
+   * @throws ResponseStatusException 409 if the check-in is no longer CREATED in the database: it
+   *   changed (for example a practitioner cancelled it) after the caller read it
+   */
   @Transactional
   fun checkinSubmission(checkin: OffenderCheckin, event: CheckinSubmittedEvent) {
+    // The caller read the check-in before this transaction. Saving the stale copy would overwrite
+    // a cancellation committed since; locking also makes a concurrent cancellation wait for this.
+    if (checkinRepository.lockAndGetStatus(checkin.id) != CheckinStatus.CREATED.name) {
+      LOGGER.info("Not submitting checkin {}: it is no longer {}", checkin.uuid, CheckinStatus.CREATED)
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin ${checkin.uuid} changed while it was being submitted")
+    }
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
     if (checkinDeliusEventService.enabled()) {
@@ -167,46 +181,62 @@ class CheckinPersistenceService(
   }
 
   /**
-   * Saves [checkin], which the caller read with status [expectedStatus] and cancelled, with the
-   * reason in the event log and, if NDelius has the check-in, a cancelled event for NDelius.
+   * Cancels [checkin], which the caller read with status [expectedStatus], recording the reason in
+   * the event log and, if NDelius has the check-in, a cancelled event for NDelius. Only the
+   * cancellation columns are written, so a change the caller's copy missed (link status, ID
+   * check) isn't overwritten.
    *
-   * @return false if nothing was saved: the check-in's status changed after the caller read it
-   *   (for example the offender submitted it, or the creation job activated it)
+   * @param toEvent builds the event from the cancelled check-in
+   * @return the event, or null if nothing was saved: the check-in's status changed after the
+   *   caller read it (for example the offender submitted it, or the creation job activated it)
    */
   @Transactional
-  fun checkinCancellation(checkin: OffenderCheckin, expectedStatus: CheckinStatus, request: CancelCheckinRequest, event: CheckinCancelledEvent): Boolean {
-    require(checkin.status == CheckinStatus.CANCELLED && checkin.cancelledBy != null)
-    // Locking also makes a concurrent submission, activation or stop wait until this commits.
-    if (checkinRepository.lockAndGetStatus(checkin.id) != expectedStatus.name) {
+  fun checkinCancellation(
+    checkin: OffenderCheckin,
+    expectedStatus: CheckinStatus,
+    cancellation: CheckinCancellation,
+    toEvent: (OffenderCheckin) -> CheckinCancelledEvent,
+  ): CheckinCancelledEvent? {
+    // The conditional update locks the row, so a concurrent submission, activation or stop waits
+    // until this commits, then sees it cancelled.
+    val updated = checkinRepository.cancel(checkin.id, expectedStatus, cancellation.cancelledAt, cancellation.cancelledBy, cancellation.sensitive)
+    if (updated == 0) {
       LOGGER.info("Not cancelling checkin {}: it is no longer {}", checkin.uuid, expectedStatus)
-      // With open-in-view the caller cancelled a managed copy, which committing this transaction
-      // would write back over the change that beat us.
-      if (entityManager.contains(checkin)) entityManager.refresh(checkin)
-      return false
+      return null
     }
-    checkinRepository.save(checkin)
+    // With open-in-view the caller's copy is managed: refresh it so it shows the cancellation.
+    val cancelled = if (entityManager.contains(checkin)) checkin.also { entityManager.refresh(it) } else checkinRepository.findById(checkin.id).get()
     offenderEventLogRepository.save(
       OffenderEventLog(
-        comment = request.reason,
-        sensitive = checkin.sensitive,
+        comment = cancellation.reason,
+        sensitive = cancelled.sensitive,
         createdAt = clock.instant(),
         logEntryType = LogEntryType.OFFENDER_CHECKIN_CANCELLED,
-        practitioner = request.cancelledBy,
+        practitioner = cancellation.cancelledBy,
         uuid = UUID.randomUUID(),
-        offender = checkin.offender,
-        checkin = checkin.id,
+        offender = cancelled.offender,
+        checkin = cancelled.id,
       ),
     )
     if (checkinDeliusEventService.enabled()) {
-      checkinDeliusEventService.recordCancelledIfRecorded(checkin, request.reason)
+      checkinDeliusEventService.recordCancelledIfRecorded(cancelled, cancellation.reason)
     }
-    eventAuditService.recordCheckinCancelled(checkin, event)
+    val event = toEvent(cancelled)
+    eventAuditService.recordCheckinCancelled(cancelled, event)
 
     appEventPublisher.publishEvent(event)
-    return true
+    return event
   }
 
   companion object {
     private val LOGGER = logger<CheckinPersistenceService>()
   }
 }
+
+/** A practitioner's cancellation of a check-in, ready to persist */
+data class CheckinCancellation(
+  val cancelledBy: ExternalUserId,
+  val cancelledAt: Instant,
+  val reason: String,
+  val sensitive: Boolean,
+)

@@ -421,21 +421,22 @@ class CheckinService(
     }
 
     val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    checkin.status = CheckinStatus.CANCELLED
-    checkin.cancelledAt = clock.instant()
-    checkin.cancelledBy = request.cancelledBy
-    checkin.sensitive = checkin.sensitive || request.sensitive
-    val event = CheckinCancelledEvent(
-      checkinId = checkin.id,
-      offenderId = checkin.offender.id,
-      practitionerId = checkin.offender.practitionerId,
-      checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
-      offenderContactPreference = checkin.offender.contactPreference,
-      previousStatus = previousStatus,
+    val cancellation = CheckinCancellation(
+      cancelledBy = request.cancelledBy,
+      cancelledAt = clock.instant(),
+      reason = request.reason,
+      sensitive = request.sensitive,
     )
-    if (!checkinPersistenceService.checkinCancellation(checkin, previousStatus, request, event)) {
-      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin $uuid changed while it was being cancelled")
-    }
+    val event = checkinPersistenceService.checkinCancellation(checkin, previousStatus, cancellation) { cancelled ->
+      CheckinCancelledEvent(
+        checkinId = cancelled.id,
+        offenderId = cancelled.offender.id,
+        practitionerId = cancelled.offender.practitionerId,
+        checkin = cancelled.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
+        offenderContactPreference = cancelled.offender.contactPreference,
+        previousStatus = previousStatus,
+      )
+    } ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin $uuid changed while it was being cancelled")
     LOGGER.info("Checkin cancelled: {} (was {}) by {}", uuid, previousStatus, request.cancelledBy)
     return event.checkin
   }

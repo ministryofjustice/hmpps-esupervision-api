@@ -4,6 +4,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.mockito.kotlin.any
@@ -20,13 +21,18 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancellation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancelledEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -71,6 +77,9 @@ class CheckinCancellationIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var eventDetailService: EventDetailService
+
+  @Autowired
+  private lateinit var persistenceService: CheckinPersistenceService
 
   @MockitoBean
   private lateinit var ndiliusApiClient: INdiliusApiClient
@@ -267,6 +276,61 @@ class CheckinCancellationIT : IntegrationTestBase() {
 
     assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(checkin.uuid)).isEmpty()
   }
+
+  @Test
+  fun `a check-in whose status changed after it was read isn't cancelled`() {
+    val checkin = saveCheckin(CheckinStatus.CREATED)
+    jdbcTemplate.update("update offender_checkin_v2 set status = 'SUBMITTED' where id = ?", checkin.id)
+
+    val event = transactionTemplate.execute {
+      persistenceService.checkinCancellation(checkin, CheckinStatus.CREATED, cancellation()) { error("not expected") }
+    }
+
+    assertThat(event).isNull()
+    val saved = checkinRepository.findByUuid(checkin.uuid).get()
+    assertThat(saved.status).isEqualTo(CheckinStatus.SUBMITTED)
+    assertThat(saved.cancelledBy).isNull()
+    assertThat(jdbcTemplate.queryForObject("select count(*) from offender_event_log_v2", Int::class.java)).isZero()
+  }
+
+  @Test
+  fun `cancelling doesn't overwrite a change made after the check-in was read`() {
+    val checkin = saveCheckin(CheckinStatus.CREATED)
+    jdbcTemplate.update("update offender_checkin_v2 set link_status = 'SENT' where id = ?", checkin.id)
+
+    transactionTemplate.execute {
+      persistenceService.checkinCancellation(checkin, CheckinStatus.CREATED, cancellation()) { cancelledEvent(it) }
+    }
+
+    val saved = checkinRepository.findByUuid(checkin.uuid).get()
+    assertThat(saved.status).isEqualTo(CheckinStatus.CANCELLED)
+    assertThat(saved.linkStatus).isEqualTo(CheckinLinkStatus.SENT)
+  }
+
+  @Test
+  fun `a submission read before the check-in was cancelled is refused`() {
+    val checkin = saveCheckin(CheckinStatus.CREATED)
+    cancel(checkin.uuid).expectStatus().isOk
+
+    checkin.status = CheckinStatus.SUBMITTED
+    checkin.submittedAt = Instant.now()
+    val event = CheckinSubmittedEvent(checkin.id, checkin.offender.id, "PRACT001", checkin.dto(), checkin.offender.contactPreference)
+    val error = assertThrows<ResponseStatusException> { persistenceService.checkinSubmission(checkin, event) }
+
+    assertThat(error.statusCode.value()).isEqualTo(409)
+    assertThat(checkinRepository.findByUuid(checkin.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+  }
+
+  private fun cancellation() = CheckinCancellation(cancelledBy = "PRACT_CANCEL", cancelledAt = Instant.now(), reason = "reason", sensitive = false)
+
+  private fun cancelledEvent(checkin: OffenderCheckin) = CheckinCancelledEvent(
+    checkinId = checkin.id,
+    offenderId = checkin.offender.id,
+    practitionerId = checkin.offender.practitionerId,
+    checkin = checkin.dto(),
+    offenderContactPreference = checkin.offender.contactPreference,
+    previousStatus = CheckinStatus.CREATED,
+  )
 
   private fun cancellationLog(checkin: OffenderCheckin) = jdbcTemplate.queryForMap(
     "select comment, sensitive, practitioner from offender_event_log_v2 where checkin = ? and log_entry_type = ?::log_entry_type_v2",

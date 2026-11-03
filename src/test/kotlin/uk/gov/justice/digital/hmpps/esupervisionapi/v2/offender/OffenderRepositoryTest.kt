@@ -129,27 +129,31 @@ class OffenderRepositoryTest : IntegrationTestBase() {
 
   @Test
   @Transactional
-  fun `findEligibleForCheckinCreation - a check-in a practitioner cancelled holds its date, one the system cancelled does not`() {
+  fun `findEligibleForCheckinCreation - a check-in a practitioner cancelled holds its date until the offender is updated`() {
     val today = LocalDate.of(2026, 1, 21)
-    val practitionerCancelled = createOffenderV2(crn = "V200030", firstCheckin = today)
-    val systemCancelled = createOffenderV2(crn = "V200031", firstCheckin = today)
-    offenderRepository.saveAll(listOf(practitionerCancelled, systemCancelled))
+    val updatedAt = Instant.parse("2026-01-20T12:00:00Z")
+    val practitionerCancelled = createOffenderV2(crn = "V200030", firstCheckin = today).apply { this.updatedAt = updatedAt }
+    val systemCancelled = createOffenderV2(crn = "V200031", firstCheckin = today).apply { this.updatedAt = updatedAt }
+    val rebooked = createOffenderV2(crn = "V200032", firstCheckin = today).apply { this.updatedAt = updatedAt.plusSeconds(7200) }
+    offenderRepository.saveAll(listOf(practitionerCancelled, systemCancelled, rebooked))
 
     fun cancelled(offender: Offender, cancelledBy: String?) = OffenderCheckin(
       uuid = UUID.randomUUID(),
       offender = offender,
       status = CheckinStatus.CANCELLED,
       dueDate = today,
-      createdAt = Instant.now(),
+      createdAt = updatedAt,
       createdBy = "SYSTEM",
-      cancelledAt = cancelledBy?.let { Instant.now() },
+      cancelledAt = cancelledBy?.let { updatedAt.plusSeconds(3600) },
       cancelledBy = cancelledBy,
     )
-    checkinV2Repository.saveAll(listOf(cancelled(practitionerCancelled, "PRACT1"), cancelled(systemCancelled, null)))
+    checkinV2Repository.saveAll(
+      listOf(cancelled(practitionerCancelled, "PRACT1"), cancelled(systemCancelled, null), cancelled(rebooked, "PRACT1")),
+    )
 
     val result = offenderRepository.findEligibleForCheckinCreation(today, today.plusDays(1))
 
-    assertEquals(setOf(systemCancelled.crn), result.map { it.crn }.toSet())
+    assertEquals(setOf(systemCancelled.crn, rebooked.crn), result.map { it.crn }.toSet())
   }
 
   @Test

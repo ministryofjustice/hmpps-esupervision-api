@@ -158,7 +158,7 @@ Stores checkin records with survey responses.
 | link_status | ENUM | | Whether GOV.UK Notify accepted the check-in invite (no delivery receipts, so not whether it was delivered). SENDING: live, not yet accepted; SENT: accepted (NDelius `link.delivered`); FAILED: rejected or couldn't be sent (NDelius `link.not_delivered`). NULL for check-ins created before ESUP-2223 |
 | link_status_updated_at | TIMESTAMP | | When link_status last changed |
 | cancelled_at | TIMESTAMP | | When a practitioner cancelled the check-in (ESUP-2128). NULL if the system cancelled it |
-| cancelled_by | VARCHAR(255) | | Practitioner who cancelled it. Set means the check-in holds its date: the creation job won't create another for it |
+| cancelled_by | VARCHAR(255) | | Practitioner who cancelled it. Set means the check-in holds its date: the creation job won't create another for it, until the offender is next updated (for example the date is booked again) |
 
 ### generic_notification_v2
 

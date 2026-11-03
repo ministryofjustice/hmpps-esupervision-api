@@ -126,8 +126,10 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
           AND :lowerBoundInclusive <= c.due_date
           AND c.due_date < :upperBoundExclusive
           -- a check-in a practitioner cancelled (cancelled_by set) holds its date, so it isn't
-          -- recreated; one the system cancelled (check-ins stopped) doesn't
-          AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED') OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL))
+          -- recreated, until the practitioner changes the schedule (or anything else) after
+          -- cancelling: rebooking the date must create it. One the system cancelled doesn't.
+          AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+            OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL AND c.cancelled_at > o.updated_at))
       )
       AND o.id > coalesce(:lastOffenderId, 0)
     ORDER BY o.id
@@ -380,6 +382,25 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Query("select cast(status as text) from offender_checkin_v2 where id = :id for update", nativeQuery = true)
   @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
   fun lockAndGetStatus(id: Long): String?
+
+  /**
+   * ESUP-2128: a practitioner cancels the check-in, if it is still [expectedStatus]. Writes only the
+   * cancellation columns, and [sensitive] can only set the flag, not clear it.
+   * @return 1 if cancelled, 0 if its status had changed
+   */
+  @Modifying
+  @Query(
+    """
+    UPDATE OffenderCheckin c
+    SET c.status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus.CANCELLED,
+        c.cancelledAt = :cancelledAt,
+        c.cancelledBy = :cancelledBy,
+        c.sensitive = CASE WHEN :sensitive = true THEN true ELSE c.sensitive END
+    WHERE c.id = :id
+      AND c.status = :expectedStatus
+    """,
+  )
+  fun cancel(id: Long, expectedStatus: CheckinStatus, cancelledAt: Instant, cancelledBy: String, sensitive: Boolean): Int
 
   /** Whether the offender has a CREATED check-in for [dueDate] in the database. Doesn't flush first, as [lockAndGetStatus]. */
   @Query(

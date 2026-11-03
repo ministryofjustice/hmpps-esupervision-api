@@ -68,7 +68,7 @@ An offender is eligible for checkin creation if:
 - `first_checkin IS NOT NULL`
 - `checkin_interval IS NOT NULL`
 - Next due date falls on today
-- No existing checkin for today (any status except CANCELLED, unless a practitioner cancelled it)
+- No existing checkin for today (any status except CANCELLED, unless a practitioner cancelled it and the offender hasn't been updated since)
 
 ---
 

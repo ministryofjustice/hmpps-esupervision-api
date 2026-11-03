@@ -247,7 +247,8 @@ POST /v2/offender_checkins/{uuid}/cancel
 - If the checkin was open, the person on probation is sent the "check-in cancelled" message.
 - With `ESUP_2223` on, if NDelius has the checkin (it was recorded as scheduled), a
   `check-in.cancelled` event is recorded with the reason as its note.
-- The daily creation job does not create another checkin for that date.
+- The daily creation job does not create another checkin for that date, unless the offender is
+  updated afterwards (for example the practitioner books that date again).
 - `409` if the checkin is submitted, reviewed, expired (including open past its window) or
   already cancelled, or if it changes while being cancelled.
 
