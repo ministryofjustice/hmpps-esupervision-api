@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.Custo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierApiVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.tier.TierDetails
+import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -105,10 +106,56 @@ class DefaultStubDataProvider : StubDataProvider {
  * - X001122 -> Last character will decide the supervision package phase: "1" early engagement,
  *   "2" final third, "3" recalled and back in custody, "4" no active package, "6" an open recall
  *   request, "7" recalled and unlawfully at large, anything else standard supervision
+ * - CRNs ending in "0" return two active events; event 2 has the later expected sentence end date
  */
-class GeneratingStubDataProvider : StubDataProvider {
+class GeneratingStubDataProvider(
+  private val clock: Clock = Clock.system(ZoneId.of("Europe/London")),
+) : StubDataProvider {
   override fun provideCase(crn: CRN): ContactDetails {
     val parsed = parseCrn(crn)
+    val today = LocalDate.now(clock)
+    val sentenceStart = today.minusMonths(6)
+    val shorterSentenceStart = today.minusMonths(3)
+    val events = if (crn.last() == '0') {
+      listOf(
+        Event(
+          2,
+          CodedDescription("04300", "Abstracting electricity - 04300"),
+          Event.Sentence(
+            date = sentenceStart,
+            description = "Adult Custody < 12m",
+            expectedEndDate = sentenceStart.plusMonths(12),
+            length = 12,
+            lengthUnit = "Months",
+          ),
+        ),
+        Event(
+          1,
+          CodedDescription("11800", "Night poaching - 11800"),
+          Event.Sentence(
+            date = shorterSentenceStart,
+            description = "SA2020 Community Order",
+            expectedEndDate = shorterSentenceStart.plusMonths(6),
+            length = 6,
+            lengthUnit = "Months",
+          ),
+        ),
+      )
+    } else {
+      listOf(
+        Event(
+          1,
+          CodedDescription("0001", "stealing candy"),
+          Event.Sentence(
+            date = sentenceStart,
+            description = "Sentence description here",
+            expectedEndDate = sentenceStart.plusMonths(12),
+            length = 12,
+            lengthUnit = "Months",
+          ),
+        ),
+      )
+    }
     return ContactDetails(
       crn = crn,
       name = Name(
@@ -140,16 +187,7 @@ class GeneratingStubDataProvider : StubDataProvider {
         unallocated = false,
         username = "practitioner.number${parsed.practitioner}",
       ),
-      events = listOf(
-        Event(
-          1,
-          CodedDescription("0001", "stealing candy"),
-          Event.Sentence(
-            LocalDate.now(ZoneId.of("Europe/London")).minusWeeks(90),
-            "Sentence description here",
-          ),
-        ),
-      ),
+      events = events,
     )
   }
 

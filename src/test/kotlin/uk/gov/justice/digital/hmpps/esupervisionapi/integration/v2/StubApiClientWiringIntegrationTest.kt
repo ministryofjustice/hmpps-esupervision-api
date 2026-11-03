@@ -1,6 +1,8 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.integration.v2
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
@@ -59,6 +61,16 @@ class StubApiClientWiringIntegrationTest : IntegrationTestBase() {
 
   @Autowired
   private lateinit var offenderService: OffenderService
+
+  @Test
+  fun `documented multi-event CRN is available through the NDelius stub`() {
+    val details = requireNotNull(standardNdiliusApiClient.getContactDetails("X000010"))
+
+    assertEquals(2, details.events.size)
+    assertTrue(details.events.all { it.sentence?.expectedEndDate != null })
+    assertEquals(2, details.events.map { it.sentence?.expectedEndDate }.toSet().size)
+    assertEquals(2, details.events.map { it.sentence?.length }.toSet().size)
+  }
 
   @Test
   fun `stub clients resolve for both standard and eligibility consumers`() {

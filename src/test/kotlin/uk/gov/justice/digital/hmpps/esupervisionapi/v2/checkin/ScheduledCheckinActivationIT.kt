@@ -104,7 +104,7 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
     saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today())
     val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), clock.today()).single()
     // check-ins stopped while the creation job was getting contact details
-    transactionTemplate.execute { checkinRepository.updateStatusForOffender(offender, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) }
+    transactionTemplate.execute { checkinRepository.updateStatusForOffenderId(offender.id, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) }
 
     val checkin = checkinCreationService.prepareCheckinForOffender(offender, clock.today(), scheduled)
     checkinCreationService.createCheckins(listOf(checkin to createdEvent(offender, checkin)))
@@ -137,7 +137,7 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
     val scheduled = saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today())
     jdbcTemplate.update("insert into question_list_assignment (question_list_id, offender_id) select id, ? from question_list where name = 'Default'", offender.id)
 
-    lateinit var stopping: CompletableFuture<Offender?>
+    lateinit var stopping: CompletableFuture<Boolean>
     transactionTemplate.executeWithoutResult {
       // activation locks the check-in, then changes it
       checkinRepository.lockAndGetStatus(scheduled.id)
@@ -151,7 +151,7 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
       jdbcTemplate.update("update offender_checkin_v2 set status = 'CREATED' where id = ?", scheduled.id)
     }
 
-    assertThat(stopping.get(10, TimeUnit.SECONDS)).isNotNull
+    assertThat(stopping.get(10, TimeUnit.SECONDS)).isTrue
     assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
   }
 

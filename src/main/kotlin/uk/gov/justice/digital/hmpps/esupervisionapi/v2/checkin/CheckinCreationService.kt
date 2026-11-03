@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -44,6 +45,7 @@ class CheckinCreationService(
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val transactionTemplate: TransactionTemplate,
   private val checkinPersistenceService: CheckinPersistenceService,
+  private val appConfig: AppConfig,
 ) {
 
   val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -102,6 +104,7 @@ class CheckinCreationService(
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
   ): OffenderCheckin? {
+    val eventNumber = resolveEventNumber(offender.currentEvent, contactDetails)
     val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), dueDate).singleOrNull()
     val checkin = newOrActivatedCheckin(offender, dueDate, createdBy, scheduled)
 
@@ -110,7 +113,7 @@ class CheckinCreationService(
       practitionerId = checkin.createdBy,
       checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
       offenderContactPreference = checkin.offender.contactPreference,
-      currentEvent = checkin.offender.currentEvent,
+      currentEvent = eventNumber,
       checkinMode = offender.mode,
     )
 
@@ -142,6 +145,7 @@ class CheckinCreationService(
     if (checkins.isEmpty()) return listOf()
     val created = mutableListOf<CheckinCreatedEvent>()
     try {
+      checkins.forEach { (_, event) -> resolveEventNumber(event.currentEvent, event.checkin.personalDetails) }
       for ((checkin, event) in checkins) {
         checkinPersistenceService.checkinCreation(checkin, event)?.let(created::add)
       }
@@ -149,6 +153,18 @@ class CheckinCreationService(
       throw BatchCheckinCreationException(checkins, e)
     }
     return created
+  }
+
+  private fun resolveEventNumber(currentEvent: Long?, contactDetails: ContactDetails?): Long? {
+    val enabled = appConfig.esup2305DeliusEventSelection
+    val eventNumber = contactDetails?.let { activeEventNumber(currentEvent, it, enabled) }
+    if (eventNumber == null && currentEvent != null && contactDetails != null) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because ${CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.description}.")
+    }
+    if (eventNumber == null && enabled) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because a probation event must be selected.")
+    }
+    return eventNumber
   }
 
   /**

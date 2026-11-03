@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.RateLimiter
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
@@ -24,6 +25,7 @@ import java.util.UUID
 
 @Service
 class MigrationEventReplayService(
+  private val appConfig: AppConfig,
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderRepository: OffenderRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
@@ -351,7 +353,7 @@ class MigrationEventReplayService(
         }
         try {
           val details = contactsByCrn[offender.crn]
-          if (details == null || details.events.isEmpty()) {
+          if (offender.currentEvent == null && (details == null || details.events.isEmpty())) {
             logger.info("Skipping V2_SETUP_COMPLETED for crn={}: no active Delius events", offender.crn)
             row.eventSent = true
             row.eventSentAt = clock.instant()
@@ -370,7 +372,7 @@ class MigrationEventReplayService(
             description = "Practitioner completed setup for offender ${offender.crn}",
             occurredAt = offender.createdAt.atZone(clock.zone),
             additionalInformation = AdditionalInformation(
-              eventNumber = activeEventNumber(offender, details),
+              eventNumber = offender.currentEvent ?: details?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) },
               setupId = setup.setupId(),
             ),
           )
