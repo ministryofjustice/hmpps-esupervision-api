@@ -125,7 +125,9 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         WHERE c.offender_id = o.id
           AND :lowerBoundInclusive <= c.due_date
           AND c.due_date < :upperBoundExclusive
-          AND c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+          -- a check-in a practitioner cancelled (cancelled_by set) holds its date, so it isn't
+          -- recreated; one the system cancelled (check-ins stopped) doesn't
+          AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED') OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL))
       )
       AND o.id > coalesce(:lastOffenderId, 0)
     ORDER BY o.id
@@ -536,6 +538,7 @@ enum class LogEntryType {
   OFFENDER_CHECKIN_OUTSIDE_ACCESS,
   OFFENDER_CHECKIN_LIVENESS_FAILED,
   OFFENDER_CHECKIN_FACE_MATCH_FAILED,
+  OFFENDER_CHECKIN_CANCELLED,
 }
 
 /**

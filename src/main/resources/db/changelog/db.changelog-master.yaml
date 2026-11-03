@@ -181,3 +181,5 @@ databaseChangeLog:
       file: db/changelog/changesets/90_one_created_checkin_per_day.sql
   - include:
       file: db/changelog/changesets/91_one_scheduled_checkin_per_offender.sql
+  - include:
+      file: db/changelog/changesets/92_checkin_cancellation.sql

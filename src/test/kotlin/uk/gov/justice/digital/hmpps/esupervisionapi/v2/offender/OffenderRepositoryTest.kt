@@ -129,6 +129,31 @@ class OffenderRepositoryTest : IntegrationTestBase() {
 
   @Test
   @Transactional
+  fun `findEligibleForCheckinCreation - a check-in a practitioner cancelled holds its date, one the system cancelled does not`() {
+    val today = LocalDate.of(2026, 1, 21)
+    val practitionerCancelled = createOffenderV2(crn = "V200030", firstCheckin = today)
+    val systemCancelled = createOffenderV2(crn = "V200031", firstCheckin = today)
+    offenderRepository.saveAll(listOf(practitionerCancelled, systemCancelled))
+
+    fun cancelled(offender: Offender, cancelledBy: String?) = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinStatus.CANCELLED,
+      dueDate = today,
+      createdAt = Instant.now(),
+      createdBy = "SYSTEM",
+      cancelledAt = cancelledBy?.let { Instant.now() },
+      cancelledBy = cancelledBy,
+    )
+    checkinV2Repository.saveAll(listOf(cancelled(practitionerCancelled, "PRACT1"), cancelled(systemCancelled, null)))
+
+    val result = offenderRepository.findEligibleForCheckinCreation(today, today.plusDays(1))
+
+    assertEquals(setOf(systemCancelled.crn), result.map { it.crn }.toSet())
+  }
+
+  @Test
+  @Transactional
   fun `findAllByStatusAndIdGreaterThanOrderByIdAsc - pages verified offenders only`() {
     val firstVerified = offenderRepository.saveAndFlush(createOffenderV2("V200020", LocalDate.now()))
     offenderRepository.saveAndFlush(createOffenderV2("V200021", LocalDate.now(), status = OffenderStatus.INACTIVE))

@@ -232,6 +232,25 @@ sequenceDiagram
     end
 ```
 
+### Cancelling a Checkin (ESUP-2128)
+
+A practitioner can cancel an upcoming (`SCHEDULED`) or open (`CREATED`) checkin:
+
+```http
+POST /v2/offender_checkins/{uuid}/cancel
+{ "cancelledBy": "PRACT001", "reason": "Attending in person instead", "sensitive": false }
+```
+
+- The checkin becomes `CANCELLED`, with `cancelledAt` and `cancelledBy` set. A sensitive reason
+  marks the checkin sensitive.
+- The reason is an `OFFENDER_CHECKIN_CANCELLED` entry in the checkin's logs.
+- If the checkin was open, the person on probation is sent the "check-in cancelled" message.
+- With `ESUP_2223` on, if NDelius has the checkin (it was recorded as scheduled), a
+  `check-in.cancelled` event is recorded with the reason as its note.
+- The daily creation job does not create another checkin for that date.
+- `409` if the checkin is submitted, reviewed, expired (including open past its window) or
+  already cancelled, or if it changes while being cancelled.
+
 ### Review List Use Cases
 
 | Use Case | Description | Query Parameter |
@@ -255,5 +274,6 @@ sequenceDiagram
 | `POST` | `/v2/offender_checkins/{uuid}/review-started` | Mark review started |
 | `POST` | `/v2/offender_checkins/{uuid}/review` | Complete review |
 | `POST` | `/v2/offender_checkins/{uuid}/annotate` | Add annotation |
+| `POST` | `/v2/offender_checkins/{uuid}/cancel` | Cancel an upcoming or open checkin, with a reason (ESUP-2128) |
 | `GET` | `/v2/offender_checkins/{uuid}/proxy/video` | Get video URL |
 | `GET` | `/v2/offender_checkins/{uuid}/proxy/snapshot` | Get snapshot URL |

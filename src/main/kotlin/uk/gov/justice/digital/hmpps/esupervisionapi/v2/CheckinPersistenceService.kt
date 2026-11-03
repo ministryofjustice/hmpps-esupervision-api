@@ -103,6 +103,8 @@ class CheckinPersistenceService(
       if (checkin.imageDeletedAt != null) add("imageDeletedAt")
       if (checkin.linkStatus != null) add("linkStatus")
       if (checkin.linkStatusUpdatedAt != null) add("linkStatusUpdatedAt")
+      if (checkin.cancelledAt != null) add("cancelledAt")
+      if (checkin.cancelledBy != null) add("cancelledBy")
     }
     require(unsupported.isEmpty()) { "Check-in creation does not persist $unsupported; extend OffenderCheckinRepository.maybeInsert" }
   }
@@ -162,6 +164,46 @@ class CheckinPersistenceService(
     }
 
     appEventPublisher.publishEvent(event.finalise(logEntry))
+  }
+
+  /**
+   * Saves [checkin], which the caller read with status [expectedStatus] and cancelled, with the
+   * reason in the event log and, if NDelius has the check-in, a cancelled event for NDelius.
+   *
+   * @return false if nothing was saved: the check-in's status changed after the caller read it
+   *   (for example the offender submitted it, or the creation job activated it)
+   */
+  @Transactional
+  fun checkinCancellation(checkin: OffenderCheckin, expectedStatus: CheckinStatus, request: CancelCheckinRequest, event: CheckinCancelledEvent): Boolean {
+    require(checkin.status == CheckinStatus.CANCELLED && checkin.cancelledBy != null)
+    // Locking also makes a concurrent submission, activation or stop wait until this commits.
+    if (checkinRepository.lockAndGetStatus(checkin.id) != expectedStatus.name) {
+      LOGGER.info("Not cancelling checkin {}: it is no longer {}", checkin.uuid, expectedStatus)
+      // With open-in-view the caller cancelled a managed copy, which committing this transaction
+      // would write back over the change that beat us.
+      if (entityManager.contains(checkin)) entityManager.refresh(checkin)
+      return false
+    }
+    checkinRepository.save(checkin)
+    offenderEventLogRepository.save(
+      OffenderEventLog(
+        comment = request.reason,
+        sensitive = checkin.sensitive,
+        createdAt = clock.instant(),
+        logEntryType = LogEntryType.OFFENDER_CHECKIN_CANCELLED,
+        practitioner = request.cancelledBy,
+        uuid = UUID.randomUUID(),
+        offender = checkin.offender,
+        checkin = checkin.id,
+      ),
+    )
+    if (checkinDeliusEventService.enabled()) {
+      checkinDeliusEventService.recordCancelledIfRecorded(checkin, request.reason)
+    }
+    eventAuditService.recordCheckinCancelled(checkin, event)
+
+    appEventPublisher.publishEvent(event)
+    return true
   }
 
   companion object {

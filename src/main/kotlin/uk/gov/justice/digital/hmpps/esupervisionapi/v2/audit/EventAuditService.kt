@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancelledEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
@@ -70,6 +71,7 @@ enum class CheckinAuditEventType {
   CHECKIN_EXPIRED,
   CHECKIN_REMINDER,
   CHECKIN_IMAGE_DELETED,
+  CHECKIN_CANCELLED,
 }
 
 /**
@@ -150,6 +152,11 @@ class EventAuditService(
    * Record checkin reviewed event
    */
   fun recordCheckinReviewed(checkin: OffenderCheckin, event: CheckinReviewedEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_REVIEWED, checkin, event)
+
+  /**
+   * Record checkin cancelled (by a practitioner) event
+   */
+  fun recordCheckinCancelled(checkin: OffenderCheckin, event: CheckinCancelledEvent) = recordCheckinEvent(CheckinAuditEventType.CHECKIN_CANCELLED, checkin, event)
 
   /**
    * Record checkin expired event
@@ -317,6 +324,17 @@ class EventAuditService(
         contactDetails = checkinDto.personalDetails,
         checkin = checkin,
         notes = "Reminder sent by scheduled job",
+      )
+
+      // No reason here: the audit log holds no PII, and the reason may be sensitive.
+      CheckinAuditEventType.CHECKIN_CANCELLED -> buildAudit(
+        eventType = eventType.name,
+        crn = checkinDto.crn,
+        practitionerId = this.practitionerId,
+        contactDetails = checkinDto.personalDetails,
+        checkin = checkin,
+        notes = if (checkin.cancelledBy != this.practitionerId) "Cancelled by ${checkin.cancelledBy}" else null,
+        sensitive = checkin.sensitive,
       )
 
       CheckinAuditEventType.CHECKIN_IMAGE_DELETED -> {
