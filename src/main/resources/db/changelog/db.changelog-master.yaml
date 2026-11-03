@@ -180,6 +180,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/90_one_created_checkin_per_day.sql
   - include:
-      file: db/changelog/changesets/91_add_current_event_backfill_job_type.sql
+      file: db/changelog/changesets/91_one_scheduled_checkin_per_offender.sql
   - include:
-      file: db/changelog/changesets/92_update_monthly_stats_for_selected_event_deactivation.sql
+      file: db/changelog/changesets/92_add_current_event_backfill_job_type.sql
+  - include:
+      file: db/changelog/changesets/93_update_monthly_stats_for_selected_event_deactivation.sql

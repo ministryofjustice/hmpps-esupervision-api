@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusBatchFetchException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.BatchCheckinCreationException
@@ -65,6 +66,7 @@ private fun JobMetrics.info(logger: Logger, jobId: Long, duration: Duration) {
 class CheckinCreationJob(
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
+  private val checkinRepository: OffenderCheckinRepository,
   private val ndiliusApiClient: INdiliusApiClient,
   private val checkinCreationService: CheckinCreationService,
   private val offenderDeactivationService: OffenderDeactivationService,
@@ -105,6 +107,9 @@ class CheckinCreationJob(
         LOGGER.info("Processing page {} with {} offenders", metrics.chunks, chunk.size)
 
         try {
+          // Before the NDelius call: if check-ins are stopped during it, the upcoming check-in is then
+          // activated, and refused as cancelled, rather than missed and a new check-in created.
+          val scheduledByOffenderId = checkinRepository.findScheduledForOffenders(chunk.map { it.id }, today).associateBy { it.offender.id }
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
           val checkinsToCreate = ArrayList<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>(contactDetailsMap.size)
           val infoByCrn = chunk.associateBy { it.crn }
@@ -117,7 +122,7 @@ class CheckinCreationJob(
             if (ineligibility != null && (!newEligibilityRulesEnabled || savedSelectionIsInactive)) {
               deactivateOffender(ineligibility, info, contactDetails, metrics)
             } else {
-              prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
+              prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id])?.let { checkinsToCreate.add(it) }
             }
           }
 
@@ -151,9 +156,10 @@ class CheckinCreationJob(
     info: OffenderRepository.IOffenderCheckinCreationInfo,
     today: LocalDate,
     contactDetails: ContactDetails,
+    scheduled: OffenderCheckin?,
   ): Pair<OffenderCheckin, PartialCheckinCreatedEvent>? {
     val offenderRef = offenderRepository.getReferenceById(info.id)
-    val checkin = checkinCreationService.prepareCheckinForOffender(offenderRef, today)
+    val checkin = checkinCreationService.prepareCheckinForOffender(offenderRef, today, scheduled)
     val eventNumber = activeEventNumber(info, contactDetails, appConfig.esup2305DeliusEventSelection)
     var result: Pair<OffenderCheckin, PartialCheckinCreatedEvent>? = null
     if (eventNumber != null) {

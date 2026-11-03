@@ -23,6 +23,7 @@ class CheckinPersistenceServiceTest {
     offenderEventLogRepository = mock(),
     clock = Clock.systemUTC(),
     checkinDeliusEventService = mock(),
+    entityManager = mock(),
   )
 
   private fun newCheckin() = OffenderCheckin(
