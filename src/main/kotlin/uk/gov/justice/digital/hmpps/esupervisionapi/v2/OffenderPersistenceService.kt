@@ -95,7 +95,7 @@ class OffenderPersistenceService(
   companion object {
     val LOGGER = logger<OffenderPersistenceService>()
 
-    // TODO ESUP-2223: wording to be agreed with product
+    // TODO ESUP-2223: agreed for now; to change or remove if probation integration take over the NDelius note text
     const val CHECKINS_STOPPED_REASON = "Check ins were stopped"
   }
 }
