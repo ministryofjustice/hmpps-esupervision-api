@@ -388,7 +388,21 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `after today's creation job has started, today's upcoming check-in is left for the job`() {
+  fun `after today's creation job has started, today's upcoming check-in is left alone while the schedule still has today`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    jobLogRepository.save(JobLog(jobType = CheckinCreationJob.JOB_TYPE, createdAt = clock.instant()))
+
+    service.scheduleNext(offender.id)
+
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today)
+    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).map { it.eventType })
+      .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+  }
+
+  @Test
+  fun `after today's creation job has started, a schedule change still moves today's upcoming check-in`() {
     val offender = saveOffender(firstCheckin = today)
     service.scheduleNext(offender.id)
     val scheduled = scheduledCheckins(offender).single()
@@ -398,9 +412,12 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     offenderRepository.save(offender)
     service.scheduleNext(offender.id)
 
-    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today)
+    assertThat(scheduledCheckins(offender).single()).satisfies({
+      assertThat(it.uuid).isEqualTo(scheduled.uuid)
+      assertThat(it.dueDate).isEqualTo(today.plusDays(2))
+    })
     assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).map { it.eventType })
-      .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+      .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED, DomainEventType.V2_CHECKIN_RESCHEDULED)
   }
 
   @Test
