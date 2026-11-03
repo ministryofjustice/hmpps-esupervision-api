@@ -182,4 +182,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/91_one_scheduled_checkin_per_offender.sql
   - include:
-      file: db/changelog/changesets/92_checkin_cancellation.sql
+      file: db/changelog/changesets/92_add_current_event_backfill_job_type.sql
+  - include:
+      file: db/changelog/changesets/93_update_monthly_stats_for_selected_event_deactivation.sql
+  - include:
+      file: db/changelog/changesets/94_checkin_cancellation.sql

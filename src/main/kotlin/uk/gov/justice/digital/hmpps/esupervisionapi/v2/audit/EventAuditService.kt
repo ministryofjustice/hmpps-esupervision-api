@@ -44,6 +44,9 @@ enum class OffenderAuditEventType(
   /** Automated deactivation by a scheduled job because the POP has no active probation events in NDelius. */
   OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS("ESPNA", automated = true),
 
+  /** Automated deactivation by a scheduled job because the POP's selected event is no longer active in NDelius. */
+  OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE("ESPNA", automated = true),
+
   /** Automated deactivation because an eligibility rule no longer passes. */
   OFFENDER_AUTO_DEACTIVATED_INELIGIBLE(automated = true),
   ;
@@ -59,6 +62,7 @@ enum class OffenderAuditEventType(
       OFFENDER_DEACTIVATED,
       OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
       OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
       OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
       -> -1
     }
@@ -252,6 +256,7 @@ class EventAuditService(
       OffenderAuditEventType.OFFENDER_DEACTIVATED,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
       OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_INELIGIBLE,
       -> buildAudit(
         eventType.name,

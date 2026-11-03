@@ -238,7 +238,8 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         (4, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000004', 'P1', 'N03', 'Wales'),
         (5, 'OFFENDER_DEACTIVATED', '2026-01-10T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
         (6, 'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED', '2026-01-11T10:00:00Z', 'X000002', 'P1', 'N03', 'Wales'),
-        (7, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-12T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales')
+        (7, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-12T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales'),
+        (8, 'OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE', '2026-01-13T10:00:00Z', 'X000004', 'P1', 'N03', 'Wales')
       """,
     )
 
@@ -246,8 +247,8 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
 
     val summary = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "ALL").first()
     assertEquals(4, summary.totalSignedUp)
-    assertEquals(3, summary.totalInactiveUsers)
-    assertEquals(1, summary.totalActiveUsers)
+    assertEquals(4, summary.totalInactiveUsers)
+    assertEquals(0, summary.totalActiveUsers)
   }
 
   @ParameterizedTest

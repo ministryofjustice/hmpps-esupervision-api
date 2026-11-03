@@ -3,27 +3,66 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ActiveEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /**
- * Finds the active event number for the offender, when available.
- *
- * Note: We check the offender and contact details, because we don't collect and set the event number
- * during offender onboarding (meaning, they'll be mostly nulls). In contact details we find the first
- * event not associated with a completed sentence. This will enable us to stop sending messages
- * to Delius when someone does not have an ongoing event.
+ * Returns the offender's saved event number when it appears in the active events returned by NDelius.
+ * Without a saved selection, returns the sole sentenced event or the sentence with the latest expected
+ * end date when all sentenced events are dated. Returns null when multiple sentences cannot be ranked,
+ * and falls back to the first returned event when no sentenced events are present.
  *
  * @see uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
  */
-fun activeEventNumber(offender: ActiveEvent, details: ContactDetails): Long? {
-  if (offender.currentEvent != null) {
-    return offender.currentEvent
-  }
+fun activeEventNumber(
+  offender: ActiveEvent,
+  details: ContactDetails,
+  useLatestExpectedEndDateWhenNoSelection: Boolean = true,
+): Long? = activeEventNumber(offender.currentEvent, details, useLatestExpectedEndDateWhenNoSelection)
 
-  return details.events.firstOrNull()?.number
+fun activeEventNumber(
+  currentEvent: Long?,
+  details: ContactDetails,
+  useLatestExpectedEndDateWhenNoSelection: Boolean = true,
+): Long? = if (currentEvent != null) {
+  details.events.firstOrNull { it.number == currentEvent }?.number
+} else if (!useLatestExpectedEndDateWhenNoSelection) {
+  details.events.firstOrNull()?.number
+} else {
+  val sentenceEvents = details.events.filter { it.sentence != null }
+  when {
+    sentenceEvents.size > 1 && sentenceEvents.any { it.sentence?.expectedEndDate == null } -> null
+    sentenceEvents.size == 1 -> sentenceEvents.single().number
+    sentenceEvents.size > 1 -> sentenceEvents.maxWithOrNull(
+      compareBy<Event> { requireNotNull(it.sentence?.expectedEndDate) }.thenBy { it.number },
+    )?.number
+    else -> details.events.firstOrNull()?.number
+  }
+}
+
+fun reactivationEventNumber(
+  currentEvent: Long?,
+  requestedEvent: Long?,
+  details: ContactDetails,
+  eventSelectionEnabled: Boolean,
+): Long? {
+  require(requestedEvent == null || eventSelectionEnabled) { "Delius event selection is not enabled" }
+  if (requestedEvent != null) {
+    require(details.events.any { it.number == requestedEvent }) {
+      "Selected event $requestedEvent is not active for offender ${details.crn}"
+    }
+    return requestedEvent
+  }
+  if (currentEvent != null && details.events.any { it.number == currentEvent }) return currentEvent
+  if (!eventSelectionEnabled) {
+    require(currentEvent == null) { "Selected event $currentEvent is not active for offender ${details.crn}" }
+    return activeEventNumber(currentEvent, details, useLatestExpectedEndDateWhenNoSelection = false)
+  }
+  check(details.events.isNotEmpty()) { "Cannot reactivate ${details.crn}: no active events in NDelius." }
+  require(details.events.size == 1) { "A current event must be selected for offender ${details.crn}" }
+  return details.events.single().number
 }
 
 /**
@@ -43,6 +82,10 @@ enum class CheckinIneligibilityReason(
     "there are no active probation events in NDelius",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
   ),
+  SELECTED_EVENT_NO_LONGER_ACTIVE(
+    "the selected probation event is no longer active in NDelius",
+    OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+  ),
   ;
 
   /** Human-readable reason text recorded in the audit event's notes. */
@@ -53,18 +96,20 @@ enum class CheckinIneligibilityReason(
  * Determines whether an offender should be stopped from receiving online check-ins, based on the
  * latest Delius contact details. Returns the reason, or null if the offender is still eligible.
  *
- * Stops check-ins when the person is in reset (contact suspended) or has no active probation events.
+ * Stops check-ins when the person is in reset, has no active probation events, or their selected event
+ * is no longer active in NDelius.
  *
  * Note on no-active-events: we only treat this as grounds for stopping when NDelius returns an
- * explicitly empty events list. An absent/null events list is treated as indeterminate (e.g. a
- * partial or degraded response) and does NOT stop check-ins, so a transient data gap can't wrongly
- * off-board an active person. A cached [Offender.currentEvent] always counts as an active event.
+ * explicitly empty events list when no selection is saved. If a selection is saved, NDelius must
+ * return that event; another active event does not keep the existing setup eligible.
  *
  * @see activeEventNumber
  */
 fun checkinIneligibilityReason(offender: ActiveEvent, details: ContactDetails): CheckinIneligibilityReason? = when {
   offender.currentEvent == null && details.events.isEmpty() -> CheckinIneligibilityReason.NO_ACTIVE_EVENTS
   details.contactSuspended -> CheckinIneligibilityReason.CONTACT_SUSPENDED
+  offender.currentEvent != null && details.events.none { it.number == offender.currentEvent } ->
+    CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE
   else -> null
 }
 
