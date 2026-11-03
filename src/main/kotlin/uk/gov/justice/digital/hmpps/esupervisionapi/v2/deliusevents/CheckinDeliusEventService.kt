@@ -84,7 +84,12 @@ class CheckinDeliusEventService(
    * @param detailId the id the event's detail endpoint expects: the check-in UUID, or for an annotation its log entry UUID
    */
   @Transactional(propagation = Propagation.MANDATORY)
-  fun recordCheckinUpdate(eventType: DomainEventType, checkin: OffenderCheckin, detailId: UUID = checkin.uuid): Boolean {
+  fun recordCheckinUpdate(
+    eventType: DomainEventType,
+    checkin: OffenderCheckin,
+    detailId: UUID = checkin.uuid,
+    eventNumber: Long? = checkin.offender.currentEvent,
+  ): Boolean {
     require(eventType in CHECKIN_UPDATE_EVENT_TYPES) { "$eventType is not a check-in update event" }
     return insert(
       CheckinDeliusEvent(
@@ -93,8 +98,7 @@ class CheckinDeliusEventService(
         detailId = detailId,
         checkinUuid = checkin.uuid,
         crn = checkin.offender.crn,
-        // as when published directly: NDelius matches the contact by check-in
-        eventNumber = null,
+        eventNumber = eventNumber,
         dateTime = null,
         notes = null,
         occurredAt = clock.instant(),

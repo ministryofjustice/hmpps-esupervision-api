@@ -96,7 +96,7 @@ class UpcomingCheckinService(
   /** @param includeToday whether today can be the next check-in date; null: only if today's creation job hasn't started */
   private fun scheduleNextInTransaction(offenderId: Long, eventNumber: Long?, includeToday: Boolean?) {
     // Locking the offender serialises this with stopping check-ins, which cancels upcoming check-ins.
-    val offender = offenderRepository.findByIdForUpdate(offenderId) ?: return
+    val offender = offenderRepository.findByIdForUpdate(offenderId).orElse(null) ?: return
     // Under open-in-view this joins the request's persistence context, which may hold the offender
     // as it was before the change that triggered this.
     entityManager.refresh(offender)

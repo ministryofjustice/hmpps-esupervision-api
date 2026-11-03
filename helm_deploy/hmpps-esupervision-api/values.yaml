@@ -84,6 +84,10 @@ generic-service:
       type: OFFENDER_ELIGIBILITY_SYNC
       schedule: "0 3 * * *"
       suspend: true # flip to false once real sync logic lands (job body is currently a TODO)
+    - name: current-event-backfill
+      type: CURRENT_EVENT_BACKFILL
+      schedule: "0 0 1 1 *"
+      suspend: true
 
 generic-prometheus-alerts:
   targetApplication: hmpps-esupervision-api

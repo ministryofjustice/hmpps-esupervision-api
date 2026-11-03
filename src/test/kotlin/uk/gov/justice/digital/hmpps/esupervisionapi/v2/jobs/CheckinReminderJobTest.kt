@@ -14,6 +14,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
@@ -56,6 +58,7 @@ class CheckinReminderJobTest {
   }
   private val eventAuditService: EventAuditService = mock()
   private val genericNotificationRepository: GenericNotificationRepository = mock()
+  private val appConfig: AppConfig = mock()
 
   private val job = CheckinReminderJob(
     clock,
@@ -67,7 +70,7 @@ class CheckinReminderJobTest {
     transactionTemplate,
     eventAuditService,
     genericNotificationRepository,
-    appConfig = mock(),
+    appConfig = appConfig,
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -81,7 +84,76 @@ class CheckinReminderJobTest {
     job.process()
 
     verify(notificationService).sendCheckinReminderNotifications(same(checkin), eq(cd))
-    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull<String>())
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+  }
+
+  @Test
+  fun `checkin is deactivated without reminder when its selected event is no longer active`() {
+    val checkin = checkin("X000004").apply { offender.currentEvent = 1L }
+    val cd = details("X000004", events = listOf(anEvent.copy(number = 2L)))
+    stub(listOf(checkin), listOf(cd))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(checkin.offender),
+      eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      anyOrNull<String>(),
+      eq(cd),
+      eq(false),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      expectedCurrentEvent = eq(1L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
+    )
+    verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
+
+    val captor = argumentCaptor<Iterable<Pair<OffenderCheckin, ContactDetails?>>>()
+    verify(eventAuditService).recordCheckinReminded(captor.capture())
+    assertThat(captor.firstValue.map { it.first }).doesNotContain(checkin)
+  }
+
+  @Test
+  fun `stale selected event deactivates when new eligibility rules are enabled`() {
+    val checkin = checkin("X000005").apply { offender.currentEvent = 2L }
+    val cd = details("X000005", events = listOf(anEvent))
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    stub(listOf(checkin), listOf(cd))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(checkin.offender),
+      eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
+      anyOrNull<String>(),
+      eq(cd),
+      eq(false),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
+      expectedCurrentEvent = eq(2L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
+    )
+    verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
+  }
+
+  @Test
+  fun `contact suspension keeps precedence when both it and the saved event are stale`() {
+    val checkin = checkin("X000006").apply { offender.currentEvent = 1L }
+    val cd = details("X000006", events = listOf(anEvent.copy(number = 2L)), suspended = true)
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    stub(listOf(checkin), listOf(cd))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(checkin.offender),
+      eq("Automatically deactivated: contact is suspended (in reset) in NDelius"),
+      anyOrNull<String>(),
+      eq(cd),
+      eq(false),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      expectedCurrentEvent = eq(1L),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
+    )
+    verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
   }
 
   @Test
@@ -102,9 +174,10 @@ class CheckinReminderJobTest {
       same(ineligible.offender),
       any(),
       anyOrNull(),
-      any(),
+      anyOrNull(),
       any(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      anyOrNull(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
     verify(notificationService).sendCheckinReminderNotifications(same(eligible), eq(eligibleCd))
@@ -133,12 +206,13 @@ class CheckinReminderJobTest {
         any(),
         any(),
         anyOrNull(),
+        anyOrNull(),
         any(),
-        any(),
+        anyOrNull(),
         anyOrNull(),
         anyOrNull<String>(),
       ),
-    ).thenAnswer { it.getArgument<Offender>(0) }
+    ).thenReturn(true)
   }
 
   private fun details(crn: String, events: List<Event> = emptyList(), suspended: Boolean = false) = ContactDetails(
