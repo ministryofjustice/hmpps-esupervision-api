@@ -8,9 +8,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -26,10 +24,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -40,8 +36,7 @@ class CheckinCreationServiceTest {
   private val clock = Clock.fixed(Instant.parse("2026-10-29T10:00:00Z"), ZoneOffset.UTC)
   private val appConfig: AppConfig = mock()
   private val persistence: CheckinPersistenceService = mock()
-  private val deactivation: OffenderDeactivationService = mock()
-  private val service = CheckinCreationService(clock, mock(), mock(), mock(), mock(), mock(), Duration.ofDays(3), mock(), persistence, appConfig, deactivation)
+  private val service = CheckinCreationService(clock, mock(), mock(), mock(), mock(), mock(), Duration.ofDays(3), mock(), persistence, appConfig)
   private val offender = offenderTemplate.toEntity()
   private val today = LocalDate.now(clock)
   private val sentence = Event.Sentence(today.minusMonths(1), "Community order", today.plusMonths(6))
@@ -93,20 +88,6 @@ class CheckinCreationServiceTest {
       verify(persistence).checkinCreation(any(), any())
     }
     assertEquals(if (savedSelection) 99L else null, offender.currentEvent)
-    if (savedSelection && !batch) {
-      verify(deactivation).deactivateOffender(
-        eq(offender),
-        eq(CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditNote),
-        anyOrNull<String>(),
-        eq(details),
-        eq(false),
-        eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
-        eq(99L),
-        eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
-      )
-    } else {
-      verify(deactivation, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
-    }
   }
 
   @ParameterizedTest

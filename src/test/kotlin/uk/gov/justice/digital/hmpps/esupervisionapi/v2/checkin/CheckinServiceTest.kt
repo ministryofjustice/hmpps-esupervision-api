@@ -12,7 +12,6 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -59,7 +58,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetailsVerificationUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
@@ -77,7 +75,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -103,7 +100,6 @@ class CheckinServiceTest {
   private val livenessSessionService: LivenessSessionService = mock()
   private val livenessCredentialsProvider: LivenessCredentialsProvider = mock()
   private val checkinPersistenceService: CheckinPersistenceService = mock()
-  private val offenderDeactivationService: OffenderDeactivationService = mock()
   private val uploadTtlMinutes = 10L
   private val faceSimilarityThreshold = 80.0f
   private val livenessConfidenceThreshold = 90.0f
@@ -137,7 +133,6 @@ class CheckinServiceTest {
     livenessSessionService,
     livenessCredentialsProvider,
     checkinPersistenceService,
-    offenderDeactivationService,
     uploadTtlMinutes,
     faceSimilarityThreshold,
     livenessConfidenceThreshold,
@@ -295,11 +290,10 @@ class CheckinServiceTest {
       assertEquals(CheckinStatus.SUBMITTED, service.submitCheckin(checkin.uuid, request).status)
       verify(checkinPersistenceService).checkinSubmission(any(), any())
     }
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
   @Test
-  fun `submitCheckin - deactivates and rejects when selected event is no longer active`() {
+  fun `submitCheckin - rejects when selected event is no longer active`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender().apply { currentEvent = 1L }
     val checkin = OffenderCheckin(
@@ -327,16 +321,6 @@ class CheckinServiceTest {
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
     assertEquals(CheckinStatus.CREATED, checkin.status)
-    verify(offenderDeactivationService).deactivateOffender(
-      offender = eq(offender),
-      reason = eq("Automatically deactivated: the selected probation event is no longer active in NDelius"),
-      practitionerMessageFragment = eq(null),
-      contactDetails = eq(contactDetails),
-      sensitive = eq(false),
-      auditEventType = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
-      expectedCurrentEvent = eq(1L),
-      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
-    )
     verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
   }
 
@@ -1448,7 +1432,7 @@ class CheckinServiceTest {
 
   @ParameterizedTest
   @CsvSource("true,true", "true,false", "false,true", "false,false")
-  fun `manual creation deactivates a stale saved selection before rejecting`(enabled: Boolean, byCrn: Boolean) {
+  fun `manual creation rejects a stale saved selection`(enabled: Boolean, byCrn: Boolean) {
     whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
     val offender = createOffender().apply {
       currentEvent = 1L
@@ -1469,21 +1453,11 @@ class CheckinServiceTest {
     }
 
     assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
-    verify(offenderDeactivationService).deactivateOffender(
-      eq(offender),
-      eq(CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.auditNote),
-      anyOrNull<String>(),
-      eq(details),
-      eq(false),
-      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
-      eq(1L),
-      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
-    )
     verify(checkinCreationService, never()).createCheckin(any(), any(), any())
   }
 
   @Test
-  fun `manual creation rejects ambiguous unsaved sentences without deactivating`() {
+  fun `manual creation rejects ambiguous unsaved sentences`() {
     val offender = createOffender()
     val sentence = Event.Sentence(LocalDate.now(clock), "Community order")
     val details = contactDetails(offender).copy(
@@ -1496,7 +1470,6 @@ class CheckinServiceTest {
       service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, LocalDate.now(clock)))
     }
 
-    verify(offenderDeactivationService, never()).deactivateOffender(any(), any(), anyOrNull<String>(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(checkinCreationService, never()).createCheckin(any(), any(), any())
   }
 

@@ -36,7 +36,8 @@ class OffenderDeactivationService(
 ) {
 
   /**
-   * Deactivate a VERIFIED offender. Idempotent: a no-op if the offender is not VERIFIED.
+   * Deactivate a VERIFIED offender. Idempotent: a no-op if the offender is not VERIFIED, or if the stored
+   * status or event selection changed since the caller read it (the decision is then stale).
    *
    * @param reason recorded against the deactivation audit event
    * @param contactDetails Delius details fetched by the caller; downstream audit/notifications are skipped when null
@@ -44,6 +45,8 @@ class OffenderDeactivationService(
    * @param auditEventType the audit event type to record; defaults to a manual practitioner
    *   deactivation. Scheduled jobs pass a criterion-specific automated type so the reason an offender
    *   was stopped (in reset vs no active events) is queryable via the audit event_type.
+   * @param expectedCurrentEvent the event selection the caller based its decision on
+   * @return true if the offender was deactivated
    *
    * Spins its own transaction (REQUIRES_NEW) so that a deactivation commits independently of any
    * surrounding work. In particular, when called from [V2CheckinCreationJob]'s long-lived job
@@ -62,66 +65,43 @@ class OffenderDeactivationService(
     expectedCurrentEvent: Long? = offender.currentEvent,
     deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
   ): Boolean {
-    if (offender.status != OffenderStatus.VERIFIED) {
-      LOGGER.info("Skipping deactivation for CRN {}: status is {}", offender.crn, offender.status)
-      return false
-    }
+    if (!canDeactivate(offender)) return false
 
-    val checkEvent = auditEventType in setOf(
-      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
-      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
-    )
-    val updatedAt = clock.instant()
-    return offenderPersistenceService.offenderDeactivation(
+    val event = OffenderDeactivatedEvent(
       offenderId = offender.id,
+      offender = offender.dto(contactDetails),
+      auditEventType = auditEventType,
+      setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) },
+      activeEventNumber = null,
+      reason = reason,
+      sensitive = sensitive,
       expectedCurrentEvent = expectedCurrentEvent,
-      checkEvent = checkEvent,
-      updatedAt = updatedAt,
-    ) { persisted ->
-      val snapshot = persisted.copy(personalDetails = contactDetails, updatedAt = updatedAt)
-      val setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) }
-      OffenderDeactivatedEvent(
-        offenderId = offender.id,
-        offender = snapshot,
-        auditEventType = auditEventType,
-        setup = setup,
-        activeEventNumber = contactDetails?.let { activeEventNumber(snapshot.currentEvent, it, appConfig.esup2305DeliusEventSelection) }
-          ?: snapshot.currentEvent.takeIf { setup == null },
-        reason = reason,
-        sensitive = sensitive,
-        expectedCurrentEvent = expectedCurrentEvent,
-        deliusOutcomeCode = deliusOutcomeCode ?: auditEventType.deliusOutcomeCode,
-        practitionerMessageFragment = practitionerMessageFragment,
-      )
-    }
+      deliusOutcomeCode = deliusOutcomeCode ?: auditEventType.deliusOutcomeCode,
+      practitionerMessageFragment = practitionerMessageFragment,
+    )
+    return offenderPersistenceService.offenderDeactivation(finalise(event))
   }
 
-  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Offender? {
-    if (!canDeactivate(offender)) return offender
+  /** Deactivate using an event built by the caller, which is expected to have looked up [OffenderDeactivatedEvent.setup]. */
+  fun deactivateOffender(offender: Offender, event: OffenderDeactivatedEvent): Boolean {
+    if (!canDeactivate(offender)) return false
 
-    val updatedAt = clock.instant()
-    val checkEvent = event.auditEventType in setOf(
-      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
-      OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+    return offenderPersistenceService.offenderDeactivation(finalise(event))
+  }
+
+  /**
+   * Fills in the parts of the event that describe the deactivated offender. The guarded update only
+   * succeeds if the saved selection still equals [OffenderDeactivatedEvent.expectedCurrentEvent], so
+   * that is the selection the event reports.
+   */
+  private fun finalise(event: OffenderDeactivatedEvent): OffenderDeactivatedEvent {
+    val currentEvent = event.expectedCurrentEvent
+    return event.copy(
+      offender = event.offender.copy(status = OffenderStatus.INACTIVE, currentEvent = currentEvent, updatedAt = clock.instant()),
+      activeEventNumber = event.offender.personalDetails?.let {
+        activeEventNumber(currentEvent, it, appConfig.esup2305DeliusEventSelection)
+      } ?: currentEvent.takeIf { event.setup == null },
     )
-    val deactivated = offenderPersistenceService.offenderDeactivation(
-      offenderId = offender.id,
-      expectedCurrentEvent = event.expectedCurrentEvent,
-      checkEvent = checkEvent,
-      updatedAt = updatedAt,
-    ) { persisted ->
-      val snapshot = persisted.copy(personalDetails = event.offender.personalDetails, updatedAt = updatedAt)
-      val setup = offenderSetupRepository.findByOffender(offender).orElse(null)?.let { SetupInfo.from(it) }
-      event.copy(
-        offender = snapshot,
-        setup = setup,
-        activeEventNumber = snapshot.personalDetails?.let {
-          activeEventNumber(snapshot.currentEvent, it, appConfig.esup2305DeliusEventSelection)
-        } ?: snapshot.currentEvent.takeIf { setup == null },
-        expectedCurrentEvent = event.expectedCurrentEvent,
-      )
-    }
-    return offender.takeIf { deactivated }
   }
 
   private fun canDeactivate(offender: Offender): Boolean {

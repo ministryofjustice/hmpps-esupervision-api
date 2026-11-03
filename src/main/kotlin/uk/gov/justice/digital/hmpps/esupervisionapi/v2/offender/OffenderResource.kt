@@ -13,7 +13,6 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.GetMapping
@@ -517,7 +516,6 @@ class OffenderResource(
   @ApiResponse(responseCode = "400", description = "Offender not in VERIFIED status")
   @ApiResponse(responseCode = "404", description = "Offender not found")
   @PostMapping("/{uuid}/deactivate")
-  @Transactional
   fun deactivateOffender(
     @Parameter(description = "Offender UUID", required = true) @PathVariable uuid: UUID,
     @Valid @RequestBody request: DeactivateOffenderRequest,
@@ -543,7 +541,8 @@ class OffenderResource(
     if (!deactivated) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Offender deactivation failed - record could not be updated")
     }
-    entityManager.refresh(offender)
+    // deactivation committed in its own transaction; refresh needs one, but not one held across the Delius call
+    transactionTemplate.executeWithoutResult { entityManager.refresh(offender) }
 
     LOGGER.info(
       "Deactivated offender: uuid={}, crn={}, requestedBy={}, reason={}, sensitive={}",
@@ -788,14 +787,13 @@ is *today*.""",
     val offenderAfter = result.offenderAfter
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offenderInfo.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
     if (request.checkinSchedule != null && newFirstCheckinDateIsToday(result.offenderBefore, offenderAfter, clock.today())) {
-      if (!result.todayIsOccupied) {
+      val created = !result.todayIsOccupied &&
         checkinCreationService.createCheckin(
           offenderAfter.uuid,
           requireNotNull(offenderAfter.firstCheckin) { "Cannot create a check-in without a first check-in date" },
           request.checkinSchedule.requestedBy,
-        )
-      }
-      LOGGER.debug("{} check-in for offender {}", if (result.todayIsOccupied) "skipped" else "created", offenderAfter.uuid)
+        ) != null
+      LOGGER.debug("{} check-in for offender {}", if (created) "created" else "skipped", offenderAfter.uuid)
     }
     return ResponseEntity.ok(offenderAfter)
   }

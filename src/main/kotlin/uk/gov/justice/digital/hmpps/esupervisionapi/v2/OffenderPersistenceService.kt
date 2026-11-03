@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
-import java.time.Instant
 
 @Service
 class OffenderPersistenceService(
@@ -23,25 +22,18 @@ class OffenderPersistenceService(
 ) {
 
   /**
-   * Only perform deactivation side effects when the stored status transitions from VERIFIED to INACTIVE.
+   * Deactivates the offender only if it is still VERIFIED with the event selection the caller evaluated
+   * ([OffenderDeactivatedEvent.expectedCurrentEvent]). Otherwise the decision is stale and nothing happens.
    *
-   * @return the deactivated offender, or null if no VERIFIED offender record was updated
+   * @return true if the offender was deactivated
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  fun offenderDeactivation(
-    offenderId: Long,
-    expectedCurrentEvent: Long?,
-    checkEvent: Boolean,
-    updatedAt: Instant,
-    buildEvent: (OffenderDto) -> OffenderDeactivatedEvent,
-  ): Boolean {
-    if (offenderRepository.deactivateIfUnchanged(offenderId, expectedCurrentEvent, checkEvent, updatedAt) == 0) {
-      LOGGER.info("Skipping stale deactivation for offender {}", offenderId)
+  fun offenderDeactivation(event: OffenderDeactivatedEvent): Boolean {
+    if (offenderRepository.deactivateIfUnchanged(event.offenderId, event.expectedCurrentEvent, event.offender.updatedAt) == 0) {
+      LOGGER.info("Skipping stale deactivation for CRN {}", event.offender.crn)
       return false
     }
 
-    val snapshot = offenderRepository.findDeactivationSnapshot(offenderId).orElseThrow().dto()
-    val event = buildEvent(snapshot)
     event.setup?.let {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, it.primaryKey)
     }

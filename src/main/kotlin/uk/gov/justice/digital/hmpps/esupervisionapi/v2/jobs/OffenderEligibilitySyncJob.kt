@@ -150,7 +150,7 @@ class OffenderEligibilitySyncJob(
               practitionerMessageFragment = result.messageFragment,
             )
 
-            if (offenderDeactivationService.deactivateOffender(offender, event) != null) {
+            if (offenderDeactivationService.deactivateOffender(offender, event)) {
               deactivated += 1
               LOGGER.info("Stopped online check-ins for CRN {}: triggered rule code={}, outcome={}", offender.crn, result.triggeredRuleCode, result.outcome)
             }
