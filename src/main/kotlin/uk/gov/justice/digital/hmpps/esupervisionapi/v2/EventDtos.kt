@@ -34,6 +34,7 @@ data class OffenderDeactivatedEvent(
   val activeEventNumber: Long?,
   val reason: String? = null,
   val sensitive: Boolean = false,
+  val expectedCurrentEvent: Long? = offender.currentEvent,
   val deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
   /**
    * Passed in the notification message to practitioner.
@@ -118,7 +119,9 @@ data class CheckinSubmittedEvent(
   override val practitionerId: ExternalUserId,
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
-) : ICheckinEvent {
+  override val currentEvent: Long? = null,
+) : ICheckinEvent,
+  ActiveEvent {
   override val outboxItemCoords = OutboxItemType.CHECKIN_SUBMITTED to checkinId
 }
 

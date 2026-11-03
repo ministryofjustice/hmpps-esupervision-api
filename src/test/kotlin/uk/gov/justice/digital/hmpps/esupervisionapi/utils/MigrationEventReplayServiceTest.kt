@@ -3,6 +3,8 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.utils
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doThrow
@@ -12,6 +14,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.domain.PageRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
@@ -43,6 +46,7 @@ import java.util.UUID
 class MigrationEventReplayServiceTest {
 
   private val clock = Clock.fixed(Instant.parse("2025-12-03T10:00:00Z"), ZoneId.of("UTC"))
+  private val appConfig: AppConfig = mock()
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val offenderRepository: OffenderRepository = mock()
   private val offenderSetupRepository: OffenderSetupRepository = mock()
@@ -51,11 +55,16 @@ class MigrationEventReplayServiceTest {
   private val domainEventService: DomainEventService = mock()
   private val eventAuditLogRepository: EventAuditRepository = mock()
 
+  init {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
+  }
+
   private lateinit var service: MigrationEventReplayService
 
   @BeforeEach
   fun setUp() {
     service = MigrationEventReplayService(
+      appConfig,
       checkinRepository,
       offenderRepository,
       offenderSetupRepository,
@@ -177,6 +186,39 @@ class MigrationEventReplayServiceTest {
       occurredAt = eq(offender.createdAt.atZone(clock.zone)),
       additionalInformation = eq(AdditionalInformation(eventNumber = 7L, setupId = setup.setupId())),
     )
+  }
+
+  @ParameterizedTest
+  @CsvSource("true,other", "true,empty", "true,missing", "false,other", "false,empty", "false,missing")
+  fun `replayActiveOffenderSetupEvents preserves saved association when Delius no longer returns it`(enabled: Boolean, response: String) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = newOffender(id = 100L).apply { currentEvent = 101L }
+    val setup = OffenderSetup(UUID.randomUUID(), offender, offender.practitionerId, offender.createdAt)
+    val row = SetupEventBackfill(offenderId = offender.id, createdAt = clock.instant())
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Smith"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = if (response == "other") listOf(Event(202L, CodedDescription("OFF01", "Test"), null)) else emptyList(),
+    )
+    whenever(backfillRepository.findPendingEventSend(any())).thenReturn(listOf(row)).thenReturn(emptyList())
+    whenever(offenderRepository.findAllById(listOf(offender.id))).thenReturn(listOf(offender))
+    whenever(offenderSetupRepository.findByOffender(offender)).thenReturn(Optional.of(setup))
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(offender.crn)))
+      .thenReturn(if (response == "missing") emptyList() else listOf(details))
+
+    assertThat(service.replayActiveOffenderSetupEvents(batchSize = 50)).isEqualTo(1)
+
+    verify(domainEventService).publishDomainEvent(
+      eventType = eq(DomainEventType.V2_SETUP_COMPLETED),
+      uuid = eq(offender.uuid),
+      crn = eq(offender.crn),
+      description = any(),
+      occurredAt = eq(offender.createdAt.atZone(clock.zone)),
+      additionalInformation = eq(AdditionalInformation(eventNumber = 101L, setupId = setup.setupId())),
+    )
+    assertThat(row.eventSent).isTrue()
+    assertThat(row.eventSentAt).isEqualTo(clock.instant())
   }
 
   @Test
