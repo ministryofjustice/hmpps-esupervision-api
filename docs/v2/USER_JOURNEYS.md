@@ -244,6 +244,9 @@ POST /v2/offender_checkins/{uuid}/cancel
 - The checkin becomes `CANCELLED`, with `cancelledAt` and `cancelledBy` set. A sensitive reason
   marks the checkin sensitive.
 - The reason is an `OFFENDER_CHECKIN_CANCELLED` entry in the checkin's logs.
+- Custom questions stay with the cancelled checkin and are not asked at the next one: an
+  upcoming checkin's pending question list assignment is attached to it (an open checkin's
+  already is).
 - If the checkin was open, the person on probation is sent the "check-in cancelled" message.
 - With `ESUP_2223` on, if NDelius has the checkin (it was recorded as scheduled), a
   `check-in.cancelled` event is recorded with the reason as its note.

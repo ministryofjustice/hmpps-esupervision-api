@@ -107,6 +107,7 @@ class CheckinCancellationIT : IntegrationTestBase() {
     jdbcTemplate.update("TRUNCATE TABLE checkin_delius_event_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE outbox_items RESTART IDENTITY CASCADE")
+    jdbcTemplate.update("DELETE FROM question_list_assignment")
     jdbcTemplate.update("TRUNCATE TABLE offender_event_log_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE offender_checkin_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE offender_v2 RESTART IDENTITY CASCADE")
@@ -276,6 +277,32 @@ class CheckinCancellationIT : IntegrationTestBase() {
 
     assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(checkin.uuid)).isEmpty()
   }
+
+  @Test
+  fun `cancelling an upcoming check-in keeps its custom questions with it, not the next check-in`() {
+    val checkin = saveCheckin(CheckinStatus.SCHEDULED, dueDate = LocalDate.now().plusDays(3))
+    assignPendingQuestions(checkin)
+
+    cancel(checkin.uuid).expectStatus().isOk
+
+    assertThat(assignments(checkin)).containsExactly(checkin.id)
+  }
+
+  @Test
+  fun `cancelling an open check-in leaves questions already assigned for the next check-in`() {
+    val checkin = saveCheckin(CheckinStatus.CREATED)
+    assignPendingQuestions(checkin)
+
+    cancel(checkin.uuid).expectStatus().isOk
+
+    assertThat(assignments(checkin)).containsExactly(null)
+  }
+
+  private fun assignPendingQuestions(checkin: OffenderCheckin) {
+    jdbcTemplate.update("insert into question_list_assignment (question_list_id, offender_id) select id, ? from question_list where name = 'Default'", checkin.offender.id)
+  }
+
+  private fun assignments(checkin: OffenderCheckin): List<Long?> = jdbcTemplate.queryForList("select checkin_id from question_list_assignment where offender_id = ?", Long::class.javaObjectType, checkin.offender.id)
 
   @Test
   fun `a check-in whose status changed after it was read isn't cancelled`() {

@@ -31,6 +31,7 @@ class CheckinPersistenceService(
   private val clock: Clock,
   private val checkinDeliusEventService: CheckinDeliusEventService,
   private val entityManager: EntityManager,
+  private val questionListAssignmentRepository: QuestionListAssignmentRepository,
 ) {
 
   @Transactional
@@ -203,6 +204,12 @@ class CheckinPersistenceService(
     if (updated == 0) {
       LOGGER.info("Not cancelling checkin {}: it is no longer {}", checkin.uuid, expectedStatus)
       return null
+    }
+    // An upcoming check-in's custom questions are the offender's pending assignment (an open one's
+    // are already attached to it). Attach them to the cancelled check-in, so they aren't asked at
+    // the next check-in instead.
+    if (expectedStatus == CheckinStatus.SCHEDULED) {
+      questionListAssignmentRepository.bindUpcomingAssignment(checkin.offender.id, checkin.id)
     }
     // With open-in-view the caller's copy is managed: refresh it so it shows the cancellation.
     val cancelled = if (entityManager.contains(checkin)) checkin.also { entityManager.refresh(it) } else checkinRepository.findById(checkin.id).get()

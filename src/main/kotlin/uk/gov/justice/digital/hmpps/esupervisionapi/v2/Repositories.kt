@@ -1045,6 +1045,21 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   )
   @Modifying
   fun deleteUpcomingAssignment(offenderId: Long): Int
+
+  /**
+   * ESUP-2128: attaches the offender's pending assignment to [checkinId], as activating it would.
+   * Used when an upcoming check-in is cancelled, so its questions don't carry over to the next one.
+   */
+  @Query(
+    """
+    update question_list_assignment
+    set checkin_id = :checkinId, updated_at = now()
+    where offender_id = :offenderId and checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun bindUpcomingAssignment(offenderId: Long, checkinId: Long): Int
 }
 
 typealias OutboxItemTypeString = String
