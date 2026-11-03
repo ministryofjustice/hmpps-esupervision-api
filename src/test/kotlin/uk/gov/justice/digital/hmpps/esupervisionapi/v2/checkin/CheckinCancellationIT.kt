@@ -44,6 +44,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -346,6 +347,21 @@ class CheckinCancellationIT : IntegrationTestBase() {
 
     assertThat(error.statusCode.value()).isEqualTo(409)
     assertThat(checkinRepository.findByUuid(checkin.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+  }
+
+  @Test
+  fun `a verification result read before the check-in was cancelled doesn't undo the cancellation`() {
+    val checkin = saveCheckin(CheckinStatus.CREATED)
+    cancel(checkin.uuid).expectStatus().isOk
+
+    checkin.autoIdCheck = AutomatedIdVerificationResult.MATCH
+    val error = assertThrows<ResponseStatusException> { persistenceService.saveOpenCheckin(checkin) }
+
+    assertThat(error.statusCode.value()).isEqualTo(409)
+    val saved = checkinRepository.findByUuid(checkin.uuid).get()
+    assertThat(saved.status).isEqualTo(CheckinStatus.CANCELLED)
+    assertThat(saved.cancelledBy).isEqualTo("PRACT_CANCEL")
+    assertThat(saved.autoIdCheck).isNull()
   }
 
   private fun cancellation() = CheckinCancellation(cancelledBy = "PRACT_CANCEL", cancelledAt = Instant.now(), reason = "reason", sensitive = false)

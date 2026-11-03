@@ -159,7 +159,7 @@ class CheckinService(
 
     if (checkin.checkinStartedAt == null) {
       checkin.checkinStartedAt = clock.instant()
-      transactionTemplate.executeWithoutResult { checkinRepository.save(checkin) }
+      checkinPersistenceService.saveOpenCheckin(checkin)
     }
 
     LOGGER.info("Identity validated successfully for checkin {}", uuid)
@@ -319,7 +319,7 @@ class CheckinService(
 
     checkin.autoIdCheck = outcome.result
     checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     return FacialRecognitionResult(outcome.result)
   }
@@ -494,7 +494,7 @@ class CheckinService(
     checkin.livenessConfidence = null
     checkin.autoIdCheck = null
     checkin.autoIdCheckScore = null
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     val sessionId = awaitRekognition(
       future = livenessSessionService.createSession(),
@@ -746,7 +746,7 @@ class CheckinService(
     checkin.livenessConfidence = confidence
     checkin.autoIdCheck = outcome.result
     checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     return LivenessVerificationResponse(
       isLive = isLive,
@@ -827,7 +827,7 @@ class CheckinService(
     checkin.livenessConfidence = confidence
     checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
     checkin.autoIdCheckScore = null
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
     return LivenessVerificationResponse(
       isLive = isLive,
       livenessConfidence = confidence,

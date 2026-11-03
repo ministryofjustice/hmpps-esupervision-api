@@ -789,7 +789,7 @@ class CheckinServiceTest {
 
     assertEquals("session-123", result.sessionId)
     assertTrue(checkin.livenessEnabled)
-    verify(checkinRepository).save(checkin)
+    verify(checkinPersistenceService).saveOpenCheckin(checkin)
   }
 
   @Test

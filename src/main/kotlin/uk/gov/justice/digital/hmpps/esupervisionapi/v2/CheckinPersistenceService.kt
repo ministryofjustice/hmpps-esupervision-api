@@ -115,17 +115,39 @@ class CheckinPersistenceService(
   }
 
   /**
+   * Saves an open check-in the offender is working through (identity, face match, liveness), if
+   * it is still open in the database.
+   *
+   * @throws ResponseStatusException 409 if it is no longer CREATED: it changed after the caller
+   *   read it, for example a practitioner cancelled it or it expired
+   */
+  @Transactional
+  fun saveOpenCheckin(checkin: OffenderCheckin) {
+    requireStillOpen(checkin)
+    checkinRepository.save(checkin)
+  }
+
+  /**
+   * The caller read [checkin] before this transaction, often before slow calls to NDelius or
+   * Rekognition. Saving the stale copy would overwrite a cancellation committed since. Locking also
+   * makes a concurrent cancellation wait until the caller's transaction commits.
+   */
+  private fun requireStillOpen(checkin: OffenderCheckin) {
+    if (checkinRepository.lockAndGetStatus(checkin.id) != CheckinStatus.CREATED.name) {
+      LOGGER.info("Not saving checkin {}: it is no longer {}", checkin.uuid, CheckinStatus.CREATED)
+      // With open-in-view the caller's copy is managed: don't leave its changes to be flushed later.
+      if (entityManager.contains(checkin)) entityManager.refresh(checkin)
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin ${checkin.uuid} is no longer open")
+    }
+  }
+
+  /**
    * @throws ResponseStatusException 409 if the check-in is no longer CREATED in the database: it
    *   changed (for example a practitioner cancelled it) after the caller read it
    */
   @Transactional
   fun checkinSubmission(checkin: OffenderCheckin, event: CheckinSubmittedEvent) {
-    // The caller read the check-in before this transaction. Saving the stale copy would overwrite
-    // a cancellation committed since; locking also makes a concurrent cancellation wait for this.
-    if (checkinRepository.lockAndGetStatus(checkin.id) != CheckinStatus.CREATED.name) {
-      LOGGER.info("Not submitting checkin {}: it is no longer {}", checkin.uuid, CheckinStatus.CREATED)
-      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin ${checkin.uuid} changed while it was being submitted")
-    }
+    requireStillOpen(checkin)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
     if (checkinDeliusEventService.enabled()) {
