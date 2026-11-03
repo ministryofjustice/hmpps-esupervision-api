@@ -427,6 +427,17 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
   fun existsCreated(offenderId: Long, dueDate: LocalDate): Boolean
 
+  /** ESUP-2223: whether the offender has a check-in for [dueDate] whose invite failed. Doesn't flush first, as [lockAndGetStatus]. */
+  @Query(
+    "select exists(select 1 from offender_checkin_v2 where offender_id = :offenderId and due_date = :dueDate and link_status = 'FAILED')",
+    nativeQuery = true,
+  )
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun existsLinkFailed(offenderId: Long, dueDate: LocalDate): Boolean
+
+  @Query("select offender_id from offender_checkin_v2 where id = :id", nativeQuery = true)
+  fun findOffenderId(id: Long): Long?
+
   /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(
     """

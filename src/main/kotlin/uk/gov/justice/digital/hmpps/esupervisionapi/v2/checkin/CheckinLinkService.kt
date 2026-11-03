@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -18,6 +19,7 @@ import java.time.Clock
 @Service
 class CheckinLinkService(
   private val checkinRepository: OffenderCheckinRepository,
+  private val offenderRepository: OffenderRepository,
   private val checkinDeliusEventService: CheckinDeliusEventService,
   private val upcomingCheckinService: UpcomingCheckinService,
   private val transactionTemplate: TransactionTemplate,
@@ -63,6 +65,9 @@ class CheckinLinkService(
    * @return true if this changed the check-in
    */
   fun linkFailed(checkinId: Long, reason: String): Boolean = transactionTemplate.execute {
+    // Serialises this with creating a check-in for the same offender (see CheckinPersistenceService.checkinCreation),
+    // which must either see this check-in as created, or its invite as failed.
+    offenderRepository.findByIdForUpdate(checkinRepository.findOffenderId(checkinId) ?: return@execute false)
     if (checkinRepository.markLinkFailed(checkinId, clock.instant()) == 0) return@execute false
     val checkin = checkinRepository.findById(checkinId).orElseThrow()
     checkinDeliusEventService.record(

@@ -61,6 +61,13 @@ class CheckinPersistenceService(
         scheduled.createdBy = checkin.createdBy
         return checkinCreation(scheduled, event.copy(checkin = event.checkin.copy(uuid = scheduled.uuid)))
       }
+      // A check-in for this date whose invite failed was cancelled, so it doesn't stop the insert
+      // below, but it takes the date: don't create another and send a second invite. Failing an
+      // invite takes the same offender lock, so this sees one that failed after the caller looked.
+      if (checkinRepository.existsLinkFailed(checkin.offender.id, checkin.dueDate)) {
+        LOGGER.info("Not creating checkin {}: the invite for the check-in due {} failed", checkin.uuid, checkin.dueDate)
+        return null
+      }
     }
     val activating = checkin.id != 0L
     if (upcomingCheckinService.enabled()) {
