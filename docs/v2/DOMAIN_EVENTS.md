@@ -32,6 +32,48 @@ detail URL and detail response are unchanged.
 
 ---
 
+## Upcoming Check-ins (ESUP-2223, feature `ESUP_2223`)
+
+NDelius records each person's next check-in before it is due. `UpcomingCheckinService.scheduleNext`
+creates it as a `SCHEDULED` check-in and records a `scheduled` event. Only the next check-in is
+recorded: while a check-in is open (`CREATED`), the one after it waits until it is submitted or missed.
+Today only counts as the next date before that day's creation job has started (or from the job
+itself), because after it nothing would create today's check-in.
+
+| Trigger | Where |
+|---------|-------|
+| Setup completed | `OffenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin` |
+| Check-ins restarted | `OffenderResource.reactivateOffender` |
+| Schedule set (`update_details`) | `OffenderResource.updateDetails` (moving an already scheduled check-in comes later) |
+| Ad hoc check-in arranged | `OffenderResource.scheduleAdHocCheckin` |
+| Check-in submitted | `CheckinPersistenceService.checkinSubmission` |
+| Check-in missed | `CheckinExpiryJob` |
+| Scheduled check-in not created on its due date | `CheckinCreationJob` (cancels it, then schedules the next) |
+
+Scheduling runs after the triggering transaction commits, in its own transaction, and never fails
+the change that triggered it. A check-in created without having been scheduled (no upcoming check-in
+for its date, for example someone set up before the feature was on) is recorded as `scheduled` when
+it is created, so NDelius always sees `scheduled` first.
+
+### Check-in link (ESUP-2223)
+
+With the feature on, a check-in is created (or activated) with `link_status` SENDING, and the
+invite is sent once that commits (`NotificationOrchestratorService.sendCheckinCreatedNotifications`).
+We don't get delivery receipts from GOV.UK Notify, so "sent" means Notify accepted it.
+
+| Outcome | link_status | Check-in | NDelius |
+|---------|-------------|----------|---------|
+| Notify accepted the invite | SENT | unchanged | `link.delivered` |
+| Unknown whether Notify sent it (timeout, or 502/504 from its gateway: `NotifyOutcomeUnknown`) | SENT, so they can use the link if they got it | unchanged; missed (EXPIRED) if they didn't get it | nothing: the contact has no link outcome (`CheckinLinkService.linkMaybeSent`) |
+| Notify rejected it, or it couldn't be sent (no active event, no contact details, no mobile number or email address for their preference, or invites by that channel switched off in config) | FAILED | CANCELLED: not missed, no reminders; questions assigned to it stay with it; the practitioner is emailed (`PRACTITIONER_INVITE_ISSUE_GENERIC`); the next check-in is scheduled | `link.not_delivered` |
+
+**Link-sent gate**: a check-in can't be started (identity check) or submitted while it is
+SCHEDULED or its link is SENDING (409), so NDelius records the link before the check-in is
+received. Check-ins created before the feature have no link status and aren't held.
+
+The creation job doesn't create another check-in for a day whose invite failed, and a failed
+check-in keeps its date when the next one is scheduled.
+
 ## Event Publishing Flow
 
 ```mermaid

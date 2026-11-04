@@ -6,8 +6,12 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -25,12 +29,15 @@ import java.util.UUID
 @Service
 class CheckinPersistenceService(
   private val checkinRepository: OffenderCheckinRepository,
+  private val offenderRepository: OffenderRepository,
   private val eventAuditService: EventAuditService,
   private val appEventPublisher: ApplicationEventPublisher,
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val clock: Clock,
   private val checkinDeliusEventService: CheckinDeliusEventService,
+  private val upcomingCheckinService: UpcomingCheckinService,
   private val entityManager: EntityManager,
+  private val appConfig: AppConfig,
   private val questionListAssignmentRepository: QuestionListAssignmentRepository,
 ) {
 
@@ -47,7 +54,41 @@ class CheckinPersistenceService(
   @Transactional
   fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
     require(checkin.status == CheckinStatus.CREATED)
-    val id = (if (checkin.id != 0L) activate(checkin) else insert(checkin)) ?: return null
+    if (checkin.id == 0L && upcomingCheckinService.enabled()) {
+      // Locking the offender serialises this with scheduling, which may have scheduled this date
+      // after the caller looked for an upcoming check-in: activate that one rather than creating a
+      // second check-in NDelius would also record. It also loads the offender in this transaction,
+      // as recording the check-in reads it and the caller's may be detached (the creation job's).
+      checkin.offender = offenderRepository.findByIdForUpdate(checkin.offender.id).orElseThrow()
+      val scheduled = checkinRepository.findScheduledForOffenders(listOf(checkin.offender.id), checkin.dueDate).singleOrNull()
+      if (scheduled != null) {
+        LOGGER.info("Activating checkin {}, scheduled after the caller looked for it, instead of creating checkin {}", scheduled.uuid, checkin.uuid)
+        scheduled.status = CheckinStatus.CREATED
+        scheduled.createdAt = checkin.createdAt
+        scheduled.createdBy = checkin.createdBy
+        return checkinCreation(scheduled, event.copy(checkin = event.checkin.copy(uuid = scheduled.uuid)))
+      }
+      // A check-in for this date whose invite failed was cancelled, so it doesn't stop the insert
+      // below, but it takes the date: don't create another and send a second invite. Failing an
+      // invite takes the same offender lock, so this sees one that failed after the caller looked.
+      if (checkinRepository.existsLinkFailed(checkin.offender.id, checkin.dueDate)) {
+        LOGGER.info("Not creating checkin {}: the invite for the check-in due {} failed", checkin.uuid, checkin.dueDate)
+        return null
+      }
+    }
+    val activating = checkin.id != 0L
+    if (upcomingCheckinService.enabled()) {
+      // the invite is sent once this commits; the link-sent gate holds submission until then
+      checkin.linkStatus = CheckinLinkStatus.SENDING
+      checkin.linkStatusUpdatedAt = clock.instant()
+    }
+    val id = (if (activating) activate(checkin) else insert(checkin)) ?: return null
+    // an activated check-in was recorded in NDelius when it was scheduled
+    if (!activating && upcomingCheckinService.enabled()) {
+      // the event's number is the one on record, which can be unset when the caller has NDelius's
+      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) }
+      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, CheckinDeliusEventNotes.scheduled(checkin.dueDate), eventNumber, checkin.dueDate)
+    }
     val finalisedEvent = event.finalise(checkin, id)
     eventAuditService.recordCheckinCreated(checkin, finalisedEvent)
 
@@ -79,12 +120,15 @@ class CheckinPersistenceService(
       if (entityManager.contains(checkin)) entityManager.refresh(checkin)
       return null
     }
-    return checkinRepository.saveAndFlush(checkin).id
+    val id = checkinRepository.saveAndFlush(checkin).id
+    // the link columns are only written on insert (see OffenderCheckin.linkStatus)
+    checkin.linkStatusUpdatedAt?.let { checkinRepository.markLinkSending(id, it) }
+    return id
   }
 
   /**
-   * [OffenderCheckinRepository.maybeInsert] writes only uuid, offender, status, due date, created at and
-   * created by. Anything else set on a new check-in would be silently dropped, so refuse it: extend
+   * [OffenderCheckinRepository.maybeInsert] writes only uuid, offender, status, due date, created at,
+   * created by and link status. Anything else set on a new check-in would be silently dropped, so refuse it: extend
    * the INSERT before setting another field at creation time.
    */
   private fun requireOnlyInsertedFieldsSet(checkin: OffenderCheckin) {
@@ -106,8 +150,6 @@ class CheckinPersistenceService(
       if (checkin.riskFeedback != null) add("riskFeedback")
       if (checkin.sensitive) add("sensitive")
       if (checkin.imageDeletedAt != null) add("imageDeletedAt")
-      if (checkin.linkStatus != null) add("linkStatus")
-      if (checkin.linkStatusUpdatedAt != null) add("linkStatusUpdatedAt")
       if (checkin.cancelledAt != null) add("cancelledAt")
       if (checkin.cancelledBy != null) add("cancelledBy")
     }
@@ -150,6 +192,7 @@ class CheckinPersistenceService(
     requireStillOpen(checkin)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
+    upcomingCheckinService.scheduleNext(checkin.offender.id, event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) })
     if (checkinDeliusEventService.enabled()) {
       checkinDeliusEventService.recordCheckinUpdate(
         DomainEventType.V2_CHECKIN_SUBMITTED,

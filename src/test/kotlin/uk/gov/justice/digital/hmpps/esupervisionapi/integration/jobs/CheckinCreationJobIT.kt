@@ -14,10 +14,14 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.util.ReflectionTestUtils
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -33,8 +37,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventPublisher
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
@@ -80,6 +86,12 @@ class CheckinCreationJobIT : IntegrationTestBase() {
   @Autowired
   lateinit var job: CheckinCreationJob
 
+  @Autowired
+  lateinit var appConfig: AppConfig
+
+  @Autowired
+  lateinit var deliusEventRepository: CheckinDeliusEventRepository
+
   @MockitoBean
   lateinit var ndeliusApiClient: INdiliusApiClient
 
@@ -115,6 +127,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
 
   @AfterEach
   fun cleanDb() {
+    jdbcTemplate.update("TRUNCATE TABLE checkin_delius_event_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE generic_notification_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE offender_checkin_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
@@ -177,6 +190,29 @@ class CheckinCreationJobIT : IntegrationTestBase() {
           .orElseThrow()
           .let { assertEquals(OutboxItemStatus.SENT, it.status) }
       }
+  }
+
+  @Test
+  fun `with ESUP_2223 on, a check-in that wasn't scheduled is created and recorded as scheduled`() {
+    val featuresBefore = appConfig.enabledFeatures
+    ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
+    val checkins = try {
+      job.process()
+      // the invites are sent asynchronously and record link events: let them finish before cleanup
+      await()
+        .atMost(Duration.ofSeconds(30))
+        .pollInterval(100, TimeUnit.MILLISECONDS)
+        .until { checkinRepository.findAll().let { it.size == 2 && it.all { checkin -> checkin.linkStatus == CheckinLinkStatus.SENT } } }
+      checkinRepository.findAll()
+    } finally {
+      ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore)
+    }
+
+    assertEquals(listOf(CheckinStatus.CREATED, CheckinStatus.CREATED), checkins.map { it.status })
+    assertEquals(
+      checkins.map { it.uuid to DomainEventType.V2_CHECKIN_SCHEDULED }.toSet(),
+      deliusEventRepository.findAll().filter { it.eventType == DomainEventType.V2_CHECKIN_SCHEDULED }.map { it.checkinUuid to it.eventType }.toSet(),
+    )
   }
 
   @Test

@@ -276,12 +276,17 @@ open class OffenderCheckin(
   @Column(name = "image_deleted_at", nullable = true)
   open var imageDeletedAt: Instant? = null,
 
-  /** Null for check-ins created before ESUP-2223; those are not subject to the link-sent gate. */
-  @Column(name = "link_status", nullable = true)
+  /**
+   * Null for check-ins created before ESUP-2223; those are not subject to the link-sent gate.
+   *
+   * Written on insert, and after that only by the repository's conditional updates (markLink*):
+   * not updatable, so saving a check-in read before one of those can't write back its old value.
+   */
+  @Column(name = "link_status", nullable = true, updatable = false)
   @Enumerated(EnumType.STRING)
   open var linkStatus: CheckinLinkStatus? = null,
 
-  @Column(name = "link_status_updated_at", nullable = true)
+  @Column(name = "link_status_updated_at", nullable = true, updatable = false)
   open var linkStatusUpdatedAt: Instant? = null,
 
   /** Set only when a practitioner cancelled the check-in, not when the system did. */
@@ -344,7 +349,10 @@ enum class CheckinLinkStatus {
   /** The check-in is live, the invite not yet accepted by Notify. */
   SENDING,
 
-  /** Notify accepted the invite. Published to NDelius as `link.delivered`. */
+  /**
+   * Notify accepted the invite. Published to NDelius as `link.delivered`. Also used, without telling
+   * NDelius, when it's unknown whether Notify sent it (see CheckinLinkService.linkMaybeSent).
+   */
   SENT,
 
   /** Notify rejected the invite, or it couldn't be sent (for example no contact details). Published to NDelius as `link.not_delivered`. */

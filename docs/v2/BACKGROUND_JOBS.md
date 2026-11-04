@@ -16,6 +16,10 @@ Scheduled jobs that run automatically to manage checkin lifecycle.
 
 ## 1. Checkin Creation Job
 
+With feature `ESUP_2223` on, the job first cancels upcoming (`SCHEDULED`) check-ins whose due date
+passed without them being created, and schedules each person's next check-in. When it creates a
+check-in, it activates the person's upcoming check-in for today, if there is one.
+
 Creates checkins for verified offenders based on their configured schedule.
 
 ### Flow

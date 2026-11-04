@@ -69,6 +69,7 @@ class CheckinCreationJobTest {
     ndiliusApiClient,
     checkinCreationService,
     deactivationService,
+    mock(),
     appConfig,
     jobLogRepository,
     entityManager,

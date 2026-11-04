@@ -2,11 +2,13 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
@@ -19,6 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.asSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinLinkService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -30,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.Notificatio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationWithRecipient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
+import uk.gov.service.notify.NotificationClientException
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -48,6 +52,7 @@ class NotificationOrchestratorServiceTest {
   private val eventDetailService: EventDetailService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val appConfig: AppConfig = mock()
+  private val checkinLinkService: CheckinLinkService = mock()
 
   private lateinit var service: NotificationOrchestratorService
 
@@ -69,6 +74,7 @@ class NotificationOrchestratorServiceTest {
       appConfig,
       clock,
       Duration.ofHours(72),
+      checkinLinkService,
     )
   }
 
@@ -247,6 +253,119 @@ class NotificationOrchestratorServiceTest {
       eq(AdditionalInformation(eventNumber = 2L)),
     )
     verify(ndiliusApiClient, never()).getContactDetails(any())
+  }
+
+  @Nested
+  inner class CheckinLink {
+    private val offender = createOffender()
+    private val checkin = createCheckin(offender)
+    private val invite = reactivationNotification(offender, NotificationType.OffenderCheckinInvite, "invite-template", "ref")
+
+    private fun event(contactDetails: ContactDetails? = createContactDetails(), currentEvent: Long? = 1) = CheckinCreatedEvent(
+      checkin = checkin.dto(contactDetails, clock = clock),
+      offenderId = offender.id,
+      checkinId = checkin.id,
+      practitionerId = offender.practitionerId,
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = currentEvent,
+      checkinMode = offender.mode,
+    )
+
+    @Test
+    fun `an invite Notify accepts marks the link sent`() {
+      stubReactivationSending(offender, invite, "07700900123")
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkSent(checkin.id, "SMS")
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+    }
+
+    @Test
+    fun `an invite Notify accepts is marked sent even if recording the notification fails`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      doThrow(RuntimeException("database unavailable")).whenever(notificationPersistence).updateSingleNotificationStatus(any(), eq(true), any(), anyOrNull())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkSent(checkin.id, "SMS")
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+      verify(checkinLinkService, never()).linkMaybeSent(any())
+      // not recorded as failed: Notify sent it
+      verify(notificationPersistence, never()).updateSingleNotificationStatus(any(), eq(false), any(), anyOrNull())
+    }
+
+    @Test
+    fun `an invite Notify rejects fails the link even if recording the notification fails`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenThrow(RuntimeException("rejected"))
+      doThrow(RuntimeException("database unavailable")).whenever(notificationPersistence).updateSingleNotificationStatus(any(), eq(false), any(), anyOrNull())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NOTIFY_FAILED)
+    }
+
+    @Test
+    fun `an invite Notify rejects marks the link failed and tells the practitioner`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenThrow(RuntimeException("rejected"))
+      whenever(checkinLinkService.linkFailed(any(), any())).thenReturn(true)
+      whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NOTIFY_FAILED)
+      verify(notificationPersistence).buildPractitionerNotifications(any(), any(), any(), any(), eq(NotificationType.PractitionerInviteIssueGeneric), any())
+      // the email links to the person's activity log in MPoP
+      verify(appConfig).contactsUrl(offender.crn)
+    }
+
+    @Test
+    fun `an invite Notify may have sent keeps the check-in open, without telling the practitioner`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      val gatewayTimeout = NotificationClientException::class.java
+        .getDeclaredConstructor(Int::class.javaPrimitiveType, String::class.java)
+        .apply { isAccessible = true }
+        .newInstance(504, "Status code: 504")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenAnswer { throw gatewayTimeout }
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkMaybeSent(checkin.id)
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+      verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `the practitioner isn't told when the link status didn't change`() {
+      whenever(notificationPersistence.offenderChannelEnabled(any())).thenReturn(true)
+      whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ADDRESS)
+      verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `an invite by a switched-off channel fails with that reason, not a missing address`() {
+      whenever(notificationPersistence.offenderChannelEnabled(any())).thenReturn(false)
+      whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.CHANNEL_DISABLED)
+    }
+
+    @Test
+    fun `no contact details or no active event marks the link failed`() {
+      service.sendCheckinCreatedNotifications(event(contactDetails = null))
+      service.sendCheckinCreatedNotifications(event(contactDetails = null, currentEvent = null))
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_CONTACT_DETAILS)
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ACTIVE_EVENT)
+    }
   }
 
   @Test
