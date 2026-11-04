@@ -288,6 +288,13 @@ open class OffenderCheckin(
 
   @Column(name = "link_status_updated_at", nullable = true, updatable = false)
   open var linkStatusUpdatedAt: Instant? = null,
+
+  /** Set only when a practitioner cancelled the check-in, not when the system did. */
+  @Column(name = "cancelled_at", nullable = true)
+  open var cancelledAt: Instant? = null,
+
+  @Column(name = "cancelled_by", nullable = true)
+  open var cancelledBy: String? = null,
 ) : V2BaseEntity() {
   fun dto(
     personalDetails: ContactDetails? = null,
@@ -328,6 +335,8 @@ open class OffenderCheckin(
       snapshotUrl = snapshotUrl,
       checkinLogs = checkinLogs,
       photoUrl = photoUrl,
+      cancelledAt = cancelledAt,
+      cancelledBy = cancelledBy,
     )
   }
 }

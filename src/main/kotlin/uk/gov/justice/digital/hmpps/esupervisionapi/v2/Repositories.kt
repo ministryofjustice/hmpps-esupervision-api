@@ -184,7 +184,11 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         WHERE c.offender_id = o.id
           AND :lowerBoundInclusive <= c.due_date
           AND c.due_date < :upperBoundExclusive
+          -- a check-in a practitioner cancelled (cancelled_by set) holds its date, so it isn't
+          -- recreated, until the practitioner changes the schedule (or anything else) after
+          -- cancelling: rebooking the date must create it. One the system cancelled doesn't.
           AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+            OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL AND c.cancelled_at > o.updated_at)
             -- ESUP-2223: the invite couldn't be sent; don't create another for the same day
             OR (c.status = 'CANCELLED' AND c.link_status = 'FAILED'))
       )
@@ -501,6 +505,25 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   @Query("select c from OffenderCheckin c where c.offender = :offender and c.status = 'SCHEDULED'")
   fun findScheduledForUpdate(offender: Offender): OffenderCheckin?
 
+  /**
+   * ESUP-2128: a practitioner cancels the check-in, if it is still [expectedStatus]. Writes only the
+   * cancellation columns, and [sensitive] can only set the flag, not clear it.
+   * @return 1 if cancelled, 0 if its status had changed
+   */
+  @Modifying
+  @Query(
+    """
+    UPDATE OffenderCheckin c
+    SET c.status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus.CANCELLED,
+        c.cancelledAt = :cancelledAt,
+        c.cancelledBy = :cancelledBy,
+        c.sensitive = CASE WHEN :sensitive = true THEN true ELSE c.sensitive END
+    WHERE c.id = :id
+      AND c.status = :expectedStatus
+    """,
+  )
+  fun cancel(id: Long, expectedStatus: CheckinStatus, cancelledAt: Instant, cancelledBy: String, sensitive: Boolean): Int
+
   /** Whether the offender has a CREATED check-in for [dueDate] in the database. Doesn't flush first, as [lockAndGetStatus]. */
   @Query(
     "select exists(select 1 from offender_checkin_v2 where offender_id = :offenderId and due_date = :dueDate and status = 'CREATED')",
@@ -672,6 +695,7 @@ enum class LogEntryType {
   OFFENDER_CHECKIN_OUTSIDE_ACCESS,
   OFFENDER_CHECKIN_LIVENESS_FAILED,
   OFFENDER_CHECKIN_FACE_MATCH_FAILED,
+  OFFENDER_CHECKIN_CANCELLED,
 }
 
 /**
@@ -1157,6 +1181,21 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   )
   @Modifying
   fun deleteUpcomingAssignment(offenderId: Long): Int
+
+  /**
+   * ESUP-2128: attaches the offender's pending assignment to [checkinId], as activating it would.
+   * Used when an upcoming check-in is cancelled, so its questions don't carry over to the next one.
+   */
+  @Query(
+    """
+    update question_list_assignment
+    set checkin_id = :checkinId, updated_at = now()
+    where offender_id = :offenderId and checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun bindUpcomingAssignment(offenderId: Long, checkinId: Long): Int
 }
 
 typealias OutboxItemTypeString = String

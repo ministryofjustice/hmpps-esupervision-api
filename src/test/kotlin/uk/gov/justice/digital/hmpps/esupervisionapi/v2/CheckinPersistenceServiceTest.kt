@@ -27,6 +27,7 @@ class CheckinPersistenceServiceTest {
     entityManager = mock(),
     upcomingCheckinService = mock(),
     appConfig = mock(),
+    questionListAssignmentRepository = mock(),
   )
 
   private fun newCheckin() = OffenderCheckin(

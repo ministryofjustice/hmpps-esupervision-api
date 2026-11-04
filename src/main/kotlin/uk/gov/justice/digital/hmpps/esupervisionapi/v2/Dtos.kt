@@ -443,6 +443,10 @@ data class CheckinDto(
   val checkinLogs: CheckinLogsDto,
   @field:Schema(description = "Presigned S3 URL for reference photo", required = false)
   val photoUrl: URL? = null,
+  @field:Schema(description = "When a practitioner cancelled the check-in", required = false)
+  val cancelledAt: Instant? = null,
+  @field:Schema(description = "Practitioner who cancelled the check-in", required = false)
+  val cancelledBy: String? = null,
 ) {
   @get:JsonProperty("flaggedResponses")
   val flaggedResponses: List<String>
@@ -552,6 +556,21 @@ data class AnnotateCheckinRequest(
   @JsonDeserialize(using = StrictBooleanDeserializer::class)
   val sensitive: Boolean = false,
 )
+
+data class CancelCheckinRequest(
+  @field:Schema(description = "Practitioner cancelling the check-in", required = true)
+  @field:NotBlank
+  val cancelledBy: ExternalUserId,
+  @field:Schema(description = "Why the check-in was cancelled. Sent to NDelius as the contact note.", required = true)
+  @field:NotBlank
+  @field:Size(max = CANCELLATION_REASON_MAX_LENGTH)
+  val reason: String,
+  @field:Schema(description = "Whether the reason contains sensitive information", required = false)
+  @JsonDeserialize(using = StrictBooleanDeserializer::class)
+  val sensitive: Boolean = false,
+)
+
+const val CANCELLATION_REASON_MAX_LENGTH = 4000
 
 /** Create checkin request (DEBUG ONLY) */
 data class CreateCheckinRequest(
@@ -920,6 +939,8 @@ data class UpcomingQuestionAssignmentResponse(
 data class UpcomingQuestionListItems(
   val expectedCheckinDate: LocalDate?,
   val items: List<QuestionListItemDto>,
+  // The SCHEDULED or CREATED check-in for the expected date, once one exists
+  val checkinUuid: UUID? = null,
 )
 
 /**
@@ -942,6 +963,11 @@ data class UpcomingQuestionItemsResponse(
 data class UpcomingOffenderQuestions(
   val expectedCheckinDate: LocalDate?,
   val questions: List<OffenderQuestion>,
+  @field:Schema(
+    description = "The upcoming check-in (SCHEDULED, or CREATED once the invite is sent) for the expected date, when it exists. This is the uuid to cancel.",
+    required = false,
+  )
+  val checkinUuid: UUID? = null,
 )
 
 /**
