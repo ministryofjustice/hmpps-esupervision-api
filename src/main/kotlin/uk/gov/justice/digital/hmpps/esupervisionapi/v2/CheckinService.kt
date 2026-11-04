@@ -106,6 +106,7 @@ class CheckinService(
         LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
         LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED,
         LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+        LogEntryType.OFFENDER_CHECKIN_CANCELLED,
       ),
     )
     val checkinLogs = CheckinLogsDto(hint = CheckinLogsHint.SUBSET, logs = events)
@@ -159,7 +160,7 @@ class CheckinService(
 
     if (checkin.checkinStartedAt == null) {
       checkin.checkinStartedAt = clock.instant()
-      transactionTemplate.executeWithoutResult { checkinRepository.save(checkin) }
+      checkinPersistenceService.saveOpenCheckin(checkin)
     }
 
     LOGGER.info("Identity validated successfully for checkin {}", uuid)
@@ -335,7 +336,7 @@ class CheckinService(
 
     checkin.autoIdCheck = outcome.result
     checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     return FacialRecognitionResult(outcome.result)
   }
@@ -419,6 +420,44 @@ class CheckinService(
     return event.checkin
   }
 
+  /**
+   * A practitioner cancels a check-in that is upcoming (SCHEDULED) or open (CREATED). The offender
+   * is told if it was open, since they have the link.
+   *
+   * @throws ResponseStatusException 404 if not found, 409 if it can't be cancelled in its status
+   */
+  fun cancelCheckin(uuid: UUID, request: CancelCheckinRequest): CheckinDto {
+    val checkin = checkinPersistenceService.findCheckin(uuid) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    val previousStatus = checkin.status
+    // An open check-in past its window is expired, though the expiry job may not have marked it yet.
+    if (previousStatus !in CANCELLABLE_STATUSES ||
+      (previousStatus == CheckinStatus.CREATED && checkin.isPastSubmissionDate(clock, checkinWindowPeriod))
+    ) {
+      val shownStatus = checkin.dto(clock = clock, checkinWindow = checkinWindowPeriod).status
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin cannot be cancelled. Current status: $shownStatus")
+    }
+
+    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val cancellation = CheckinCancellation(
+      cancelledBy = request.cancelledBy,
+      cancelledAt = clock.instant(),
+      reason = request.reason,
+      sensitive = request.sensitive,
+    )
+    val event = checkinPersistenceService.checkinCancellation(checkin, previousStatus, cancellation) { cancelled ->
+      CheckinCancelledEvent(
+        checkinId = cancelled.id,
+        offenderId = cancelled.offender.id,
+        practitionerId = cancelled.offender.practitionerId,
+        checkin = cancelled.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
+        offenderContactPreference = cancelled.offender.contactPreference,
+        previousStatus = previousStatus,
+      )
+    } ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin $uuid changed while it was being cancelled")
+    LOGGER.info("Checkin cancelled: {} (was {}) by {}", uuid, previousStatus, request.cancelledBy)
+    return event.checkin
+  }
+
   /** Get proxy URL for checkin video */
   fun getVideoProxyUrl(uuid: UUID): URL {
     val checkin =
@@ -472,7 +511,7 @@ class CheckinService(
     checkin.livenessConfidence = null
     checkin.autoIdCheck = null
     checkin.autoIdCheckScore = null
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     val sessionId = awaitRekognition(
       future = livenessSessionService.createSession(),
@@ -724,7 +763,7 @@ class CheckinService(
     checkin.livenessConfidence = confidence
     checkin.autoIdCheck = outcome.result
     checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     return LivenessVerificationResponse(
       isLive = isLive,
@@ -805,7 +844,7 @@ class CheckinService(
     checkin.livenessConfidence = confidence
     checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
     checkin.autoIdCheckScore = null
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
     return LivenessVerificationResponse(
       isLive = isLive,
       livenessConfidence = confidence,
@@ -1105,6 +1144,7 @@ class CheckinService(
   companion object {
     private val LOGGER = logger<CheckinService>()
     private const val SYSTEM_PRACTITIONER = "system"
+    private val CANCELLABLE_STATUSES = setOf(CheckinStatus.SCHEDULED, CheckinStatus.CREATED)
   }
 }
 

@@ -16,7 +16,7 @@ Domain events are published to AWS SQS for integration with NDelius and other do
 | `V2_CHECKIN_ANNOTATED` | `checkin-annotated` | Checkin updated (annotated) | Yes |
 | `V2_CHECKIN_SCHEDULED` | `checkin-scheduled` | Next check-in scheduled (ESUP-2223) | Yes |
 | `V2_CHECKIN_RESCHEDULED` | `checkin-rescheduled` | Scheduled check-in moved to a new date; published as `check-in.updated` (ESUP-2223) | Yes |
-| `V2_CHECKIN_CANCELLED` | `checkin-cancelled` | Check-in cancelled before it was submitted (ESUP-2223) | Yes |
+| `V2_CHECKIN_CANCELLED` | `checkin-cancelled` | Check-in cancelled before it was submitted (ESUP-2223), including by a practitioner with a reason (ESUP-2128) | Yes |
 | `V2_CHECKIN_LINK_DELIVERED` | `checkin-link-delivered` | Check-in link accepted by GOV.UK Notify (ESUP-2223) | Yes |
 | `V2_CHECKIN_LINK_NOT_DELIVERED` | `checkin-link-not-delivered` | Check-in link could not be sent (ESUP-2223) | Yes |
 

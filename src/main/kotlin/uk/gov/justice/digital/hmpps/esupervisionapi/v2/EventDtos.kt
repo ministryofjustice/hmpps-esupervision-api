@@ -147,6 +147,23 @@ data class CheckinAnnotatedEvent(
 }
 
 /**
+ * A practitioner cancelled the check-in. [practitionerId] is the offender's practitioner, as for
+ * the other check-in events; who cancelled it is [CheckinDto.cancelledBy].
+ */
+data class CheckinCancelledEvent(
+  override val checkinId: Long,
+  override val offenderId: Long,
+  override val practitionerId: ExternalUserId,
+  override val checkin: CheckinDto,
+  override val offenderContactPreference: ContactPreference,
+  /** The status it was cancelled from */
+  val previousStatus: CheckinStatus,
+) : ICheckinEvent {
+  /** Only an open check-in was sent to the offender, so only then do they hear it was cancelled. */
+  val notifyOffender: Boolean get() = previousStatus == CheckinStatus.CREATED
+}
+
+/**
  * Finalised event requires the checkin ID to be set, which we only get after DB insert is done.
  */
 data class PartialCheckinCreatedEvent(

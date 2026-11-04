@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications
 
 import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancelledEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
@@ -97,6 +98,13 @@ class NotificationService(
    */
   fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
     orchestrator.sendCheckinUpdatedNotifications(event)
+  }
+
+  /**
+   * Send notifications for checkin cancelled (by a practitioner) event
+   */
+  fun sendCheckinCancelledNotifications(event: CheckinCancelledEvent) {
+    orchestrator.sendCheckinCancelledNotifications(event)
   }
 
   /**
