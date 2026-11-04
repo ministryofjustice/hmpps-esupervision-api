@@ -30,6 +30,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.finalCheckinDate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
@@ -291,8 +292,7 @@ class NotificationOrchestratorService(
     }
 
     try {
-      // final checkin date == last day offender can submit
-      val finalCheckinDate = checkin.dueDate.plus(checkinWindowPeriod).minusDays(1)
+      val finalCheckinDate = finalCheckinDate(checkin.dueDate, checkinWindowPeriod)
       val contactDetails = checkin.personalDetails
       val personalisation =
         mapOf(

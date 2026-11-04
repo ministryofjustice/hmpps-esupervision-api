@@ -33,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.checkinDateTime
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -377,7 +378,9 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     val rescheduled = deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).last()
     assertThat(rescheduled.eventType).isEqualTo(DomainEventType.V2_CHECKIN_RESCHEDULED)
     assertThat(rescheduled.dateTime).isEqualTo(checkinDateTime(today.plusDays(5)).toInstant())
-    assertThat(rescheduled.notes).startsWith("Check in moved to: ")
+    assertThat(rescheduled.notes).isEqualTo(
+      "${CheckinDeliusEventNotes.rescheduled(today.plusDays(5))}\n${CheckinDeliusEventNotes.completeBy(today.plusDays(7))}",
+    )
     assertThat(rescheduled.eventNumber).isNull()
   }
 

@@ -247,6 +247,21 @@ If they need us to contact them: Yes
 What they want to talk about: Need help with rent
 ```
 
+**Checkin Scheduled** (ESUP-2223):
+```
+Check in due: Monday 2 November 2026
+Complete by: Wednesday 4 November 2026 at 11:59pm
+```
+
+**Checkin Rescheduled** (ESUP-2223, published as updated):
+```
+Check in moved to: Tuesday 3 November 2026
+Complete by: Thursday 5 November 2026 at 11:59pm
+```
+
+The last day is the due date plus the check-in window (`grace-period-days`, 3) less one day, the
+same date the invite gives.
+
 **Checkin Updated:**
 ```
 Check in updated: 16 January 2025 at 10:00am

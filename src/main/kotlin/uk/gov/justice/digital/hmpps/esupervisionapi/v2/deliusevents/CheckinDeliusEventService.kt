@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -8,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.finalCheckinDate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.AdditionalInformation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.security.PiiSanitizer
@@ -15,6 +17,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.Period
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
@@ -35,7 +38,9 @@ class CheckinDeliusEventService(
   private val domainEventService: DomainEventService,
   private val clock: Clock,
   private val appConfig: AppConfig,
+  @param:Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}") private val gracePeriodDays: Int,
 ) {
+  private val checkinWindow = Period.ofDays(gracePeriodDays)
 
   fun enabled() = appConfig.enabledFeatures.contains(Feature.ESUP_2223)
 
@@ -44,7 +49,8 @@ class CheckinDeliusEventService(
    * commits. Every event type except rescheduling is recorded at most once per check-in; a repeat
    * is ignored.
    *
-   * @param date the check-in date, for scheduled and rescheduled events
+   * @param date the check-in date, for scheduled and rescheduled events. Their [notes] get the
+   *   deadline for completing the check-in added.
    * @return true if recorded, false if the check-in already had an event of that type
    */
   @Transactional(propagation = Propagation.MANDATORY)
@@ -69,7 +75,7 @@ class CheckinDeliusEventService(
         crn = checkin.offender.crn,
         eventNumber = eventNumber,
         dateTime = date?.let { checkinDateTime(it).toInstant() },
-        notes = notes,
+        notes = date?.let { "$notes\n${CheckinDeliusEventNotes.completeBy(finalCheckinDate(it, checkinWindow))}" } ?: notes,
         occurredAt = clock.instant(),
       ),
     )

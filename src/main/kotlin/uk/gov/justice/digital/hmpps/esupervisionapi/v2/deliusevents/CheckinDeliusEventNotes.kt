@@ -17,6 +17,9 @@ object CheckinDeliusEventNotes {
 
   fun rescheduled(newDueDate: LocalDate) = "Check in moved to: ${newDueDate.format(DATE_FORMATTER)}"
 
+  /** @param finalCheckinDate the last day the check-in can be completed */
+  fun completeBy(finalCheckinDate: LocalDate) = "Complete by: ${finalCheckinDate.format(DATE_FORMATTER)} at 11:59pm"
+
   fun cancelled(reason: String) = "Reason: $reason"
 
   /** @param channel how the link was sent, for example "text message" */
