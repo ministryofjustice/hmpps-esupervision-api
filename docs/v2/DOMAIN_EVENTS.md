@@ -44,11 +44,17 @@ itself), because after it nothing would create today's check-in.
 |---------|-------|
 | Setup completed | `OffenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin` |
 | Check-ins restarted | `OffenderResource.reactivateOffender` |
-| Schedule set (`update_details`) | `OffenderResource.updateDetails` (moving an already scheduled check-in comes later) |
+| Schedule changed (`update_details`) | `OffenderResource.updateDetails` |
 | Ad hoc check-in arranged | `OffenderResource.scheduleAdHocCheckin` |
 | Check-in submitted | `CheckinPersistenceService.checkinSubmission` |
 | Check-in missed | `CheckinExpiryJob` |
 | Scheduled check-in not created on its due date | `CheckinCreationJob` (cancels it, then schedules the next) |
+
+Each trigger makes the upcoming check-in match the schedule. If there is one and the next date
+has changed, it is moved, keeping its UUID, and NDelius gets `updated` with the new `dateTime`.
+If there's no longer a next date (for example an ad hoc check-in with no date), it is cancelled.
+If a check-in is open, an upcoming one alongside it is cancelled. Only upcoming check-ins move:
+a created check-in, whose link may have been sent, keeps its date.
 
 Scheduling runs after the triggering transaction commits, in its own transaction, and never fails
 the change that triggered it. A check-in created without having been scheduled (no upcoming check-in

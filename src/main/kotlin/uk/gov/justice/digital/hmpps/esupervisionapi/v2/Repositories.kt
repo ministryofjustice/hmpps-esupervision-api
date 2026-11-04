@@ -490,6 +490,22 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   fun lockAndGetStatus(id: Long): String?
 
   /**
+   * ESUP-2223: locks the check-in row and returns its due date in the database if it's still
+   * upcoming (SCHEDULED), else null. Doesn't flush first, as [lockAndGetStatus].
+   */
+  @Query("select due_date from offender_checkin_v2 where id = :id and status = 'SCHEDULED' for update", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun lockAndGetScheduledDueDate(id: Long): LocalDate?
+
+  /**
+   * ESUP-2223: the offender's upcoming check-in, locked, so moving or cancelling it and activating
+   * it (which locks it too) take turns. Refresh it: a cached copy may be out of date.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select c from OffenderCheckin c where c.offender = :offender and c.status = 'SCHEDULED'")
+  fun findScheduledForUpdate(offender: Offender): OffenderCheckin?
+
+  /**
    * ESUP-2128: a practitioner cancels the check-in, if it is still [expectedStatus]. Writes only the
    * cancellation columns, and [sensitive] can only set the flag, not clear it.
    * @return 1 if cancelled, 0 if its status had changed

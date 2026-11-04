@@ -49,7 +49,8 @@ class CheckinPersistenceService(
    * caller read and made CREATED.
    *
    * @return null if nothing was created: its offender already has a CREATED check-in for the due
-   *   date, or the upcoming check-in was cancelled after the caller read it (check-ins were stopped)
+   *   date, or the upcoming check-in was cancelled (check-ins were stopped) or moved after the
+   *   caller read it
    */
   @Transactional
   fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
@@ -108,15 +109,16 @@ class CheckinPersistenceService(
    */
   private fun activate(checkin: OffenderCheckin): Long? {
     // The caller read the upcoming check-in before this transaction, and stopping check-ins may
-    // have cancelled it since. Saving the stale copy would undo the cancellation. Locking it also
-    // makes stopping check-ins wait until this commits, then cancel it as created.
+    // have cancelled it since, or a schedule change moved it to another date. Saving the stale copy
+    // would undo that. Locking it also makes stopping check-ins, or moving it, wait until this
+    // commits, then find it created.
     // A check-in created for its date meanwhile would make activating it break the one-per-day index.
-    if (checkinRepository.lockAndGetStatus(checkin.id) != CheckinStatus.SCHEDULED.name ||
+    if (checkinRepository.lockAndGetScheduledDueDate(checkin.id) != checkin.dueDate ||
       checkinRepository.existsCreated(checkin.offender.id, checkin.dueDate)
     ) {
-      LOGGER.info("Not activating checkin {}: it is no longer scheduled, or its date already has a check-in", checkin.uuid)
+      LOGGER.info("Not activating checkin {}: it is no longer scheduled for {}, or that date already has a check-in", checkin.uuid, checkin.dueDate)
       // With open-in-view the caller may have activated a managed copy, which committing this
-      // transaction would write back over the cancellation.
+      // transaction would write back over the cancellation or move.
       if (entityManager.contains(checkin)) entityManager.refresh(checkin)
       return null
     }

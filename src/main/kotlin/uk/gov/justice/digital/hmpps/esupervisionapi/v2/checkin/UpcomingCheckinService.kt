@@ -55,8 +55,11 @@ class UpcomingCheckinService(
   fun enabled() = appConfig.enabledFeatures.contains(Feature.ESUP_2223)
 
   /**
-   * Schedule the offender's next check-in, if it isn't scheduled yet. Inside a transaction this
-   * runs once the transaction commits, so it sees the change that triggered it.
+   * Make the offender's upcoming check-in match their schedule: schedule it if there isn't one,
+   * move it (rescheduled) if the next date has changed, or cancel it if there's no longer a next
+   * date. Only an upcoming (SCHEDULED) check-in moves: one already created, whose link may have
+   * been sent, is left as it is. Inside a transaction this runs once the transaction commits, so
+   * it sees the change that triggered it.
    *
    * @param eventNumber the offender's active event, if the caller knows it; otherwise the one on record
    */
@@ -101,23 +104,38 @@ class UpcomingCheckinService(
     val today = clock.today()
     val event = eventNumber ?: offender.currentEvent
 
-    val scheduled = checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.SCHEDULED).singleOrNull()
-    if (scheduled != null) {
-      if (scheduled.dueDate >= today) return
+    // Locked: activation may be about to make it today's check-in. If it has, it's no longer SCHEDULED.
+    var scheduled = checkinRepository.findScheduledForUpdate(offender)?.also { entityManager.refresh(it) }
+    if (scheduled != null && scheduled.dueDate < today) {
       // Its due date passed without it being created: no active event, or the schedule changed.
-      scheduled.status = CheckinStatus.CANCELLED
-      checkinRepository.save(scheduled)
-      // No event number: NDelius matches the contact by check-in, and rejects an update whose event
-      // number differs from the contact's, which it would if the active event changed since.
-      checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_CANCELLED, scheduled, CheckinDeliusEventNotes.cancelled(NOT_CREATED_REASON), eventNumber = null)
-      LOGGER.info("Cancelled checkin {} for CRN {}: not created on its due date {}", scheduled.uuid, offender.crn, scheduled.dueDate)
+      cancel(scheduled, NOT_CREATED_REASON)
+      scheduled = null
     }
 
-    if (checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).isNotEmpty()) return
+    // After today's creation job has started, a check-in for today won't be created, so today can't
+    // be scheduled. An upcoming check-in already due today may still be: the job may be activating it
+    // now. It can still be moved or cancelled, as activation checks the locked row's date and status.
+    val creationJobStarted = includeToday != true && creationJobStarted(today)
 
-    // After today's creation job, a check-in for today won't be created, so it can't be scheduled.
-    val from = if (includeToday ?: !creationJobStarted(today)) today else today.plusDays(1)
-    val dueDate = nextCheckinDate(offender, from) ?: return
+    if (checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).isNotEmpty()) {
+      // Only the next check-in is recorded, and that's the open one. An upcoming one alongside it is
+      // left from a schedule change that created today's check-in.
+      scheduled?.let { cancel(it, SCHEDULE_CHANGED_REASON) }
+      return
+    }
+
+    // An upcoming check-in due today counts today, so it's left alone if the schedule still has today.
+    val from = if (creationJobStarted && scheduled?.dueDate != today) today.plusDays(1) else today
+    val dueDate = nextCheckinDate(offender, from)
+    if (scheduled != null) {
+      when (dueDate) {
+        scheduled.dueDate -> {}
+        null -> cancel(scheduled, SCHEDULE_CHANGED_REASON)
+        else -> move(scheduled, dueDate)
+      }
+      return
+    }
+    if (dueDate == null) return
     val checkin = checkinRepository.save(
       OffenderCheckin(
         uuid = UUID.randomUUID(),
@@ -130,6 +148,23 @@ class UpcomingCheckinService(
     )
     checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, CheckinDeliusEventNotes.scheduled(dueDate), event, dueDate)
     LOGGER.info("Scheduled checkin {} for CRN {} due {}", checkin.uuid, offender.crn, dueDate)
+  }
+
+  // No event number on updates: NDelius matches the contact by check-in, and rejects an update whose
+  // event number differs from the contact's, which it would if the active event changed since.
+
+  private fun cancel(scheduled: OffenderCheckin, reason: String) {
+    scheduled.status = CheckinStatus.CANCELLED
+    checkinRepository.save(scheduled)
+    checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_CANCELLED, scheduled, CheckinDeliusEventNotes.cancelled(reason), eventNumber = null)
+    LOGGER.info("Cancelled checkin {} due {}: {}", scheduled.uuid, scheduled.dueDate, reason)
+  }
+
+  private fun move(scheduled: OffenderCheckin, dueDate: LocalDate) {
+    LOGGER.info("Moved checkin {} from {} to {}", scheduled.uuid, scheduled.dueDate, dueDate)
+    scheduled.dueDate = dueDate
+    checkinRepository.save(scheduled)
+    checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_RESCHEDULED, scheduled, CheckinDeliusEventNotes.rescheduled(dueDate), eventNumber = null, date = dueDate)
   }
 
   /** The offender's next check-in date on or after [from] that doesn't have a check-in yet. */
@@ -172,5 +207,6 @@ class UpcomingCheckinService(
 
     // TODO ESUP-2223: agreed for now; to change or remove if probation integration take over the NDelius note text
     const val NOT_CREATED_REASON = "The check in was not opened on its due date"
+    const val SCHEDULE_CHANGED_REASON = "The check in schedule was changed"
   }
 }

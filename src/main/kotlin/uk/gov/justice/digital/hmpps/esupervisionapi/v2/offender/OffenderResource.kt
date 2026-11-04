@@ -800,7 +800,6 @@ is *today*.""",
       LOGGER.debug("{} check-in for offender {}", if (created) "created" else "skipped", offenderAfter.uuid)
     }
     if (request.checkinSchedule != null) {
-      // TODO ESUP-2223 (PR 5): move an already scheduled check-in to the new schedule
       upcomingCheckinService.scheduleNext(offenderInfo.id)
     }
     return ResponseEntity.ok(offenderAfter)
