@@ -40,6 +40,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.DebugQuestionsRe
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 /**
  * ESUP-2223: the check-in link status, its NDelius events and the link-sent gate. The feature
@@ -158,6 +159,33 @@ class CheckinLinkIT : IntegrationTestBase() {
     val event = deliusEventRepository.findAllByCheckinUuidOrderById(checkin.uuid).single()
     assertThat(event.eventType).isEqualTo(DomainEventType.V2_CHECKIN_LINK_DELIVERED)
     assertThat(event.notes).startsWith("Link sent by text message: ")
+  }
+
+  @Test
+  fun `a link sent after check-ins were stopped is marked sent without telling NDelius`() {
+    val checkin = saveCheckin(saveOffender(), CheckinLinkStatus.SENDING)
+    checkinRepository.save(checkin.also { it.status = CheckinStatus.CANCELLED })
+
+    assertThat(linkService.linkSent(checkin.id, "SMS")).isTrue()
+
+    assertThat(checkinRepository.findByUuid(checkin.uuid).get().linkStatus).isEqualTo(CheckinLinkStatus.SENT)
+    assertThat(deliusEventRepository.findAll()).isEmpty()
+  }
+
+  @Test
+  fun `a link sent after check-ins were stopped doesn't tell NDelius when the check-in is cached from before`() {
+    val checkin = saveCheckin(saveOffender(), CheckinLinkStatus.SENDING)
+
+    // as under open-in-view: the request read the check-in before sending its invite
+    transactionTemplate.executeWithoutResult {
+      checkinRepository.findById(checkin.id).get()
+      // check-ins stopped while the invite was sending
+      CompletableFuture.runAsync { jdbcTemplate.update("update offender_checkin_v2 set status = 'CANCELLED' where id = ?", checkin.id) }.get()
+
+      assertThat(linkService.linkSent(checkin.id, "SMS")).isTrue()
+    }
+
+    assertThat(deliusEventRepository.findAll()).isEmpty()
   }
 
   @Test

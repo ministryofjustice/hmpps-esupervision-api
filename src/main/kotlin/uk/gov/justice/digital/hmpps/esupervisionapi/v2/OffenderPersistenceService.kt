@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 
 @Service
 class OffenderPersistenceService(
@@ -19,6 +20,7 @@ class OffenderPersistenceService(
   private val eventAuditService: EventAuditService,
   private val entityManager: EntityManager,
   private val appEventPublisher: ApplicationEventPublisher,
+  private val checkinDeliusEventService: CheckinDeliusEventService,
 ) {
 
   /**
@@ -41,9 +43,18 @@ class OffenderPersistenceService(
     event.setup?.let {
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_DEACTIVATED, it.primaryKey)
     }
-    // Cancel scheduled rows before created rows to match the check-in/question-assignment lock order.
-    val cancelledCheckins = checkinRepository.updateStatusForOffenderId(event.offenderId, CheckinStatus.SCHEDULED, CheckinStatus.CANCELLED) +
-      checkinRepository.updateStatusForOffenderId(event.offenderId, CheckinStatus.CREATED, CheckinStatus.CANCELLED)
+    // In the order activating an upcoming check-in (SCHEDULED -> CREATED) locks rows: the check-in,
+    // then (by trigger) the upcoming question assignment, so the two wait rather than deadlock.
+    // SCHEDULED first: if an activation holds the row, this waits for it and then skips it, and the
+    // CREATED update, a later statement, sees it as created and cancels it.
+    val cancelledIds = checkinRepository.cancelForOffender(event.offenderId, CheckinStatus.SCHEDULED.name) +
+      checkinRepository.cancelForOffender(event.offenderId, CheckinStatus.CREATED.name)
+    // ESUP-2223: NDelius has the upcoming check-in, and the open one, so it's told they're cancelled:
+    // those this cancelled, not those read before (one may have been submitted since).
+    if (checkinDeliusEventService.enabled()) {
+      checkinRepository.findAllById(cancelledIds).forEach { checkinDeliusEventService.recordCancelledIfRecorded(it, CHECKINS_STOPPED_REASON) }
+    }
+    val cancelledCheckins = cancelledIds.size
     val deletedAssignments = questionListAssignmentRepository.deleteUpcomingAssignment(event.offenderId)
     if (cancelledCheckins > 0 || deletedAssignments > 0) {
       LOGGER.info("Cancelled {} created/scheduled check ins, deleted {} question assignments for CRN {} due to offender deactivation", cancelledCheckins, deletedAssignments, event.offender.crn)
@@ -86,5 +97,8 @@ class OffenderPersistenceService(
 
   companion object {
     val LOGGER = logger<OffenderPersistenceService>()
+
+    // TODO ESUP-2223: agreed for now; to change or remove if probation integration take over the NDelius note text
+    const val CHECKINS_STOPPED_REASON = "Check ins were stopped"
   }
 }

@@ -56,10 +56,33 @@ If there's no longer a next date (for example an ad hoc check-in with no date), 
 If a check-in is open, an upcoming one alongside it is cancelled. Only upcoming check-ins move:
 a created check-in, whose link may have been sent, keeps its date.
 
+Stopping check-ins (by a practitioner, the creation job's eligibility check or the eligibility
+sync) cancels the upcoming and open check-ins, and NDelius gets `cancelled` for each one it has,
+in the same transaction (`OffenderPersistenceService.offenderDeactivation`). A check-in opened
+before the feature was on has no NDelius contact, so it's cancelled without an event: NDelius
+would reject an update to a contact it can't find. If the invite was still sending, a link sent
+afterwards is marked SENT but not recorded, so it doesn't overwrite the cancellation in NDelius.
+
 Scheduling runs after the triggering transaction commits, in its own transaction, and never fails
 the change that triggered it. A check-in created without having been scheduled (no upcoming check-in
 for its date, for example someone set up before the feature was on) is recorded as `scheduled` when
 it is created, so NDelius always sees `scheduled` first.
+
+### Turning the feature on: backfill
+
+People set up before the feature was on have no upcoming check-in until one of the triggers above
+fires. `UpcomingCheckinBackfillJob` schedules it for every verified person with neither an upcoming
+nor an open check-in (someone with an open check-in gets the next once it's submitted or missed).
+It's safe to run again, and it won't run alongside the check-in creation job.
+
+It runs as a batch CronJob kept suspended (`upcoming-checkin-backfill` in
+`helm_deploy/hmpps-esupervision-api/values.yaml`). When turning the feature on in an environment:
+
+1. Turn the flag on (`APP_FEATURES_ESUP_2223`) after that day's 9am creation job has finished.
+2. The same day, run the backfill:
+   `kubectl create job --from=cronjob/batch-upcoming-checkin-backfill upcoming-checkin-backfill-<date>`
+   (or `POST /v2/jobs/upcoming-checkin-backfill/run` where manual triggering is enabled).
+3. Check its `job_log_v2` row has `ended_at` set and the log line's `processed` count.
 
 ### Check-in link (ESUP-2223)
 
