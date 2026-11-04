@@ -186,4 +186,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changesets/93_update_monthly_stats_for_selected_event_deactivation.sql
   - include:
-      file: db/changelog/changesets/94_upcoming_checkin_backfill_job_type.sql
+      file: db/changelog/changesets/94_checkin_cancellation.sql
+  - include:
+      file: db/changelog/changesets/95_upcoming_checkin_backfill_job_type.sql

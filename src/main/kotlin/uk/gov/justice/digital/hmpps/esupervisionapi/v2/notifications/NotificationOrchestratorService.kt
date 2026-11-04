@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancelledEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
@@ -543,6 +544,37 @@ class NotificationOrchestratorService(
   /** Send notifications for checkin updated event */
   fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
     if (!checkinEventsRelayed()) event.publish(domainEventService)
+  }
+
+  /**
+   * Tell the offender their open check-in was cancelled. NDelius hears through the check-in's
+   * events (see CheckinPersistenceService.checkinCancellation), not from here.
+   */
+  fun sendCheckinCancelledNotifications(event: CheckinCancelledEvent) {
+    if (!event.notifyOffender) return
+    val checkin = event.checkin
+    val contactDetails = checkin.personalDetails
+    if (contactDetails == null) {
+      LOGGER.warn("Skipping checkin cancelled notification for checkin {}, CRN={}: personal details not found", checkin.uuid, checkin.crn)
+      return
+    }
+    try {
+      val personalisation = mapOf(
+        "name" to contactDetails.name.forename,
+        "date" to checkin.dueDate.format(DATE_FORMATTER),
+      )
+      val notifications = notificationPersistence.buildOffenderNotifications(
+        offenderId = event.offenderId,
+        crn = checkin.crn,
+        contactPreference = event.offenderContactPreference,
+        contactDetails = contactDetails,
+        notificationType = NotificationType.OffenderCheckinCancelled,
+      )
+      processAndSendNotifications(notifications, personalisation)
+    } catch (e: Exception) {
+      val sanitized = PiiSanitizer.sanitizeException(e, checkin.crn)
+      LOGGER.warn("Failed to send checkin cancelled notification for checkin {}: {}", checkin.uuid, sanitized)
+    }
   }
 
   /**
