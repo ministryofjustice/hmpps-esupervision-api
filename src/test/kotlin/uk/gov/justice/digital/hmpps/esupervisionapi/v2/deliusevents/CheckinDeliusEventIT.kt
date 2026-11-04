@@ -294,7 +294,8 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
     val featuresBefore = appConfig.enabledFeatures
     ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
     try {
-      val checkin = saveCheckin()
+      // only an open check-in can be submitted
+      val checkin = checkinRepository.save(saveCheckin().apply { status = CheckinStatus.CREATED })
       checkin.status = CheckinStatus.SUBMITTED
       checkin.submittedAt = clock.instant()
       val event = CheckinSubmittedEvent(

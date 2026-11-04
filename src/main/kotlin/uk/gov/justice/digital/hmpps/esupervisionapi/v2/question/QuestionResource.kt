@@ -90,12 +90,13 @@ class QuestionResource(
     description = """
       Assuming the CRN is VERIFIED, this endpoint will always return valid questions for an offender (including the fixed questions). 
       These are meant be used in the offender context.
+      Also carries the uuid of the upcoming check-in once it exists, for the practitioner UI to cancel it.
     """,
   )
   fun upcomingOffenderQuestions(@PathVariable crn: CRN, @RequestParam(required = true) @Valid language: Language): ResponseEntity<UpcomingOffenderQuestions> {
     val upcoming = questionService.upcomingQuestionListItems(crn, language)
     val upcomingQuestions = upcoming.items.map { it.evalTemplate() }
-    return ResponseEntity.ok(UpcomingOffenderQuestions(upcoming.expectedCheckinDate, upcomingQuestions))
+    return ResponseEntity.ok(UpcomingOffenderQuestions(upcoming.expectedCheckinDate, upcomingQuestions, upcoming.checkinUuid))
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")

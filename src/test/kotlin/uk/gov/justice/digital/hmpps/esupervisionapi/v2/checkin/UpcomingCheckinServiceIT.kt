@@ -197,6 +197,26 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `skips a date whose check-in a practitioner cancelled, until the offender is changed`() {
+    val offender = saveOffender(firstCheckin = today.minusWeeks(1))
+    saveCheckin(offender, CheckinStatus.CANCELLED, today).also {
+      it.cancelledAt = offender.updatedAt.plusSeconds(1)
+      it.cancelledBy = "PRACT001"
+      checkinRepository.save(it)
+    }
+
+    service.scheduleNext(offender.id)
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusWeeks(1))
+
+    // rebooking: once the offender is changed after the cancellation, its date can be scheduled again
+    checkinRepository.deleteAll(scheduledCheckins(offender))
+    offender.updatedAt = clock.instant().plusSeconds(60)
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today)
+  }
+
+  @Test
   fun `schedules today when today's check-in hasn't been created yet`() {
     val offender = saveOffender(firstCheckin = today.minusWeeks(1))
 
@@ -341,7 +361,8 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   @Test
   fun `submitting a check-in schedules the next`() {
     val offender = saveOffender(firstCheckin = today)
-    val checkin = saveCheckin(offender, CheckinStatus.SUBMITTED, today)
+    // open in the database, submitted in memory, as CheckinService passes it
+    val checkin = saveCheckin(offender, CheckinStatus.CREATED, today).also { it.status = CheckinStatus.SUBMITTED }
     val event = CheckinSubmittedEvent(checkin.id, offender.id, offender.practitionerId, checkin.dto(contactDetails(offender)), offender.contactPreference)
 
     checkinPersistenceService.checkinSubmission(checkin, event)
