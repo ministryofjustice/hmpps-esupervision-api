@@ -357,6 +357,17 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
 
   fun findAllByOffenderAndStatus(offender: Offender, status: CheckinStatus): List<OffenderCheckin>
 
+  /** Cancels the offender's check-ins in [status]. @return the ids of those it cancelled */
+  @Query(
+    """
+    update offender_checkin_v2 set status = 'CANCELLED'
+    where offender_id = :offenderId and status = cast(:status as offender_checkin_status_v2)
+    returning id
+    """,
+    nativeQuery = true,
+  )
+  fun cancelForOffender(offenderId: Long, status: String): List<Long>
+
   @Query("""select c from OffenderCheckin c where c.id in :ids""")
   @EntityGraph(attributePaths = ["offender"])
   fun findAllByIds(ids: List<Long>): List<OffenderCheckin>
