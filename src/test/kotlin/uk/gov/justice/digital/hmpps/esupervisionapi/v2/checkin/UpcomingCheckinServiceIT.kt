@@ -44,7 +44,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinExpiryJob
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
+import java.time.Period
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * ESUP-2223: scheduling the next check-in. The feature flag is switched on per test, so this
@@ -359,6 +362,115 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `a changed schedule moves the upcoming check-in, keeping its UUID`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3), currentEvent = 4)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+
+    offender.firstCheckin = today.plusDays(5)
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+
+    val moved = scheduledCheckins(offender).single()
+    assertThat(moved.uuid).isEqualTo(scheduled.uuid)
+    assertThat(moved.dueDate).isEqualTo(today.plusDays(5))
+    val rescheduled = deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).last()
+    assertThat(rescheduled.eventType).isEqualTo(DomainEventType.V2_CHECKIN_RESCHEDULED)
+    assertThat(rescheduled.dateTime).isEqualTo(checkinDateTime(today.plusDays(5)).toInstant())
+    assertThat(rescheduled.notes).startsWith("Check in moved to: ")
+    assertThat(rescheduled.eventNumber).isNull()
+  }
+
+  @Test
+  fun `an unchanged schedule leaves the upcoming check-in alone`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3))
+    service.scheduleNext(offender.id)
+
+    service.scheduleNext(offender.id)
+
+    assertThat(deliusEventRepository.findAll().map { it.eventType }).containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+  }
+
+  @Test
+  fun `the upcoming check-in is cancelled when there's no longer a next date`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3), mode = CheckinMode.AD_HOC)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+
+    offender.firstCheckin = null
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+
+    assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+    val cancelled = deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).last()
+    assertThat(cancelled.eventType).isEqualTo(DomainEventType.V2_CHECKIN_CANCELLED)
+    assertThat(cancelled.notes).isEqualTo("Reason: ${UpcomingCheckinService.SCHEDULE_CHANGED_REASON}")
+  }
+
+  @Test
+  fun `after today's creation job has started, today's upcoming check-in is left alone while the schedule still has today`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    jobLogRepository.save(JobLog(jobType = CheckinCreationJob.JOB_TYPE, createdAt = clock.instant()))
+
+    service.scheduleNext(offender.id)
+
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today)
+    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).map { it.eventType })
+      .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+  }
+
+  @Test
+  fun `after today's creation job has started, a schedule change still moves today's upcoming check-in`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    jobLogRepository.save(JobLog(jobType = CheckinCreationJob.JOB_TYPE, createdAt = clock.instant()))
+
+    offender.firstCheckin = today.plusDays(2)
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+
+    assertThat(scheduledCheckins(offender).single()).satisfies({
+      assertThat(it.uuid).isEqualTo(scheduled.uuid)
+      assertThat(it.dueDate).isEqualTo(today.plusDays(2))
+    })
+    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).map { it.eventType })
+      .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED, DomainEventType.V2_CHECKIN_RESCHEDULED)
+  }
+
+  @Test
+  fun `an upcoming check-in alongside an open one is cancelled`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3))
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    saveCheckin(offender, CheckinStatus.CREATED, today)
+
+    service.scheduleNext(offender.id)
+
+    assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
+  }
+
+  @Test
+  fun `changing the schedule through update_details moves the upcoming check-in`() {
+    val offender = saveOffender(firstCheckin = today.plusDays(3))
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    val firstCheckin = today.plusDays(4)
+
+    webTestClient.post()
+      .uri("/v2/offenders/${offender.uuid}/update_details")
+      .headers(setAuthorisation(roles = listOf("ROLE_ESUPERVISION__ESUPERVISION_UI")))
+      .contentType(MediaType.APPLICATION_JSON)
+      .bodyValue("""{"checkinSchedule":{"requestedBy":"PRACT001","firstCheckin":"$firstCheckin","checkinInterval":"WEEKLY","mode":"SCHEDULED"}}""")
+      .exchange()
+      .expectStatus().isOk
+
+    assertThat(scheduledCheckins(offender).single().let { it.uuid to it.dueDate }).isEqualTo(scheduled.uuid to firstCheckin)
+  }
+
+  @Test
   fun `submitting a check-in schedules the next`() {
     val offender = saveOffender(firstCheckin = today)
     // open in the database, submitted in memory, as CheckinService passes it
@@ -394,6 +506,54 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     checkinCreationJob.process()
 
     assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusDays(2))
+  }
+
+  @Test
+  fun `an upcoming check-in moved after it was read is not activated`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), today).single()
+    // the schedule changed while the creation job was getting contact details
+    jdbcTemplate.update("update offender_checkin_v2 set due_date = ? where id = ?", today.plusDays(1), scheduled.id)
+
+    val checkin = checkinCreationService.prepareCheckinForOffender(offender, today, scheduled)
+    val event = PartialCheckinCreatedEvent(
+      offenderId = offender.id,
+      practitionerId = "SYSTEM",
+      checkin = checkin.dto(contactDetails(offender), clock = clock, checkinWindow = Period.ofDays(3)),
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = 1L,
+      checkinMode = offender.mode,
+    )
+    checkinCreationService.createCheckins(listOf(checkin to event))
+
+    val after = checkinRepository.findByUuid(scheduled.uuid).get()
+    assertThat(after.status).isEqualTo(CheckinStatus.SCHEDULED)
+    assertThat(after.dueDate).isEqualTo(today.plusDays(1))
+  }
+
+  @Test
+  fun `a schedule change while today's upcoming check-in is being activated leaves it activated`() {
+    val offender = saveOffender(firstCheckin = today)
+    service.scheduleNext(offender.id)
+    val scheduled = scheduledCheckins(offender).single()
+    jdbcTemplate.update("update offender_v2 set first_checkin = ? where id = ?", today.plusDays(1), offender.id)
+
+    lateinit var rescheduling: CompletableFuture<Unit>
+    transactionTemplate.executeWithoutResult {
+      // activation locks the check-in, then changes it
+      checkinRepository.lockAndGetStatus(scheduled.id)
+      rescheduling = CompletableFuture.supplyAsync { service.scheduleNext(offender.id) }
+      await().atMost(Duration.ofSeconds(10)).until {
+        jdbcTemplate.queryForObject("select count(*) from pg_locks where not granted", Int::class.java)!! > 0
+      }
+      jdbcTemplate.update("update offender_checkin_v2 set status = 'CREATED' where id = ?", scheduled.id)
+    }
+    rescheduling.get(10, TimeUnit.SECONDS)
+
+    val after = checkinRepository.findByUuid(scheduled.uuid).get()
+    assertThat(after.status).isEqualTo(CheckinStatus.CREATED)
+    assertThat(after.dueDate).isEqualTo(today)
   }
 
   private fun setFeatures(features: Set<Feature>) = ReflectionTestUtils.setField(appConfig, "enabledFeatures", features)
