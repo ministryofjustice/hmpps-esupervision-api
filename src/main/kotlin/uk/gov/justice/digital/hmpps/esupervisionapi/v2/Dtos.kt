@@ -939,6 +939,8 @@ data class UpcomingQuestionAssignmentResponse(
 data class UpcomingQuestionListItems(
   val expectedCheckinDate: LocalDate?,
   val items: List<QuestionListItemDto>,
+  // The SCHEDULED or CREATED check-in for the expected date, once one exists
+  val checkinUuid: UUID? = null,
 )
 
 /**
@@ -961,6 +963,11 @@ data class UpcomingQuestionItemsResponse(
 data class UpcomingOffenderQuestions(
   val expectedCheckinDate: LocalDate?,
   val questions: List<OffenderQuestion>,
+  @field:Schema(
+    description = "The upcoming check-in (SCHEDULED, or CREATED once the invite is sent) for the expected date, when it exists. This is the uuid to cancel.",
+    required = false,
+  )
+  val checkinUuid: UUID? = null,
 )
 
 /**
