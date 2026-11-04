@@ -67,6 +67,7 @@ class CheckinExpiryJobTest {
     transactionTemplate = transactionTemplate,
     gracePeriodDays = 3,
     eventAuditService = eventAuditService,
+    upcomingCheckinService = mock(),
     checkinDeliusEventService = checkinDeliusEventService,
     appConfig = appConfig,
   )

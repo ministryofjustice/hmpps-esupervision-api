@@ -561,6 +561,32 @@ class QuestionsIT(
   }
 
   @Test
+  fun `QuestionService - upcoming questions carry the check-in uuid once the check-in exists`() {
+    val dueDate = clock.today().plusDays(1)
+    val offender = offenderTemplate.copy(crn = "A000003", firstCheckin = dueDate).toEntity()
+    offenderRepository.save(offender)
+
+    // Day before due date: no check-in row yet, so nothing to cancel
+    val upcomingBeforeCheckin = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate, upcomingBeforeCheckin.expectedCheckinDate)
+    assertNull(upcomingBeforeCheckin.checkinUuid)
+
+    clock.advanceBy(Duration.ofDays(1))
+
+    // Day = due date: the open check-in is the one to cancel
+    val checkin = offenderCheckinService.debugCreateCheckin(offender, clock)
+    val upcomingWithCheckin = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate, upcomingWithCheckin.expectedCheckinDate)
+    assertEquals(checkin.uuid, upcomingWithCheckin.checkinUuid)
+
+    // Once submitted the next check-in has no row yet
+    offenderCheckinService.submitCheckin(checkin.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
+    val upcomingAfterSubmission = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), upcomingAfterSubmission.expectedCheckinDate)
+    assertNull(upcomingAfterSubmission.checkinUuid)
+  }
+
+  @Test
   fun `QuestionService - assigning and fetching questions for ad-hoc check-ins`() {
     val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
     val offender = offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = null).toEntity()

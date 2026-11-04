@@ -18,12 +18,16 @@ class CheckinPersistenceServiceTest {
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val service = CheckinPersistenceService(
     checkinRepository = checkinRepository,
+    offenderRepository = mock(),
     eventAuditService = mock(),
     appEventPublisher = mock(),
     offenderEventLogRepository = mock(),
     clock = Clock.systemUTC(),
     checkinDeliusEventService = mock(),
     entityManager = mock(),
+    upcomingCheckinService = mock(),
+    appConfig = mock(),
+    questionListAssignmentRepository = mock(),
   )
 
   private fun newCheckin() = OffenderCheckin(
@@ -39,13 +43,13 @@ class CheckinPersistenceServiceTest {
   fun `checkinCreation refuses fields the native insert would drop`() {
     val checkin = newCheckin().apply {
       livenessEnabled = true
-      linkStatus = CheckinLinkStatus.FAILED
+      sensitive = true
     }
 
     val error = assertThrows<IllegalArgumentException> { service.checkinCreation(checkin, mock()) }
 
     assertTrue(error.message!!.contains("livenessEnabled"))
-    assertTrue(error.message!!.contains("linkStatus"))
+    assertTrue(error.message!!.contains("sensitive"))
     verify(checkinRepository, never()).maybeInsert(any())
   }
 

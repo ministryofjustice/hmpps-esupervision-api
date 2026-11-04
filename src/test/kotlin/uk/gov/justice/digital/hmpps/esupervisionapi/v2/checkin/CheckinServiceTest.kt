@@ -33,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
@@ -245,6 +246,48 @@ class CheckinServiceTest {
     assertNull(result.videoUrl, "Submission result should not contain media URLs")
     assertNull(result.snapshotUrl, "Submission result should not contain media URLs")
     verify(checkinPersistenceService).checkinSubmission(any(), any())
+  }
+
+  @ParameterizedTest
+  @CsvSource("CREATED, SENDING", "SCHEDULED, ")
+  fun `submitCheckin - a check-in whose link isn't sent can't be submitted`(status: CheckinStatus, linkStatus: CheckinLinkStatus?) {
+    val checkin = submittableCheckin(status, linkStatus)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.submitCheckin(checkin.uuid, SubmitCheckinRequest(survey = mapOf("question1" to "answer1")))
+    }
+
+    assertEquals(HttpStatus.CONFLICT, exception.statusCode)
+    assertNull(checkin.submittedAt)
+    verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
+  }
+
+  @Test
+  fun `submitCheckin - a check-in whose link is sent can be submitted`() {
+    val checkin = submittableCheckin(CheckinStatus.CREATED, CheckinLinkStatus.SENT)
+
+    val result = service.submitCheckin(checkin.uuid, SubmitCheckinRequest(survey = mapOf("question1" to "answer1")))
+
+    assertEquals(CheckinStatus.SUBMITTED, result.status)
+    verify(checkinPersistenceService).checkinSubmission(any(), any())
+  }
+
+  private fun submittableCheckin(status: CheckinStatus, linkStatus: CheckinLinkStatus?): OffenderCheckin {
+    val offender = createOffender()
+    val checkin = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = status,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      checkinStartedAt = clock.instant(),
+    ).also { it.linkStatus = linkStatus }
+    whenever(checkinPersistenceService.findCheckin(checkin.uuid)).thenReturn(checkin)
+    whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
+    whenever(s3UploadService.isSetupPhotoUploaded(offender)).thenReturn(false)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
+    return checkin
   }
 
   @ParameterizedTest
@@ -874,7 +917,7 @@ class CheckinServiceTest {
 
     assertEquals("session-123", result.sessionId)
     assertTrue(checkin.livenessEnabled)
-    verify(checkinRepository).save(checkin)
+    verify(checkinPersistenceService).saveOpenCheckin(checkin)
   }
 
   @Test

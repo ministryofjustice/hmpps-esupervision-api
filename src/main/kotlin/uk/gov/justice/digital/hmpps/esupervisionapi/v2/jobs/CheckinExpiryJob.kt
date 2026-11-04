@@ -15,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
@@ -36,6 +37,7 @@ class CheckinExpiryJob(
   @Value("\${app.scheduling.v2-checkin-expiry.grace-period-days:3}")
   private val gracePeriodDays: Int,
   private val eventAuditService: EventAuditService,
+  private val upcomingCheckinService: UpcomingCheckinService,
   private val checkinDeliusEventService: CheckinDeliusEventService,
   private val appConfig: AppConfig,
 ) {
@@ -151,6 +153,13 @@ class CheckinExpiryJob(
 
           eventAuditService.recordCheckinExpired(sentNotifications)
           eventAuditService.recordCheckinExpired(notSentNotifications.map { Pair(expiredCheckins[it], null) })
+
+          expiredCheckins.forEach { checkin ->
+            val eventNumber = contactDetailsMap[checkin.offender.crn]?.let {
+              activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection)
+            }
+            upcomingCheckinService.scheduleNext(checkin.offender.id, eventNumber)
+          }
         }
       }
     } catch (e: Exception) {
