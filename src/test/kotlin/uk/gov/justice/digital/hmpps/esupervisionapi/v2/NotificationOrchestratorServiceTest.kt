@@ -14,6 +14,7 @@ import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.asSetupDto
@@ -413,6 +414,75 @@ class NotificationOrchestratorServiceTest {
       eq(notification.reference),
     )
   }
+
+  @Test
+  fun `sendCheckinCancelledNotifications - an open check-in sends the cancelled template to the offender`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED).apply { dueDate = LocalDate.of(2025, 12, 3) }
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinCancelled.name,
+      recipientType = "OFFENDER",
+      channel = "SMS",
+      offenderId = offender.id,
+      reference = "OCAN-001",
+      templateId = "cancelled-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "07700900123"
+    whenever(
+      notificationPersistence.buildOffenderNotifications(
+        eq(offender.id),
+        eq(offender.crn),
+        eq(offender.contactPreference),
+        eq(contactDetails),
+        eq(NotificationType.OffenderCheckinCancelled),
+      ),
+    ).thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, contactDetails, CheckinStatus.CREATED))
+
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("cancelled-template"),
+      eq(recipient),
+      eq(mapOf("name" to "John", "date" to "Wednesday 3 December 2025")),
+      eq(notification.reference),
+    )
+    verifyNoInteractions(domainEventService)
+  }
+
+  @Test
+  fun `sendCheckinCancelledNotifications - an upcoming check-in sends nothing`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED)
+
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, createContactDetails(), CheckinStatus.SCHEDULED))
+
+    verifyNoInteractions(notificationPersistence, notifyGateway, domainEventService)
+  }
+
+  @Test
+  fun `sendCheckinCancelledNotifications - without contact details sends nothing`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED)
+
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, null, CheckinStatus.CREATED))
+
+    verifyNoInteractions(notificationPersistence, notifyGateway)
+  }
+
+  private fun cancelledEvent(offender: Offender, checkin: OffenderCheckin, contactDetails: ContactDetails?, previousStatus: CheckinStatus) = CheckinCancelledEvent(
+    checkinId = checkin.id,
+    offenderId = offender.id,
+    practitionerId = offender.practitionerId,
+    checkin = checkin.dto(contactDetails, clock = clock),
+    offenderContactPreference = offender.contactPreference,
+    previousStatus = previousStatus,
+  )
 
   @Test
   fun `sendReminderCheckinNotifications - happy path - sends to offender only`() {
