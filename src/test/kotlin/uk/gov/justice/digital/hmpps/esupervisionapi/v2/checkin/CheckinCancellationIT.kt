@@ -260,7 +260,7 @@ class CheckinCancellationIT : IntegrationTestBase() {
     assertThat(cancelled.eventNumber).isNull()
 
     val detail = eventDetailService.getEventDetail("/v2/events/checkin-cancelled/${cancelled.eventId}")!!
-    assertThat(detail.notes).isEqualTo("Reason: Attending in person instead")
+    assertThat(detail.notes).isEqualTo("Check in status: Cancelled\n\nReason: Attending in person instead")
     assertThat(detail.sensitive).isTrue()
   }
 

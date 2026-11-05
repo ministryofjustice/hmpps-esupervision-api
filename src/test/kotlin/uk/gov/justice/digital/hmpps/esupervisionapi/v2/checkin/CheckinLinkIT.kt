@@ -158,7 +158,7 @@ class CheckinLinkIT : IntegrationTestBase() {
     assertThat(checkinRepository.findByUuid(checkin.uuid).get().linkStatus).isEqualTo(CheckinLinkStatus.SENT)
     val event = deliusEventRepository.findAllByCheckinUuidOrderById(checkin.uuid).single()
     assertThat(event.eventType).isEqualTo(DomainEventType.V2_CHECKIN_LINK_DELIVERED)
-    assertThat(event.notes).startsWith("Link sent by text message: ")
+    assertThat(event.notes).startsWith("Check in status: Link sent\n\nLink sent by text message: ")
   }
 
   @Test
@@ -227,7 +227,7 @@ class CheckinLinkIT : IntegrationTestBase() {
     assertThat(questionListAssignmentRepository.checkinAssignment(checkin.id)).isNotNull()
     val event = deliusEventRepository.findAllByCheckinUuidOrderById(checkin.uuid).single()
     assertThat(event.eventType).isEqualTo(DomainEventType.V2_CHECKIN_LINK_NOT_DELIVERED)
-    assertThat(event.notes).isEqualTo("Reason the link was not sent: ${CheckinLinkService.NOTIFY_FAILED}")
+    assertThat(event.notes).isEqualTo("Check in status: Link not sent\n\nReason the link was not sent: ${CheckinLinkService.NOTIFY_FAILED}")
     // the failed check-in keeps its date, so the next is a week later
     assertThat(checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.SCHEDULED).single().dueDate).isEqualTo(today.plusWeeks(1))
   }

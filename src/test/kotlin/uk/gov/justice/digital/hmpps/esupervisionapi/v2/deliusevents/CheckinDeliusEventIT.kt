@@ -332,7 +332,7 @@ class CheckinDeliusEventIT : IntegrationTestBase() {
       .expectBody()
       .jsonPath("$.checkinUuid").isEqualTo(checkin.uuid.toString())
       .jsonPath("$.eventType").isEqualTo("CHECKIN_SCHEDULED")
-      .jsonPath("$.notes").isEqualTo("Check in due: Wednesday 1 July 2026\nComplete by: Friday 3 July 2026 at 11:59pm")
+      .jsonPath("$.notes").isEqualTo("Check in status: Scheduled\n\nCheck in due: Wednesday 1 July 2026\nComplete by: Friday 3 July 2026 at 11:59pm")
       // 9am British Summer Time, keeping the offset so NDelius takes the right local date
       .jsonPath("$.dateTime").isEqualTo("2026-07-01T09:00:00+01:00")
 

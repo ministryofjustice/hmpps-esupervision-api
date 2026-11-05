@@ -247,20 +247,46 @@ If they need us to contact them: Yes
 What they want to talk about: Need help with rent
 ```
 
+Every check-in note starts with a `Check in status: ...` line. We write it, not NDelius, for
+every event, including the ESUP-2223 ones below.
+
 **Checkin Scheduled** (ESUP-2223):
 ```
+Check in status: Scheduled
+
 Check in due: Monday 2 November 2026
 Complete by: Wednesday 4 November 2026 at 11:59pm
 ```
 
 **Checkin Rescheduled** (ESUP-2223, published as updated):
 ```
+Check in status: Rescheduled
+
 Check in moved to: Tuesday 3 November 2026
 Complete by: Thursday 5 November 2026 at 11:59pm
 ```
 
-The last day is the due date plus the check-in window (`grace-period-days`, 3) less one day, the
-same date the invite gives.
+`Complete by` is the last day: the due date plus the check-in window (`grace-period-days`, 3) less
+one day, the same date the invite gives.
+
+**Checkin Cancelled** (ESUP-2223):
+```
+Check in status: Cancelled
+
+Reason: Check ins were stopped
+```
+
+**Checkin Link Delivered / Not Delivered** (ESUP-2223, statuses "Link sent" / "Link not sent"):
+```
+Check in status: Link sent
+
+Link sent by text message: 2 November 2026 at 9:00am
+```
+```
+Check in status: Link not sent
+
+Reason the link was not sent: GOV.UK Notify could not send it
+```
 
 **Checkin Updated:**
 ```

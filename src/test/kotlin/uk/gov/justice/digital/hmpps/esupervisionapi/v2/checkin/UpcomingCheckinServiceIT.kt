@@ -418,7 +418,7 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     assertThat(checkinRepository.findByUuid(scheduled.uuid).get().status).isEqualTo(CheckinStatus.CANCELLED)
     val cancelled = deliusEventRepository.findAllByCheckinUuidOrderById(scheduled.uuid).last()
     assertThat(cancelled.eventType).isEqualTo(DomainEventType.V2_CHECKIN_CANCELLED)
-    assertThat(cancelled.notes).isEqualTo("Reason: ${UpcomingCheckinService.SCHEDULE_CHANGED_REASON}")
+    assertThat(cancelled.notes).isEqualTo("Check in status: Cancelled\n\nReason: ${UpcomingCheckinService.SCHEDULE_CHANGED_REASON}")
   }
 
   @Test
