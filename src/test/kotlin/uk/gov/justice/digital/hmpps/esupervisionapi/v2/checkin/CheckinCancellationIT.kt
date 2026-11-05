@@ -38,6 +38,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
@@ -280,6 +281,61 @@ class CheckinCancellationIT : IntegrationTestBase() {
   }
 
   @Test
+  fun `with ESUP-2223 on, cancelling an upcoming check-in schedules the one after it`() {
+    ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
+    val today = LocalDate.now()
+    val checkin = saveCheckin(CheckinStatus.SCHEDULED, dueDate = today.plusDays(3), firstCheckin = today.plusDays(3))
+
+    cancel(checkin.uuid).expectStatus().isOk
+
+    val next = scheduledCheckins(checkin.offender).single()
+    assertThat(next.dueDate).isEqualTo(today.plusDays(10))
+    assertThat(deliusEventRepository.findAllByCheckinUuidOrderById(next.uuid).map { it.eventType })
+      .containsExactly(DomainEventType.V2_CHECKIN_SCHEDULED)
+  }
+
+  @Test
+  fun `with ESUP-2223 on, cancelling an open check-in schedules the next one`() {
+    ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
+    val today = LocalDate.now()
+    val checkin = saveCheckin(CheckinStatus.CREATED, dueDate = today, firstCheckin = today)
+
+    cancel(checkin.uuid).expectStatus().isOk
+
+    assertThat(scheduledCheckins(checkin.offender).single().dueDate).isEqualTo(today.plusDays(7))
+  }
+
+  @Test
+  fun `a cancelled date stays cancelled when the contact preference changes, and is rebooked when the schedule is set`() {
+    ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
+    val today = LocalDate.now()
+    val checkin = saveCheckin(CheckinStatus.SCHEDULED, dueDate = today.plusDays(3), firstCheckin = today.plusDays(3))
+    cancel(checkin.uuid).expectStatus().isOk
+
+    updateDetails(checkin.offender, """{"contactPreference":{"requestedBy":"PRACT001","contactPreference":"PHONE"}}""")
+    assertThat(scheduledCheckins(checkin.offender).map { it.dueDate }).containsExactly(today.plusDays(10))
+
+    // the practitioner sets the same schedule again: its next date is the cancelled one, so that's rebooked
+    updateDetails(
+      checkin.offender,
+      """{"checkinSchedule":{"requestedBy":"PRACT001","firstCheckin":"${today.plusDays(3)}","checkinInterval":"WEEKLY","mode":"SCHEDULED"}}""",
+    )
+    assertThat(scheduledCheckins(checkin.offender).map { it.dueDate }).containsExactly(today.plusDays(3))
+  }
+
+  private fun scheduledCheckins(offender: Offender) = checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.SCHEDULED)
+
+  private fun updateDetails(offender: Offender, body: String) {
+    webTestClient.post()
+      .uri("/v2/offenders/{uuid}/update_details", offender.uuid)
+      .headers(setAuthorisation(roles = listOf(UI_ROLE)))
+      .contentType(MediaType.APPLICATION_JSON)
+      .bodyValue(body)
+      .exchange()
+      .expectStatus().isOk
+  }
+
+  @Test
   fun `cancelling an upcoming check-in keeps its custom questions with it, not the next check-in`() {
     val checkin = saveCheckin(CheckinStatus.SCHEDULED, dueDate = LocalDate.now().plusDays(3))
     assignPendingQuestions(checkin)
@@ -392,8 +448,15 @@ class CheckinCancellationIT : IntegrationTestBase() {
 
   private fun body(cancelledBy: String, reason: String, sensitive: Boolean) = """{"cancelledBy":"$cancelledBy","reason":"$reason","sensitive":$sensitive}"""
 
-  private fun saveCheckin(status: CheckinStatus, dueDate: LocalDate = LocalDate.now()): OffenderCheckin {
-    val offender = offenderRepository.save(offenderTemplate.copy(uuid = UUID.randomUUID(), crn = "X${(100000..999999).random()}").toEntity())
+  private fun saveCheckin(
+    status: CheckinStatus,
+    dueDate: LocalDate = LocalDate.now(),
+    firstCheckin: LocalDate? = offenderTemplate.firstCheckin,
+  ): OffenderCheckin {
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(uuid = UUID.randomUUID(), crn = "X${(100000..999999).random()}", firstCheckin = firstCheckin).toEntity()
+        .also { it.scheduleUpdatedAt = Instant.now().minusSeconds(60) },
+    )
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(crn = offender.crn, name = Name(forename = "John", surname = "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1), mobile = "07700900000"),
     )

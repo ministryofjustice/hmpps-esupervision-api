@@ -189,12 +189,12 @@ class UpcomingCheckinService(
 
   /**
    * Whether [checkin] takes its date: no other check-in is scheduled for it. A check-in a
-   * practitioner cancelled holds it until the offender is next changed, as the creation job won't
+   * practitioner cancelled holds it until the schedule is next set, as the creation job won't
    * create one for that date until then (see OffenderRepository.findEligibleForCheckinCreation).
    */
   private fun holdsDate(checkin: OffenderCheckin) = checkin.status in STATUSES_HOLDING_DATE ||
     checkin.linkStatus == CheckinLinkStatus.FAILED ||
-    (checkin.status == CheckinStatus.CANCELLED && checkin.cancelledBy != null && checkin.cancelledAt!! > checkin.offender.updatedAt)
+    checkin.holdsCancelledDate()
 
   companion object {
     private val LOGGER = logger<UpcomingCheckinService>()

@@ -102,6 +102,13 @@ open class Offender(
 
   @Column(name = "in_pilot", nullable = false)
   open var inPilot: Boolean = false,
+
+  /**
+   * When a practitioner last set the check-in schedule. A check-in a practitioner cancelled holds
+   * its date until then (see [OffenderCheckin.holdsCancelledDate]).
+   */
+  @Column(name = "schedule_updated_at", nullable = true)
+  open var scheduleUpdatedAt: Instant? = null,
 ) : V2BaseEntity(),
   CheckinSchedule,
   ActiveEvent {
@@ -296,6 +303,17 @@ open class OffenderCheckin(
   @Column(name = "cancelled_by", nullable = true)
   open var cancelledBy: String? = null,
 ) : V2BaseEntity() {
+  /**
+   * Whether a practitioner cancelled this check-in after the schedule was last set, so its date
+   * is held: no other check-in is created or scheduled for it until the practitioner sets the
+   * schedule again. Must match OffenderRepository.findEligibleForCheckinCreation.
+   */
+  fun holdsCancelledDate(): Boolean {
+    if (status != CheckinStatus.CANCELLED || cancelledBy == null) return false
+    val scheduleUpdatedAt = offender.scheduleUpdatedAt ?: return true
+    return cancelledAt!! > scheduleUpdatedAt
+  }
+
   fun dto(
     personalDetails: ContactDetails? = null,
     videoUrl: java.net.URL? = null,

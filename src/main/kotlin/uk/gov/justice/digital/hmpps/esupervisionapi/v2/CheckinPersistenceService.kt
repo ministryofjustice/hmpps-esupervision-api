@@ -301,6 +301,9 @@ class CheckinPersistenceService(
     }
     val event = toEvent(cancelled)
     eventAuditService.recordCheckinCancelled(cancelled, event)
+    // Nothing is upcoming now: schedule the next check-in. The cancelled one holds its date, so
+    // this is the one after it.
+    upcomingCheckinService.scheduleNext(cancelled.offender.id, event.checkin.personalDetails?.let { activeEventNumber(cancelled.offender, it, appConfig.esup2305DeliusEventSelection) })
 
     appEventPublisher.publishEvent(event)
     return event

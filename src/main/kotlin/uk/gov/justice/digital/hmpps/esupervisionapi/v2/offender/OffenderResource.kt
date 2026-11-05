@@ -761,6 +761,8 @@ is *today*.""",
         validateFirstCheckin(mode, schedule.firstCheckin)
         offender.firstCheckin = schedule.firstCheckin
         offender.checkinInterval = schedule.checkinInterval?.duration
+        // Releases dates the practitioner cancelled, so this can rebook them.
+        offender.scheduleUpdatedAt = clock.instant()
         changed = true
       }
 
@@ -842,7 +844,7 @@ is *today*.""",
 
     val offenderId = offender.id
     transactionTemplate.execute {
-      val updated = offenderRepository.maybeUpdate(offenderId, request.firstCheckin, today) > 0
+      val updated = offenderRepository.maybeUpdate(offenderId, request.firstCheckin, today, clock.instant()) > 0
       if (updated) {
         entityManager.refresh(offender)
         if (request.firstCheckin == today) {

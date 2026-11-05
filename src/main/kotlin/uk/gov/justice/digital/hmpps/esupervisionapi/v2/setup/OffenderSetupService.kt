@@ -140,6 +140,7 @@ class OffenderSetupService(
       existing.checkinInterval = offenderInfo.checkinInterval?.duration
       existing.createdBy = offenderInfo.practitionerId
       existing.updatedAt = now
+      existing.scheduleUpdatedAt = now
       existing.contactPreference = offenderInfo.contactPreference
       if (Feature.ESUP_2305 in appConfig.enabledFeatures) {
         offenderInfo.currentEvent?.let { existing.currentEvent = it }
@@ -157,6 +158,7 @@ class OffenderSetupService(
         createdAt = now,
         createdBy = offenderInfo.practitionerId,
         updatedAt = now,
+        scheduleUpdatedAt = now,
         contactPreference = offenderInfo.contactPreference,
         currentEvent = offenderInfo.currentEvent.takeIf { Feature.ESUP_2305 in appConfig.enabledFeatures },
       )
