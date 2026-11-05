@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectResponse
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
@@ -451,6 +452,36 @@ class S3UploadService(
     val key = CheckinVideoKey(uuid)
     val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
     return s3uploadClient.deleteObject(delReq)
+  }
+
+  /**
+   * Deletes the setup photo for a person on probation. S3 deletes are idempotent, so a missing
+   * photo is not an error.
+   */
+  @CircuitBreaker(name = "awsS3")
+  @Retry(name = "awsS3")
+  fun deleteSetupPhoto(offenderUuid: UUID): DeleteObjectResponse? {
+    val key = SetupPhotoKey(offenderUuid)
+    return s3uploadClient.deleteObject(deleteObjectRequest(bucketFor(key), key.toKey()))
+  }
+
+  /**
+   * Deletes everything stored for a check-in - the video and however many snapshots were
+   * uploaded - by listing the check-in's prefix. Returns how many objects were deleted.
+   */
+  @CircuitBreaker(name = "awsS3")
+  @Retry(name = "awsS3")
+  fun deleteCheckinObjects(checkinUuid: UUID): Int {
+    // Both check-in key types share this prefix and bucket.
+    val bucket = bucketFor(CheckinVideoKey(checkinUuid))
+    val prefix = "checkin-$checkinUuid/"
+    val listing = ListObjectsV2Request.builder().bucket(bucket).prefix(prefix).build()
+    var deleted = 0
+    s3uploadClient.listObjectsV2Paginator(listing).contents().forEach { obj ->
+      s3uploadClient.deleteObject(deleteObjectRequest(bucket, obj.key()))
+      deleted++
+    }
+    return deleted
   }
 
   companion object {
