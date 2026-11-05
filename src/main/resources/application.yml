@@ -100,6 +100,11 @@ app:
     # testing the expiry journeys.
     manual-trigger:
       enabled: ${APP_JOBS_MANUAL_TRIGGER_ENABLED:false}
+  # Exposes DELETE /v2/test-support/offenders/crn/{crn} for the e2e tests to delete the people they
+  # created. Dev only: the beans exist only when this is true AND app.env is DEV, so turning it on
+  # anywhere else by mistake still creates nothing and the endpoints 404.
+  test-support:
+    enabled: ${APP_TEST_SUPPORT_ENABLED:false}
   features:
     # publish media proxy links to NDelius
     esup-1239: true
