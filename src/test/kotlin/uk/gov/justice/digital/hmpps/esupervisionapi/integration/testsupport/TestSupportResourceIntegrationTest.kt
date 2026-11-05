@@ -17,6 +17,8 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.reactive.server.WebTestClient
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
@@ -37,6 +39,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepositor
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3PurgeResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.OffenderCleanupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.OffenderCleanupService
@@ -44,6 +47,9 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.TestSupportRe
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 private const val UI_ROLE = "ROLE_ESUPERVISION__ESUPERVISION_UI"
 
@@ -68,18 +74,28 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
 
   @Autowired lateinit var cleanupRepository: OffenderCleanupRepository
 
+  @Autowired lateinit var transactionManager: PlatformTransactionManager
+
   @MockitoBean lateinit var ndeliusApiClient: INdiliusApiClient
 
   @MockitoBean lateinit var s3UploadService: S3UploadService
 
   private val orphan = "T100001"
   private val bystander = "T100002"
+  private val sharedListCrn = "T100003"
+
+  @org.junit.jupiter.api.BeforeEach
+  fun stubS3() {
+    whenever(s3UploadService.purgeSetupPhoto(any())).thenReturn(S3PurgeResult(keysDeleted = 1, keysFailed = 0))
+    whenever(s3UploadService.purgeCheckinObjects(any())).thenReturn(S3PurgeResult(keysDeleted = 2, keysFailed = 0))
+  }
 
   @AfterEach
   fun cleanUp() {
     cleanupRepository.deleteByCrn(orphan)
     cleanupRepository.deleteByCrn(bystander)
-    jdbc.update("delete from question_list where name like 'test-support-%'")
+    cleanupRepository.deleteByCrn(sharedListCrn)
+    jdbc.update("delete from question_list where author = 'test-support'")
     reset(ndeliusApiClient, s3UploadService)
   }
 
@@ -102,12 +118,21 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
       .jsonPath("$.crn").isEqualTo(orphan)
       .jsonPath("$.rowsDeleted.offender_v2").isEqualTo(1)
       .jsonPath("$.rowsDeleted.offender_checkin_v2").isEqualTo(1)
+      .jsonPath("$.rowsDeleted.question_list").isEqualTo(1)
+      .jsonPath("$.s3ObjectsDeleted").isEqualTo(3)
       .jsonPath("$.s3Failures").isEqualTo(0)
 
     assertThat(rowsFor(orphan)).allSatisfy { _, n -> assertThat(n).isZero() }
     assertThat(rowsFor(bystander)).isEqualTo(bystanderBefore)
-    verify(s3UploadService).deleteSetupPhoto(seeded.offenderUuid)
-    verify(s3UploadService).deleteCheckinObjects(seeded.checkinUuid)
+    verify(s3UploadService).purgeSetupPhoto(seeded.offenderUuid)
+    verify(s3UploadService).purgeCheckinObjects(seeded.checkinUuid)
+
+    // The person's own unnamed list goes, with its items; the named list and one still assigned to
+    // someone else stay.
+    assertThat(listExists(seeded.ownListId)).isFalse()
+    assertThat(itemCount(seeded.ownListId)).isZero()
+    assertThat(listExists(seeded.namedListId)).isTrue()
+    assertThat(listExists(seeded.sharedListId)).isTrue()
   }
 
   @Test
@@ -119,7 +144,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
     delete(orphan).expectStatus().isEqualTo(409)
 
     assertThat(rowsFor(orphan)).isEqualTo(before)
-    verify(s3UploadService, never()).deleteSetupPhoto(any())
+    verify(s3UploadService, never()).purgeSetupPhoto(any())
   }
 
   @Test
@@ -136,7 +161,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
   @Test
   fun `S3 failures are reported but do not undo the delete`() {
     seedPerson(orphan)
-    doThrow(RuntimeException("S3 down")).whenever(s3UploadService).deleteSetupPhoto(any())
+    doThrow(RuntimeException("S3 down")).whenever(s3UploadService).purgeSetupPhoto(any())
 
     delete(orphan).expectStatus().isOk
       .expectBody().jsonPath("$.s3Failures").isEqualTo(1)
@@ -168,6 +193,46 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
   }
 
   /**
+   * NOWAIT plus retry: while the app holds the person's row, the cleanup gives up with a 503 rather
+   * than waiting on the lock, which could deadlock with the app and abort a user's request.
+   */
+  @Test
+  fun `gives up rather than waiting while the app holds the person's rows`() {
+    seedPerson(orphan)
+    val before = rowsFor(orphan)
+    val locked = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val holder = thread {
+      TransactionTemplate(transactionManager).executeWithoutResult {
+        jdbc.queryForList("select id from offender_v2 where crn = ? for update", orphan)
+        locked.countDown()
+        release.await(30, TimeUnit.SECONDS)
+      }
+    }
+    try {
+      assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue()
+      delete(orphan).expectStatus().isEqualTo(503)
+      assertThat(rowsFor(orphan)).isEqualTo(before)
+    } finally {
+      release.countDown()
+      holder.join()
+    }
+
+    // Once the app lets go, it goes through.
+    delete(orphan).expectStatus().isOk
+  }
+
+  /**
+   * outbox_items.entity_id has no foreign key, so only the type says what a row points at. A new
+   * type would leave its rows behind; fail here so whoever adds one maps it in the outbox delete.
+   */
+  @Test
+  fun `every outbox item type is handled`() {
+    val types = jdbc.queryForList("select unnest(enum_range(null::outboxitemtype))::text", String::class.java).toSet()
+    assertThat(types).isEqualTo(OffenderCleanupRepository.HANDLED_OUTBOX_TYPES)
+  }
+
+  /**
    * A new table with a foreign key into the person's tables would make the delete fail (or, with a
    * cascade, silently take more than intended). Fail here instead, so whoever adds it updates
    * [OffenderCleanupRepository] and scripts/orphan_crn_cleanup.sql.
@@ -179,15 +244,22 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
       select distinct conrelid::regclass::text || ' -> ' || confrelid::regclass::text
       from pg_constraint
       where contype = 'f'
-        and confrelid::regclass::text in ('offender_v2', 'offender_checkin_v2', 'offender_setup_v2', 'offender_event_log_v2')
+        and confrelid::regclass::text = any (?)
       """,
       String::class.java,
+      OffenderCleanupRepository.DELETED_TABLES.toTypedArray(),
     ).toSet()
 
     assertThat(foreignKeys).isEqualTo(OffenderCleanupRepository.HANDLED_FOREIGN_KEYS)
   }
 
-  private data class Seeded(val offenderUuid: UUID, val checkinUuid: UUID)
+  private data class Seeded(
+    val offenderUuid: UUID,
+    val checkinUuid: UUID,
+    val ownListId: Long,
+    val namedListId: Long,
+    val sharedListId: Long,
+  )
 
   /** One person with a row in every table the cleanup covers. */
   private fun seedPerson(crn: String): Seeded {
@@ -249,12 +321,25 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
       checkin.uuid,
       crn,
     )
-    val listId = jdbc.queryForObject(
-      "insert into question_list (author, name) values ('test', ?) returning id",
-      Long::class.java,
-      "test-support-$crn",
+    // Custom questions: the unnamed list made for this person's assignment (as
+    // upsert_custom_question_list makes one), with an item; a named, shared list; and an unnamed
+    // list that a long-lived case also uses.
+    val ownListId = newList(name = null)
+    jdbc.update(
+      "insert into question_list_item (question_list_id, question_id, position) values (?, (select min(id) from question), 1)",
+      ownListId,
     )
-    jdbc.update("insert into question_list_assignment (question_list_id, offender_id, checkin_id) values (?, ?, ?)", listId, offender.id, checkin.id)
+    val namedListId = newList(name = "test-support-$crn")
+    val sharedListId = newList(name = null)
+    jdbc.update("insert into question_list_assignment (question_list_id, offender_id, checkin_id) values (?, ?, ?)", ownListId, offender.id, checkin.id)
+    jdbc.update("insert into question_list_assignment (question_list_id, offender_id, checkin_id) values (?, ?, ?)", namedListId, offender.id, checkin.id)
+    jdbc.update("insert into question_list_assignment (question_list_id, offender_id, checkin_id) values (?, ?, ?)", sharedListId, offender.id, checkin.id)
+    // The long-lived case may already hold a pending assignment (one per person), from the other seed.
+    jdbc.update(
+      "insert into question_list_assignment (question_list_id, offender_id, checkin_id) values (?, ?, null) on conflict do nothing",
+      sharedListId,
+      sharedListUser().id,
+    )
     jdbc.update(
       """
       insert into outbox_items (type, entity_id) values
@@ -265,8 +350,23 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
       logEntry.id,
       setup.id,
     )
-    return Seeded(offender.uuid, checkin.uuid)
+    return Seeded(offender.uuid, checkin.uuid, ownListId, namedListId, sharedListId)
   }
+
+  private fun newList(name: String?): Long = jdbc.queryForObject(
+    "insert into question_list (author, name) values ('test-support', ?) returning id",
+    Long::class.java,
+    name,
+  )!!
+
+  /** A long-lived case, never cleaned up by these tests' CRNs, that shares a question list. */
+  private fun sharedListUser() = offenderRepository.findByCrn(sharedListCrn).orElseGet {
+    offenderRepository.saveAndFlush(offenderTemplate.copy(crn = sharedListCrn, uuid = UUID.randomUUID()).toEntity())
+  }
+
+  private fun listExists(id: Long) = jdbc.queryForObject("select count(*) from question_list where id = ?", Int::class.java, id) == 1
+
+  private fun itemCount(id: Long) = jdbc.queryForObject("select count(*) from question_list_item where question_list_id = ?", Int::class.java, id)
 
   /** Rows held for a person, per table, found the same ways the cleanup finds them. */
   private fun rowsFor(crn: String): Map<String, Int> {

@@ -36,7 +36,7 @@ class TestSupportResource(
   @ApiResponse(responseCode = "400", description = "Not a valid CRN")
   @ApiResponse(responseCode = "404", description = "No person on probation with this CRN")
   @ApiResponse(responseCode = "409", description = "NDelius still knows this CRN; nothing was deleted")
-  @ApiResponse(responseCode = "503", description = "NDelius could not be checked; nothing was deleted")
+  @ApiResponse(responseCode = "503", description = "NDelius could not be checked, or the app kept the person locked; nothing was deleted")
   fun deleteOffender(
     @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
   ): OffenderCleanupResponse = offenderCleanupService.deleteOffenderNotInDelius(crn)

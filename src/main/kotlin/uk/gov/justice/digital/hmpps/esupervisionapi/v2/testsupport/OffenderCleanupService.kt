@@ -2,11 +2,14 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport
 
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
+import org.springframework.dao.DataAccessException
+import org.springframework.dao.PessimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3PurgeResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.util.UUID
 
@@ -14,8 +17,9 @@ data class OffenderCleanupResponse(
   val crn: String,
   /** Rows deleted per table, in the order they were deleted. */
   val rowsDeleted: Map<String, Int>,
+  /** S3 objects removed for good: every version and delete marker of each key. */
   val s3ObjectsDeleted: Int,
-  /** S3 deletes that failed. The database rows are gone regardless; these objects are left behind. */
+  /** S3 objects, or whole check-ins' worth of them, that could not be removed. The database rows are gone regardless. */
   val s3Failures: Int,
 )
 
@@ -63,7 +67,7 @@ class OffenderCleanupService(
       )
     }
 
-    val deletion = cleanupRepository.deleteByCrn(crn)
+    val deletion = deleteWhenUnlocked(crn)
       ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "No person on probation with CRN $crn")
     LOGGER.info("Test support: deleted crn={} rows={}", crn, deletion.rowsDeleted)
 
@@ -74,29 +78,62 @@ class OffenderCleanupService(
     return OffenderCleanupResponse(crn, deletion.rowsDeleted, s3Deleted, s3Failed)
   }
 
+  /**
+   * The repository locks with NOWAIT, so it fails at once if the app holds the person's rows.
+   * Retry briefly; an app transaction is short. Never waiting on a lock is what keeps this from
+   * deadlocking with, and possibly aborting, a user's request.
+   */
+  private fun deleteWhenUnlocked(crn: String): OffenderDeletion? {
+    repeat(LOCK_ATTEMPTS - 1) { attempt ->
+      try {
+        return cleanupRepository.deleteByCrn(crn)
+      } catch (e: DataAccessException) {
+        if (!e.isLockNotAvailable()) throw e
+        LOGGER.info("Test support: crn={} is locked by the app, retrying (attempt {})", crn, attempt + 1)
+        Thread.sleep(LOCK_BACKOFF_MS * (attempt + 1))
+      }
+    }
+    return try {
+      cleanupRepository.deleteByCrn(crn)
+    } catch (e: DataAccessException) {
+      if (!e.isLockNotAvailable()) throw e
+      throw ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "$crn is being updated by the app. Nothing was deleted; try again shortly.",
+        e,
+      )
+    }
+  }
+
   /** Best effort: the rows are already gone, so a failure here is reported, not thrown. */
   private fun deleteS3Objects(offenderUuid: UUID, checkinUuids: List<UUID>): Pair<Int, Int> {
     var deleted = 0
     var failed = 0
-    try {
-      s3UploadService.deleteSetupPhoto(offenderUuid)
-      deleted++
-    } catch (e: Exception) {
-      LOGGER.warn("Test support: could not delete setup photo for offender {}: {}", offenderUuid, e.javaClass.simpleName)
-      failed++
-    }
-    for (checkinUuid in checkinUuids) {
+    fun purge(what: String, block: () -> S3PurgeResult) {
       try {
-        deleted += s3UploadService.deleteCheckinObjects(checkinUuid)
+        val result = block()
+        deleted += result.keysDeleted
+        failed += result.keysFailed
       } catch (e: Exception) {
-        LOGGER.warn("Test support: could not delete S3 objects for checkin {}: {}", checkinUuid, e.javaClass.simpleName)
+        LOGGER.warn("Test support: could not delete S3 objects for {}: {}", what, e.javaClass.simpleName)
         failed++
       }
     }
+    purge("offender $offenderUuid") { s3UploadService.purgeSetupPhoto(offenderUuid) }
+    checkinUuids.forEach { uuid -> purge("checkin $uuid") { s3UploadService.purgeCheckinObjects(uuid) } }
     return deleted to failed
   }
 
+  /**
+   * NOWAIT failing, Postgres SQL state 55P03. Spring does not translate that state on this path -
+   * it arrives as UncategorizedSQLException - so look for it rather than for an exception type.
+   */
+  private fun DataAccessException.isLockNotAvailable(): Boolean = this is PessimisticLockingFailureException ||
+    generateSequence<Throwable>(this) { it.cause }.any { (it as? java.sql.SQLException)?.sqlState == "55P03" }
+
   companion object {
     private val LOGGER = LoggerFactory.getLogger(OffenderCleanupService::class.java)
+    private const val LOCK_ATTEMPTS = 5
+    private const val LOCK_BACKOFF_MS = 200L
   }
 }
