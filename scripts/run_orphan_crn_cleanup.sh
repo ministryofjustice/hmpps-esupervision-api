@@ -59,6 +59,7 @@
 #   delius_crns.jsonl  NDelius check result per CRN and pass
 #   orphan_crns.txt    the CRNs NDelius answered 404 for -- what gets deleted
 #   orphan_uuids.csv   their offender and check-in UUIDs, for clearing S3
+#   applied-<time>-*   a permanent copy of both, for each committed delete
 
 set -euo pipefail
 umask 077
@@ -256,12 +257,18 @@ new_token() {
 
 # One request. Sets $code and leaves the body in $body. The token goes in on
 # stdin, not argv, so `ps` on a shared host never shows it.
+#
+# Any curl failure (timeout, reset, truncated body) sets code=000, even if a
+# status line had already arrived: a cut-off transfer can still carry a 404
+# that parses, and must never be read as "not in NDelius".
 request() {  # crn
-  code=$(curl -s -o "$body" -w '%{http_code}' \
+  if ! code=$(curl -s -o "$body" -w '%{http_code}' \
     --connect-timeout 10 --max-time "$REQUEST_TIMEOUT" \
     -H @- -H 'Accept: application/json' \
     "$API_BASE/v2/offenders/header/$1" \
-    <<<"Authorization: Bearer $TOKEN") || true
+    <<<"Authorization: Bearer $TOKEN"); then
+    code=000
+  fi
   code="${code:-000}"
 }
 
@@ -312,7 +319,10 @@ for pass in $(seq 1 "$PASSES"); do
         new_token; request "$crn"   # the token expired mid-pass
       fi
       case "$code" in
-        200) result=$(jq -c "$CLASSIFY" "$body" 2>/dev/null) || result='{"status":"UNCHECKED","reason":"unreadable response"}' ;;
+        # -e, and the -n check: an empty body makes jq succeed with no output,
+        # which would record nothing and leave an old NOT_IN_DELIUS standing.
+        200) result=$(jq -ce "$CLASSIFY" "$body" 2>/dev/null) && [[ -n "$result" ]] \
+               || result='{"status":"UNCHECKED","reason":"unreadable response"}' ;;
         404)
           # Only our API's own "not in NDelius" answer counts. A 404 from the
           # ingress or a wrong path must never be read as an orphan.
@@ -379,13 +389,21 @@ run_cleanup() {  # true|false
     -v target_env=dev -v expected_db="$PGDATABASE" -f "$REPO_ROOT/scripts/orphan_crn_cleanup.sql")
 }
 
-if [[ "${APPLY:-}" == 1 && "$already" -gt 0 ]]; then
-  # Some of these 404s may come from an earlier run. Ask again about every
-  # orphan, so nothing is deleted on a stale answer.
+if [[ "${APPLY:-}" == 1 ]]; then
+  # Always, even on a fresh run: the full check can take an hour, and a CRN
+  # found missing early on may be back by now, or the answer may come from an
+  # earlier run. Ask again about every orphan just before deleting.
   pending=$(cat "$ORPHANS")
   check_pending "Re-checking the orphans before deleting"
   summarise
-  if (( orphans == 0 )); then echo "Nothing to clean up after the re-check." >&2; exit 0; fi
+  if (( orphans == 0 )); then
+    echo "Nothing to clean up after the re-check." >&2
+    if (( unchecked > 0 )); then
+      echo "WARNING: $unchecked CRNs could not be checked against NDelius and were left alone. Re-run to retry." >&2
+      exit 3
+    fi
+    exit 0
+  fi
 fi
 
 start_db
@@ -401,10 +419,16 @@ if [[ "${APPLY:-}" == 1 ]]; then
   assert_dev_namespace
   step "Deleting"
   run_cleanup true || die "delete failed -- the transaction was rolled back, nothing was deleted"
-  echo "Done. S3 objects for the deleted UUIDs are listed in $WORK_DIR/orphan_uuids.csv if you want them gone too." >&2
+  # orphan_uuids.csv is rewritten by every run, so keep what this commit
+  # deleted under its own name: once the rows are gone it is the only record
+  # of which S3 objects belonged to them.
+  applied="$WORK_DIR/applied-$(date -u +%Y%m%dT%H%M%SZ)"
+  cp -- "$ORPHANS" "$applied-orphan_crns.txt"
+  cp -- "$WORK_DIR/orphan_uuids.csv" "$applied-orphan_uuids.csv"
+  echo "Done. What was deleted, and their S3 UUIDs, are kept in $applied-*." >&2
 else
   echo >&2
-  echo "Dry run only. Re-run with APPLY=1 to delete (earlier results are reused; the orphans are re-checked first)." >&2
+  echo "Dry run only. Re-run with APPLY=1 to delete (earlier results are reused; the orphans are always re-checked first)." >&2
 fi
 stop_db
 
