@@ -83,6 +83,9 @@ class CheckinCancellationIT : IntegrationTestBase() {
   @Autowired
   private lateinit var persistenceService: CheckinPersistenceService
 
+  @Autowired
+  private lateinit var upcomingCheckinService: UpcomingCheckinService
+
   @MockitoBean
   private lateinit var ndiliusApiClient: INdiliusApiClient
 
@@ -313,6 +316,8 @@ class CheckinCancellationIT : IntegrationTestBase() {
     cancel(checkin.uuid).expectStatus().isOk
 
     updateDetails(checkin.offender, """{"contactPreference":{"requestedBy":"PRACT001","contactPreference":"PHONE"}}""")
+    // a contact preference change doesn't reschedule by itself: re-run scheduling to show the date is still held
+    upcomingCheckinService.scheduleNext(checkin.offender.id)
     assertThat(scheduledCheckins(checkin.offender).map { it.dueDate }).containsExactly(today.plusDays(10))
 
     // the practitioner sets the same schedule again: its next date is the cancelled one, so that's rebooked

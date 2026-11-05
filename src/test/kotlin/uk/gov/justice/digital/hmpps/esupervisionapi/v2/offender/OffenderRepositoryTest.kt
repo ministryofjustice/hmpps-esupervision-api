@@ -132,15 +132,15 @@ class OffenderRepositoryTest : IntegrationTestBase() {
   fun `findEligibleForCheckinCreation - a check-in a practitioner cancelled holds its date until the schedule is set again`() {
     val today = LocalDate.of(2026, 1, 21)
     val updatedAt = Instant.parse("2026-01-20T12:00:00Z")
-    fun offender(crn: String, scheduleUpdatedAt: Instant?, updatedAt: Instant = scheduleUpdatedAt ?: Instant.parse("2026-01-20T12:00:00Z")) = createOffenderV2(crn = crn, firstCheckin = today).apply {
-      this.updatedAt = updatedAt
+    fun offender(crn: String, scheduleUpdatedAt: Instant?, lastUpdatedAt: Instant = scheduleUpdatedAt ?: updatedAt) = createOffenderV2(crn = crn, firstCheckin = today).apply {
+      this.updatedAt = lastUpdatedAt
       this.scheduleUpdatedAt = scheduleUpdatedAt
     }
     val practitionerCancelled = offender("V200030", updatedAt)
     val systemCancelled = offender("V200031", updatedAt)
     val rebooked = offender("V200032", updatedAt.plusSeconds(7200))
     // changed after the cancellation, but not its schedule
-    val otherwiseUpdated = offender("V200033", updatedAt, updatedAt = updatedAt.plusSeconds(7200))
+    val otherwiseUpdated = offender("V200033", updatedAt, lastUpdatedAt = updatedAt.plusSeconds(7200))
     val scheduleNeverSet = offender("V200034", null)
     offenderRepository.saveAll(listOf(practitionerCancelled, systemCancelled, rebooked, otherwiseUpdated, scheduleNeverSet))
 

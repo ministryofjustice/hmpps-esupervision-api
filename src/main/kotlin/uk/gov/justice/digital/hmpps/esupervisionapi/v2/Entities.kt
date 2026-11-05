@@ -310,8 +310,9 @@ open class OffenderCheckin(
    */
   fun holdsCancelledDate(): Boolean {
     if (status != CheckinStatus.CANCELLED || cancelledBy == null) return false
+    val cancelledAt = cancelledAt ?: return false
     val scheduleUpdatedAt = offender.scheduleUpdatedAt ?: return true
-    return cancelledAt!! > scheduleUpdatedAt
+    return cancelledAt > scheduleUpdatedAt
   }
 
   fun dto(

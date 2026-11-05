@@ -753,6 +753,7 @@ is *today*.""",
       }
 
       val offenderBefore = offender.toSummaryDto()
+      val now = clock.instant()
       var changed = false
       request.checkinSchedule?.let { schedule ->
         val mode = schedule.mode ?: offender.mode
@@ -762,7 +763,7 @@ is *today*.""",
         offender.firstCheckin = schedule.firstCheckin
         offender.checkinInterval = schedule.checkinInterval?.duration
         // Releases dates the practitioner cancelled, so this can rebook them.
-        offender.scheduleUpdatedAt = clock.instant()
+        offender.scheduleUpdatedAt = now
         changed = true
       }
 
@@ -780,7 +781,7 @@ is *today*.""",
 
       if (!changed) return@execute null
 
-      offender.updatedAt = clock.instant()
+      offender.updatedAt = now
       val saved = offenderRepository.save(offender)
       // Stopping check-ins cancels today's row but leaves it in the database, so only open or
       // completed check-ins occupy today.

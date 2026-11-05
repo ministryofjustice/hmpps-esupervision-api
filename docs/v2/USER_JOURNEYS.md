@@ -253,7 +253,9 @@ POST /v2/offender_checkins/{uuid}/cancel
 - The cancelled checkin holds its date: neither the daily creation job nor scheduling the next
   checkin uses it again, until the practitioner sets the schedule again (a schedule change,
   booking an ad hoc checkin, or restarting checkins), which can book the date again. Other
-  changes, such as the contact preference, don't release it.
+  changes, such as the contact preference, don't release it. Once today's creation job has run, a
+  cancelled date of today is only booked again if the new schedule moves the first checkin to
+  today, as for any schedule change made after the job.
 - With `ESUP_2223` on, the next checkin is then scheduled (and recorded in NDelius): the one
   after the cancelled date.
 - `409` if the checkin is submitted, reviewed, expired (including open past its window) or
