@@ -97,7 +97,7 @@ class CheckinPersistenceService(
     // an activated check-in was recorded in NDelius when it was scheduled
     if (!activating && upcomingCheckinService.enabled()) {
       // the event's number is the one on record, which can be unset when the caller has NDelius's
-      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) }
+      val eventNumber = event.currentEvent ?: eventNumberFor(checkin.offender, event.checkin.personalDetails)
       checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, CheckinDeliusEventNotes.scheduled(checkin.dueDate), eventNumber, checkin.dueDate)
     }
     val finalisedEvent = event.finalise(checkin, id)
@@ -204,7 +204,7 @@ class CheckinPersistenceService(
     requireStillOpen(checkin)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
-    upcomingCheckinService.scheduleNext(checkin.offender.id, event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) })
+    upcomingCheckinService.scheduleNext(checkin.offender.id, eventNumberFor(checkin.offender, event.checkin.personalDetails))
     if (checkinDeliusEventService.enabled()) {
       checkinDeliusEventService.recordCheckinUpdate(
         DomainEventType.V2_CHECKIN_SUBMITTED,
@@ -311,10 +311,16 @@ class CheckinPersistenceService(
     }
     val event = toEvent(cancelled)
     eventAuditService.recordCheckinCancelled(cancelled, event)
+    // Nothing is upcoming now: schedule the next check-in. The cancelled one holds its date, so
+    // this is the one after it.
+    upcomingCheckinService.scheduleNext(cancelled.offender.id, eventNumberFor(cancelled.offender, event.checkin.personalDetails))
 
     appEventPublisher.publishEvent(event)
     return event
   }
+
+  /** The offender's active event, from their NDelius [details] if known */
+  private fun eventNumberFor(offender: Offender, details: ContactDetails?) = details?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) }
 
   companion object {
     private val LOGGER = logger<CheckinPersistenceService>()

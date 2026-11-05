@@ -129,13 +129,20 @@ class OffenderRepositoryTest : IntegrationTestBase() {
 
   @Test
   @Transactional
-  fun `findEligibleForCheckinCreation - a check-in a practitioner cancelled holds its date until the offender is updated`() {
+  fun `findEligibleForCheckinCreation - a check-in a practitioner cancelled holds its date until the schedule is set again`() {
     val today = LocalDate.of(2026, 1, 21)
     val updatedAt = Instant.parse("2026-01-20T12:00:00Z")
-    val practitionerCancelled = createOffenderV2(crn = "V200030", firstCheckin = today).apply { this.updatedAt = updatedAt }
-    val systemCancelled = createOffenderV2(crn = "V200031", firstCheckin = today).apply { this.updatedAt = updatedAt }
-    val rebooked = createOffenderV2(crn = "V200032", firstCheckin = today).apply { this.updatedAt = updatedAt.plusSeconds(7200) }
-    offenderRepository.saveAll(listOf(practitionerCancelled, systemCancelled, rebooked))
+    fun offender(crn: String, scheduleUpdatedAt: Instant?, lastUpdatedAt: Instant = scheduleUpdatedAt ?: updatedAt) = createOffenderV2(crn = crn, firstCheckin = today).apply {
+      this.updatedAt = lastUpdatedAt
+      this.scheduleUpdatedAt = scheduleUpdatedAt
+    }
+    val practitionerCancelled = offender("V200030", updatedAt)
+    val systemCancelled = offender("V200031", updatedAt)
+    val rebooked = offender("V200032", updatedAt.plusSeconds(7200))
+    // changed after the cancellation, but not its schedule
+    val otherwiseUpdated = offender("V200033", updatedAt, lastUpdatedAt = updatedAt.plusSeconds(7200))
+    val scheduleNeverSet = offender("V200034", null)
+    offenderRepository.saveAll(listOf(practitionerCancelled, systemCancelled, rebooked, otherwiseUpdated, scheduleNeverSet))
 
     fun cancelled(offender: Offender, cancelledBy: String?) = OffenderCheckin(
       uuid = UUID.randomUUID(),
@@ -148,7 +155,13 @@ class OffenderRepositoryTest : IntegrationTestBase() {
       cancelledBy = cancelledBy,
     )
     checkinV2Repository.saveAll(
-      listOf(cancelled(practitionerCancelled, "PRACT1"), cancelled(systemCancelled, null), cancelled(rebooked, "PRACT1")),
+      listOf(
+        cancelled(practitionerCancelled, "PRACT1"),
+        cancelled(systemCancelled, null),
+        cancelled(rebooked, "PRACT1"),
+        cancelled(otherwiseUpdated, "PRACT1"),
+        cancelled(scheduleNeverSet, "PRACT1"),
+      ),
     )
 
     val result = offenderRepository.findEligibleForCheckinCreation(today, today.plusDays(1))

@@ -753,6 +753,7 @@ is *today*.""",
       }
 
       val offenderBefore = offender.toSummaryDto()
+      val now = clock.instant()
       var changed = false
       request.checkinSchedule?.let { schedule ->
         val mode = schedule.mode ?: offender.mode
@@ -761,6 +762,8 @@ is *today*.""",
         validateFirstCheckin(mode, schedule.firstCheckin)
         offender.firstCheckin = schedule.firstCheckin
         offender.checkinInterval = schedule.checkinInterval?.duration
+        // Releases dates the practitioner cancelled, so this can rebook them.
+        offender.scheduleUpdatedAt = now
         changed = true
       }
 
@@ -778,7 +781,7 @@ is *today*.""",
 
       if (!changed) return@execute null
 
-      offender.updatedAt = clock.instant()
+      offender.updatedAt = now
       val saved = offenderRepository.save(offender)
       // Stopping check-ins cancels today's row but leaves it in the database, so only open or
       // completed check-ins occupy today.
@@ -846,7 +849,7 @@ is *today*.""",
 
     val offenderId = offender.id
     transactionTemplate.execute {
-      val updated = offenderRepository.maybeUpdate(offenderId, request.firstCheckin, today) > 0
+      val updated = offenderRepository.maybeUpdate(offenderId, request.firstCheckin, today, clock.instant()) > 0
       if (updated) {
         entityManager.refresh(offender)
         if (request.firstCheckin == today) {

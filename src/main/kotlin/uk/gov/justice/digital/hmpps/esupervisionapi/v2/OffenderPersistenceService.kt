@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import java.time.Clock
 
 @Service
 class OffenderPersistenceService(
@@ -21,6 +22,7 @@ class OffenderPersistenceService(
   private val entityManager: EntityManager,
   private val appEventPublisher: ApplicationEventPublisher,
   private val checkinDeliusEventService: CheckinDeliusEventService,
+  private val clock: Clock,
 ) {
 
   /**
@@ -83,6 +85,8 @@ class OffenderPersistenceService(
       offender.checkinInterval = event.offender.checkinInterval?.duration
       offender.contactPreference = event.offender.contactPreference
       offender.currentEvent = event.offender.currentEvent
+      // Restarting check-ins sets the schedule, releasing dates the practitioner cancelled.
+      offender.scheduleUpdatedAt = clock.instant()
       offenderRepository.save(offender)
 
       outboxItemRepository.addOutboxItem(OutboxItemType.OFFENDER_REACTIVATED, setup.get().id)
