@@ -17,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
@@ -105,6 +106,7 @@ class CheckinService(
         LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED,
         LogEntryType.OFFENDER_CHECKIN_REVIEW_SUBMITTED,
         LogEntryType.OFFENDER_CHECKIN_ANNOTATED,
+        LogEntryType.OFFENDER_CHECKIN_CANCELLED,
       ),
     )
     val checkinLogs = CheckinLogsDto(hint = CheckinLogsHint.SUBSET, logs = events)
@@ -133,6 +135,8 @@ class CheckinService(
         ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
       }
 
+    requireLinkSent(checkin)
+
     if (checkin.offender.crn != personalDetails.crn) {
       LOGGER.warn(
         "CRN mismatch for checkin {}: expected {}, got {}",
@@ -158,7 +162,7 @@ class CheckinService(
 
     if (checkin.checkinStartedAt == null) {
       checkin.checkinStartedAt = clock.instant()
-      transactionTemplate.executeWithoutResult { checkinRepository.save(checkin) }
+      checkinPersistenceService.saveOpenCheckin(checkin)
     }
 
     LOGGER.info("Identity validated successfully for checkin {}", uuid)
@@ -222,10 +226,26 @@ class CheckinService(
   fun submitCheckin(uuid: UUID, request: SubmitCheckinRequest): CheckinDto {
     val maybeCheckin = checkinPersistenceService.findCheckin(uuid)
     val checkin = validateCheckinForSubmission(uuid, maybeCheckin)
-    checkin.applyRequest(request, clock)
-
     val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
-    val event = checkin.toCheckinSubmittedEvent(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    val ineligibility = contactDetails?.let { checkinIneligibilityReason(checkin.offender, it) }
+    if (ineligibility != null) {
+      throw ResponseStatusException(
+        HttpStatus.BAD_REQUEST,
+        "Cannot submit check-in because ${ineligibility.description}.",
+      )
+    }
+
+    if (appConfig.esup2305DeliusEventSelection && contactDetails != null && activeEventNumber(checkin.offender, contactDetails) == null) {
+      throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot submit check-in because a probation event must be selected.")
+    }
+
+    checkin.applyRequest(request, clock)
+    val event = checkin.toCheckinSubmittedEvent(
+      contactDetails,
+      clock = clock,
+      checkinWindow = checkinWindowPeriod,
+      eventSelectionEnabled = appConfig.esup2305DeliusEventSelection,
+    )
     checkinPersistenceService.checkinSubmission(checkin, event)
 
     LOGGER.info("Checkin submitted: {}, submission started at {}", uuid, checkin.checkinStartedAt)
@@ -233,10 +253,23 @@ class CheckinService(
   }
 
   /**
+   * ESUP-2223 link-sent gate: a check-in can't be started or submitted until GOV.UK Notify has
+   * accepted its invite, so NDelius records the link as sent before the check-in is received.
+   * Check-ins created before ESUP-2223 have no link status and aren't held.
+   */
+  private fun requireLinkSent(checkin: OffenderCheckin) {
+    if (checkin.status == CheckinStatus.SCHEDULED || checkin.linkStatus == CheckinLinkStatus.SENDING) {
+      LOGGER.warn("Checkin {} is not open yet: status={}, linkStatus={}", checkin.uuid, checkin.status, checkin.linkStatus)
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin is not open yet: ${checkin.uuid}")
+    }
+  }
+
+  /**
    * Returns the validated value or throws.
    */
   private fun validateCheckinForSubmission(uuid: UUID, maybeCheckin: OffenderCheckin?): OffenderCheckin {
     val checkin = maybeCheckin ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    requireLinkSent(checkin)
     if (checkin.status != CheckinStatus.CREATED) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Can't submit checkin with status: ${checkin.status}")
     }
@@ -318,7 +351,7 @@ class CheckinService(
 
     checkin.autoIdCheck = outcome.result
     checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     return FacialRecognitionResult(outcome.result)
   }
@@ -402,6 +435,44 @@ class CheckinService(
     return event.checkin
   }
 
+  /**
+   * A practitioner cancels a check-in that is upcoming (SCHEDULED) or open (CREATED). The offender
+   * is told if it was open, since they have the link.
+   *
+   * @throws ResponseStatusException 404 if not found, 409 if it can't be cancelled in its status
+   */
+  fun cancelCheckin(uuid: UUID, request: CancelCheckinRequest): CheckinDto {
+    val checkin = checkinPersistenceService.findCheckin(uuid) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Checkin not found: $uuid")
+    val previousStatus = checkin.status
+    // An open check-in past its window is expired, though the expiry job may not have marked it yet.
+    if (previousStatus !in CANCELLABLE_STATUSES ||
+      (previousStatus == CheckinStatus.CREATED && checkin.isPastSubmissionDate(clock, checkinWindowPeriod))
+    ) {
+      val shownStatus = checkin.dto(clock = clock, checkinWindow = checkinWindowPeriod).status
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin cannot be cancelled. Current status: $shownStatus")
+    }
+
+    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val cancellation = CheckinCancellation(
+      cancelledBy = request.cancelledBy,
+      cancelledAt = clock.instant(),
+      reason = request.reason,
+      sensitive = request.sensitive,
+    )
+    val event = checkinPersistenceService.checkinCancellation(checkin, previousStatus, cancellation) { cancelled ->
+      CheckinCancelledEvent(
+        checkinId = cancelled.id,
+        offenderId = cancelled.offender.id,
+        practitionerId = cancelled.offender.practitionerId,
+        checkin = cancelled.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
+        offenderContactPreference = cancelled.offender.contactPreference,
+        previousStatus = previousStatus,
+      )
+    } ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin $uuid changed while it was being cancelled")
+    LOGGER.info("Checkin cancelled: {} (was {}) by {}", uuid, previousStatus, request.cancelledBy)
+    return event.checkin
+  }
+
   /** Get proxy URL for checkin video */
   fun getVideoProxyUrl(uuid: UUID): URL {
     val checkin =
@@ -455,7 +526,7 @@ class CheckinService(
     checkin.livenessConfidence = null
     checkin.autoIdCheck = null
     checkin.autoIdCheckScore = null
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     val sessionId = awaitRekognition(
       future = livenessSessionService.createSession(),
@@ -707,7 +778,7 @@ class CheckinService(
     checkin.livenessConfidence = confidence
     checkin.autoIdCheck = outcome.result
     checkin.autoIdCheckScore = outcome.topSimilarity
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
 
     return LivenessVerificationResponse(
       isLive = isLive,
@@ -788,7 +859,7 @@ class CheckinService(
     checkin.livenessConfidence = confidence
     checkin.autoIdCheck = AutomatedIdVerificationResult.ERROR
     checkin.autoIdCheckScore = null
-    checkinRepository.save(checkin)
+    checkinPersistenceService.saveOpenCheckin(checkin)
     return LivenessVerificationResponse(
       isLive = isLive,
       livenessConfidence = confidence,
@@ -921,7 +992,7 @@ class CheckinService(
 
     val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
-    if (activeEventNumber(offender, personalDetails) == null) {
+    if (activeEventNumber(offender, personalDetails, appConfig.esup2305DeliusEventSelection) == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
 
@@ -931,7 +1002,8 @@ class CheckinService(
       createdBy = requestedBy,
     )
 
-    return checkin.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+    return checkin?.dto(personalDetails, clock = clock, checkinWindow = checkinWindowPeriod)
+      ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Failed to create checkin, a check-in possibly exists for given due date")
   }
 
   fun sendInvite(uuid: UUID, request: CheckinNotificationRequest): CheckinDto {
@@ -950,7 +1022,11 @@ class CheckinService(
       }
 
     val offender = checkin.offender
-    val currentEvent = if (contactDetails == null) offender.currentEvent else activeEventNumber(offender, contactDetails)
+    val currentEvent = if (contactDetails == null) {
+      offender.currentEvent
+    } else {
+      activeEventNumber(offender, contactDetails, appConfig.esup2305DeliusEventSelection)
+    }
     if (currentEvent == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
     }
@@ -1083,6 +1159,7 @@ class CheckinService(
   companion object {
     private val LOGGER = logger<CheckinService>()
     private const val SYSTEM_PRACTITIONER = "system"
+    private val CANCELLABLE_STATUSES = setOf(CheckinStatus.SCHEDULED, CheckinStatus.CREATED)
   }
 }
 
@@ -1157,6 +1234,7 @@ private fun OffenderCheckin.toCheckinSubmittedEvent(
   contactDetails: ContactDetails?,
   clock: Clock,
   checkinWindow: Period,
+  eventSelectionEnabled: Boolean,
   videoUrl: URL? = null,
   snapshotUrl: URL? = null,
 ) = CheckinSubmittedEvent(
@@ -1165,6 +1243,7 @@ private fun OffenderCheckin.toCheckinSubmittedEvent(
   checkin = this.dto(contactDetails, clock = clock, checkinWindow = checkinWindow, videoUrl = videoUrl, snapshotUrl = snapshotUrl),
   practitionerId = this.offender.practitionerId,
   offenderContactPreference = this.offender.contactPreference,
+  currentEvent = contactDetails?.let { activeEventNumber(this.offender, it, eventSelectionEnabled) } ?: this.offender.currentEvent,
 )
 
 private fun OffenderCheckin.toCheckinReviewedEvent(

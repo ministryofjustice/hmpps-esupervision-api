@@ -34,6 +34,7 @@ data class OffenderDeactivatedEvent(
   val activeEventNumber: Long?,
   val reason: String? = null,
   val sensitive: Boolean = false,
+  val expectedCurrentEvent: Long? = offender.currentEvent,
   val deliusOutcomeCode: String? = auditEventType.deliusOutcomeCode,
   /**
    * Passed in the notification message to practitioner.
@@ -118,7 +119,9 @@ data class CheckinSubmittedEvent(
   override val practitionerId: ExternalUserId,
   override val checkin: CheckinDto,
   override val offenderContactPreference: ContactPreference,
-) : ICheckinEvent {
+  override val currentEvent: Long? = null,
+) : ICheckinEvent,
+  ActiveEvent {
   override val outboxItemCoords = OutboxItemType.CHECKIN_SUBMITTED to checkinId
 }
 
@@ -144,6 +147,23 @@ data class CheckinAnnotatedEvent(
 }
 
 /**
+ * A practitioner cancelled the check-in. [practitionerId] is the offender's practitioner, as for
+ * the other check-in events; who cancelled it is [CheckinDto.cancelledBy].
+ */
+data class CheckinCancelledEvent(
+  override val checkinId: Long,
+  override val offenderId: Long,
+  override val practitionerId: ExternalUserId,
+  override val checkin: CheckinDto,
+  override val offenderContactPreference: ContactPreference,
+  /** The status it was cancelled from */
+  val previousStatus: CheckinStatus,
+) : ICheckinEvent {
+  /** Only an open check-in was sent to the offender, so only then do they hear it was cancelled. */
+  val notifyOffender: Boolean get() = previousStatus == CheckinStatus.CREATED
+}
+
+/**
  * Finalised event requires the checkin ID to be set, which we only get after DB insert is done.
  */
 data class PartialCheckinCreatedEvent(
@@ -157,10 +177,10 @@ data class PartialCheckinCreatedEvent(
 ) : ICheckinEventBase,
   IPartialEvent,
   ActiveEvent {
-  fun finalise(checkin: OffenderCheckin): CheckinCreatedEvent {
-    require(checkin.id != 0L) { "Checkin ID must be set after DB insert" }
+  fun finalise(checkin: OffenderCheckin, id: Long): CheckinCreatedEvent {
+    require(id != 0L) { "Checkin ID must be set after DB insert" }
     return CheckinCreatedEvent(
-      checkinId = checkin.id,
+      checkinId = id,
       offenderId = offenderId,
       practitionerId = practitionerId,
       checkin = this.checkin,

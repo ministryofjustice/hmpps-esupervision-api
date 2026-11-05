@@ -199,3 +199,19 @@ class NotifyRetryableFailure : Predicate<Throwable> {
     }
   }
 }
+
+/**
+ * GOV.UK Notify failures after which it may still have sent the notification: those that reached
+ * Notify but that [NotifyRetryableFailure] won't resend for that reason - a read timeout or reset
+ * after sending, or a 502/504 from its gateway.
+ */
+class NotifyOutcomeUnknown : Predicate<Throwable> {
+  override fun test(t: Throwable): Boolean {
+    if (t !is NotificationClientException) return false
+    return when (t.httpResult) {
+      502, 504 -> true
+      0 -> !NotifyRetryableFailure().test(t)
+      else -> false
+    }
+  }
+}

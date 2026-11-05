@@ -162,7 +162,8 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(0L, feedbackSummary.helpsFeelSupportedCounts["notAnswered"])
     assertEquals(0, BigDecimal("0.5000").compareTo(feedbackSummary.helpsFeelSupportedPct["yes"]))
     assertEquals(1L, feedbackSummary.lessContactNeededCounts["no"])
-    assertEquals(1L, feedbackSummary.lessContactNeededCounts["notAnswered"])
+    // feedback from before the new questions went live was never asked them, so is not counted as notAnswered
+    assertEquals(0L, feedbackSummary.lessContactNeededCounts["notAnswered"])
     assertEquals(0, BigDecimal("1.0000").compareTo(feedbackSummary.lessContactNeededPct["no"]))
 
     val feedbackRows =
@@ -221,9 +222,62 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
     assertEquals(2L, extendedFeedbackSummary.helpsFeelSupportedCounts["yes"])
     assertEquals(1L, extendedFeedbackSummary.helpsFeelSupportedCounts["no"])
     assertEquals(BigDecimal("0.6667"), extendedFeedbackSummary.helpsFeelSupportedPct["yes"])
-    // an unexpected value is not an answer
+    // an unexpected value is never counted as an answer; this one is from before the new questions
+    // went live, so it is not counted as notAnswered either
     assertEquals(null, extendedFeedbackSummary.lessContactNeededCounts["maybe"])
-    assertEquals(2L, extendedFeedbackSummary.lessContactNeededCounts["notAnswered"])
+    assertEquals(0L, extendedFeedbackSummary.lessContactNeededCounts["notAnswered"])
+  }
+
+  @Test
+  fun `new feedback questions only count as not answered after they went live`() {
+    jdbcTemplate.update(
+      """
+      INSERT INTO feedback (feedback, created_at)
+      VALUES
+        -- old form, before the new questions went live
+        ('{"version":1,"howEasy":"easy"}'::jsonb, '2026-10-20T10:00:00Z'),
+        ('{"version":1,"howEasy":"easy"}'::jsonb, '2026-11-03T15:08:57Z'),
+        -- new form
+        ('{"version":1,"howEasy":"easy"}'::jsonb, '2026-11-03T15:08:58Z'),
+        ('{"version":1,"howEasy":"easy","helpsFeelSupported":"yes"}'::jsonb, '2026-11-04T10:00:00Z'),
+        ('{"version":1,"howEasy":"easy","helpsFeelSupported":"no","lessContactNeeded":"yes"}'::jsonb, '2026-11-05T10:00:00Z'),
+        ('{"version":1,"howEasy":"easy","helpsFeelSupported":"yes","lessContactNeeded":"maybe"}'::jsonb, '2026-11-06T10:00:00Z')
+      """,
+    )
+
+    val job = MonthlyStatsRefreshJob(jdbcTemplate, fixedClock)
+    job.refresh(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 1))
+
+    val summary = statsSummaryRepository.getFeedbackSummary(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 12, 1))
+
+    assertEquals(6L, summary.feedbackTotal)
+    // existing questions are unaffected
+    assertEquals(6L, summary.howEasyCounts["easy"])
+    assertEquals(mapOf("yes" to 2L, "no" to 1L, "notAnswered" to 1L), summary.helpsFeelSupportedCounts)
+    assertEquals(0, BigDecimal("0.6667").compareTo(summary.helpsFeelSupportedPct["yes"]))
+    assertEquals(0, BigDecimal("0.3333").compareTo(summary.helpsFeelSupportedPct["no"]))
+    // an unexpected value counts as not answered
+    assertEquals(mapOf("yes" to 1L, "notAnswered" to 3L), summary.lessContactNeededCounts)
+    assertEquals(0, BigDecimal("1.0000").compareTo(summary.lessContactNeededPct["yes"]))
+
+    val monthlyNotAnswered =
+      jdbcTemplate.queryForList(
+        """
+        SELECT month, feedback_key, (counts->>'notAnswered')::bigint AS not_answered
+        FROM monthly_feedback_stats
+        WHERE feedback_key IN ('helpsFeelSupported', 'lessContactNeeded')
+        ORDER BY month, feedback_key
+        """,
+      ).map { Triple(it["month"].toString(), it["feedback_key"], it["not_answered"]) }
+    assertEquals(
+      listOf(
+        Triple("2026-10-01", "helpsFeelSupported", 0L),
+        Triple("2026-10-01", "lessContactNeeded", 0L),
+        Triple("2026-11-01", "helpsFeelSupported", 1L),
+        Triple("2026-11-01", "lessContactNeeded", 3L),
+      ),
+      monthlyNotAnswered,
+    )
   }
 
   @Test
@@ -238,7 +292,8 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
         (4, 'SETUP_COMPLETED', '2026-01-05T10:00:00Z', 'X000004', 'P1', 'N03', 'Wales'),
         (5, 'OFFENDER_DEACTIVATED', '2026-01-10T10:00:00Z', 'X000001', 'P1', 'N03', 'Wales'),
         (6, 'OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED', '2026-01-11T10:00:00Z', 'X000002', 'P1', 'N03', 'Wales'),
-        (7, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-12T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales')
+        (7, 'OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS', '2026-01-12T10:00:00Z', 'X000003', 'P1', 'N03', 'Wales'),
+        (8, 'OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE', '2026-01-13T10:00:00Z', 'X000004', 'P1', 'N03', 'Wales')
       """,
     )
 
@@ -246,8 +301,8 @@ class MonthlyStatsRefreshJobIT : IntegrationTestBase() {
 
     val summary = statsSummaryRepository.getSummary(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), "ALL").first()
     assertEquals(4, summary.totalSignedUp)
-    assertEquals(3, summary.totalInactiveUsers)
-    assertEquals(1, summary.totalActiveUsers)
+    assertEquals(4, summary.totalInactiveUsers)
+    assertEquals(0, summary.totalActiveUsers)
   }
 
   @ParameterizedTest

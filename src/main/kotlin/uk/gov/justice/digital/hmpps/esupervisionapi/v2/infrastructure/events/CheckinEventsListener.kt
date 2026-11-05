@@ -7,6 +7,7 @@ import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancelledEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
@@ -36,6 +37,7 @@ class CheckinEventsListener(
         is CheckinSubmittedEvent -> notificationService.sendCheckinSubmittedNotifications(event)
         is CheckinReviewedEvent -> notificationService.sendCheckinReviewedNotifications(event)
         is CheckinAnnotatedEvent -> notificationService.sendCheckinUpdatedNotifications(event)
+        is CheckinCancelledEvent -> notificationService.sendCheckinCancelledNotifications(event)
       }
       event.outboxItemCoords?.let { (type, id) ->
         val result = outboxItemRepository.markAsSent(type.name, id)

@@ -14,11 +14,15 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -36,8 +40,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventPublisher
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
@@ -88,6 +94,12 @@ class CheckinCreationJobIT : IntegrationTestBase() {
   @Autowired
   lateinit var job: CheckinCreationJob
 
+  @Autowired
+  lateinit var appConfig: AppConfig
+
+  @Autowired
+  lateinit var deliusEventRepository: CheckinDeliusEventRepository
+
   @MockitoBean
   lateinit var ndeliusApiClient: INdiliusApiClient
 
@@ -114,37 +126,8 @@ class CheckinCreationJobIT : IntegrationTestBase() {
     )
       .toEntity().let { offenderRepository.save(it) }
 
-    val practitionerDetails = PractitionerDetails(name = Name("John", "Smith"), email = "foo@example.com")
     whenever(ndeliusApiClient.getContactDetailsForMultiple(any()))
-      .thenAnswer { invocation ->
-        val crns = invocation.getArgument<List<String>>(0)
-        listOf(
-          ContactDetails(
-            crn = "A000001",
-            name = Name("John", "Smith"),
-            email = "a1@example.com",
-            practitioner = practitionerDetails,
-            events = listOf(
-              Event(
-                number = 1L,
-                mainOffence = CodedDescription("OFF01", "Test"),
-                sentence = null,
-              ),
-            ),
-            dateOfBirth = LocalDate.of(1980, 1, 1),
-          ),
-          ContactDetails(
-            crn = "A000002",
-            name = Name("John", "Smith"),
-            email = "a2@example.com",
-            practitioner = practitionerDetails,
-            events = listOf(
-              Event(number = 1L, mainOffence = CodedDescription("OFF01", "Test"), sentence = null),
-            ),
-            dateOfBirth = LocalDate.of(1980, 1, 1),
-          ),
-        ).filter { it.crn in crns }
-      }
+      .thenAnswer { contactDetailsFor(it.getArgument(0)) }
 
     whenever(notifyGateway.send(any(), any(), any(), any(), any()))
       .thenAnswer { UUID.randomUUID() }
@@ -152,6 +135,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
 
   @AfterEach
   fun cleanDb() {
+    jdbcTemplate.update("TRUNCATE TABLE checkin_delius_event_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE generic_notification_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE offender_checkin_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
@@ -166,7 +150,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
     job.process()
 
     await()
-      .atMost(Duration.ofSeconds(10000))
+      .atMost(Duration.ofSeconds(30))
       .pollInterval(100, TimeUnit.MILLISECONDS)
       .untilAsserted {
         val checkins = checkinRepository.findAll().associateBy { it.offender.crn }
@@ -202,7 +186,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
     val offender = offenderRepository.findByCrn("A000001").orElseThrow()
     val checkin = prepareCheckin(offender)
 
-    lateinit var stopping: CompletableFuture<Offender?>
+    lateinit var stopping: CompletableFuture<Boolean>
     transactionTemplate.executeWithoutResult {
       assertEquals(1, checkinCreationService.createCheckins(listOf(checkin)).size)
       stopping = CompletableFuture.supplyAsync {
@@ -214,7 +198,7 @@ class CheckinCreationJobIT : IntegrationTestBase() {
       }
     }
 
-    assertEquals(offender.id, stopping.get(10, TimeUnit.SECONDS)?.id)
+    assertEquals(true, stopping.get(10, TimeUnit.SECONDS))
     assertEquals(CheckinStatus.CANCELLED, checkinRepository.findByUuid(checkin.first.uuid).orElseThrow().status)
   }
 
@@ -229,5 +213,119 @@ class CheckinCreationJobIT : IntegrationTestBase() {
       currentEvent = 1L,
       checkinMode = offender.mode,
     )
+  }
+
+  @Test
+  fun `activates a scheduled check-in instead of creating another`() {
+    val offender = offenderRepository.findByCrn("A000001").orElseThrow()
+    val scheduled = checkinRepository.save(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.SCHEDULED,
+        dueDate = clock.today(),
+        createdAt = clock.instant(),
+        createdBy = "SYSTEM",
+      ),
+    )
+
+    job.process()
+
+    val checkins = checkinRepository.findAll()
+    assertEquals(2, checkins.size)
+    val activated = checkins.single { it.id == scheduled.id }
+    assertEquals(scheduled.uuid, activated.uuid)
+    assertEquals(CheckinStatus.CREATED, activated.status)
+    await()
+      .atMost(Duration.ofSeconds(10))
+      .pollInterval(100, TimeUnit.MILLISECONDS)
+      .untilAsserted {
+        outboxItemRepository
+          .findByTypeAndEntityId(OutboxItemType.CHECKIN_CREATED, scheduled.id)
+          .orElseThrow()
+          .let { assertEquals(OutboxItemStatus.SENT, it.status) }
+      }
+  }
+
+  @Test
+  fun `with ESUP_2223 on, a check-in that wasn't scheduled is created and recorded as scheduled`() {
+    val featuresBefore = appConfig.enabledFeatures
+    ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore + Feature.ESUP_2223)
+    val checkins = try {
+      job.process()
+      // the invites are sent asynchronously and record link events: let them finish before cleanup
+      await()
+        .atMost(Duration.ofSeconds(30))
+        .pollInterval(100, TimeUnit.MILLISECONDS)
+        .until { checkinRepository.findAll().let { it.size == 2 && it.all { checkin -> checkin.linkStatus == CheckinLinkStatus.SENT } } }
+      checkinRepository.findAll()
+    } finally {
+      ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore)
+    }
+
+    assertEquals(listOf(CheckinStatus.CREATED, CheckinStatus.CREATED), checkins.map { it.status })
+    assertEquals(
+      checkins.map { it.uuid to DomainEventType.V2_CHECKIN_SCHEDULED }.toSet(),
+      deliusEventRepository.findAll().filter { it.eventType == DomainEventType.V2_CHECKIN_SCHEDULED }.map { it.checkinUuid to it.eventType }.toSet(),
+    )
+  }
+
+  @Test
+  fun `check-ins stopped while the job waits for NDelius - neither the upcoming check-in nor a new one is created`() {
+    val offender = offenderRepository.findByCrn("A000001").orElseThrow()
+    val scheduled = checkinRepository.save(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.SCHEDULED,
+        dueDate = clock.today(),
+        createdAt = clock.instant(),
+        createdBy = "SYSTEM",
+      ),
+    )
+    whenever(ndeliusApiClient.getContactDetailsForMultiple(any())).thenAnswer {
+      if (offender.crn in it.getArgument<List<String>>(0)) {
+        jdbcTemplate.update("update offender_v2 set status = 'INACTIVE' where id = ?", offender.id)
+        jdbcTemplate.update("update offender_checkin_v2 set status = 'CANCELLED' where id = ?", scheduled.id)
+      }
+      contactDetailsFor(it.getArgument(0))
+    }
+
+    job.process()
+
+    assertEquals(
+      listOf(CheckinStatus.CANCELLED),
+      checkinRepository.findAll().filter { it.offender.id == offender.id }.map { it.status },
+    )
+  }
+
+  private fun contactDetailsFor(crns: List<String>): List<ContactDetails> {
+    val practitionerDetails = PractitionerDetails(name = Name("John", "Smith"), email = "foo@example.com")
+    return listOf(
+      ContactDetails(
+        crn = "A000001",
+        name = Name("John", "Smith"),
+        email = "a1@example.com",
+        practitioner = practitionerDetails,
+        events = listOf(
+          Event(
+            number = 1L,
+            mainOffence = CodedDescription("OFF01", "Test"),
+            sentence = null,
+          ),
+        ),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
+      ContactDetails(
+        crn = "A000002",
+        name = Name("John", "Smith"),
+        email = "a2@example.com",
+        practitioner = practitionerDetails,
+        events = listOf(
+          Event(number = 1L, mainOffence = CodedDescription("OFF01", "Test"), sentence = null),
+        ),
+        dateOfBirth = LocalDate.of(1980, 1, 1),
+      ),
+    ).filter { it.crn in crns }
   }
 }

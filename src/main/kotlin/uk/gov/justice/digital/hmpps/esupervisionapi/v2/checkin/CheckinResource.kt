@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CancelCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCollectionResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinListUseCase
@@ -320,6 +321,23 @@ class CheckinResource(
     val checkin = checkinService.annotateCheckin(uuid, request)
     return ResponseEntity.ok(checkin)
   }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @PostMapping("/{uuid}/cancel")
+  @Operation(
+    summary = "Cancel a checkin",
+    description = """Practitioner cancels an upcoming (SCHEDULED) or open (CREATED) checkin, giving a reason.
+The person on probation is told if the checkin was open. The reason is recorded against the checkin
+and, if NDelius has the checkin, sent to NDelius as the note on its contact, marked sensitive if requested.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Checkin cancelled")
+  @ApiResponse(responseCode = "400", description = "Invalid request")
+  @ApiResponse(responseCode = "404", description = "Checkin not found")
+  @ApiResponse(responseCode = "409", description = "Checkin cannot be cancelled in its current status")
+  fun cancelCheckin(
+    @Parameter(description = "Checkin UUID", required = true) @PathVariable uuid: UUID,
+    @RequestBody @Valid request: CancelCheckinRequest,
+  ): ResponseEntity<CheckinDto> = ResponseEntity.ok(checkinService.cancelCheckin(uuid, request))
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/{uuid}/proxy/video")

@@ -2,19 +2,26 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.asSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinLinkService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -26,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.Notificatio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationWithRecipient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
+import uk.gov.service.notify.NotificationClientException
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -44,11 +52,13 @@ class NotificationOrchestratorServiceTest {
   private val eventDetailService: EventDetailService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val appConfig: AppConfig = mock()
+  private val checkinLinkService: CheckinLinkService = mock()
 
   private lateinit var service: NotificationOrchestratorService
 
   @BeforeEach
   fun setUp() {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     whenever(appConfig.checkinSubmitUrlV2(any())).thenReturn(URI("https://example.com/submitv2"))
     whenever(appConfig.checkinReviewUrlV2(any(), any())).thenReturn(URI("https://example.com/reviewv2"))
     whenever(appConfig.feedbackUrl()).thenReturn(URI("https://example.com/feedback"))
@@ -64,6 +74,7 @@ class NotificationOrchestratorServiceTest {
       appConfig,
       clock,
       Duration.ofHours(72),
+      checkinLinkService,
     )
   }
 
@@ -198,7 +209,9 @@ class NotificationOrchestratorServiceTest {
   fun `sendCheckinCreatedNotifications - happy path - sends to offender only`() {
     val offender = createOffender()
     val checkin = createCheckin(offender)
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(
+      events = createContactDetails().events + Event(2, CodedDescription("OFF02", "Selected offence"), sentence = null),
+    )
 
     whenever(
       notificationPersistence.buildOffenderNotifications(
@@ -217,7 +230,7 @@ class NotificationOrchestratorServiceTest {
       checkinId = checkin.id,
       practitionerId = offender.practitionerId,
       offenderContactPreference = offender.contactPreference,
-      currentEvent = null,
+      currentEvent = 2L,
       checkinMode = offender.mode,
     )
     service.sendCheckinCreatedNotifications(event)
@@ -237,9 +250,122 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = 2L)),
     )
     verify(ndiliusApiClient, never()).getContactDetails(any())
+  }
+
+  @Nested
+  inner class CheckinLink {
+    private val offender = createOffender()
+    private val checkin = createCheckin(offender)
+    private val invite = reactivationNotification(offender, NotificationType.OffenderCheckinInvite, "invite-template", "ref")
+
+    private fun event(contactDetails: ContactDetails? = createContactDetails(), currentEvent: Long? = 1) = CheckinCreatedEvent(
+      checkin = checkin.dto(contactDetails, clock = clock),
+      offenderId = offender.id,
+      checkinId = checkin.id,
+      practitionerId = offender.practitionerId,
+      offenderContactPreference = offender.contactPreference,
+      currentEvent = currentEvent,
+      checkinMode = offender.mode,
+    )
+
+    @Test
+    fun `an invite Notify accepts marks the link sent`() {
+      stubReactivationSending(offender, invite, "07700900123")
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkSent(checkin.id, "SMS")
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+    }
+
+    @Test
+    fun `an invite Notify accepts is marked sent even if recording the notification fails`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      doThrow(RuntimeException("database unavailable")).whenever(notificationPersistence).updateSingleNotificationStatus(any(), eq(true), any(), anyOrNull())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkSent(checkin.id, "SMS")
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+      verify(checkinLinkService, never()).linkMaybeSent(any())
+      // not recorded as failed: Notify sent it
+      verify(notificationPersistence, never()).updateSingleNotificationStatus(any(), eq(false), any(), anyOrNull())
+    }
+
+    @Test
+    fun `an invite Notify rejects fails the link even if recording the notification fails`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenThrow(RuntimeException("rejected"))
+      doThrow(RuntimeException("database unavailable")).whenever(notificationPersistence).updateSingleNotificationStatus(any(), eq(false), any(), anyOrNull())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NOTIFY_FAILED)
+    }
+
+    @Test
+    fun `an invite Notify rejects marks the link failed and tells the practitioner`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenThrow(RuntimeException("rejected"))
+      whenever(checkinLinkService.linkFailed(any(), any())).thenReturn(true)
+      whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NOTIFY_FAILED)
+      verify(notificationPersistence).buildPractitionerNotifications(any(), any(), any(), any(), eq(NotificationType.PractitionerInviteIssueGeneric), any())
+      // the email links to the person's activity log in MPoP
+      verify(appConfig).contactsUrl(offender.crn)
+    }
+
+    @Test
+    fun `an invite Notify may have sent keeps the check-in open, without telling the practitioner`() {
+      stubReactivationSending(offender, invite, "07700900123")
+      val gatewayTimeout = NotificationClientException::class.java
+        .getDeclaredConstructor(Int::class.javaPrimitiveType, String::class.java)
+        .apply { isAccessible = true }
+        .newInstance(504, "Status code: 504")
+      whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenAnswer { throw gatewayTimeout }
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkMaybeSent(checkin.id)
+      verify(checkinLinkService, never()).linkFailed(any(), any())
+      verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `the practitioner isn't told when the link status didn't change`() {
+      whenever(notificationPersistence.offenderChannelEnabled(any())).thenReturn(true)
+      whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ADDRESS)
+      verify(notificationPersistence, never()).buildPractitionerNotifications(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `an invite by a switched-off channel fails with that reason, not a missing address`() {
+      whenever(notificationPersistence.offenderChannelEnabled(any())).thenReturn(false)
+      whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event())
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.CHANNEL_DISABLED)
+    }
+
+    @Test
+    fun `no contact details or no active event marks the link failed`() {
+      service.sendCheckinCreatedNotifications(event(contactDetails = null))
+      service.sendCheckinCreatedNotifications(event(contactDetails = null, currentEvent = null))
+
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_CONTACT_DETAILS)
+      verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ACTIVE_EVENT)
+    }
   }
 
   @Test
@@ -290,6 +416,75 @@ class NotificationOrchestratorServiceTest {
   }
 
   @Test
+  fun `sendCheckinCancelledNotifications - an open check-in sends the cancelled template to the offender`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED).apply { dueDate = LocalDate.of(2025, 12, 3) }
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinCancelled.name,
+      recipientType = "OFFENDER",
+      channel = "SMS",
+      offenderId = offender.id,
+      reference = "OCAN-001",
+      templateId = "cancelled-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "07700900123"
+    whenever(
+      notificationPersistence.buildOffenderNotifications(
+        eq(offender.id),
+        eq(offender.crn),
+        eq(offender.contactPreference),
+        eq(contactDetails),
+        eq(NotificationType.OffenderCheckinCancelled),
+      ),
+    ).thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, contactDetails, CheckinStatus.CREATED))
+
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("cancelled-template"),
+      eq(recipient),
+      eq(mapOf("name" to "John", "date" to "Wednesday 3 December 2025")),
+      eq(notification.reference),
+    )
+    verifyNoInteractions(domainEventService)
+  }
+
+  @Test
+  fun `sendCheckinCancelledNotifications - an upcoming check-in sends nothing`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED)
+
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, createContactDetails(), CheckinStatus.SCHEDULED))
+
+    verifyNoInteractions(notificationPersistence, notifyGateway, domainEventService)
+  }
+
+  @Test
+  fun `sendCheckinCancelledNotifications - without contact details sends nothing`() {
+    val offender = createOffender()
+    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED)
+
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, null, CheckinStatus.CREATED))
+
+    verifyNoInteractions(notificationPersistence, notifyGateway)
+  }
+
+  private fun cancelledEvent(offender: Offender, checkin: OffenderCheckin, contactDetails: ContactDetails?, previousStatus: CheckinStatus) = CheckinCancelledEvent(
+    checkinId = checkin.id,
+    offenderId = offender.id,
+    practitionerId = offender.practitionerId,
+    checkin = checkin.dto(contactDetails, clock = clock),
+    offenderContactPreference = offender.contactPreference,
+    previousStatus = previousStatus,
+  )
+
+  @Test
   fun `sendReminderCheckinNotifications - happy path - sends to offender only`() {
     val offender = createOffender()
     val checkin = createCheckin(offender)
@@ -323,7 +518,9 @@ class NotificationOrchestratorServiceTest {
   fun `sendCheckinSubmittedNotifications test`() {
     val offender = createOffender()
     val checkin = createCheckin(offender, status = CheckinStatus.SUBMITTED)
-    val contactDetails = createContactDetails()
+    val contactDetails = createContactDetails().copy(
+      events = createContactDetails().events + Event(2, CodedDescription("OFF02", "Selected offence"), sentence = null),
+    )
 
     whenever(
       notificationPersistence.buildOffenderNotifications(
@@ -353,6 +550,7 @@ class NotificationOrchestratorServiceTest {
       offender.practitionerId,
       checkin.dto(contactDetails, clock = clock),
       offender.contactPreference,
+      currentEvent = 2L,
     )
     service.sendCheckinSubmittedNotifications(event)
 
@@ -362,7 +560,7 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
-      eq(null),
+      eq(AdditionalInformation(eventNumber = 2L)),
     )
     verify(eventAuditService, never()).recordCheckinSubmitted(checkin, event)
   }
@@ -419,7 +617,31 @@ class NotificationOrchestratorServiceTest {
       eq(checkin.offender.crn),
       any(),
       eq(null),
+      eq(AdditionalInformation(eventNumber = 1L)),
+    )
+  }
+
+  @ParameterizedTest
+  @CsvSource("true,true", "true,false", "false,true", "false,false")
+  fun `sendCheckinExpiredNotifications - retains saved association after event disappears`(enabled: Boolean, hasOtherEvent: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = createOffender().apply { currentEvent = 101L }
+    val checkin = createCheckin(offender, status = CheckinStatus.EXPIRED)
+    val details = createContactDetails().copy(
+      events = if (hasOtherEvent) listOf(Event(202L, CodedDescription("X", "Another offence"), null)) else emptyList(),
+    )
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendCheckinExpiredNotifications(checkin, details)
+
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_CHECKIN_EXPIRED),
+      eq(checkin.uuid),
+      eq(offender.crn),
+      any(),
       eq(null),
+      eq(AdditionalInformation(eventNumber = 101L)),
     )
   }
 
@@ -693,6 +915,115 @@ class NotificationOrchestratorServiceTest {
           outcomeCode = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode,
         ),
       ),
+    )
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - selected event no longer active uses automatic stopped template`() {
+    val offender = createOffender().apply { contactPreference = ContactPreference.EMAIL }
+    val contactDetails = createContactDetailsWithEvents()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinsStoppedAuto.name,
+      recipientType = "OFFENDER",
+      channel = "EMAIL",
+      offenderId = offender.id,
+      reference = "AUTO-STOP-001",
+      templateId = "automatic-stopped-email-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "test@test.com"
+    val notifyId = UUID.randomUUID()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.buildPractitionerNotifications(any(), any(), anyOrNull(), anyOrNull(), any(), any()))
+      .thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(notifyId)
+
+    service.sendDeactivationCompletedNotifications(
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        auditEventType = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+        setup = null,
+        activeEventNumber = null,
+      ),
+    )
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStoppedAuto),
+    )
+    verify(notifyGateway).send(
+      eq("EMAIL"),
+      eq("automatic-stopped-email-template"),
+      eq(recipient),
+      eq(
+        mapOf(
+          "name" to "John Smith",
+          "practitionerName" to "Jane",
+          "reason" to "eligibility rules",
+          "popDashboardUrl" to "https://example.com/dashboard",
+        ),
+      ),
+      eq(notification.reference),
+    )
+    verify(notificationPersistence).updateSingleNotificationStatus(
+      notification = eq(notification),
+      success = eq(true),
+      notifyId = eq(notifyId),
+      error = isNull(),
+    )
+    verify(domainEventService).publishDomainEvent(
+      eq(DomainEventType.V2_SETUP_REMOVED),
+      eq(offender.uuid),
+      eq(offender.crn),
+      any(),
+      isNull(),
+      eq(
+        AdditionalInformation(
+          eventNumber = null,
+          setupId = null,
+          outcomeCode = OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode,
+        ),
+      ),
+    )
+  }
+
+  @Test
+  fun `sendDeactivationCompletedNotifications - practitioner deactivation uses manual stopped template`() {
+    val offender = createOffender()
+    val contactDetails = createContactDetailsWithEvents()
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(emptyList())
+
+    service.sendDeactivationCompletedNotifications(
+      OffenderDeactivatedEvent(
+        offenderId = offender.id,
+        offender = offender.dto(contactDetails),
+        auditEventType = OffenderAuditEventType.OFFENDER_DEACTIVATED,
+        setup = null,
+        activeEventNumber = null,
+      ),
+    )
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(offender.contactPreference),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsStopped),
     )
   }
 

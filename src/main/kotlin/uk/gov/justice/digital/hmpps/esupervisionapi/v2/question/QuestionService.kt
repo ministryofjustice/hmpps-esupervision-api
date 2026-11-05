@@ -76,7 +76,14 @@ class QuestionService(
 
     val upcoming = upcomingAssignment(offender)
     val items = if (upcoming.questionList != null) questionsRepository.getListItems(upcoming.questionList, language) else questionsRepository.defaultListItems(language)
-    return UpcomingQuestionListItems(upcoming.expectedCheckinDate, items)
+    // The practitioner UI cancels the upcoming check-in by uuid, and this is the only place it
+    // reads the upcoming check-in from, so the uuid rides along with the questions.
+    val checkinUuid = upcoming.expectedCheckinDate?.let { dueDate ->
+      checkinRepository.findAllByOffenderAndDueDate(offender, dueDate)
+        .firstOrNull { it.status in UPCOMING_CHECKIN_STATUSES }
+        ?.uuid
+    }
+    return UpcomingQuestionListItems(upcoming.expectedCheckinDate, items, checkinUuid)
   }
 
   /**
@@ -122,7 +129,9 @@ class QuestionService(
       CheckinMode.SCHEDULED -> null
     }
 
+    // an upcoming check-in isn't a check-in yet: until it is activated, treat today as if it didn't exist
     val checkins = checkinRepository.findAllByOffenderAndDueDate(offender, today)
+      .filter { it.status != CheckinStatus.SCHEDULED }
     val isDueToday = when (offender.mode) {
       CheckinMode.SCHEDULED -> isCheckinDay(offender, today)
       CheckinMode.AD_HOC -> offender.firstCheckin == today
@@ -245,6 +254,7 @@ class QuestionService(
   }
 
   companion object {
+    private val UPCOMING_CHECKIN_STATUSES = setOf(CheckinStatus.SCHEDULED, CheckinStatus.CREATED)
     val LOG = logger<QuestionService>()
   }
 }

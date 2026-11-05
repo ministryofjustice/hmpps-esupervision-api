@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -18,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
@@ -43,6 +46,7 @@ class CheckinCreationService(
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val transactionTemplate: TransactionTemplate,
   private val checkinPersistenceService: CheckinPersistenceService,
+  private val appConfig: AppConfig,
 ) {
 
   val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -58,7 +62,7 @@ class CheckinCreationService(
     offenderUuid: UUID,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val offender =
       offenderRepository.findByUuid(offenderUuid).orElseThrow {
         ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $offenderUuid")
@@ -79,58 +83,61 @@ class CheckinCreationService(
     offender: Offender,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
-  ): OffenderCheckin {
+  ): OffenderCheckin? {
     val contactDetails = ndiliusApiClient.getContactDetails(offender.crn)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
     return createCheckinForOffender(offender, dueDate, createdBy, contactDetails)
   }
 
   /**
-   * Create a checkin for an offender
+   * Create a checkin for an offender. If the offender has an upcoming (SCHEDULED) check-in for
+   * [dueDate], that check-in is activated instead, keeping its UUID.
    * @param offender Offender entity
    * @param dueDate Due date for checkin
    * @param createdBy Who created the checkin
    * @param contactDetails Contact details for offender
-   * @return Created checkin
+   * @return the created check-in, or null if the offender already has one for [dueDate]
+   * @throws ResponseStatusException 409 if the offender's check-ins were stopped, or the upcoming
+   *   check-in it would activate was cancelled, meanwhile
    */
   fun createCheckinForOffender(
     offender: Offender,
     dueDate: LocalDate,
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
-  ): OffenderCheckin {
-    val checkin =
-      OffenderCheckin(
-        uuid = UUID.randomUUID(),
-        offender = offender,
-        status = CheckinStatus.CREATED,
-        dueDate = dueDate,
-        createdAt = clock.instant(),
-        createdBy = createdBy,
-      )
+  ): OffenderCheckin? {
+    val eventNumber = resolveEventNumber(offender.currentEvent, contactDetails)
+    val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), dueDate).singleOrNull()
+    val checkin = newOrActivatedCheckin(offender, dueDate, createdBy, scheduled)
 
     val event = PartialCheckinCreatedEvent(
       offenderId = checkin.offender.id,
       practitionerId = checkin.createdBy,
       checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
       offenderContactPreference = checkin.offender.contactPreference,
-      currentEvent = checkin.offender.currentEvent,
+      currentEvent = eventNumber,
       checkinMode = offender.mode,
     )
 
-    if (!checkinPersistenceService.checkinCreation(checkin, event)) {
+    val finalisedEvent = checkinPersistenceService.checkinCreation(checkin, event)
+    if (finalisedEvent == null && offenderRepository.findStatus(offender.id) != OffenderStatus.VERIFIED.name) {
       throw ResponseStatusException(HttpStatus.CONFLICT, "Check-ins have been stopped for CRN=${offender.crn}")
     }
-
+    // Not activated, and not because the date already has a check-in: the upcoming check-in was
+    // cancelled (check-ins were stopped) after it was read above.
+    if (finalisedEvent == null && scheduled != null && !checkinRepository.existsCreated(offender.id, dueDate)) {
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-in ${checkin.uuid} was cancelled before it could be created")
+    }
     LOGGER.info(
-      "Created checkin {} for offender CRN={} with due date {} by {}",
+      "{} checkin {} for offender CRN={} with due date {} by {}",
+      if (finalisedEvent != null) "Created" else "Did not create",
       checkin.uuid,
       offender.crn,
       dueDate,
       createdBy,
     )
 
-    return checkin
+    return finalisedEvent?.let { checkinRepository.findById(it.checkinId).orElseThrow() }
   }
 
   /**
@@ -139,13 +146,30 @@ class CheckinCreationService(
    * @throws BatchCheckinCreationException
    */
   @Transactional
-  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>): List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>> {
-    if (checkins.isEmpty()) return emptyList()
+  fun createCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>): List<CheckinCreatedEvent> {
+    if (checkins.isEmpty()) return listOf()
+    val created = mutableListOf<CheckinCreatedEvent>()
     try {
-      return checkins.filter { (checkin, event) -> checkinPersistenceService.checkinCreation(checkin, event) }
+      checkins.forEach { (_, event) -> resolveEventNumber(event.currentEvent, event.checkin.personalDetails) }
+      for ((checkin, event) in checkins) {
+        checkinPersistenceService.checkinCreation(checkin, event)?.let(created::add)
+      }
     } catch (e: Exception) {
       throw BatchCheckinCreationException(checkins, e)
     }
+    return created
+  }
+
+  private fun resolveEventNumber(currentEvent: Long?, contactDetails: ContactDetails?): Long? {
+    val enabled = appConfig.esup2305DeliusEventSelection
+    val eventNumber = contactDetails?.let { activeEventNumber(currentEvent, it, enabled) }
+    if (eventNumber == null && currentEvent != null && contactDetails != null) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because ${CheckinIneligibilityReason.SELECTED_EVENT_NO_LONGER_ACTIVE.description}.")
+    }
+    if (eventNumber == null && enabled) {
+      throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Cannot create check-in because a probation event must be selected.")
+    }
+    return eventNumber
   }
 
   /**
@@ -153,16 +177,39 @@ class CheckinCreationService(
    * Does not save to database - call batchCreateCheckins() to persist
    * @param offender Offender entity
    * @param dueDate Due date for checkin
+   * @param scheduled the offender's upcoming check-in for [dueDate], if any, to activate instead of creating a new one
    * @return Checkin entity ready to save
    */
-  fun prepareCheckinForOffender(offender: Offender, dueDate: LocalDate): OffenderCheckin = OffenderCheckin(
-    uuid = UUID.randomUUID(),
-    offender = offender,
-    status = CheckinStatus.CREATED,
-    dueDate = dueDate,
-    createdAt = clock.instant(),
-    createdBy = "SYSTEM",
-  )
+  fun prepareCheckinForOffender(offender: Offender, dueDate: LocalDate, scheduled: OffenderCheckin? = null): OffenderCheckin = newOrActivatedCheckin(offender, dueDate, "SYSTEM", scheduled)
+
+  /**
+   * A CREATED check-in, not yet saved: [scheduled] activated, or a new one. Activation keeps the
+   * UUID NDelius already knows the check-in by; saving it fires the same triggers as an insert
+   * (outbox item, question assignment). It takes the creation time and creator of the activation,
+   * as a new check-in would.
+   */
+  private fun newOrActivatedCheckin(offender: Offender, dueDate: LocalDate, createdBy: ExternalUserId, scheduled: OffenderCheckin?): OffenderCheckin {
+    if (scheduled == null) {
+      return OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.CREATED,
+        dueDate = dueDate,
+        createdAt = clock.instant(),
+        createdBy = createdBy,
+      )
+    }
+    require(scheduled.status == CheckinStatus.SCHEDULED && scheduled.dueDate == dueDate) {
+      "Check-in ${scheduled.uuid} is ${scheduled.status} for ${scheduled.dueDate}, expected SCHEDULED for $dueDate"
+    }
+    LOGGER.info("Activating scheduled checkin {} due {}", scheduled.uuid, dueDate)
+    return scheduled.apply {
+      this.offender = offender
+      status = CheckinStatus.CREATED
+      createdAt = clock.instant()
+      this.createdBy = createdBy
+    }
+  }
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(CheckinCreationService::class.java)

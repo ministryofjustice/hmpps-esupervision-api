@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNull
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
@@ -30,13 +33,17 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinUploadHashesRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinByCrnRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CreateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IdentityValidationResponse
@@ -54,6 +61,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.LivenessResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
@@ -105,6 +113,7 @@ class CheckinServiceTest {
   @BeforeEach
   fun setUp() {
     reset(s3UploadService)
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     service = buildService(allowPastDueDate = false)
 
     whenever(s3UploadService.getCheckinSnapshot(any(), any())).thenReturn(URI.create("https://snapshot/1").toURL())
@@ -237,6 +246,125 @@ class CheckinServiceTest {
     assertNull(result.videoUrl, "Submission result should not contain media URLs")
     assertNull(result.snapshotUrl, "Submission result should not contain media URLs")
     verify(checkinPersistenceService).checkinSubmission(any(), any())
+  }
+
+  @ParameterizedTest
+  @CsvSource("CREATED, SENDING", "SCHEDULED, ")
+  fun `submitCheckin - a check-in whose link isn't sent can't be submitted`(status: CheckinStatus, linkStatus: CheckinLinkStatus?) {
+    val checkin = submittableCheckin(status, linkStatus)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.submitCheckin(checkin.uuid, SubmitCheckinRequest(survey = mapOf("question1" to "answer1")))
+    }
+
+    assertEquals(HttpStatus.CONFLICT, exception.statusCode)
+    assertNull(checkin.submittedAt)
+    verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
+  }
+
+  @Test
+  fun `submitCheckin - a check-in whose link is sent can be submitted`() {
+    val checkin = submittableCheckin(CheckinStatus.CREATED, CheckinLinkStatus.SENT)
+
+    val result = service.submitCheckin(checkin.uuid, SubmitCheckinRequest(survey = mapOf("question1" to "answer1")))
+
+    assertEquals(CheckinStatus.SUBMITTED, result.status)
+    verify(checkinPersistenceService).checkinSubmission(any(), any())
+  }
+
+  private fun submittableCheckin(status: CheckinStatus, linkStatus: CheckinLinkStatus?): OffenderCheckin {
+    val offender = createOffender()
+    val checkin = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = status,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      checkinStartedAt = clock.instant(),
+    ).also { it.linkStatus = linkStatus }
+    whenever(checkinPersistenceService.findCheckin(checkin.uuid)).thenReturn(checkin)
+    whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
+    whenever(s3UploadService.isSetupPhotoUploaded(offender)).thenReturn(false)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
+    return checkin
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = [true, false])
+  fun `submitCheckin - unresolved sentence selection is rejected only when enabled`(enabled: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = createOffender()
+    val checkin = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      checkinStartedAt = clock.instant(),
+    )
+    val sentence = Event.Sentence(
+      date = LocalDate.now(clock).minusMonths(1),
+      description = "Community order",
+      expectedEndDate = LocalDate.now(clock).plusMonths(6),
+    )
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(
+        Event(1L, CodedDescription("X", "An offence"), sentence),
+        Event(2L, CodedDescription("Y", "Another offence"), sentence.copy(expectedEndDate = null)),
+      ),
+    )
+    whenever(checkinPersistenceService.findCheckin(checkin.uuid)).thenReturn(checkin)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(details)
+    whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
+    val request = SubmitCheckinRequest(survey = mapOf("question1" to "answer1"))
+
+    if (enabled) {
+      val exception = assertThrows(ResponseStatusException::class.java) { service.submitCheckin(checkin.uuid, request) }
+      assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+      assertEquals(CheckinStatus.CREATED, checkin.status)
+      assertNull(checkin.submittedAt)
+      verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
+    } else {
+      assertEquals(CheckinStatus.SUBMITTED, service.submitCheckin(checkin.uuid, request).status)
+      verify(checkinPersistenceService).checkinSubmission(any(), any())
+    }
+  }
+
+  @Test
+  fun `submitCheckin - rejects when selected event is no longer active`() {
+    val uuid = UUID.randomUUID()
+    val offender = createOffender().apply { currentEvent = 1L }
+    val checkin = OffenderCheckin(
+      uuid = uuid,
+      offender = offender,
+      status = CheckinStatus.CREATED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      checkinStartedAt = clock.instant(),
+    )
+    val contactDetails = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      events = listOf(Event(2L, CodedDescription("X", "Another offence"), sentence = null)),
+    )
+    whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
+    whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      service.submitCheckin(uuid, SubmitCheckinRequest(survey = emptyMap()))
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    assertEquals(CheckinStatus.CREATED, checkin.status)
+    verify(checkinPersistenceService, never()).checkinSubmission(any(), any())
   }
 
   @Test
@@ -789,7 +917,7 @@ class CheckinServiceTest {
 
     assertEquals("session-123", result.sessionId)
     assertTrue(checkin.livenessEnabled)
-    verify(checkinRepository).save(checkin)
+    verify(checkinPersistenceService).saveOpenCheckin(checkin)
   }
 
   @Test
@@ -1345,6 +1473,49 @@ class CheckinServiceTest {
     verify(checkinCreationService).createCheckin(offender.uuid, dueDate, "PRACT001")
   }
 
+  @ParameterizedTest
+  @CsvSource("true,true", "true,false", "false,true", "false,false")
+  fun `manual creation rejects a stale saved selection`(enabled: Boolean, byCrn: Boolean) {
+    whenever(appConfig.esup2305DeliusEventSelection).thenReturn(enabled)
+    val offender = createOffender().apply {
+      currentEvent = 1L
+      mode = CheckinMode.AD_HOC
+      firstCheckin = null
+    }
+    val details = contactDetails(offender).copy(events = listOf(Event(2L, CodedDescription("X", "Another offence"), null)))
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(details)
+
+    val exception = assertThrows(ResponseStatusException::class.java) {
+      if (byCrn) {
+        service.createCheckinByCrn(CreateCheckinByCrnRequest("PRACT001", offender.crn, LocalDate.now(clock)))
+      } else {
+        service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, LocalDate.now(clock)))
+      }
+    }
+
+    assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
+  }
+
+  @Test
+  fun `manual creation rejects ambiguous unsaved sentences`() {
+    val offender = createOffender()
+    val sentence = Event.Sentence(LocalDate.now(clock), "Community order")
+    val details = contactDetails(offender).copy(
+      events = listOf(Event(1L, CodedDescription("X", "An offence"), sentence), Event(2L, CodedDescription("Y", "Another offence"), sentence)),
+    )
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(details)
+
+    assertThrows(ResponseStatusException::class.java) {
+      service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, LocalDate.now(clock)))
+    }
+
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
+  }
+
   @Test
   fun `createCheckinByCrn - accepts today's due date when past dates not enabled`() {
     val dueDate = LocalDate.now(clock)
@@ -1360,11 +1531,48 @@ class CheckinServiceTest {
     verify(checkinCreationService).createCheckin(offender.uuid, dueDate, "PRACT001")
   }
 
+  @Test
+  fun `createCheckin - returns 422 when a CREATED check-in already exists for the due date`() {
+    val dueDate = LocalDate.now(clock)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByUuid(offender.uuid)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001")).thenReturn(null)
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.createCheckin(CreateCheckinRequest("PRACT001", offender.uuid, dueDate))
+    }
+
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, ex.statusCode)
+  }
+
+  @Test
+  fun `createCheckinByCrn - returns 422 when a CREATED check-in already exists for the due date`() {
+    val dueDate = LocalDate.now(clock)
+    val offender = createOffender()
+    offender.currentEvent = 1L
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails(offender))
+    whenever(checkinCreationService.createCheckin(offender.uuid, dueDate, "PRACT001")).thenReturn(null)
+
+    val ex = assertThrows(ResponseStatusException::class.java) {
+      service.createCheckinByCrn(CreateCheckinByCrnRequest("PRACT001", offender.crn, dueDate))
+    }
+
+    assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, ex.statusCode)
+  }
+
   private fun contactDetails(offender: Offender) = uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails(
     crn = offender.crn,
     name = uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name("John", "Doe"),
     email = "john@example.com",
     dateOfBirth = LocalDate.of(1980, 1, 1),
+    events = listOfNotNull(
+      offender.currentEvent?.let { eventNumber ->
+        Event(eventNumber, CodedDescription("X", "An offence"), sentence = null)
+      },
+    ),
   )
 
   private fun createdCheckin(offender: Offender, dueDate: LocalDate) = OffenderCheckin(

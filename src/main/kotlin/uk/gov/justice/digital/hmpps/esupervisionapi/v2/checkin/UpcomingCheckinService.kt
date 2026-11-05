@@ -1,0 +1,212 @@
+package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
+
+import jakarta.persistence.EntityManager
+import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
+import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
+import java.time.Clock
+import java.time.LocalDate
+import java.util.UUID
+
+/**
+ * ESUP-2223: keeps an offender's next check-in recorded in NDelius before it is due, as an
+ * upcoming (SCHEDULED) check-in. Only the next check-in is recorded: while a check-in is open
+ * (CREATED), the one after it is scheduled once that one is submitted or missed.
+ *
+ * Scheduling never fails the change that triggered it. A gap it leaves is filled when the check-in
+ * is created on its due date, which records it as scheduled first (see
+ * [uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService.checkinCreation]).
+ */
+@Service
+class UpcomingCheckinService(
+  private val offenderRepository: OffenderRepository,
+  private val checkinRepository: OffenderCheckinRepository,
+  private val checkinDeliusEventService: CheckinDeliusEventService,
+  private val appConfig: AppConfig,
+  private val clock: Clock,
+  private val entityManager: EntityManager,
+  private val jobLogRepository: JobLogRepository,
+  transactionManager: PlatformTransactionManager,
+) {
+  private val newTransaction = TransactionTemplate(transactionManager).apply {
+    propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+  }
+
+  fun enabled() = appConfig.enabledFeatures.contains(Feature.ESUP_2223)
+
+  /**
+   * Make the offender's upcoming check-in match their schedule: schedule it if there isn't one,
+   * move it (rescheduled) if the next date has changed, or cancel it if there's no longer a next
+   * date. Only an upcoming (SCHEDULED) check-in moves: one already created, whose link may have
+   * been sent, is left as it is. Inside a transaction this runs once the transaction commits, so
+   * it sees the change that triggered it.
+   *
+   * @param eventNumber the offender's active event, if the caller knows it; otherwise the one on record
+   */
+  fun scheduleNext(offenderId: Long, eventNumber: Long? = null) {
+    if (!enabled()) return
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      TransactionSynchronizationManager.registerSynchronization(
+        object : TransactionSynchronization {
+          override fun afterCommit() = scheduleNextNow(offenderId, eventNumber, includeToday = null)
+        },
+      )
+    } else {
+      scheduleNextNow(offenderId, eventNumber, includeToday = null)
+    }
+  }
+
+  /**
+   * For the check-in creation job, before it creates today's check-ins: today counts as the next
+   * check-in date, as the job is about to create (activate) it.
+   */
+  fun scheduleNextBeforeCreation(offenderId: Long) {
+    if (!enabled()) return
+    scheduleNextNow(offenderId, eventNumber = null, includeToday = true)
+  }
+
+  private fun scheduleNextNow(offenderId: Long, eventNumber: Long?, includeToday: Boolean?) {
+    try {
+      newTransaction.executeWithoutResult { scheduleNextInTransaction(offenderId, eventNumber, includeToday) }
+    } catch (e: Exception) {
+      LOGGER.error("Failed to schedule the next check-in for offender id={}", offenderId, e)
+    }
+  }
+
+  /** @param includeToday whether today can be the next check-in date; null: only if today's creation job hasn't started */
+  private fun scheduleNextInTransaction(offenderId: Long, eventNumber: Long?, includeToday: Boolean?) {
+    // Locking the offender serialises this with stopping check-ins, which cancels upcoming check-ins.
+    val offender = offenderRepository.findByIdForUpdate(offenderId).orElse(null) ?: return
+    // Under open-in-view this joins the request's persistence context, which may hold the offender
+    // as it was before the change that triggered this.
+    entityManager.refresh(offender)
+    if (offender.status != OffenderStatus.VERIFIED) return
+    val today = clock.today()
+    val event = eventNumber ?: offender.currentEvent
+
+    // Locked: activation may be about to make it today's check-in. If it has, it's no longer SCHEDULED.
+    var scheduled = checkinRepository.findScheduledForUpdate(offender)?.also { entityManager.refresh(it) }
+    if (scheduled != null && scheduled.dueDate < today) {
+      // Its due date passed without it being created: no active event, or the schedule changed.
+      cancel(scheduled, NOT_CREATED_REASON)
+      scheduled = null
+    }
+
+    // After today's creation job has started, a check-in for today won't be created, so today can't
+    // be scheduled. An upcoming check-in already due today may still be: the job may be activating it
+    // now. It can still be moved or cancelled, as activation checks the locked row's date and status.
+    val creationJobStarted = includeToday != true && creationJobStarted(today)
+
+    if (checkinRepository.findAllByOffenderAndStatus(offender, CheckinStatus.CREATED).isNotEmpty()) {
+      // Only the next check-in is recorded, and that's the open one. An upcoming one alongside it is
+      // left from a schedule change that created today's check-in.
+      scheduled?.let { cancel(it, SCHEDULE_CHANGED_REASON) }
+      return
+    }
+
+    // An upcoming check-in due today counts today, so it's left alone if the schedule still has today.
+    val from = if (creationJobStarted && scheduled?.dueDate != today) today.plusDays(1) else today
+    val dueDate = nextCheckinDate(offender, from)
+    if (scheduled != null) {
+      when (dueDate) {
+        scheduled.dueDate -> {}
+        null -> cancel(scheduled, SCHEDULE_CHANGED_REASON)
+        else -> move(scheduled, dueDate)
+      }
+      return
+    }
+    if (dueDate == null) return
+    val checkin = checkinRepository.save(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.SCHEDULED,
+        dueDate = dueDate,
+        createdAt = clock.instant(),
+        createdBy = "SYSTEM",
+      ),
+    )
+    checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, CheckinDeliusEventNotes.scheduled(dueDate), event, dueDate)
+    LOGGER.info("Scheduled checkin {} for CRN {} due {}", checkin.uuid, offender.crn, dueDate)
+  }
+
+  // No event number on updates: NDelius matches the contact by check-in, and rejects an update whose
+  // event number differs from the contact's, which it would if the active event changed since.
+
+  private fun cancel(scheduled: OffenderCheckin, reason: String) {
+    scheduled.status = CheckinStatus.CANCELLED
+    checkinRepository.save(scheduled)
+    checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_CANCELLED, scheduled, CheckinDeliusEventNotes.cancelled(reason), eventNumber = null)
+    LOGGER.info("Cancelled checkin {} due {}: {}", scheduled.uuid, scheduled.dueDate, reason)
+  }
+
+  private fun move(scheduled: OffenderCheckin, dueDate: LocalDate) {
+    LOGGER.info("Moved checkin {} from {} to {}", scheduled.uuid, scheduled.dueDate, dueDate)
+    scheduled.dueDate = dueDate
+    checkinRepository.save(scheduled)
+    checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_RESCHEDULED, scheduled, CheckinDeliusEventNotes.rescheduled(dueDate), eventNumber = null, date = dueDate)
+  }
+
+  /** The offender's next check-in date on or after [from] that doesn't have a check-in yet. */
+  private fun nextCheckinDate(offender: Offender, from: LocalDate): LocalDate? {
+    val firstCheckin = offender.firstCheckin ?: return null
+    return when (offender.mode) {
+      CheckinMode.AD_HOC -> firstCheckin.takeIf { it >= from && !hasCheckin(offender, it) }
+      CheckinMode.SCHEDULED -> {
+        if (offender.checkinInterval == null) return null
+        val taken = checkinRepository.findAllByOffenderAndDueDateGreaterThanEqual(offender, from)
+          .filter(::holdsDate).map { it.dueDate }.toSet()
+        var next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
+        while (next in taken) next = nextCheckinDay(offender, next)
+        next
+      }
+    }
+  }
+
+  private fun creationJobStarted(today: LocalDate) = jobLogRepository.existsByJobTypeAndCreatedAtGreaterThanEqual(CheckinCreationJob.JOB_TYPE, today.atStartOfDay(clock.zone).toInstant())
+
+  private fun hasCheckin(offender: Offender, date: LocalDate) = checkinRepository.findAllByOffenderAndDueDate(offender, date).any(::holdsDate)
+
+  /**
+   * Whether [checkin] takes its date: no other check-in is scheduled for it. A check-in a
+   * practitioner cancelled holds it until the offender is next changed, as the creation job won't
+   * create one for that date until then (see OffenderRepository.findEligibleForCheckinCreation).
+   */
+  private fun holdsDate(checkin: OffenderCheckin) = checkin.status in STATUSES_HOLDING_DATE ||
+    checkin.linkStatus == CheckinLinkStatus.FAILED ||
+    (checkin.status == CheckinStatus.CANCELLED && checkin.cancelledBy != null && checkin.cancelledAt!! > checkin.offender.updatedAt)
+
+  companion object {
+    private val LOGGER = logger<UpcomingCheckinService>()
+
+    /**
+     * A check-in in one of these statuses takes its date: no other check-in is scheduled for it.
+     * So does one cancelled because its invite couldn't be sent.
+     */
+    private val STATUSES_HOLDING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED, CheckinStatus.EXPIRED)
+
+    // TODO ESUP-2223: agreed for now; to change or remove if probation integration take over the NDelius note text
+    const val NOT_CREATED_REASON = "The check in was not opened on its due date"
+    const val SCHEDULE_CHANGED_REASON = "The check in schedule was changed"
+  }
+}

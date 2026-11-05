@@ -43,30 +43,110 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
-  @Transactional(readOnly = true)
-  fun findByCrn(crn: String): Optional<Offender>
+  @Query("SELECT o.id AS id, o.uuid AS uuid, o.crn AS crn, o.status AS status FROM Offender o WHERE o.uuid = :uuid")
+  fun findUpdateInfoByUuid(@Param("uuid") uuid: UUID): Optional<IOffenderUpdateInfo>
 
-  fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
+  interface IOffenderUpdateInfo {
+    val id: Long
+    val uuid: UUID
+    val crn: CRN
+    val status: OffenderStatus
+  }
 
+  /**
+   * ESUP-2223 backfill: verified offenders with neither an upcoming (SCHEDULED) nor an open
+   * (CREATED) check-in, in id order after [afterId].
+   */
   @Query(
     """
-    UPDATE offender_v2
-    SET status = 'INACTIVE', updated_at = now()
-    WHERE id = :offenderId AND status = 'VERIFIED'
-    RETURNING *
+    select o.id from offender_v2 o
+    where o.status = 'VERIFIED' and o.id > :afterId
+      and not exists (select 1 from offender_checkin_v2 c where c.offender_id = o.id and c.status in ('SCHEDULED', 'CREATED'))
+    order by o.id
+    limit :limit
     """,
     nativeQuery = true,
   )
-  fun deactivateIfVerified(offenderId: Long): Optional<Offender>
+  fun findIdsWithoutUpcomingCheckin(afterId: Long, limit: Int): List<Long>
+
+  @Transactional(readOnly = true)
+  fun findByCrn(crn: String): Optional<Offender>
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT o FROM Offender o WHERE o.id = :offenderId")
+  fun findByIdForUpdate(@Param("offenderId") offenderId: Long): Optional<Offender>
+
+  @Modifying
+  @Transactional
+  @Query(
+    nativeQuery = true,
+    value = """
+    UPDATE offender_v2 SET status = 'INACTIVE', updated_at = :updatedAt
+    WHERE id = :id AND status = 'VERIFIED'
+      AND current_event IS NOT DISTINCT FROM :expectedEvent
+      AND (
+        SELECT s.id FROM offender_setup_v2 s
+        WHERE s.offender_id = :id
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT 1
+      ) IS NOT DISTINCT FROM :expectedSetupId
+    """,
+  )
+  fun deactivateIfUnchanged(
+    @Param("id") id: Long,
+    @Param("expectedEvent") expectedEvent: Long?,
+    @Param("expectedSetupId") expectedSetupId: Long?,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
+
+  @Modifying
+  @Transactional
+  @Query(
+    """
+    UPDATE Offender o
+    SET o.currentEvent = :eventNumber, o.updatedAt = :updatedAt
+    WHERE o.id = :offenderId
+      AND o.status = :status
+      AND o.currentEvent IS NULL
+    """,
+  )
+  fun setCurrentEventIfMissing(
+    @Param("offenderId") offenderId: Long,
+    @Param("status") status: OffenderStatus,
+    @Param("eventNumber") eventNumber: Long,
+    @Param("updatedAt") updatedAt: Instant,
+  ): Int
+
+  @Query(
+    """
+    SELECT o FROM Offender o
+    WHERE o.status = :status
+      AND o.currentEvent IS NULL
+      AND o.id > :afterId
+    ORDER BY o.id ASC
+    """,
+  )
+  fun findVerifiedWithoutCurrentEventAfterId(
+    @Param("status") status: OffenderStatus,
+    @Param("afterId") afterId: Long,
+    pageable: Pageable,
+  ): List<Offender>
+
+  fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
 
   /**
    * Locks the offender's row until the transaction ends, so stopping check-ins (which updates it)
    * waits for this transaction, and returns the offender's committed status. It doesn't flush
    * pending changes first, so it can't write anything the caller then decides not to save.
    */
-  @Query("select cast(status as text) from offender_v2 where id = :id for share", nativeQuery = true)
+  @Query("select cast(status as text) from offender_v2 where id = :id for update", nativeQuery = true)
   @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
   fun lockAndGetStatus(id: Long): String?
+
+  /** The offender's status in the database, not a cached entity's. */
+  @Query("select cast(status as text) from offender_v2 where id = :id", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun findStatus(id: Long): String?
 
   /**
    * Update an offender based on new due_date and today's date.
@@ -94,6 +174,9 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
           from offender_checkin_v2
           where offender_id = :offenderId
             and due_date > (cast(:today as date) - '3 day'::interval)
+            -- an upcoming check-in moves with the schedule, and a cancelled one (possibly
+            -- future-dated, if it was upcoming) is gone, so neither blocks a change
+            and status not in ('SCHEDULED', 'CANCELLED')
         )
         update offender_v2 o
         set first_checkin = :newDueDate,
@@ -131,7 +214,13 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         WHERE c.offender_id = o.id
           AND :lowerBoundInclusive <= c.due_date
           AND c.due_date < :upperBoundExclusive
-          AND c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+          -- a check-in a practitioner cancelled (cancelled_by set) holds its date, so it isn't
+          -- recreated, until the practitioner changes the schedule (or anything else) after
+          -- cancelling: rebooking the date must create it. One the system cancelled doesn't.
+          AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
+            OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL AND c.cancelled_at > o.updated_at)
+            -- ESUP-2223: the invite couldn't be sent; don't create another for the same day
+            OR (c.status = 'CANCELLED' AND c.link_status = 'FAILED'))
       )
       AND o.id > coalesce(:lastOffenderId, 0)
     ORDER BY o.id
@@ -225,7 +314,7 @@ interface OffenderSetupRepository : JpaRepository<OffenderSetup, Long> {
     """
     SELECT s FROM OffenderSetup s
     WHERE s.offender = :offender
-    ORDER BY s.createdAt DESC
+    ORDER BY s.createdAt DESC, s.id DESC
     LIMIT 1
   """,
   )
@@ -282,6 +371,17 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
 
   fun findAllByOffenderAndStatus(offender: Offender, status: CheckinStatus): List<OffenderCheckin>
 
+  /** Cancels the offender's check-ins in [status]. @return the ids of those it cancelled */
+  @Query(
+    """
+    update offender_checkin_v2 set status = 'CANCELLED'
+    where offender_id = :offenderId and status = cast(:status as offender_checkin_status_v2)
+    returning id
+    """,
+    nativeQuery = true,
+  )
+  fun cancelForOffender(offenderId: Long, status: String): List<Long>
+
   @Query("""select c from OffenderCheckin c where c.id in :ids""")
   @EntityGraph(attributePaths = ["offender"])
   fun findAllByIds(ids: List<Long>): List<OffenderCheckin>
@@ -301,12 +401,23 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """
     UPDATE OffenderCheckin c
     SET c.status = :newStatus
-    WHERE c.offender = :offender
+    WHERE c.offender.id = :offenderId
       AND c.status = :currentStatus
     """,
   )
   @Modifying
-  fun updateStatusForOffender(offender: Offender, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
+  fun updateStatusForOffenderId(offenderId: Long, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
+
+  @Query(
+    """
+    UPDATE OffenderCheckin c
+    SET c.status = :newStatus
+    WHERE c.id = :checkinId
+      AND c.status = :currentStatus
+    """,
+  )
+  @Modifying
+  fun updateStatusForCheckinId(checkinId: Long, currentStatus: CheckinStatus, newStatus: CheckinStatus): Int
 
   @Query(
     """
@@ -324,6 +435,7 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     JOIN FETCH c.offender o
     WHERE c.status = 'CREATED'
       AND c.dueDate = :checkinStartDate
+      AND (c.linkStatus IS NULL OR c.linkStatus = 'SENT')
       AND NOT EXISTS (
           SELECT n FROM GenericNotification n
           WHERE n.offenderId = o.id
@@ -356,6 +468,8 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   // their check-ins and another created by restarting them, so lookups by day never assume one row.
   fun findAllByOffenderAndDueDate(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
 
+  fun findAllByOffenderAndDueDateGreaterThanEqual(offender: Offender, dueDate: LocalDate): List<OffenderCheckin>
+
   @Query(
     """
     SELECT c FROM OffenderCheckin c
@@ -364,6 +478,111 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
     """,
   )
   fun findAllByOffenderIdAndDueDate(offenderId: Long, dueDate: LocalDate): List<OffenderCheckin>
+
+  /** The offenders' upcoming (SCHEDULED) check-ins due on [dueDate]. */
+  @Query(
+    """
+    SELECT c FROM OffenderCheckin c
+    JOIN FETCH c.offender
+    WHERE c.offender.id IN :offenderIds
+      AND c.dueDate = :dueDate
+      AND c.status = 'SCHEDULED'
+    """,
+  )
+  fun findScheduledForOffenders(offenderIds: Collection<Long>, dueDate: LocalDate): List<OffenderCheckin>
+
+  /** ESUP-2223: the check-in's invite was accepted by GOV.UK Notify. Only from SENDING, so a repeat is a no-op. */
+  @Query(
+    "update offender_checkin_v2 set link_status = 'SENT', link_status_updated_at = :at where id = :id and link_status = 'SENDING'",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun markLinkSent(id: Long, at: Instant): Int
+
+  /**
+   * ESUP-2223: the check-in's invite couldn't be sent. The check-in is cancelled rather than left
+   * to be missed. Only from SENDING, so a repeat is a no-op.
+   */
+  @Query(
+    "update offender_checkin_v2 set link_status = 'FAILED', link_status_updated_at = :at, status = 'CANCELLED' where id = :id and link_status = 'SENDING' and status = 'CREATED'",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun markLinkFailed(id: Long, at: Instant): Int
+
+  /** An activated upcoming check-in's invite is about to be sent. */
+  @Query(
+    "update offender_checkin_v2 set link_status = 'SENDING', link_status_updated_at = :at where id = :id",
+    nativeQuery = true,
+  )
+  @Modifying
+  fun markLinkSending(id: Long, at: Instant): Int
+
+  /** Offenders whose upcoming (SCHEDULED) check-in's due date has passed without it being created. */
+  @Query("SELECT c.offender.id FROM OffenderCheckin c WHERE c.status = 'SCHEDULED' AND c.dueDate < :today")
+  fun findOffenderIdsWithScheduledBefore(today: LocalDate): List<Long>
+
+  /**
+   * ESUP-2223: locks the check-in row and returns its status in the database, not a cached entity's.
+   * It doesn't flush first, so a change to the check-in pending in this transaction isn't counted.
+   */
+  @Query("select cast(status as text) from offender_checkin_v2 where id = :id for update", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun lockAndGetStatus(id: Long): String?
+
+  /**
+   * ESUP-2223: locks the check-in row and returns its due date in the database if it's still
+   * upcoming (SCHEDULED), else null. Doesn't flush first, as [lockAndGetStatus].
+   */
+  @Query("select due_date from offender_checkin_v2 where id = :id and status = 'SCHEDULED' for update", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun lockAndGetScheduledDueDate(id: Long): LocalDate?
+
+  /**
+   * ESUP-2223: the offender's upcoming check-in, locked, so moving or cancelling it and activating
+   * it (which locks it too) take turns. Refresh it: a cached copy may be out of date.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select c from OffenderCheckin c where c.offender = :offender and c.status = 'SCHEDULED'")
+  fun findScheduledForUpdate(offender: Offender): OffenderCheckin?
+
+  /**
+   * ESUP-2128: a practitioner cancels the check-in, if it is still [expectedStatus]. Writes only the
+   * cancellation columns, and [sensitive] can only set the flag, not clear it.
+   * @return 1 if cancelled, 0 if its status had changed
+   */
+  @Modifying
+  @Query(
+    """
+    UPDATE OffenderCheckin c
+    SET c.status = uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus.CANCELLED,
+        c.cancelledAt = :cancelledAt,
+        c.cancelledBy = :cancelledBy,
+        c.sensitive = CASE WHEN :sensitive = true THEN true ELSE c.sensitive END
+    WHERE c.id = :id
+      AND c.status = :expectedStatus
+    """,
+  )
+  fun cancel(id: Long, expectedStatus: CheckinStatus, cancelledAt: Instant, cancelledBy: String, sensitive: Boolean): Int
+
+  /** Whether the offender has a CREATED check-in for [dueDate] in the database. Doesn't flush first, as [lockAndGetStatus]. */
+  @Query(
+    "select exists(select 1 from offender_checkin_v2 where offender_id = :offenderId and due_date = :dueDate and status = 'CREATED')",
+    nativeQuery = true,
+  )
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun existsCreated(offenderId: Long, dueDate: LocalDate): Boolean
+
+  /** ESUP-2223: whether the offender has a check-in for [dueDate] whose invite failed. Doesn't flush first, as [lockAndGetStatus]. */
+  @Query(
+    "select exists(select 1 from offender_checkin_v2 where offender_id = :offenderId and due_date = :dueDate and link_status = 'FAILED')",
+    nativeQuery = true,
+  )
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun existsLinkFailed(offenderId: Long, dueDate: LocalDate): Boolean
+
+  @Query("select offender_id from offender_checkin_v2 where id = :id", nativeQuery = true)
+  fun findOffenderId(id: Long): Long?
 
   /** Find all checkins by practitioner (created by), excluding upcoming (SCHEDULED) ones */
   @Query(
@@ -443,6 +662,20 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
 """,
   )
   fun findMigratedByStatus(status: CheckinStatus, pageable: Pageable): List<OffenderCheckin>
+
+  /** Returns the inserted checkin, or null if a CREATED checkin already exists for this offender and due date. */
+  @Query(
+    """
+    INSERT INTO offender_checkin_v2 (uuid, offender_id, status, due_date, created_at, created_by, link_status, link_status_updated_at)
+    VALUES (:#{#checkin.uuid}, :#{#checkin.offender.id}, :#{#checkin.status.name()}, :#{#checkin.dueDate}, :#{#checkin.createdAt}, :#{#checkin.createdBy},
+      :#{#checkin.linkStatus?.name()}, :#{#checkin.linkStatusUpdatedAt})
+    ON CONFLICT (offender_id, due_date) WHERE status = 'CREATED'
+    DO NOTHING
+    RETURNING id
+    """,
+    nativeQuery = true,
+  )
+  fun maybeInsert(checkin: OffenderCheckin): Long?
 }
 
 /**
@@ -489,7 +722,11 @@ interface EventAuditRepository : JpaRepository<EventAudit, Long> {
  * Separate from V1 job_log for complete decoupling
  */
 @Repository
-interface JobLogRepository : JpaRepository<JobLog, Long>
+interface JobLogRepository : JpaRepository<JobLog, Long> {
+  fun existsByJobTypeAndCreatedAtGreaterThanEqual(jobType: String, createdAt: Instant): Boolean
+
+  fun existsByJobTypeAndCreatedAtGreaterThanEqualAndEndedAtIsNull(jobType: String, createdAt: Instant): Boolean
+}
 
 enum class LogEntryType {
   OFFENDER_SETUP_COMPLETE,
@@ -501,6 +738,7 @@ enum class LogEntryType {
   OFFENDER_CHECKIN_OUTSIDE_ACCESS,
   OFFENDER_CHECKIN_LIVENESS_FAILED,
   OFFENDER_CHECKIN_FACE_MATCH_FAILED,
+  OFFENDER_CHECKIN_CANCELLED,
 }
 
 /**
@@ -986,6 +1224,21 @@ interface QuestionListAssignmentRepository : JpaRepository<QuestionListAssignmen
   )
   @Modifying
   fun deleteUpcomingAssignment(offenderId: Long): Int
+
+  /**
+   * ESUP-2128: attaches the offender's pending assignment to [checkinId], as activating it would.
+   * Used when an upcoming check-in is cancelled, so its questions don't carry over to the next one.
+   */
+  @Query(
+    """
+    update question_list_assignment
+    set checkin_id = :checkinId, updated_at = now()
+    where offender_id = :offenderId and checkin_id is null
+  """,
+    nativeQuery = true,
+  )
+  @Modifying
+  fun bindUpcomingAssignment(offenderId: Long, checkinId: Long): Int
 }
 
 typealias OutboxItemTypeString = String

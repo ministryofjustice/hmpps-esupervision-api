@@ -8,6 +8,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinAnnotatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancelledEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
@@ -16,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.DomainEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotification
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
@@ -23,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinLinkService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -64,6 +67,7 @@ class NotificationOrchestratorService(
   private val appConfig: AppConfig,
   private val clock: Clock,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  private val checkinLinkService: CheckinLinkService,
 ) {
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
 
@@ -79,7 +83,7 @@ class NotificationOrchestratorService(
       crn = offender.crn,
       description = "Practitioner completed setup for offender ${offender.crn}",
       additionalInformation = AdditionalInformation(
-        eventNumber = contactDetails?.let { activeEventNumber(offender, it) },
+        eventNumber = contactDetails?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) },
         setupId = setup.setupId,
       ),
     )
@@ -267,16 +271,22 @@ class NotificationOrchestratorService(
     // to the client). But let's say checkin was created, and we somehow got here. We will publish domain event
     // to reflect what happened in the database and possibly resolve any issues after investigating
     val checkin = event.checkin
-    val activeEventNumber = if (checkin.personalDetails == null) event.currentEvent else activeEventNumber(event, checkin.personalDetails)
+    val activeEventNumber = if (checkin.personalDetails == null) {
+      event.currentEvent
+    } else {
+      activeEventNumber(event, checkin.personalDetails, appConfig.esup2305DeliusEventSelection)
+    }
     if (activeEventNumber == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: no active events found", checkin.uuid, checkin.crn)
+      inviteFailed(event, CheckinLinkService.NO_ACTIVE_EVENT)
       return
     }
 
-    event.publish(domainEventService)
+    event.copy(currentEvent = activeEventNumber).publish(domainEventService)
 
     if (event.checkin.personalDetails == null) {
       LOGGER.warn("Skipping checkin created notifications for checkin {}, CRN={}: personal details not found", checkin.uuid, checkin.crn)
+      inviteFailed(event, CheckinLinkService.NO_CONTACT_DETAILS)
       return
     }
 
@@ -301,8 +311,19 @@ class NotificationOrchestratorService(
           contactDetails = contactDetails,
           notificationType = NotificationType.OffenderCheckinInvite,
         )
+      if (notificationsWithRecipients.isEmpty()) {
+        val reason = if (notificationPersistence.offenderChannelEnabled(event.offenderContactPreference)) CheckinLinkService.NO_ADDRESS else CheckinLinkService.CHANNEL_DISABLED
+        inviteFailed(event, reason)
+        return
+      }
 
-      processAndSendNotifications(notificationsWithRecipients, personalisation)
+      val outcome = processAndSendNotifications(notificationsWithRecipients, personalisation)
+      when {
+        outcome.sent.isNotEmpty() -> checkinLinkService.linkSent(event.checkinId, outcome.sent.first().channel)
+        // Notify may have sent it: keep the check-in open rather than cancel a link they may have
+        outcome.maybeSent.isNotEmpty() -> checkinLinkService.linkMaybeSent(event.checkinId)
+        else -> inviteFailed(event, CheckinLinkService.NOTIFY_FAILED)
+      }
     } catch (e: Exception) {
       val sanitized = PiiSanitizer.sanitizeException(e, checkin.crn)
       LOGGER.warn(
@@ -311,6 +332,34 @@ class NotificationOrchestratorService(
         sanitized,
       )
       throw NotificationFailureException("Failed to send checkin created notification. Checkin uuid=${checkin.uuid}")
+    }
+  }
+
+  /**
+   * ESUP-2223: the check-in invite couldn't be sent. If that cancelled the check-in (feature on),
+   * tell the practitioner, who can arrange another.
+   */
+  private fun inviteFailed(event: CheckinCreatedEvent, reason: String) {
+    if (!checkinLinkService.linkFailed(event.checkinId, reason)) return
+    val details = event.checkin.personalDetails ?: return
+    val practitioner = details.practitioner ?: return
+    try {
+      val personalisation = mapOf(
+        "practitionerName" to "${practitioner.name.forename} ${practitioner.name.surname}",
+        "name" to "${details.name.forename} ${details.name.surname}",
+        "popDashboardUrl" to appConfig.contactsUrl(event.checkin.crn).toString(),
+      )
+      val notifications = notificationPersistence.buildPractitionerNotifications(
+        offenderId = event.offenderId,
+        crn = event.checkin.crn,
+        contactDetails = practitioner,
+        checkin = event.checkin,
+        notificationType = NotificationType.PractitionerInviteIssueGeneric,
+        practitionerId = event.practitionerId,
+      )
+      processAndSendNotifications(notifications, personalisation)
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to tell the practitioner the invite for checkin {} was not sent: {}", event.checkin.uuid, PiiSanitizer.sanitizeException(e, event.checkin.crn))
     }
   }
 
@@ -369,9 +418,14 @@ class NotificationOrchestratorService(
 
   /** Send notifications for checkin submitted event */
   fun sendCheckinSubmittedNotifications(event: CheckinSubmittedEvent) {
-    if (!checkinEventsRelayed()) event.publish(domainEventService)
-
     val checkin = event.checkin
+    val eventNumber = if (checkin.personalDetails == null) {
+      event.currentEvent
+    } else {
+      activeEventNumber(event, checkin.personalDetails, appConfig.esup2305DeliusEventSelection)
+    }
+    if (!checkinEventsRelayed()) event.copy(currentEvent = eventNumber).publish(domainEventService)
+
     if (event.checkin.personalDetails == null) {
       LOGGER.debug("Skipping checkin submitted notifications for checkin {}: personal details not found", event.checkin.uuid)
       return
@@ -466,11 +520,14 @@ class NotificationOrchestratorService(
     processAndSendNotifications(notificationsWithRecipients, personalisation)
 
     if (!checkinEventsRelayed()) {
+      val eventNumber = checkin.offender.currentEvent
+        ?: activeEventNumber(checkin.offender, details, appConfig.esup2305DeliusEventSelection)
       domainEventService.publishDomainEvent(
         eventType = DomainEventType.V2_CHECKIN_EXPIRED,
         uuid = checkin.uuid,
         crn = checkin.offender.crn,
         description = "Check-in expired for ${checkin.offender.crn} (due date was ${checkin.dueDate})",
+        additionalInformation = AdditionalInformation(eventNumber = eventNumber),
       )
     }
   }
@@ -487,6 +544,37 @@ class NotificationOrchestratorService(
   /** Send notifications for checkin updated event */
   fun sendCheckinUpdatedNotifications(event: CheckinAnnotatedEvent) {
     if (!checkinEventsRelayed()) event.publish(domainEventService)
+  }
+
+  /**
+   * Tell the offender their open check-in was cancelled. NDelius hears through the check-in's
+   * events (see CheckinPersistenceService.checkinCancellation), not from here.
+   */
+  fun sendCheckinCancelledNotifications(event: CheckinCancelledEvent) {
+    if (!event.notifyOffender) return
+    val checkin = event.checkin
+    val contactDetails = checkin.personalDetails
+    if (contactDetails == null) {
+      LOGGER.warn("Skipping checkin cancelled notification for checkin {}, CRN={}: personal details not found", checkin.uuid, checkin.crn)
+      return
+    }
+    try {
+      val personalisation = mapOf(
+        "name" to contactDetails.name.forename,
+        "date" to checkin.dueDate.format(DATE_FORMATTER),
+      )
+      val notifications = notificationPersistence.buildOffenderNotifications(
+        offenderId = event.offenderId,
+        crn = checkin.crn,
+        contactPreference = event.offenderContactPreference,
+        contactDetails = contactDetails,
+        notificationType = NotificationType.OffenderCheckinCancelled,
+      )
+      processAndSendNotifications(notifications, personalisation)
+    } catch (e: Exception) {
+      val sanitized = PiiSanitizer.sanitizeException(e, checkin.crn)
+      LOGGER.warn("Failed to send checkin cancelled notification for checkin {}: {}", checkin.uuid, sanitized)
+    }
   }
 
   /**
@@ -522,13 +610,21 @@ class NotificationOrchestratorService(
   /** Get event detail for a given URL */
   fun getEventDetail(detailUrl: String): EventDetailResponse? = eventDetailService.getEventDetail(detailUrl)
 
+  /**
+   * @property sent the notifications GOV.UK Notify accepted
+   * @property maybeSent those it failed in a way that leaves unknown whether it sent them
+   */
+  private data class SendOutcome(val sent: List<GenericNotification>, val maybeSent: List<GenericNotification>)
+
   private fun processAndSendNotifications(
     notificationsWithRecipients: List<NotificationWithRecipient>,
     personalisation: Map<String, String>,
-  ) {
-    if (notificationsWithRecipients.isEmpty()) return
+  ): SendOutcome {
+    if (notificationsWithRecipients.isEmpty()) return SendOutcome(emptyList(), emptyList())
 
     notificationPersistence.saveNotifications(notificationsWithRecipients.map { it.notification })
+    val sent = mutableListOf<GenericNotification>()
+    val maybeSent = mutableListOf<GenericNotification>()
 
     notificationsWithRecipients.forEach { wrapper ->
       val notification = wrapper.notification
@@ -543,6 +639,7 @@ class NotificationOrchestratorService(
             personalisation = personalisation,
             reference = notification.reference,
           )
+        sent.add(notification)
 
         LOGGER.info(
           "Sent {} notification to {} for offender {}, notificationId={}",
@@ -552,12 +649,9 @@ class NotificationOrchestratorService(
           notifyId,
         )
 
-        notificationPersistence.updateSingleNotificationStatus(
-          notification = notification,
-          success = true,
-          notifyId = notifyId,
-        )
+        recordNotificationStatus(wrapper, success = true, notifyId = notifyId)
       } catch (e: Exception) {
+        if (NOTIFY_OUTCOME_UNKNOWN.test(e)) maybeSent.add(notification)
         val sanitized = PiiSanitizer.sanitizeException(e, wrapper.offender?.crn, null)
         LOGGER.warn(
           "Failed to send {} to {}: {}",
@@ -566,18 +660,38 @@ class NotificationOrchestratorService(
           sanitized,
         )
 
-        notificationPersistence.updateSingleNotificationStatus(
-          notification = notification,
+        recordNotificationStatus(
+          wrapper,
           success = false,
           notifyId = UUID.randomUUID(),
           error = PiiSanitizer.sanitizeMessage(e.message ?: "Unknown error", wrapper.offender?.crn, null),
         )
       }
     }
+    return SendOutcome(sent, maybeSent)
+  }
+
+  /**
+   * The outcome is what Notify did, so failing to record it doesn't change it: a sent notification
+   * isn't recorded as failed, and a rejected invite still fails its check-in's link.
+   */
+  private fun recordNotificationStatus(wrapper: NotificationWithRecipient, success: Boolean, notifyId: UUID, error: String? = null) {
+    try {
+      notificationPersistence.updateSingleNotificationStatus(wrapper.notification, success, notifyId, error)
+    } catch (e: Exception) {
+      LOGGER.error(
+        "Failed to record {} {} notification as {}: {}",
+        wrapper.notification.channel,
+        wrapper.notification.recipientType,
+        if (success) "sent" else "failed",
+        PiiSanitizer.sanitizeException(e, wrapper.offender?.crn, null),
+      )
+    }
   }
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(NotificationOrchestratorService::class.java)
+    private val NOTIFY_OUTCOME_UNKNOWN = NotifyOutcomeUnknown()
 
     // Match V1 date format: "Monday 15 January 2025"
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("EEEE d LLLL yyyy")
@@ -608,6 +722,7 @@ fun CheckinCreatedEvent.publish(domainEventService: DomainEventService) {
     uuid = checkin.uuid,
     crn = checkin.crn,
     description = "Check-in created for ${checkin.crn} with due date ${checkin.dueDate}",
+    additionalInformation = AdditionalInformation(eventNumber = currentEvent),
   )
 }
 
@@ -617,6 +732,7 @@ fun CheckinSubmittedEvent.publish(domainEventService: DomainEventService) {
     uuid = checkin.uuid,
     crn = checkin.crn,
     description = "Check-in submitted for ${checkin.crn}",
+    additionalInformation = AdditionalInformation(eventNumber = currentEvent),
   )
 }
 

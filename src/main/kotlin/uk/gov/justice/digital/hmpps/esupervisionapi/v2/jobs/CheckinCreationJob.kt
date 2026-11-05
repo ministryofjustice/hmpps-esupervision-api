@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHint
@@ -19,11 +20,13 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.NdiliusBatchFetchException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.BatchCheckinCreationException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinIneligibilityReason
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
@@ -64,14 +67,16 @@ private fun JobMetrics.info(logger: Logger, jobId: Long, duration: Duration) {
 class CheckinCreationJob(
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
+  private val checkinRepository: OffenderCheckinRepository,
   private val ndiliusApiClient: INdiliusApiClient,
   private val checkinCreationService: CheckinCreationService,
   private val offenderDeactivationService: OffenderDeactivationService,
+  private val upcomingCheckinService: UpcomingCheckinService,
+  private val appConfig: AppConfig,
   private val jobLogRepository: JobLogRepository,
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
-  private val appConfig: AppConfig,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -85,9 +90,11 @@ class CheckinCreationJob(
   fun process() {
     val now = clock.instant()
     val today = LocalDate.now(clock)
-    val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = "V2_CHECKIN_CREATION", createdAt = now))
+    val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = JOB_TYPE, createdAt = now))
     LOGGER.info("Checkin Creation Job(id={}) started: creating checkins for date={}", logEntry.id, today)
     val metrics = JobMetrics()
+
+    rescheduleUncreatedCheckins(today)
 
     try {
       val upperBound = today.plusDays(1)
@@ -104,29 +111,30 @@ class CheckinCreationJob(
         LOGGER.info("Processing page {} with {} offenders", metrics.chunks, chunk.size)
 
         try {
+          // Before the NDelius call: if check-ins are stopped during it, the upcoming check-in is then
+          // activated, and refused as cancelled, rather than missed and a new check-in created.
+          val scheduledByOffenderId = checkinRepository.findScheduledForOffenders(chunk.map { it.id }, today).associateBy { it.offender.id }
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
           val checkinsToCreate = ArrayList<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>(contactDetailsMap.size)
           val infoByCrn = chunk.associateBy { it.crn }
+          val newEligibilityRulesEnabled = appConfig.enabledFeatures.contains(Feature.ESUP_2082)
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!
-            if (appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
-              prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
+            val ineligibility = checkinIneligibilityReason(info, contactDetails)
+            val savedSelectionIsInactive = info.currentEvent != null && contactDetails.events.none { it.number == info.currentEvent }
+            if (ineligibility != null && (!newEligibilityRulesEnabled || savedSelectionIsInactive)) {
+              deactivateOffender(ineligibility, info, contactDetails, metrics)
             } else {
-              val ineligibility = checkinIneligibilityReason(info, contactDetails)
-              if (ineligibility != null) {
-                deactivateOffender(checkinIneligibilityReason(info, contactDetails)!!, info, contactDetails, metrics)
-              } else {
-                prepareCheckin(info, today, contactDetails)?.let { checkinsToCreate.add(it) }
-              }
+              prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id])?.let { checkinsToCreate.add(it) }
             }
           }
 
           metrics.processed += contactDetailsMap.size
           val batchInsertStart = System.currentTimeMillis()
-          val createdCheckins = checkinCreationService.createCheckins(checkinsToCreate)
-          logCreatedCheckins(createdCheckins, today, batchInsertStart)
-          metrics.created += createdCheckins.size
+          val created = checkinCreationService.createCheckins(checkinsToCreate)
+          logCreatedCheckins(created, today, batchInsertStart)
+          metrics.created += created.size
           metrics.chunks += 1
         } catch (e: NdiliusBatchFetchException) {
           metrics.errors += e.crns.size // already logged elsewhere
@@ -148,14 +156,33 @@ class CheckinCreationJob(
     metrics.info(LOGGER, jobId = logEntry.id, Duration.between(now, endTime))
   }
 
+  /**
+   * ESUP-2223: an upcoming check-in whose due date passed without it being created (no active
+   * event, or the schedule changed) is cancelled and the next one scheduled, before today's
+   * check-ins are created (which may activate it).
+   */
+  private fun rescheduleUncreatedCheckins(today: LocalDate) {
+    if (!upcomingCheckinService.enabled()) return
+    try {
+      val offenderIds = checkinRepository.findOffenderIdsWithScheduledBefore(today)
+      offenderIds.forEach { upcomingCheckinService.scheduleNextBeforeCreation(it) }
+      if (offenderIds.isNotEmpty()) {
+        LOGGER.info("Rescheduled upcoming check-ins that were not created on their due date for {} offenders", offenderIds.size)
+      }
+    } catch (e: Exception) {
+      LOGGER.warn("Failed to reschedule upcoming check-ins that were not created on their due date", e)
+    }
+  }
+
   private fun prepareCheckin(
     info: OffenderRepository.IOffenderCheckinCreationInfo,
     today: LocalDate,
     contactDetails: ContactDetails,
+    scheduled: OffenderCheckin?,
   ): Pair<OffenderCheckin, PartialCheckinCreatedEvent>? {
     val offenderRef = offenderRepository.getReferenceById(info.id)
-    val checkin = checkinCreationService.prepareCheckinForOffender(offenderRef, today)
-    val eventNumber = activeEventNumber(info, contactDetails)
+    val checkin = checkinCreationService.prepareCheckinForOffender(offenderRef, today, scheduled)
+    val eventNumber = activeEventNumber(info, contactDetails, appConfig.esup2305DeliusEventSelection)
     var result: Pair<OffenderCheckin, PartialCheckinCreatedEvent>? = null
     if (eventNumber != null) {
       val event = PartialCheckinCreatedEvent(
@@ -197,28 +224,27 @@ class CheckinCreationJob(
     LOGGER.info("Deactivating CRN {} instead of creating checkin: {}", offenderInfo.crn, ineligibility.name)
     val offender = offenderRepository.findById(offenderInfo.id).getOrNull() ?: return
     try {
-      offenderDeactivationService.deactivateOffender(
+      val deactivated = offenderDeactivationService.deactivateOffender(
         offender = offender,
         reason = ineligibility.auditNote,
-        // "old" rules are a special case, so we massage the the wording a bit so it fits
-        // '..., because ((name)) ((reason))', `practitionerMessageFragment` is used as ((reason))
-        // Ugly, but once eligibility is live, we will can delete this whole method.
-        practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
         contactDetails = contactDetails,
+        practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
         auditEventType = ineligibility.auditEventType,
-      )?.let { metrics.deactivated += 1 }
+        expectedCurrentEvent = offenderInfo.currentEvent,
+      )
+      if (deactivated) metrics.deactivated += 1
     } catch (e: Exception) {
       LOGGER.warn("Failed to deactivate CRN {} in chunk {}", offenderInfo.crn, metrics.chunks, e)
       metrics.errors += 1
     }
   }
 
-  private fun logCreatedCheckins(checkins: List<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>, dueDate: LocalDate, start: Long) {
+  private fun logCreatedCheckins(checkins: List<CheckinCreatedEvent>, dueDate: LocalDate, start: Long) {
     val sb = StringBuilder()
-    for ((checkin, event) in checkins) {
+    for (event in checkins) {
       sb.append("(CRN=").append(event.checkin.crn)
       sb.append(", eventNumber=").append(event.currentEvent ?: "NULL")
-      sb.append(", checkin=").append(checkin.uuid).append(")")
+      sb.append(", checkin=").append(event.checkin.uuid).append(")")
     }
     LOGGER.info(
       "Checkins created: {}, with due date {}, took {}, (CRN,eventNumber,uuid): {}",
@@ -249,6 +275,7 @@ class CheckinCreationJob(
   }
 
   companion object {
+    const val JOB_TYPE = "V2_CHECKIN_CREATION"
     private val LOGGER = LoggerFactory.getLogger(CheckinCreationJob::class.java)
   }
 }

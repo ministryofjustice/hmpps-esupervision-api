@@ -76,6 +76,21 @@ class CheckinDeliusEventService(
   }
 
   /**
+   * Record that [checkin] was cancelled, if NDelius has it: that is, it was recorded as scheduled.
+   * A check-in opened before the feature was on has no NDelius contact, and NDelius rejects an
+   * update to a contact it can't find.
+   *
+   * @return true if recorded
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  fun recordCancelledIfRecorded(checkin: OffenderCheckin, reason: String): Boolean {
+    if (!repository.existsByCheckinUuidAndEventType(checkin.uuid, DomainEventType.V2_CHECKIN_SCHEDULED)) return false
+    // No event number: NDelius matches the contact by check-in, and rejects an update whose event
+    // number differs from the contact's, which it would if the active event changed since.
+    return record(DomainEventType.V2_CHECKIN_CANCELLED, checkin, CheckinDeliusEventNotes.cancelled(reason), eventNumber = null)
+  }
+
+  /**
    * Record one of the check-in events that existed before ESUP-2223 (received, expired, reviewed,
    * updated), so it is published in order with the check-in's lifecycle events. Its detail is
    * built from the check-in, as before. Callers use this instead of publishing directly when
@@ -84,7 +99,12 @@ class CheckinDeliusEventService(
    * @param detailId the id the event's detail endpoint expects: the check-in UUID, or for an annotation its log entry UUID
    */
   @Transactional(propagation = Propagation.MANDATORY)
-  fun recordCheckinUpdate(eventType: DomainEventType, checkin: OffenderCheckin, detailId: UUID = checkin.uuid): Boolean {
+  fun recordCheckinUpdate(
+    eventType: DomainEventType,
+    checkin: OffenderCheckin,
+    detailId: UUID = checkin.uuid,
+    eventNumber: Long? = checkin.offender.currentEvent,
+  ): Boolean {
     require(eventType in CHECKIN_UPDATE_EVENT_TYPES) { "$eventType is not a check-in update event" }
     return insert(
       CheckinDeliusEvent(
@@ -93,8 +113,7 @@ class CheckinDeliusEventService(
         detailId = detailId,
         checkinUuid = checkin.uuid,
         crn = checkin.offender.crn,
-        // as when published directly: NDelius matches the contact by check-in
-        eventNumber = null,
+        eventNumber = eventNumber,
         dateTime = null,
         notes = null,
         occurredAt = clock.instant(),
