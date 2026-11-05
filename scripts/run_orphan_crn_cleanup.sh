@@ -413,9 +413,28 @@ echo "Orphans listed in $ORPHANS (first few: $(head -5 "$ORPHANS" | paste -sd' '
 # ---------------------------------------------------------------------------
 # Delete -- one transaction, rolled back unless APPLY=1 and confirmed
 # ---------------------------------------------------------------------------
+# The SQL locks with NOWAIT: if the app holds any of these people's rows it
+# fails at once with SQL state 55P03 and rolls back, rather than waiting and
+# risking a deadlock with the app. Retry a few times; app transactions are short.
+LOCK_ATTEMPTS=5
 run_cleanup() {  # true|false
-  (cd "$WORK_DIR" && psql -X -q -v ON_ERROR_STOP=1 -v apply="$1" \
-    -v target_env=dev -v expected_addr="$DEV_DB_ADDR" -f "$REPO_ROOT/scripts/orphan_crn_cleanup.sql")
+  local attempt err rc
+  err=$(mktemp "$WORK_DIR/.psql-err.XXXXXX")
+  for attempt in $(seq 1 "$LOCK_ATTEMPTS"); do
+    rc=0
+    # VERBOSITY=verbose puts the SQL state in the error, so the match below
+    # does not depend on the server's message wording or language.
+    (cd "$WORK_DIR" && psql -X -q -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v apply="$1" \
+      -v target_env=dev -v expected_addr="$DEV_DB_ADDR" -f "$REPO_ROOT/scripts/orphan_crn_cleanup.sql") 2>"$err" || rc=$?
+    if (( rc != 0 )) && grep -q '55P03' "$err" && (( attempt < LOCK_ATTEMPTS )); then
+      echo "Some of these people are locked by the app right now; nothing was changed. Retrying in ${attempt}s (attempt $attempt of $LOCK_ATTEMPTS)." >&2
+      sleep "$attempt"
+      continue
+    fi
+    cat "$err" >&2
+    rm -f "$err"
+    return "$rc"
+  done
 }
 
 start_db

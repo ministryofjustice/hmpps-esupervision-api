@@ -21,8 +21,12 @@
 -- new outbox item type (outbox_items.entity_id has no foreign key, so only the
 -- type says what it points at). Update the deletes and the guard lists.
 --
+-- Each person's own unnamed question lists go too, with their items (ON DELETE
+-- CASCADE): every custom-questions assignment gets a fresh list of its own.
+--
 -- Left alone on purpose:
---   question_list            lists are shared, not owned by one offender
+--   named question lists     the Default list and other shared ones
+--   bespoke questions        another practitioner's list can reuse one by id
 --   monthly_stats and the
 --   stats materialised views recomputed from event_audit_log_v2 on refresh
 --   v1 / migration tables    offender_crn_mapping, offender_id_mapping,
@@ -71,12 +75,18 @@ END $$;
 -- event for them between the snapshots below and the deletes. outbox_items and
 -- checkin_delius_event_v2 have no foreign keys, so such rows would otherwise be
 -- left pointing at nothing.
+--
+-- NOWAIT: if the app holds any of these rows this fails at once (SQL state
+-- 55P03), the transaction rolls back, and run_orphan_crn_cleanup.sh retries.
+-- Waiting instead could deadlock with app transactions, which lock a person and
+-- their check-ins in either order, and Postgres might then abort the user's
+-- request rather than this one.
 DO $$
 BEGIN
-  PERFORM 1 FROM offender_v2 WHERE crn IN (SELECT crn FROM orphan_crn) FOR UPDATE;
+  PERFORM 1 FROM offender_v2 WHERE crn IN (SELECT crn FROM orphan_crn) FOR UPDATE NOWAIT;
   PERFORM 1 FROM offender_checkin_v2
     WHERE offender_id IN (SELECT id FROM offender_v2 WHERE crn IN (SELECT crn FROM orphan_crn))
-    FOR UPDATE;
+    FOR UPDATE NOWAIT;
 END $$;
 
 CREATE TEMP TABLE o ON COMMIT DROP AS
@@ -88,17 +98,25 @@ CREATE TEMP TABLE s ON COMMIT DROP AS
 CREATE TEMP TABLE el ON COMMIT DROP AS
   SELECT e.id FROM offender_event_log_v2 e
   WHERE e.offender_id IN (SELECT id FROM o) OR e.checkin IN (SELECT id FROM c);
+-- The lists these people's custom questions were put in, kept before their
+-- assignments are deleted.
+CREATE TEMP TABLE ql ON COMMIT DROP AS
+  SELECT DISTINCT a.question_list_id AS id FROM question_list_assignment a
+  WHERE a.offender_id IN (SELECT id FROM o) OR a.checkin_id IN (SELECT id FROM c);
 
 -- Every foreign key into a table we delete from must come from a table we
 -- also delete from, or the deletes below would miss rows: fail on the
 -- constraint, or with ON DELETE CASCADE take rows the counts never show.
+-- The one exception: question_list_item rows go with their list, by its
+-- ON DELETE CASCADE.
 DO $$
 DECLARE
   deleted_from text[] := ARRAY[
     'offender_v2', 'offender_checkin_v2', 'offender_setup_v2', 'offender_event_log_v2',
     'generic_notification_v2', 'setup_event_backfill_v2', 'question_list_assignment',
-    'outbox_items', 'checkin_delius_event_v2', 'checkin_note_resend',
+    'question_list', 'outbox_items', 'checkin_delius_event_v2', 'checkin_note_resend',
     'migration_events_to_send', 'event_audit_log_v2'];
+  cascades text[] := ARRAY['question_list_item -> question_list'];
   unhandled text;
 BEGIN
   SELECT string_agg(DISTINCT format('%s -> %s', conrelid::regclass, confrelid::regclass), ', ')
@@ -106,7 +124,8 @@ BEGIN
   FROM pg_constraint
   WHERE contype = 'f'
     AND confrelid::regclass::text = ANY (deleted_from)
-    AND NOT conrelid::regclass::text = ANY (deleted_from);
+    AND NOT conrelid::regclass::text = ANY (deleted_from)
+    AND NOT format('%s -> %s', conrelid::regclass, confrelid::regclass) = ANY (cascades);
   IF unhandled IS NOT NULL THEN
     RAISE EXCEPTION 'foreign keys this script does not handle: % -- update scripts/orphan_crn_cleanup.sql', unhandled;
   END IF;
@@ -164,6 +183,15 @@ WITH d AS (
   WHERE offender_id IN (SELECT id FROM o) OR checkin_id IN (SELECT id FROM c)
   RETURNING 1)
 INSERT INTO deleted (tbl, n) SELECT 'question_list_assignment', count(*) FROM d;
+
+-- These people's own lists: unnamed, and now assigned to no one else.
+WITH d AS (
+  DELETE FROM question_list l
+  WHERE l.id IN (SELECT id FROM ql)
+    AND l.name IS NULL
+    AND NOT EXISTS (SELECT 1 FROM question_list_assignment a WHERE a.question_list_id = l.id)
+  RETURNING 1)
+INSERT INTO deleted (tbl, n) SELECT 'question_list', count(*) FROM d;
 
 WITH d AS (DELETE FROM offender_event_log_v2 WHERE id IN (SELECT id FROM el) RETURNING 1)
 INSERT INTO deleted (tbl, n) SELECT 'offender_event_log_v2', count(*) FROM d;
