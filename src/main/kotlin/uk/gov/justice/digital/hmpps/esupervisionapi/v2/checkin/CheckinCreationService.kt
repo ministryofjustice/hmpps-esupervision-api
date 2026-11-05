@@ -20,6 +20,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import java.time.Clock
 import java.time.Duration
@@ -96,7 +97,8 @@ class CheckinCreationService(
    * @param createdBy Who created the checkin
    * @param contactDetails Contact details for offender
    * @return the created check-in, or null if the offender already has one for [dueDate]
-   * @throws ResponseStatusException 409 if the upcoming check-in it would activate was cancelled meanwhile
+   * @throws ResponseStatusException 409 if the offender's check-ins were stopped, or the upcoming
+   *   check-in it would activate was cancelled, meanwhile
    */
   fun createCheckinForOffender(
     offender: Offender,
@@ -118,6 +120,9 @@ class CheckinCreationService(
     )
 
     val finalisedEvent = checkinPersistenceService.checkinCreation(checkin, event)
+    if (finalisedEvent == null && offenderRepository.findStatus(offender.id) != OffenderStatus.VERIFIED.name) {
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-ins have been stopped for CRN=${offender.crn}")
+    }
     // Not activated, and not because the date already has a check-in: the upcoming check-in was
     // cancelled (check-ins were stopped) after it was read above.
     if (finalisedEvent == null && scheduled != null && !checkinRepository.existsCreated(offender.id, dueDate)) {
@@ -137,7 +142,7 @@ class CheckinCreationService(
 
   /**
    * @param checkins List of checkins to create
-   * @return List of saved checkins
+   * @return the check-ins created: those for offenders whose check-ins were stopped are skipped
    * @throws BatchCheckinCreationException
    */
   @Transactional

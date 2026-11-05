@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -18,7 +20,8 @@ class CheckinPersistenceServiceTest {
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val service = CheckinPersistenceService(
     checkinRepository = checkinRepository,
-    offenderRepository = mock(),
+    // the offender's check-ins haven't been stopped
+    offenderRepository = mock { on { lockAndGetStatus(any()) } doReturn OffenderStatus.VERIFIED.name },
     eventAuditService = mock(),
     appEventPublisher = mock(),
     offenderEventLogRepository = mock(),

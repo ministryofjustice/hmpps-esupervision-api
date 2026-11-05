@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -28,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
@@ -44,7 +46,10 @@ class CheckinCreationServiceTest {
   private val clock = Clock.fixed(Instant.parse("2026-10-29T10:00:00Z"), ZoneOffset.UTC)
   private val appConfig: AppConfig = mock()
   private val persistence: CheckinPersistenceService = mock()
-  private val service = CheckinCreationService(clock, mock(), mock(), mock(), mock(), mock(), Duration.ofDays(3), mock(), persistence, appConfig)
+
+  // the offender's check-ins haven't been stopped
+  private val offenderRepository: OffenderRepository = mock { on { findStatus(any()) } doReturn OffenderStatus.VERIFIED.name }
+  private val service = CheckinCreationService(clock, offenderRepository, mock(), mock(), mock(), mock(), Duration.ofDays(3), mock(), persistence, appConfig)
   private val offender = offenderTemplate.toEntity()
   private val today = LocalDate.now(clock)
   private val sentence = Event.Sentence(today.minusMonths(1), "Community order", today.plusMonths(6))
@@ -130,9 +135,10 @@ class ScheduledCheckinActivationTest {
   private val today = LocalDate.now(clock)
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val checkinPersistenceService: CheckinPersistenceService = mock()
+  private val offenderRepository: OffenderRepository = mock()
   private val service = CheckinCreationService(
     clock = clock,
-    offenderRepository = mock(),
+    offenderRepository = offenderRepository,
     checkinRepository = checkinRepository,
     ndiliusApiClient = mock(),
     notificationService = mock(),
@@ -158,6 +164,18 @@ class ScheduledCheckinActivationTest {
     whenever(checkinRepository.findScheduledForOffenders(listOf(offender.id), today)).thenReturn(listOf(scheduled))
     // activation refused
     whenever(checkinPersistenceService.checkinCreation(any(), any())).thenReturn(null)
+    whenever(offenderRepository.findStatus(any())).thenReturn(OffenderStatus.VERIFIED.name)
+  }
+
+  @Test
+  fun `a check-in not created because the offender's check-ins were stopped is a conflict`() {
+    whenever(offenderRepository.findStatus(offender.id)).thenReturn(OffenderStatus.INACTIVE.name)
+
+    val exception = assertThrows<ResponseStatusException> {
+      service.createCheckinForOffender(offender, today, "PRACT001", contactDetails())
+    }
+
+    assertEquals(HttpStatus.CONFLICT, exception.statusCode)
   }
 
   @Test

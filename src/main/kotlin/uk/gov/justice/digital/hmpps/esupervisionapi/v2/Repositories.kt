@@ -135,6 +135,20 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
 
   /**
+   * Locks the offender's row until the transaction ends, so stopping check-ins (which updates it)
+   * waits for this transaction, and returns the offender's committed status. It doesn't flush
+   * pending changes first, so it can't write anything the caller then decides not to save.
+   */
+  @Query("select cast(status as text) from offender_v2 where id = :id for update", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun lockAndGetStatus(id: Long): String?
+
+  /** The offender's status in the database, not a cached entity's. */
+  @Query("select cast(status as text) from offender_v2 where id = :id", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun findStatus(id: Long): String?
+
+  /**
    * Update an offender based on new due_date and today's date.
    *
    * If update didn't happen, we should  not be creating a check-in
