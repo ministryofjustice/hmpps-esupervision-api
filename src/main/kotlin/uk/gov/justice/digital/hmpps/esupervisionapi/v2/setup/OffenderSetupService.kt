@@ -1,5 +1,6 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 
+import jakarta.persistence.EntityManager
 import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -53,6 +54,7 @@ class OffenderSetupPersistenceService(
   private val clock: Clock,
   private val upcomingCheckinService: UpcomingCheckinService,
   private val appConfig: AppConfig,
+  private val entityManager: EntityManager,
 ) {
   data class CompletionResult(val checkin: UUID?)
 
@@ -71,13 +73,25 @@ class OffenderSetupPersistenceService(
 
   /**
    * Saves the updated offender record and optionally creates a checkin.
+   *
+   * @throws ResponseStatusException 409 if the offender's check-ins have been stopped: their setup
+   *   can't make them VERIFIED again (reactivating them does that)
    */
   @Transactional
   fun completeOffenderSetupAndMaybeCreateCheckin(offender: Offender, contactDetails: ContactDetails?, createCheckin: Boolean): CompletionResult {
     require(offender.status == OffenderStatus.VERIFIED) { "Offender must be in VERIFIED status" }
     require(!createCheckin || offender.firstCheckin == LocalDate.now(clock)) { "createCheckin=true requires offender.firstCheckin to be today" }
 
-    offenderRepository.save(offender)
+    // The caller read the offender before this transaction (and before fetching their NDelius
+    // details), so their check-ins may have been stopped since, or this is a repeated completion of
+    // a stopped offender's setup. Locking the offender also makes stopping check-ins wait for this.
+    if (offenderRepository.lockAndGetStatus(offender.id) == OffenderStatus.INACTIVE.name) {
+      // With open-in-view the caller's copy is managed: don't leave it VERIFIED to be flushed later.
+      if (entityManager.contains(offender)) entityManager.refresh(offender)
+      throw ResponseStatusException(HttpStatus.CONFLICT, "Check-ins have been stopped for CRN=${offender.crn}")
+    }
+    // flushed so creating the check-in sees the offender as VERIFIED
+    offenderRepository.saveAndFlush(offender)
     val checkin = if (createCheckin && contactDetails != null) {
       checkinCreationService.createCheckinForOffender(
         offender,
@@ -140,6 +154,7 @@ class OffenderSetupService(
       existing.checkinInterval = offenderInfo.checkinInterval?.duration
       existing.createdBy = offenderInfo.practitionerId
       existing.updatedAt = now
+      existing.scheduleUpdatedAt = now
       existing.contactPreference = offenderInfo.contactPreference
       if (Feature.ESUP_2305 in appConfig.enabledFeatures) {
         offenderInfo.currentEvent?.let { existing.currentEvent = it }
@@ -157,6 +172,7 @@ class OffenderSetupService(
         createdAt = now,
         createdBy = offenderInfo.practitionerId,
         updatedAt = now,
+        scheduleUpdatedAt = now,
         contactPreference = offenderInfo.contactPreference,
         currentEvent = offenderInfo.currentEvent.takeIf { Feature.ESUP_2305 in appConfig.enabledFeatures },
       )

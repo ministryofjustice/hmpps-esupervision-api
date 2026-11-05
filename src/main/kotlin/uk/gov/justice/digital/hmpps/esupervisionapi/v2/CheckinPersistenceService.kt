@@ -14,6 +14,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import java.time.Clock
 import java.time.Instant
@@ -48,13 +49,22 @@ class CheckinPersistenceService(
    * Creates [checkin], or, if it has an id, activates it: an upcoming (SCHEDULED) check-in the
    * caller read and made CREATED.
    *
-   * @return null if nothing was created: its offender already has a CREATED check-in for the due
-   *   date, or the upcoming check-in was cancelled (check-ins were stopped) or moved after the
-   *   caller read it
+   * @return null if nothing was created: the offender's check-ins were stopped after the caller
+   *   read the offender, its offender already has a CREATED check-in for the due date, or the
+   *   upcoming check-in was cancelled (check-ins were stopped) or moved after the caller read it
    */
   @Transactional
   fun checkinCreation(checkin: OffenderCheckin, event: PartialCheckinCreatedEvent): CheckinCreatedEvent? {
     require(checkin.status == CheckinStatus.CREATED)
+    // The caller (e.g. the creation job) read the offender before this transaction, and their
+    // check-ins may have been stopped since. Locking the offender also makes stopping check-ins
+    // wait until this commits, then cancel the new check-in along with the others. This is the
+    // first lock taken (offender, then check-in), and it's FOR UPDATE because the upcoming
+    // check-in handling below locks the offender for update too.
+    if (offenderRepository.lockAndGetStatus(checkin.offender.id) != OffenderStatus.VERIFIED.name) {
+      LOGGER.info("Not creating checkin {}: the offender's check-ins have been stopped", checkin.uuid)
+      return null
+    }
     if (checkin.id == 0L && upcomingCheckinService.enabled()) {
       // Locking the offender serialises this with scheduling, which may have scheduled this date
       // after the caller looked for an upcoming check-in: activate that one rather than creating a
@@ -87,7 +97,7 @@ class CheckinPersistenceService(
     // an activated check-in was recorded in NDelius when it was scheduled
     if (!activating && upcomingCheckinService.enabled()) {
       // the event's number is the one on record, which can be unset when the caller has NDelius's
-      val eventNumber = event.currentEvent ?: event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) }
+      val eventNumber = event.currentEvent ?: eventNumberFor(checkin.offender, event.checkin.personalDetails)
       checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_SCHEDULED, checkin, CheckinDeliusEventNotes.scheduled(checkin.dueDate), eventNumber, checkin.dueDate)
     }
     val finalisedEvent = event.finalise(checkin, id)
@@ -194,7 +204,7 @@ class CheckinPersistenceService(
     requireStillOpen(checkin)
     checkinRepository.save(checkin)
     eventAuditService.recordCheckinSubmitted(checkin, event)
-    upcomingCheckinService.scheduleNext(checkin.offender.id, event.checkin.personalDetails?.let { activeEventNumber(checkin.offender, it, appConfig.esup2305DeliusEventSelection) })
+    upcomingCheckinService.scheduleNext(checkin.offender.id, eventNumberFor(checkin.offender, event.checkin.personalDetails))
     if (checkinDeliusEventService.enabled()) {
       checkinDeliusEventService.recordCheckinUpdate(
         DomainEventType.V2_CHECKIN_SUBMITTED,
@@ -301,10 +311,16 @@ class CheckinPersistenceService(
     }
     val event = toEvent(cancelled)
     eventAuditService.recordCheckinCancelled(cancelled, event)
+    // Nothing is upcoming now: schedule the next check-in. The cancelled one holds its date, so
+    // this is the one after it.
+    upcomingCheckinService.scheduleNext(cancelled.offender.id, eventNumberFor(cancelled.offender, event.checkin.personalDetails))
 
     appEventPublisher.publishEvent(event)
     return event
   }
+
+  /** The offender's active event, from their NDelius [details] if known */
+  private fun eventNumberFor(offender: Offender, details: ContactDetails?) = details?.let { activeEventNumber(offender, it, appConfig.esup2305DeliusEventSelection) }
 
   companion object {
     private val LOGGER = logger<CheckinPersistenceService>()

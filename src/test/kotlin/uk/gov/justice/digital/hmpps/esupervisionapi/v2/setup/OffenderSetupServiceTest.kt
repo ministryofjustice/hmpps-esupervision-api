@@ -742,7 +742,7 @@ class OffenderSetupServiceTest {
     fun `start setup - basic test`() {
       val checkinCreationService = mock<CheckinCreationService>()
       val (offender, _) = makeData()
-      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock())
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock(), mock())
       val setup = OffenderSetup(
         uuid = UUID.randomUUID(),
         offender = offender,
@@ -764,11 +764,11 @@ class OffenderSetupServiceTest {
       val (offender, _) = makeData()
 
       val checkinCreationService = mock<CheckinCreationService>()
-      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock())
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock(), mock())
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, null, true)
 
-      verify(offenderRepository).save(offender)
+      verify(offenderRepository).saveAndFlush(offender)
       verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
     }
 
@@ -776,11 +776,11 @@ class OffenderSetupServiceTest {
     fun `create checkin when contact info is passed in`() {
       val (offender, contactDetails) = makeData()
       val checkinCreationService = mock<CheckinCreationService>()
-      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock())
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock(), mock())
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, true)
 
-      verify(offenderRepository).save(offender)
+      verify(offenderRepository).saveAndFlush(offender)
       verify(checkinCreationService, times(1)).createCheckinForOffender(any(), any(), any(), anyOrNull())
     }
 
@@ -788,10 +788,10 @@ class OffenderSetupServiceTest {
     fun `do not create checkin when contact info passed, but flag is false`() {
       val (offender, contactDetails) = makeData()
       val checkinCreationService = mock<CheckinCreationService>()
-      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock())
+      val service = OffenderSetupPersistenceService(offenderRepository, offenderSetupRepository, checkinCreationService, clock, mock(), mock(), mock())
 
       service.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails, false)
-      verify(offenderRepository, times(1)).save(offender)
+      verify(offenderRepository, times(1)).saveAndFlush(offender)
       verify(checkinCreationService, never()).createCheckinForOffender(any(), any(), any(), anyOrNull())
     }
   }

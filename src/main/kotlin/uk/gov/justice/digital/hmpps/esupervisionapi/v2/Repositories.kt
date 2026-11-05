@@ -135,6 +135,20 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findAllByStatusAndIdGreaterThanOrderByIdAsc(status: OffenderStatus, id: Long, pageable: Pageable): List<Offender>
 
   /**
+   * Locks the offender's row until the transaction ends, so stopping check-ins (which updates it)
+   * waits for this transaction, and returns the offender's committed status. It doesn't flush
+   * pending changes first, so it can't write anything the caller then decides not to save.
+   */
+  @Query("select cast(status as text) from offender_v2 where id = :id for update", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun lockAndGetStatus(id: Long): String?
+
+  /** The offender's status in the database, not a cached entity's. */
+  @Query("select cast(status as text) from offender_v2 where id = :id", nativeQuery = true)
+  @QueryHints(QueryHint(name = "org.hibernate.flushMode", value = "COMMIT"))
+  fun findStatus(id: Long): String?
+
+  /**
    * Update an offender based on new due_date and today's date.
    *
    * If update didn't happen, we should  not be creating a check-in
@@ -166,7 +180,8 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         )
         update offender_v2 o
         set first_checkin = :newDueDate,
-            updated_at = now()
+            updated_at = now(),
+            schedule_updated_at = :scheduleUpdatedAt
         where o.id = :offenderId
           and :newDueDate >= :today
           and not exists (
@@ -176,7 +191,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     nativeQuery = true,
   )
   @Modifying
-  fun maybeUpdate(offenderId: Long, newDueDate: LocalDate, today: LocalDate): Int
+  fun maybeUpdate(offenderId: Long, newDueDate: LocalDate, today: LocalDate, scheduleUpdatedAt: Instant): Int
 
   @Query(
     value = """
@@ -201,10 +216,12 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
           AND :lowerBoundInclusive <= c.due_date
           AND c.due_date < :upperBoundExclusive
           -- a check-in a practitioner cancelled (cancelled_by set) holds its date, so it isn't
-          -- recreated, until the practitioner changes the schedule (or anything else) after
-          -- cancelling: rebooking the date must create it. One the system cancelled doesn't.
+          -- recreated, until the practitioner sets the schedule again after cancelling: rebooking
+          -- the date must create it. One the system cancelled doesn't. Must match
+          -- OffenderCheckin.holdsCancelledDate.
           AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
-            OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL AND c.cancelled_at > o.updated_at)
+            OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL
+                AND (o.schedule_updated_at IS NULL OR c.cancelled_at > o.schedule_updated_at))
             -- ESUP-2223: the invite couldn't be sent; don't create another for the same day
             OR (c.status = 'CANCELLED' AND c.link_status = 'FAILED'))
       )

@@ -189,7 +189,7 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
     saveCheckin(offender, CheckinStatus.SCHEDULED, clock.today().plusDays(7))
 
     val updated = transactionTemplate.execute {
-      offenderRepository.maybeUpdate(offender.id, clock.today().plusDays(3), clock.today())
+      offenderRepository.maybeUpdate(offender.id, clock.today().plusDays(3), clock.today(), clock.instant())
     }
 
     assertThat(updated).isEqualTo(1)
@@ -201,7 +201,7 @@ class ScheduledCheckinActivationIT : IntegrationTestBase() {
     saveCheckin(offender, CheckinStatus.CANCELLED, clock.today().plusDays(7))
 
     val updated = transactionTemplate.execute {
-      offenderRepository.maybeUpdate(offender.id, clock.today().plusDays(3), clock.today())
+      offenderRepository.maybeUpdate(offender.id, clock.today().plusDays(3), clock.today(), clock.instant())
     }
 
     assertThat(updated).isEqualTo(1)

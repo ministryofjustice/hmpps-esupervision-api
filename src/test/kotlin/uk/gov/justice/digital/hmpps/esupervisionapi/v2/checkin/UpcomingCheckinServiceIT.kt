@@ -201,10 +201,14 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `skips a date whose check-in a practitioner cancelled, until the offender is changed`() {
-    val offender = saveOffender(firstCheckin = today.minusWeeks(1))
+  fun `skips a date whose check-in a practitioner cancelled, until the schedule is set again`() {
+    val scheduleSetAt = clock.instant().minusSeconds(3600)
+    val offender = saveOffender(firstCheckin = today.minusWeeks(1)).also {
+      it.scheduleUpdatedAt = scheduleSetAt
+      offenderRepository.save(it)
+    }
     saveCheckin(offender, CheckinStatus.CANCELLED, today).also {
-      it.cancelledAt = offender.updatedAt.plusSeconds(1)
+      it.cancelledAt = scheduleSetAt.plusSeconds(1)
       it.cancelledBy = "PRACT001"
       checkinRepository.save(it)
     }
@@ -212,9 +216,16 @@ class UpcomingCheckinServiceIT : IntegrationTestBase() {
     service.scheduleNext(offender.id)
     assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusWeeks(1))
 
-    // rebooking: once the offender is changed after the cancellation, its date can be scheduled again
+    // another change to the offender (contact preference, event) doesn't release the date
     checkinRepository.deleteAll(scheduledCheckins(offender))
-    offender.updatedAt = clock.instant().plusSeconds(60)
+    offender.updatedAt = clock.instant()
+    offenderRepository.save(offender)
+    service.scheduleNext(offender.id)
+    assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today.plusWeeks(1))
+
+    // rebooking: once the schedule is set after the cancellation, its date can be scheduled again
+    checkinRepository.deleteAll(scheduledCheckins(offender))
+    offender.scheduleUpdatedAt = clock.instant()
     offenderRepository.save(offender)
     service.scheduleNext(offender.id)
     assertThat(scheduledCheckins(offender).single().dueDate).isEqualTo(today)
