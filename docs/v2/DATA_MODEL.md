@@ -20,6 +20,7 @@ erDiagram
         timestamp created_at
         varchar created_by
         timestamp updated_at
+        timestamp schedule_updated_at
     }
 
     OFFENDER_SETUP_V2 {
@@ -131,6 +132,7 @@ Stores offender records **without PII** - only CRN reference.
 | created_at | TIMESTAMP | NOT NULL | Record creation time |
 | created_by | VARCHAR(255) | NOT NULL | Creator (practitioner) |
 | updated_at | TIMESTAMP | NOT NULL | Last update time |
+| schedule_updated_at | TIMESTAMP | | When a practitioner last set the check-in schedule (setup, schedule change, ad hoc booking, reactivation). Releases the dates of check-ins they cancelled before it |
 
 ### offender_checkin_v2
 
@@ -158,7 +160,7 @@ Stores checkin records with survey responses.
 | link_status | ENUM | | Whether GOV.UK Notify accepted the check-in invite (no delivery receipts, so not whether it was delivered). SENDING: live, not yet accepted; SENT: accepted (NDelius `link.delivered`), or unknown whether Notify sent it (a timeout or 502/504; NDelius isn't told); FAILED: rejected or couldn't be sent (NDelius `link.not_delivered`). NULL for check-ins created before ESUP-2223 |
 | link_status_updated_at | TIMESTAMP | | When link_status last changed |
 | cancelled_at | TIMESTAMP | | When a practitioner cancelled the check-in (ESUP-2128). NULL if the system cancelled it |
-| cancelled_by | VARCHAR(255) | | Practitioner who cancelled it. Set means the check-in holds its date: the creation job won't create another for it, until the offender is next updated (for example the date is booked again) |
+| cancelled_by | VARCHAR(255) | | Practitioner who cancelled it. Set means the check-in holds its date: the creation job won't create another for it, nor will scheduling the next check-in use it, until the practitioner next sets the schedule (`offender_v2.schedule_updated_at`), which can book the date again |
 
 ### generic_notification_v2
 
