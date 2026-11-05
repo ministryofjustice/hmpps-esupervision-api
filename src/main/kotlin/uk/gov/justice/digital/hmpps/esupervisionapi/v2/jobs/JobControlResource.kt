@@ -64,6 +64,7 @@ class JobControlResource(
   migrationEventReplayJob: ObjectProvider<MigrationEventReplayJob>,
   monthlyStatsRefreshJob: ObjectProvider<MonthlyStatsRefreshJob>,
   offenderEligibilitySyncJob: ObjectProvider<OffenderEligibilitySyncJob>,
+  upcomingCheckinBackfillJob: ObjectProvider<UpcomingCheckinBackfillJob>,
 ) {
 
   /**
@@ -81,6 +82,7 @@ class JobControlResource(
     migrationEventReplayJob.ifAvailable { put("migration-event-replay", it::process) }
     monthlyStatsRefreshJob.ifAvailable { put("monthly-stats-refresh", it::refresh) }
     offenderEligibilitySyncJob.ifAvailable { put("offender-eligibility-sync", it::process) }
+    upcomingCheckinBackfillJob.ifAvailable { put("upcoming-checkin-backfill", it::process) }
   }
 
   private val running = ConcurrentHashMap<String, AtomicBoolean>()

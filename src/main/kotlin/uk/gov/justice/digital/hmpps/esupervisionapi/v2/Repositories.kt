@@ -53,6 +53,22 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
     val status: OffenderStatus
   }
 
+  /**
+   * ESUP-2223 backfill: verified offenders with neither an upcoming (SCHEDULED) nor an open
+   * (CREATED) check-in, in id order after [afterId].
+   */
+  @Query(
+    """
+    select o.id from offender_v2 o
+    where o.status = 'VERIFIED' and o.id > :afterId
+      and not exists (select 1 from offender_checkin_v2 c where c.offender_id = o.id and c.status in ('SCHEDULED', 'CREATED'))
+    order by o.id
+    limit :limit
+    """,
+    nativeQuery = true,
+  )
+  fun findIdsWithoutUpcomingCheckin(afterId: Long, limit: Int): List<Long>
+
   @Transactional(readOnly = true)
   fun findByCrn(crn: String): Optional<Offender>
 
@@ -340,6 +356,17 @@ interface OffenderCheckinRepository : JpaRepository<OffenderCheckin, Long> {
   fun findByIdForUpdate(checkinId: Long): Optional<OffenderCheckin>
 
   fun findAllByOffenderAndStatus(offender: Offender, status: CheckinStatus): List<OffenderCheckin>
+
+  /** Cancels the offender's check-ins in [status]. @return the ids of those it cancelled */
+  @Query(
+    """
+    update offender_checkin_v2 set status = 'CANCELLED'
+    where offender_id = :offenderId and status = cast(:status as offender_checkin_status_v2)
+    returning id
+    """,
+    nativeQuery = true,
+  )
+  fun cancelForOffender(offenderId: Long, status: String): List<Long>
 
   @Query("""select c from OffenderCheckin c where c.id in :ids""")
   @EntityGraph(attributePaths = ["offender"])
@@ -683,6 +710,8 @@ interface EventAuditRepository : JpaRepository<EventAudit, Long> {
 @Repository
 interface JobLogRepository : JpaRepository<JobLog, Long> {
   fun existsByJobTypeAndCreatedAtGreaterThanEqual(jobType: String, createdAt: Instant): Boolean
+
+  fun existsByJobTypeAndCreatedAtGreaterThanEqualAndEndedAtIsNull(jobType: String, createdAt: Instant): Boolean
 }
 
 enum class LogEntryType {

@@ -189,3 +189,5 @@ databaseChangeLog:
       file: db/changelog/changesets/94_checkin_cancellation.sql
   - include:
       file: db/changelog/changesets/95_feedback_new_questions_not_answered.sql
+  - include:
+      file: db/changelog/changesets/96_upcoming_checkin_backfill_job_type.sql
