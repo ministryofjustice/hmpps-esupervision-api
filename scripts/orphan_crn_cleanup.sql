@@ -8,16 +8,18 @@
 --
 -- psql variables:
 --   target_env   must be dev, or nothing runs
---   expected_db  the database name from the dev secret; nothing runs unless
---                current_database() is exactly this
+--   expected_addr  the IP the dev RDS hostname resolves to; nothing runs unless
+--                inet_server_addr() -- the server's own address, which no
+--                connection setting can fake -- is exactly this
 --   apply  true to COMMIT, false (the default) to roll back, so the counts
 --          printed are exactly what an apply would delete. Any other value is
 --          an error, and nothing is committed.
 --
 -- Everything runs in one transaction: either all of a CRN's rows go or none
--- do. If a table has been given a foreign key into one of the tables below
--- since this was written, the guard raises before anything is deleted --
--- add the new table to the deletes and to the handled list.
+-- do. Two guards raise before anything is deleted if the schema has moved on
+-- since this was written: a new foreign key into any table deleted from, or a
+-- new outbox item type (outbox_items.entity_id has no foreign key, so only the
+-- type says what it points at). Update the deletes and the guard lists.
 --
 -- Left alone on purpose:
 --   question_list            lists are shared, not owned by one offender
@@ -40,14 +42,15 @@
 \else
   \set target_env ''
 \endif
-\if :{?expected_db}
+\if :{?expected_addr}
 \else
-  \set expected_db ''
+  \set expected_addr ''
 \endif
-SELECT :'target_env' = 'dev' AND :'expected_db' <> '' AND current_database() = :'expected_db' AS is_dev \gset
+SELECT :'target_env' = 'dev' AND :'expected_addr' <> ''
+   AND coalesce(host(inet_server_addr()), '') = :'expected_addr' AS is_dev \gset
 \if :is_dev
 \else
-  \echo 'Refusing: this script runs against dev only (pass -v target_env=dev -v expected_db=<dev database name>).'
+  \echo 'Refusing: this script runs against dev only (pass -v target_env=dev -v expected_addr=<IP the dev RDS hostname resolves to>).'
   DO $$ BEGIN RAISE EXCEPTION 'not the dev database -- nothing was changed'; END $$;
 \endif
 
@@ -87,23 +90,40 @@ CREATE TEMP TABLE el ON COMMIT DROP AS
   WHERE e.offender_id IN (SELECT id FROM o) OR e.checkin IN (SELECT id FROM c);
 
 -- Every foreign key into a table we delete from must come from a table we
--- also delete from, or the deletes below would miss rows (and fail on the
--- constraint, at best).
+-- also delete from, or the deletes below would miss rows: fail on the
+-- constraint, or with ON DELETE CASCADE take rows the counts never show.
 DO $$
 DECLARE
+  deleted_from text[] := ARRAY[
+    'offender_v2', 'offender_checkin_v2', 'offender_setup_v2', 'offender_event_log_v2',
+    'generic_notification_v2', 'setup_event_backfill_v2', 'question_list_assignment',
+    'outbox_items', 'checkin_delius_event_v2', 'checkin_note_resend',
+    'migration_events_to_send', 'event_audit_log_v2'];
   unhandled text;
 BEGIN
   SELECT string_agg(DISTINCT format('%s -> %s', conrelid::regclass, confrelid::regclass), ', ')
     INTO unhandled
   FROM pg_constraint
   WHERE contype = 'f'
-    AND confrelid::regclass::text IN
-        ('offender_v2', 'offender_checkin_v2', 'offender_setup_v2', 'offender_event_log_v2')
-    AND conrelid::regclass::text NOT IN
-        ('offender_checkin_v2', 'offender_setup_v2', 'offender_event_log_v2',
-         'generic_notification_v2', 'setup_event_backfill_v2', 'question_list_assignment');
+    AND confrelid::regclass::text = ANY (deleted_from)
+    AND NOT conrelid::regclass::text = ANY (deleted_from);
   IF unhandled IS NOT NULL THEN
     RAISE EXCEPTION 'foreign keys this script does not handle: % -- update scripts/orphan_crn_cleanup.sql', unhandled;
+  END IF;
+END $$;
+
+-- Every outbox item type must be one the outbox delete below maps to its entity.
+DO $$
+DECLARE
+  unhandled text;
+BEGIN
+  SELECT string_agg(t::text, ', ') INTO unhandled
+  FROM unnest(enum_range(NULL::outboxitemtype)) AS t
+  WHERE t::text NOT IN ('CHECKIN_CREATED', 'CHECKIN_SUBMITTED', 'CHECKIN_REVIEWED', 'CHECKIN_EXPIRED',
+                        'CHECKIN_ANNOTATED',
+                        'OFFENDER_SETUP_COMPLETE', 'OFFENDER_DEACTIVATED', 'OFFENDER_REACTIVATED');
+  IF unhandled IS NOT NULL THEN
+    RAISE EXCEPTION 'outbox item types this script does not handle: % -- update scripts/orphan_crn_cleanup.sql', unhandled;
   END IF;
 END $$;
 

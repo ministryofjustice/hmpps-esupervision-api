@@ -28,20 +28,31 @@
 #   work_dir  defaults to ~/esup-orphan-crns/dev. Must be outside this repo.
 #
 # Dev only. Every one of these must hold, or the script stops:
-#   - the namespace, API URL and UI namespace are fixed to dev; ENV, NS,
-#     API_BASE or UI_NAMESPACE set to anything else is refused
+#   - the namespace, API URL and UI namespace are fixed to dev; NS, API_BASE
+#     or UI_NAMESPACE set to anything else is refused, as is ENV naming
+#     another environment (test, preprod, prod...)
 #   - the namespace is hmpps-esupervision-dev and Cloud Platform labels it
 #     environment-name=development, is-production=false (checked at the start
 #     and again just before deleting)
 #   - nothing else is listening on LOCAL_PG_PORT before the port-forward
 #     starts, so psql cannot reach some other environment's tunnel
-#   - once connected, the database name and user are the ones in the dev
-#     secret, and orphan_crn_cleanup.sql checks the database name again
-#     inside its transaction before it deletes anything
+#   - once connected, the server's own address (inet_server_addr()) must be
+#     the IP the dev RDS hostname resolves to -- through any other tunnel it
+#     would not be. orphan_crn_cleanup.sql checks the same address again
+#     inside its transaction, before it deletes anything
+#
+# Deleting (APPLY=1) also needs an interactive terminal, checked at the start.
+# It runs the dry run, asks you to type "dev", then asks NDelius about every
+# orphan once more; if any answer has changed it stops without deleting.
 #
 # Env:
 #   APPLY          1 to commit the deletes; otherwise a dry run
 #   RECHECK        1 to discard earlier NDelius results and ask again for every CRN
+#   MAX_ORPHAN_PERCENT  refuse when more than this share of the checked CRNs
+#                  are orphans, default 50. A partial NDelius fault (gateway
+#                  404s, empty bodies) reads as "not in NDelius", so a big share
+#                  is more likely a fault than real -- raise it only if you
+#                  expect that many
 #   CRN_LIMIT      check (and so at most clean up) only the first N CRNs -- for a
 #                  quick trial before the full run
 #   LOCAL_PG_PORT  local end of the database port-forward, default 5433
@@ -84,8 +95,12 @@ DEV_API=https://esupervision-api-dev.hmpps.service.justice.gov.uk
 
 # Refuse, rather than silently ignore, an attempt to aim it elsewhere: check
 # what the caller set before overwriting it.
-[[ -z "${ENV:-}" || "$ENV" == dev ]] \
-  || die "this script only runs against dev (ENV=$ENV given). It must never touch test, preprod or prod."
+# ENV is also the shell's startup-file variable (ENV=~/.shrc), so only a value
+# naming another environment is refused; anything else is ignored.
+case "$(tr '[:upper:]' '[:lower:]' <<<"${ENV:-}")" in
+  test|preprod|pre-prod|prod|production|staging)
+    die "this script only runs against dev (ENV=$ENV given). It must never touch test, preprod or prod." ;;
+esac
 [[ -z "${NS:-}" || "$NS" == "$DEV_NS" ]] || die "this script only runs against $DEV_NS (NS=$NS given)"
 [[ -z "${UI_NAMESPACE:-}" || "$UI_NAMESPACE" == "$DEV_NS" ]] \
   || die "this script only runs against $DEV_NS (UI_NAMESPACE=$UI_NAMESPACE given)"
@@ -108,6 +123,10 @@ assert_dev_namespace() {
 }
 
 [[ $# -le 1 ]] || die "usage: $0 [work_dir]"
+MAX_ORPHAN_PERCENT="${MAX_ORPHAN_PERCENT:-50}"
+[[ "$MAX_ORPHAN_PERCENT" =~ ^([1-9][0-9]?|100)$ ]] || die "MAX_ORPHAN_PERCENT must be 1 to 100 (got '$MAX_ORPHAN_PERCENT')"
+# Checked now, not after an hour of NDelius checks.
+[[ "${APPLY:-}" != 1 || -t 0 ]] || die "APPLY=1 needs an interactive terminal to confirm"
 WORK_DIR="${1:-$HOME/esup-orphan-crns/dev}"
 [[ "$PASSES" =~ ^[1-9][0-9]*$ ]] || die "PASSES must be a positive whole number (got '$PASSES')"
 
@@ -193,12 +212,17 @@ start_db() {
     sleep 1
   done
   [[ -n "$up" ]] || die "database not reachable on 127.0.0.1:$LOCAL_PG_PORT"
-  # Connected -- but make sure it is through our port-forward, to the dev database.
+  # Connected -- but make sure it is to the dev RDS instance. The database name
+  # or user would prove nothing (psql connected with them), so compare the
+  # server's own address with what the dev hostname resolves to, as seen from
+  # the pod doing the forwarding. Resolved afresh each time: a failover moves it.
   kill -0 "$PF_PID" 2>/dev/null || die "port-forward exited -- refusing to use whatever is on $LOCAL_PG_PORT"
-  local who
-  who=$(psql -X -qtAc "select current_database() || ' ' || current_user") || die "could not identify the database"
-  [[ "$who" == "$PGDATABASE $PGUSER" ]] \
-    || die "connected to '$who', not the dev database '$PGDATABASE $PGUSER' -- refusing to continue"
+  DEV_DB_ADDR=$(kubectl -n "$NS" exec "$POD" -- getent hosts "$RDS_HOST" </dev/null | awk 'NR == 1 {print $1}') \
+    && [[ -n "$DEV_DB_ADDR" ]] || die "could not resolve the dev RDS host from $POD"
+  local addr
+  addr=$(psql -X -qtAc "select coalesce(host(inet_server_addr()), '')") || die "could not identify the database server"
+  [[ "$addr" == "$DEV_DB_ADDR" ]] \
+    || die "connected to a server at '$addr', not the dev RDS instance ($DEV_DB_ADDR) -- refusing to continue"
 }
 stop_db() {
   [[ -n "$PF_PID" ]] && kill "$PF_PID" 2>/dev/null || true
@@ -374,6 +398,11 @@ summarise
 (( invalid == 0 )) || echo "NOTE: $invalid CRNs in offender_v2 are not valid CRNs and were left alone (see INVALID in $CRN_STATUS)" >&2
 # A check that found nobody is far likelier to be broken than to be right.
 (( found > 0 )) || die "NDelius knew none of the CRNs -- refusing to treat them all as orphans. Check the API and NDelius are healthy."
+# A partial fault (gateway 404s, empty bodies for some CRNs) also reads as "not
+# in NDelius", and found > 0 cannot catch it. Refuse a share that large.
+pct=$(( orphans * 100 / (found + orphans) ))
+(( pct <= MAX_ORPHAN_PERCENT )) \
+  || die "$orphans of $((found + orphans)) CRNs ($pct%) look orphaned, over MAX_ORPHAN_PERCENT=$MAX_ORPHAN_PERCENT. More likely an NDelius fault than real: check NDelius, re-run with RECHECK=1, and raise MAX_ORPHAN_PERCENT only if you expect this many."
 if (( orphans == 0 )); then
   echo "Nothing to clean up." >&2
   (( unchecked == 0 )) || exit 3
@@ -386,37 +415,35 @@ echo "Orphans listed in $ORPHANS (first few: $(head -5 "$ORPHANS" | paste -sd' '
 # ---------------------------------------------------------------------------
 run_cleanup() {  # true|false
   (cd "$WORK_DIR" && psql -X -q -v ON_ERROR_STOP=1 -v apply="$1" \
-    -v target_env=dev -v expected_db="$PGDATABASE" -f "$REPO_ROOT/scripts/orphan_crn_cleanup.sql")
+    -v target_env=dev -v expected_addr="$DEV_DB_ADDR" -f "$REPO_ROOT/scripts/orphan_crn_cleanup.sql")
 }
-
-if [[ "${APPLY:-}" == 1 ]]; then
-  # Always, even on a fresh run: the full check can take an hour, and a CRN
-  # found missing early on may be back by now, or the answer may come from an
-  # earlier run. Ask again about every orphan just before deleting.
-  pending=$(cat "$ORPHANS")
-  check_pending "Re-checking the orphans before deleting"
-  summarise
-  if (( orphans == 0 )); then
-    echo "Nothing to clean up after the re-check." >&2
-    if (( unchecked > 0 )); then
-      echo "WARNING: $unchecked CRNs could not be checked against NDelius and were left alone. Re-run to retry." >&2
-      exit 3
-    fi
-    exit 0
-  fi
-fi
 
 start_db
 step "Dry run (rolled back)"
 run_cleanup false || die "dry run failed -- nothing was deleted"
 
 if [[ "${APPLY:-}" == 1 ]]; then
-  [[ -t 0 ]] || die "APPLY=1 needs an interactive terminal to confirm"
+  # The port-forward would not survive the re-check below, so close it now.
+  stop_db
   printf '\nDelete these %d people on probation and everything of theirs from %s? Type the environment name (%s) to confirm: ' \
     "$orphans" "$NS" "$ENV" >&2
-  read -r answer
+  read -r -t 600 answer || die "no answer within 10 minutes -- nothing was deleted"
   [[ "$answer" == "$ENV" ]] || die "not confirmed -- nothing was deleted"
+
+  # After confirming, not before: the answers must be fresh when the delete
+  # runs, however long the full check or the prompt took. Every orphan must
+  # still be one, or nothing is deleted.
+  confirmed=$(cat "$ORPHANS")
+  pending="$confirmed"
+  check_pending "Re-checking the orphans before deleting"
+  summarise
+  if [[ "$(cat "$ORPHANS")" != "$confirmed" ]]; then
+    changed=$(comm -3 <(echo "$confirmed") "$ORPHANS" | tr -d '\t' | head -5 | paste -sd' ' -)
+    die "the orphan list changed in the re-check (e.g. $changed) -- nothing was deleted. Re-run to review the new list."
+  fi
+
   assert_dev_namespace
+  start_db
   step "Deleting"
   run_cleanup true || die "delete failed -- the transaction was rolled back, nothing was deleted"
   # orphan_uuids.csv is rewritten by every run, so keep what this commit
