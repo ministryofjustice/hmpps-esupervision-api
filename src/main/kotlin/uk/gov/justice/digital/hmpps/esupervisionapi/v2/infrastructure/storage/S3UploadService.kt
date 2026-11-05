@@ -7,11 +7,15 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.Delete
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectResponse
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
@@ -91,6 +95,9 @@ data class CheckinPhotoKey(
   val checkin: UUID,
   val index: Int,
 ) : S3Keyable()
+
+/** Keys whose every version and delete marker was removed, and keys S3 refused to delete. */
+data class S3PurgeResult(val keysDeleted: Int, val keysFailed: Int)
 
 /**
  * V2 S3 Upload Service
@@ -451,6 +458,71 @@ class S3UploadService(
     val key = CheckinVideoKey(uuid)
     val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
     return s3uploadClient.deleteObject(delReq)
+  }
+
+  /**
+   * Permanently deletes a person's setup photo: every version and delete marker, since the bucket
+   * is versioned and a plain delete only hides the object behind a marker.
+   *
+   * For the dev-only test support cleanup. Deliberately outside the `awsS3` circuit breaker and
+   * retry, so a cleanup failure (say, a missing s3:ListBucketVersions permission) cannot open the
+   * breaker the rest of the app depends on.
+   */
+  fun purgeSetupPhoto(offenderUuid: UUID): S3PurgeResult {
+    val key = SetupPhotoKey(offenderUuid)
+    val exactKey = key.toKey()
+    return purgeAllVersions(bucketFor(key), prefix = exactKey) { it == exactKey }
+  }
+
+  /**
+   * Permanently deletes everything stored for a check-in - the video and however many snapshots -
+   * as [purgeSetupPhoto] does for the setup photo.
+   */
+  fun purgeCheckinObjects(checkinUuid: UUID): S3PurgeResult {
+    // The video and the snapshots share this prefix and bucket.
+    return purgeAllVersions(bucketFor(CheckinVideoKey(checkinUuid)), prefix = "checkin-$checkinUuid/") { true }
+  }
+
+  private fun purgeAllVersions(bucket: String, prefix: String, matches: (String) -> Boolean): S3PurgeResult {
+    val targets = mutableListOf<ObjectIdentifier>()
+    var keyMarker: String? = null
+    var versionIdMarker: String? = null
+    do {
+      val page = s3uploadClient.listObjectVersions(
+        ListObjectVersionsRequest.builder()
+          .bucket(bucket)
+          .prefix(prefix)
+          .keyMarker(keyMarker)
+          .versionIdMarker(versionIdMarker)
+          .build(),
+      )
+      page.versions().filter { matches(it.key()) }
+        .mapTo(targets) { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
+      page.deleteMarkers().filter { matches(it.key()) }
+        .mapTo(targets) { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
+      keyMarker = page.nextKeyMarker()
+      versionIdMarker = page.nextVersionIdMarker()
+    } while (page.isTruncated == true)
+
+    val failedKeys = mutableSetOf<String>()
+    // DeleteObjects takes at most 1000 identifiers per request. A batch that fails outright counts
+    // all its keys as failed, and the rest still go: one bad batch should not hide what did work.
+    targets.chunked(1000).forEach { chunk ->
+      try {
+        val response = s3uploadClient.deleteObjects(
+          DeleteObjectsRequest.builder()
+            .bucket(bucket)
+            .delete(Delete.builder().objects(chunk).quiet(true).build())
+            .build(),
+        )
+        response.errors().mapTo(failedKeys) { it.key() }
+      } catch (e: Exception) {
+        LOG.warn("Could not delete a batch of {} object versions under {}/{}: {}", chunk.size, bucket, prefix, e.javaClass.simpleName)
+        chunk.mapTo(failedKeys) { it.key() }
+      }
+    }
+    val keys = targets.map { it.key() }.toSet()
+    return S3PurgeResult(keysDeleted = (keys - failedKeys).size, keysFailed = failedKeys.size)
   }
 
   companion object {
