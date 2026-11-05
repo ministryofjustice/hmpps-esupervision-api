@@ -79,7 +79,7 @@ class OffenderCleanupService(
   }
 
   /**
-   * The repository locks with NOWAIT, so it fails at once if the app holds the person's rows.
+   * The repository fails at once (NOWAIT, or a short lock timeout) if the app holds the person's rows.
    * Retry briefly; an app transaction is short. Never waiting on a lock is what keeps this from
    * deadlocking with, and possibly aborting, a user's request.
    */
@@ -125,7 +125,7 @@ class OffenderCleanupService(
   }
 
   /**
-   * NOWAIT failing, Postgres SQL state 55P03. Spring does not translate that state on this path -
+   * NOWAIT or the lock timeout failing, Postgres SQL state 55P03. Spring does not translate that state on this path -
    * it arrives as UncategorizedSQLException - so look for it rather than for an exception type.
    */
   private fun DataAccessException.isLockNotAvailable(): Boolean = this is PessimisticLockingFailureException ||

@@ -108,8 +108,12 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
   fun `deletes every row held for the person, and nobody else's`() {
     val seeded = seedPerson(orphan)
     seedPerson(bystander)
-    val bystanderBefore = rowsFor(bystander)
-    assertThat(rowsFor(orphan).filterValues { it == 0 }.keys)
+    // Captured now: once the person is gone, their check-ins and setups can no longer be found
+    // through offender_v2, and counting that way would show zero whether or not the rows went.
+    val orphanKeys = keysFor(orphan)
+    val bystanderKeys = keysFor(bystander)
+    val bystanderBefore = rowsFor(bystanderKeys)
+    assertThat(rowsFor(orphanKeys).filterValues { it == 0 }.keys)
       .describedAs("the seed should put something in every table, or the test proves nothing")
       .isEmpty()
 
@@ -122,8 +126,8 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
       .jsonPath("$.s3ObjectsDeleted").isEqualTo(3)
       .jsonPath("$.s3Failures").isEqualTo(0)
 
-    assertThat(rowsFor(orphan)).allSatisfy { _, n -> assertThat(n).isZero() }
-    assertThat(rowsFor(bystander)).isEqualTo(bystanderBefore)
+    assertThat(rowsFor(orphanKeys)).allSatisfy { _, n -> assertThat(n).isZero() }
+    assertThat(rowsFor(bystanderKeys)).isEqualTo(bystanderBefore)
     verify(s3UploadService).purgeSetupPhoto(seeded.offenderUuid)
     verify(s3UploadService).purgeCheckinObjects(seeded.checkinUuid)
 
@@ -138,24 +142,26 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
   @Test
   fun `refuses while NDelius still knows the CRN, and deletes nothing`() {
     seedPerson(orphan)
-    val before = rowsFor(orphan)
+    val keys = keysFor(orphan)
+    val before = rowsFor(keys)
     whenever(ndeliusApiClient.getContactDetailsStrict(orphan)).thenReturn(mock<ContactDetails>())
 
     delete(orphan).expectStatus().isEqualTo(409)
 
-    assertThat(rowsFor(orphan)).isEqualTo(before)
+    assertThat(rowsFor(keys)).isEqualTo(before)
     verify(s3UploadService, never()).purgeSetupPhoto(any())
   }
 
   @Test
   fun `refuses when NDelius cannot be asked, rather than reading that as not found`() {
     seedPerson(orphan)
-    val before = rowsFor(orphan)
+    val keys = keysFor(orphan)
+    val before = rowsFor(keys)
     doThrow(RuntimeException("NDelius down")).whenever(ndeliusApiClient).getContactDetailsStrict(orphan)
 
     delete(orphan).expectStatus().isEqualTo(503)
 
-    assertThat(rowsFor(orphan)).isEqualTo(before)
+    assertThat(rowsFor(keys)).isEqualTo(before)
   }
 
   @Test
@@ -199,12 +205,47 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
   @Test
   fun `gives up rather than waiting while the app holds the person's rows`() {
     seedPerson(orphan)
-    val before = rowsFor(orphan)
+    givesUpWhileLocked("select id from offender_v2 where crn = ? for update", orphan)
+  }
+
+  /** The app can lock an assignment without the person, to point it at a new list. */
+  @Test
+  fun `gives up rather than waiting while the app holds a question list assignment`() {
+    seedPerson(orphan)
+    givesUpWhileLocked(
+      "select 1 from question_list_assignment where offender_id = (select id from offender_v2 where crn = ?) for update",
+      orphan,
+    )
+  }
+
+  /**
+   * Rows locked neither by NOWAIT nor through the person: the outbox relay marks items sent in a
+   * transaction of its own, and question_list_item rows go by cascade. The lock timeout covers these.
+   */
+  @Test
+  fun `gives up rather than waiting while the app holds an outbox item`() {
+    val seeded = seedPerson(orphan)
+    givesUpWhileLocked(
+      "select 1 from outbox_items where type::text = 'CHECKIN_SUBMITTED' and entity_id = (select id from offender_checkin_v2 where uuid = ?) for update",
+      seeded.checkinUuid,
+    )
+  }
+
+  @Test
+  fun `gives up rather than waiting while the app holds a row that goes by cascade`() {
+    val seeded = seedPerson(orphan)
+    givesUpWhileLocked("select 1 from question_list_item where question_list_id = ? for update", seeded.ownListId)
+  }
+
+  /** Holds [lockSql] in another transaction: the cleanup answers 503 and changes nothing, then works once it is released. */
+  private fun givesUpWhileLocked(lockSql: String, vararg args: Any) {
+    val keys = keysFor(orphan)
+    val before = rowsFor(keys)
     val locked = CountDownLatch(1)
     val release = CountDownLatch(1)
     val holder = thread {
       TransactionTemplate(transactionManager).executeWithoutResult {
-        jdbc.queryForList("select id from offender_v2 where crn = ? for update", orphan)
+        assertThat(jdbc.queryForList(lockSql, *args)).describedAs("the lock should hold a row").isNotEmpty()
         locked.countDown()
         release.await(30, TimeUnit.SECONDS)
       }
@@ -212,7 +253,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
     try {
       assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue()
       delete(orphan).expectStatus().isEqualTo(503)
-      assertThat(rowsFor(orphan)).isEqualTo(before)
+      assertThat(rowsFor(keys)).isEqualTo(before)
     } finally {
       release.countDown()
       holder.join()
@@ -220,6 +261,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
 
     // Once the app lets go, it goes through.
     delete(orphan).expectStatus().isOk
+    assertThat(rowsFor(keys)).allSatisfy { _, n -> assertThat(n).isZero() }
   }
 
   /**
@@ -368,30 +410,63 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
 
   private fun itemCount(id: Long) = jdbc.queryForObject("select count(*) from question_list_item where question_list_id = ?", Int::class.java, id)
 
-  /** Rows held for a person, per table, found the same ways the cleanup finds them. */
-  private fun rowsFor(crn: String): Map<String, Int> {
-    val offender = "(select id from offender_v2 where crn = '$crn')"
-    val checkins = "(select id from offender_checkin_v2 where offender_id in $offender)"
-    val checkinUuids = "(select uuid from offender_checkin_v2 where offender_id in $offender)"
-    val setups = "(select id from offender_setup_v2 where offender_id in $offender)"
-    val logEntries = "(select id from offender_event_log_v2 where offender_id in $offender or checkin in $checkins)"
+  /** The ids and UUIDs a person's rows are found by, captured so they can still be counted once the person is gone. */
+  private data class PersonKeys(
+    val crn: String,
+    val offenderIds: List<Long>,
+    val checkinIds: List<Long>,
+    val checkinUuids: List<UUID>,
+    val setupIds: List<Long>,
+    val logEntryIds: List<Long>,
+  )
+
+  private fun keysFor(crn: String): PersonKeys {
+    fun <T : Any> list(sql: String, type: Class<T>, vararg args: Any): List<T> = jdbc.queryForList(sql, type, *args).filterNotNull()
+    val offenderIds = list("select id from offender_v2 where crn = ?", Long::class.java, crn)
+    val offenders = sqlList(offenderIds)
+    val checkinIds = list("select id from offender_checkin_v2 where offender_id in ($offenders)", Long::class.java)
+    return PersonKeys(
+      crn = crn,
+      offenderIds = offenderIds,
+      checkinIds = checkinIds,
+      checkinUuids = list("select uuid from offender_checkin_v2 where offender_id in ($offenders)", UUID::class.java),
+      setupIds = list("select id from offender_setup_v2 where offender_id in ($offenders)", Long::class.java),
+      logEntryIds = list(
+        "select id from offender_event_log_v2 where offender_id in ($offenders) or checkin in (${sqlList(checkinIds)})",
+        Long::class.java,
+      ),
+    )
+  }
+
+  /** "in (...)" contents; "null" for none, which matches nothing. */
+  private fun sqlList(values: List<Any>) = values.joinToString { if (it is UUID) "'$it'" else "$it" }.ifEmpty { "null" }
+
+  /** Rows held for a person, per table, found by the keys captured in [keysFor]. */
+  private fun rowsFor(keys: PersonKeys): Map<String, Int> {
+    val offenders = sqlList(keys.offenderIds)
+    val checkins = sqlList(keys.checkinIds)
+    val checkinUuids = sqlList(keys.checkinUuids)
+    val setups = sqlList(keys.setupIds)
+    val logEntries = sqlList(keys.logEntryIds)
     val counts = mapOf(
-      "offender_v2" to "select count(*) from offender_v2 where crn = '$crn'",
-      "offender_setup_v2" to "select count(*) from offender_setup_v2 where id in $setups",
-      "offender_checkin_v2" to "select count(*) from offender_checkin_v2 where id in $checkins",
-      "offender_event_log_v2" to "select count(*) from offender_event_log_v2 where id in $logEntries",
-      "generic_notification_v2" to "select count(*) from generic_notification_v2 where offender_id in $offender",
-      "setup_event_backfill_v2" to "select count(*) from setup_event_backfill_v2 where offender_id in $offender",
-      "question_list_assignment" to "select count(*) from question_list_assignment where offender_id in $offender",
-      "event_audit_log_v2" to "select count(*) from event_audit_log_v2 where crn = '$crn'",
-      "checkin_note_resend" to "select count(*) from checkin_note_resend where checkin in $checkinUuids",
-      "migration_events_to_send" to "select count(*) from migration_events_to_send where checkin in $checkinUuids",
-      "checkin_delius_event_v2" to "select count(*) from checkin_delius_event_v2 where crn = '$crn'",
+      "offender_v2" to "select count(*) from offender_v2 where id in ($offenders) or crn = '${keys.crn}'",
+      "offender_setup_v2" to "select count(*) from offender_setup_v2 where id in ($setups)",
+      "offender_checkin_v2" to "select count(*) from offender_checkin_v2 where id in ($checkins)",
+      "offender_event_log_v2" to "select count(*) from offender_event_log_v2 where id in ($logEntries)",
+      "generic_notification_v2" to "select count(*) from generic_notification_v2 where offender_id in ($offenders)",
+      "setup_event_backfill_v2" to "select count(*) from setup_event_backfill_v2 where offender_id in ($offenders)",
+      "question_list_assignment" to
+        "select count(*) from question_list_assignment where offender_id in ($offenders) or checkin_id in ($checkins)",
+      "event_audit_log_v2" to "select count(*) from event_audit_log_v2 where crn = '${keys.crn}'",
+      "checkin_note_resend" to "select count(*) from checkin_note_resend where checkin in ($checkinUuids)",
+      "migration_events_to_send" to "select count(*) from migration_events_to_send where checkin in ($checkinUuids)",
+      "checkin_delius_event_v2" to
+        "select count(*) from checkin_delius_event_v2 where crn = '${keys.crn}' or checkin_uuid in ($checkinUuids)",
       "outbox_items" to """
         select count(*) from outbox_items
-        where (type::text like 'CHECKIN_%' and type::text <> 'CHECKIN_ANNOTATED' and entity_id in $checkins)
-           or (type::text = 'CHECKIN_ANNOTATED' and entity_id in $logEntries)
-           or (type::text like 'OFFENDER_%' and entity_id in $setups)
+        where (type::text like 'CHECKIN_%' and type::text <> 'CHECKIN_ANNOTATED' and entity_id in ($checkins))
+           or (type::text = 'CHECKIN_ANNOTATED' and entity_id in ($logEntries))
+           or (type::text like 'OFFENDER_%' and entity_id in ($setups))
       """,
     )
     return counts.mapValues { (_, sql) -> jdbc.queryForObject(sql, Int::class.java)!! }

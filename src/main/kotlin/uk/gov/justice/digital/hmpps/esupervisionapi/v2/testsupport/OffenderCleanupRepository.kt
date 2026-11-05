@@ -33,11 +33,16 @@ class OffenderCleanupRepository(
 ) {
 
   /**
-   * Locks with NOWAIT: if the app holds any of these rows, this fails at once with
-   * SQL state 55P03 and the caller retries, rather than waiting. Waiting could deadlock
-   * with app transactions, which lock the person and their check-ins in either order, and Postgres
-   * might then abort the user's request rather than this one. Never waiting means never
-   * deadlocking.
+   * Never waits on a lock for long: if the app holds any of these rows, this fails with SQL state
+   * 55P03 and the caller retries. Waiting could deadlock with app transactions, which lock the
+   * person and their check-ins in either order, and Postgres might then abort the user's request
+   * rather than this one.
+   *
+   * The person, their check-ins and their question list assignments are locked up front with
+   * NOWAIT. Some rows deleted after that are not covered by those locks - an outbox item the relay
+   * is marking sent, say, or a question_list_item going by cascade - so [LOCK_TIMEOUT] bounds every
+   * other wait. It is below Postgres's default deadlock_timeout (1s), so in a deadlock this
+   * transaction gives up before Postgres would pick a victim, and the app's request is never it.
    *
    * Once the person row is locked, nothing with a foreign key to it - a new check-in, setup, event
    * log entry or notification - can be inserted until this commits. Rows the app writes by CRN or
@@ -47,6 +52,7 @@ class OffenderCleanupRepository(
    */
   @Transactional
   fun deleteByCrn(crn: String): OffenderDeletion? {
+    jdbc.jdbcTemplate.execute("set local lock_timeout = '$LOCK_TIMEOUT'")
     val offender = jdbc.query(
       "select id, uuid from offender_v2 where crn = :crn for update nowait",
       mapOf("crn" to crn),
@@ -59,12 +65,14 @@ class OffenderCleanupRepository(
       p,
     ) { rs, _ -> rs.getObject("uuid", UUID::class.java) }
 
-    // Before their assignments go: the lists this person's custom questions were put in.
+    // Before their assignments go: the lists this person's custom questions were put in. Locked, so
+    // the app cannot point a pending assignment at a new list between this read and the delete,
+    // which would leave that new list behind.
     val questionListIds = jdbc.queryForList(
-      "select distinct question_list_id from question_list_assignment where offender_id = :offenderId or checkin_id in ($CHECKIN_IDS)",
+      "select question_list_id from question_list_assignment where offender_id = :offenderId or checkin_id in ($CHECKIN_IDS) for update nowait",
       p,
       Long::class.java,
-    )
+    ).distinct()
 
     val rows = linkedMapOf<String, Int>()
     fun delete(table: String, sql: String, params: Map<String, Any> = p) {
@@ -158,6 +166,9 @@ class OffenderCleanupRepository(
       "OFFENDER_DEACTIVATED",
       "OFFENDER_REACTIVATED",
     )
+
+    /** The longest this waits on any one lock; see [deleteByCrn]. */
+    const val LOCK_TIMEOUT = "200ms"
 
     private const val CHECKIN_IDS = "select id from offender_checkin_v2 where offender_id = :offenderId"
     private const val CHECKIN_UUIDS = "select uuid from offender_checkin_v2 where offender_id = :offenderId"

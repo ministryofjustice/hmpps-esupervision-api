@@ -9,6 +9,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import software.amazon.awssdk.core.exception.SdkClientException
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.DeleteMarkerEntry
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest
@@ -133,6 +134,22 @@ class S3UploadServicePurgeTest {
     )
 
     assertThat(service.purgeCheckinObjects(checkin)).isEqualTo(S3PurgeResult(keysDeleted = 1, keysFailed = 1))
+  }
+
+  @Test
+  fun `a batch that fails outright counts its keys as failed, and later batches still go`() {
+    whenever(s3.listObjectVersions(any<ListObjectVersionsRequest>())).thenReturn(
+      page(versions = (1..2500).map { version("checkin-$checkin/$it", "v$it") }),
+    )
+    whenever(s3.deleteObjects(any<DeleteObjectsRequest>()))
+      .thenReturn(DeleteObjectsResponse.builder().build())
+      .thenThrow(SdkClientException.create("connection reset"))
+      .thenReturn(DeleteObjectsResponse.builder().build())
+
+    val result = service.purgeCheckinObjects(checkin)
+
+    verify(s3, times(3)).deleteObjects(any<DeleteObjectsRequest>())
+    assertThat(result).isEqualTo(S3PurgeResult(keysDeleted = 1500, keysFailed = 1000))
   }
 
   @Test

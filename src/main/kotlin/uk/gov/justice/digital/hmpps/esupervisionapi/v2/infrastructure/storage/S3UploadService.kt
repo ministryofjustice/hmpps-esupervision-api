@@ -505,15 +505,21 @@ class S3UploadService(
     } while (page.isTruncated == true)
 
     val failedKeys = mutableSetOf<String>()
-    // DeleteObjects takes at most 1000 identifiers per request.
+    // DeleteObjects takes at most 1000 identifiers per request. A batch that fails outright counts
+    // all its keys as failed, and the rest still go: one bad batch should not hide what did work.
     targets.chunked(1000).forEach { chunk ->
-      val response = s3uploadClient.deleteObjects(
-        DeleteObjectsRequest.builder()
-          .bucket(bucket)
-          .delete(Delete.builder().objects(chunk).quiet(true).build())
-          .build(),
-      )
-      response.errors().mapTo(failedKeys) { it.key() }
+      try {
+        val response = s3uploadClient.deleteObjects(
+          DeleteObjectsRequest.builder()
+            .bucket(bucket)
+            .delete(Delete.builder().objects(chunk).quiet(true).build())
+            .build(),
+        )
+        response.errors().mapTo(failedKeys) { it.key() }
+      } catch (e: Exception) {
+        LOG.warn("Could not delete a batch of {} object versions under {}/{}: {}", chunk.size, bucket, prefix, e.javaClass.simpleName)
+        chunk.mapTo(failedKeys) { it.key() }
+      }
     }
     val keys = targets.map { it.key() }.toSet()
     return S3PurgeResult(keysDeleted = (keys - failedKeys).size, keysFailed = failedKeys.size)
