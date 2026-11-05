@@ -1320,6 +1320,17 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - an offender whose setup isn't complete gets no check-in when their first check-in moves to today`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.INITIAL)
+    offender.firstCheckin = LocalDate.now(clock).plusDays(3)
+
+    val result = updateFirstCheckinToToday(offender)
+
+    verify(checkinCreationService, never()).createCheckin(any(), any(), any())
+    assertEquals(HttpStatus.OK, result.statusCode)
+  }
+
+  @Test
   fun `updateDetails - no update`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)

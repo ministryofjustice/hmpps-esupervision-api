@@ -10,8 +10,10 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.util.ReflectionTestUtils
@@ -133,8 +135,16 @@ class CheckinCreationJobIT : IntegrationTestBase() {
       .thenAnswer { UUID.randomUUID() }
   }
 
+  // runs the check-in event listeners (invites)
+  @Autowired
+  @Qualifier("taskExecutor")
+  lateinit var taskExecutor: ThreadPoolTaskExecutor
+
   @AfterEach
   fun cleanDb() {
+    // Committed check-ins start listeners in the background; let them finish before cleaning up,
+    // or they write to the tables after they're truncated.
+    await().atMost(Duration.ofSeconds(30)).until { taskExecutor.activeCount == 0 && taskExecutor.threadPoolExecutor.queue.isEmpty() }
     jdbcTemplate.update("TRUNCATE TABLE checkin_delius_event_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE generic_notification_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE offender_checkin_v2 RESTART IDENTITY CASCADE")

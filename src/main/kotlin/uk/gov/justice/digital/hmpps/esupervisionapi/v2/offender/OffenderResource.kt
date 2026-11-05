@@ -790,7 +790,11 @@ is *today*.""",
     val result = updateResult ?: return ResponseEntity.noContent().build()
     val offenderAfter = result.offenderAfter
     LOGGER.info("Update offender details, CRN={}, updates: schedule={}, contact prefs?={}", offenderInfo.crn, request.checkinSchedule ?: "No update", request.contactPreference ?: "No update")
-    if (request.checkinSchedule != null && newFirstCheckinDateIsToday(result.offenderBefore, offenderAfter, clock.today())) {
+    // An INITIAL offender's setup isn't complete: completing it creates today's check-in.
+    if (request.checkinSchedule != null &&
+      offenderAfter.status == OffenderStatus.VERIFIED &&
+      newFirstCheckinDateIsToday(result.offenderBefore, offenderAfter, clock.today())
+    ) {
       val created = !result.todayIsOccupied &&
         checkinCreationService.createCheckin(
           offenderAfter.uuid,

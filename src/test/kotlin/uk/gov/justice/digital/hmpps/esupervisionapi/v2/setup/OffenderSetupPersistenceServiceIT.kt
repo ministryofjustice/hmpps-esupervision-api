@@ -3,8 +3,11 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
@@ -63,6 +66,28 @@ class OffenderSetupPersistenceServiceIT : IntegrationTestBase() {
     val result = offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails(offender.crn), true)
 
     assertThat(checkinRepository.findByUuid(result.checkin!!).get().status).isEqualTo(CheckinStatus.CREATED)
+  }
+
+  @Test
+  fun `completing setup for an offender whose check-ins were stopped is a conflict, and leaves them stopped`() {
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(
+        uuid = UUID.randomUUID(),
+        crn = "X${(100000..999999).random()}",
+        status = OffenderStatus.INACTIVE,
+        firstCheckin = clock.today(),
+      ).toEntity(),
+    )
+    // the caller read them before their check-ins were stopped, or is repeating a completed setup
+    offender.status = OffenderStatus.VERIFIED
+
+    val exception = assertThrows<ResponseStatusException> {
+      offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(offender, contactDetails(offender.crn), true)
+    }
+
+    assertThat(exception.statusCode).isEqualTo(HttpStatus.CONFLICT)
+    assertThat(offenderRepository.findById(offender.id).get().status).isEqualTo(OffenderStatus.INACTIVE)
+    assertThat(checkinRepository.count()).isZero()
   }
 
   private fun contactDetails(crn: String) = ContactDetails(
