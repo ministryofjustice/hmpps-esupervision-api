@@ -378,15 +378,14 @@ enum class CheckinLinkStatus {
   FAILED,
 }
 
-fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean {
-  val submissionDate = clock.today()
-  val finalCheckinDate = if (checkinWindow.days <= 1) {
-    this.dueDate
-  } else {
-    this.dueDate.plus(checkinWindow.minusDays(1))
-  }
-  return finalCheckinDate < submissionDate
+/** The last day a check-in due on [dueDate] can be completed, to 11:59pm. */
+fun finalCheckinDate(dueDate: LocalDate, checkinWindow: Period): LocalDate = if (checkinWindow.days <= 1) {
+  dueDate
+} else {
+  dueDate.plus(checkinWindow.minusDays(1))
 }
+
+fun OffenderCheckin.isPastSubmissionDate(clock: Clock, checkinWindow: Period): Boolean = finalCheckinDate(dueDate, checkinWindow) < clock.today()
 
 /**
  * V2 Generic Notification Entity
