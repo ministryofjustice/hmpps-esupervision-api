@@ -193,3 +193,5 @@ databaseChangeLog:
       file: db/changelog/changesets/96_upcoming_checkin_backfill_job_type.sql
   - include:
       file: db/changelog/changesets/97_offender_schedule_updated_at.sql
+  - include:
+      file: db/changelog/changesets/98_pilot_eligibility_message.sql
