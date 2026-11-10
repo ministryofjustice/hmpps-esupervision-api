@@ -79,7 +79,7 @@ enum class CheckinIneligibilityReason(
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
   ),
   NO_ACTIVE_EVENTS(
-    "there are no active probation events in NDelius",
+    "no active sentence",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
   ),
   SELECTED_EVENT_NO_LONGER_ACTIVE(
