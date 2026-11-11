@@ -82,7 +82,7 @@ enum class CheckinIneligibilityReason(
   CONTACT_SUSPENDED(
     "contact is suspended (in reset) in NDelius",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
-    "contact is suspended",
+    "has had contact suspended (in reset) in NDelius",
   ),
   NO_ACTIVE_EVENTS(
     "no active sentence",
@@ -92,7 +92,7 @@ enum class CheckinIneligibilityReason(
   SELECTED_EVENT_NO_LONGER_ACTIVE(
     "the selected probation event is no longer active in NDelius",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
-    "has an associated event that's no longer active",
+    "is no longer on the sentence their online check-ins were set up for",
   ),
   ;
 
