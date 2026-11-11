@@ -327,7 +327,7 @@ class CheckinResource(
   @Operation(
     summary = "Cancel a checkin",
     description = """Practitioner cancels an upcoming (SCHEDULED) or open (CREATED) checkin, giving a reason.
-The person on probation is told if the checkin was open. The reason is recorded against the checkin
+The person on probation is told using a template based on whether their invite has been sent. The reason is recorded against the checkin
 and, if NDelius has the checkin, sent to NDelius as the note on its contact, marked sensitive if requested.""",
   )
   @ApiResponse(responseCode = "200", description = "Checkin cancelled")

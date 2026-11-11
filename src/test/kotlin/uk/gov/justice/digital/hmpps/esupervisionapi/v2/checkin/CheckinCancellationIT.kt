@@ -6,9 +6,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.EnumSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.timeout
@@ -27,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancellation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCancelledEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
@@ -46,10 +49,14 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliu
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventPublisher
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -86,11 +93,17 @@ class CheckinCancellationIT : IntegrationTestBase() {
   @Autowired
   private lateinit var upcomingCheckinService: UpcomingCheckinService
 
+  @Autowired
+  private lateinit var notificationOrchestratorService: NotificationOrchestratorService
+
   @MockitoBean
   private lateinit var ndiliusApiClient: INdiliusApiClient
 
   @MockitoBean
   private lateinit var notificationService: NotificationService
+
+  @MockitoBean
+  private lateinit var notifyGatewayService: NotifyGatewayService
 
   @MockitoBean
   private lateinit var publisher: DomainEventPublisher
@@ -109,6 +122,7 @@ class CheckinCancellationIT : IntegrationTestBase() {
   @AfterEach
   fun tearDown() {
     ReflectionTestUtils.setField(appConfig, "enabledFeatures", featuresBefore)
+    jdbcTemplate.update("TRUNCATE TABLE generic_notification_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE checkin_delius_event_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE event_audit_log_v2 RESTART IDENTITY CASCADE")
     jdbcTemplate.update("TRUNCATE TABLE outbox_items RESTART IDENTITY CASCADE")
@@ -141,18 +155,60 @@ class CheckinCancellationIT : IntegrationTestBase() {
     val event = argumentCaptor<CheckinCancelledEvent>()
     verify(notificationService, timeout(2000)).sendCheckinCancelledNotifications(event.capture())
     assertThat(event.firstValue.previousStatus).isEqualTo(CheckinStatus.CREATED)
-    assertThat(event.firstValue.notifyOffender).isTrue()
+    assertThat(event.firstValue.inviteSent).isTrue()
   }
 
-  @Test
-  fun `cancelling an upcoming check-in doesn't tell the offender`() {
-    val checkin = saveCheckin(CheckinStatus.SCHEDULED, dueDate = LocalDate.now().plusDays(3))
+  @ParameterizedTest
+  @EnumSource(CheckinMode::class)
+  fun `cancelling an upcoming check-in uses the invitation-not-sent variant`(mode: CheckinMode) {
+    val checkin = saveCheckin(CheckinStatus.SCHEDULED, dueDate = LocalDate.now().plusDays(3), mode = mode)
 
     cancel(checkin.uuid).expectStatus().isOk
 
     val event = argumentCaptor<CheckinCancelledEvent>()
     verify(notificationService, timeout(2000)).sendCheckinCancelledNotifications(event.capture())
-    assertThat(event.firstValue.notifyOffender).isFalse()
+    assertThat(event.firstValue.previousStatus).isEqualTo(CheckinStatus.SCHEDULED)
+    assertThat(event.firstValue.inviteSent).isFalse()
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    "CREATED,SENT,PHONE,OffenderCheckinCancelled,SMS,827fce47-9d47-4ef2-a658-189d6853b4a4",
+    "CREATED,SENT,EMAIL,OffenderCheckinCancelled,EMAIL,c525e883-0524-47b3-92ee-901bce7e7d8e",
+    "SCHEDULED,,PHONE,OffenderCheckinCancelledBeforeInvite,SMS,1357812e-fb3d-4351-809b-65fd8b569a40",
+    "SCHEDULED,,EMAIL,OffenderCheckinCancelledBeforeInvite,EMAIL,2312df50-470c-45b5-bb4a-de252254acd2",
+  )
+  fun `cancellation events send and persist the configured template for their channel`(
+    previousStatus: CheckinStatus,
+    linkStatus: CheckinLinkStatus?,
+    contactPreference: ContactPreference,
+    notificationType: NotificationType,
+    channel: String,
+    templateId: String,
+  ) {
+    val checkin = saveCheckin(previousStatus, linkStatus = linkStatus, contactPreference = contactPreference)
+    whenever(notifyGatewayService.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+
+    cancel(checkin.uuid).expectStatus().isOk
+
+    val captor = argumentCaptor<CheckinCancelledEvent>()
+    verify(notificationService, timeout(2000)).sendCheckinCancelledNotifications(captor.capture())
+    val event = captor.firstValue
+    assertThat(event.linkStatus).isEqualTo(linkStatus)
+
+    notificationOrchestratorService.sendCheckinCancelledNotifications(event)
+
+    verify(notifyGatewayService).send(
+      eq(channel),
+      eq(templateId),
+      eq(if (contactPreference == ContactPreference.PHONE) "07700900000" else "john@example.com"),
+      any(),
+      any(),
+    )
+    val notification = jdbcTemplate.queryForMap("select * from generic_notification_v2 where offender_id = ?", event.offenderId)
+    assertThat(notification["template_id"]).isEqualTo(templateId)
+    assertThat(notification["event_type"]).isEqualTo(notificationType.name)
+    assertThat(notification["status"]).isEqualTo("sent")
   }
 
   @Test
@@ -384,16 +440,18 @@ class CheckinCancellationIT : IntegrationTestBase() {
 
   @Test
   fun `cancelling doesn't overwrite a change made after the check-in was read`() {
-    val checkin = saveCheckin(CheckinStatus.CREATED)
+    val checkin = saveCheckin(CheckinStatus.CREATED, linkStatus = CheckinLinkStatus.SENDING)
     jdbcTemplate.update("update offender_checkin_v2 set link_status = 'SENT' where id = ?", checkin.id)
 
-    transactionTemplate.execute {
+    val event = transactionTemplate.execute {
       persistenceService.checkinCancellation(checkin, CheckinStatus.CREATED, cancellation()) { cancelledEvent(it) }
     }
 
     val saved = checkinRepository.findByUuid(checkin.uuid).get()
     assertThat(saved.status).isEqualTo(CheckinStatus.CANCELLED)
     assertThat(saved.linkStatus).isEqualTo(CheckinLinkStatus.SENT)
+    assertThat(requireNotNull(event).linkStatus).isEqualTo(CheckinLinkStatus.SENT)
+    assertThat(event.inviteSent).isTrue()
   }
 
   @Test
@@ -434,6 +492,7 @@ class CheckinCancellationIT : IntegrationTestBase() {
     checkin = checkin.dto(),
     offenderContactPreference = checkin.offender.contactPreference,
     previousStatus = CheckinStatus.CREATED,
+    linkStatus = checkin.linkStatus,
   )
 
   private fun cancellationLog(checkin: OffenderCheckin) = jdbcTemplate.queryForMap(
@@ -457,13 +516,24 @@ class CheckinCancellationIT : IntegrationTestBase() {
     status: CheckinStatus,
     dueDate: LocalDate = LocalDate.now(),
     firstCheckin: LocalDate? = offenderTemplate.firstCheckin,
+    linkStatus: CheckinLinkStatus? = null,
+    contactPreference: ContactPreference = offenderTemplate.contactPreference,
+    mode: CheckinMode = CheckinMode.SCHEDULED,
   ): OffenderCheckin {
     val offender = offenderRepository.save(
       offenderTemplate.copy(uuid = UUID.randomUUID(), crn = "X${(100000..999999).random()}", firstCheckin = firstCheckin).toEntity()
-        .also { it.scheduleUpdatedAt = Instant.now().minusSeconds(60) },
+        .also {
+          it.scheduleUpdatedAt = Instant.now().minusSeconds(60)
+          it.contactPreference = contactPreference
+          it.mode = mode
+          if (mode == CheckinMode.AD_HOC) {
+            it.firstCheckin = null
+            it.checkinInterval = null
+          }
+        },
     )
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
-      ContactDetails(crn = offender.crn, name = Name(forename = "John", surname = "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1), mobile = "07700900000"),
+      ContactDetails(crn = offender.crn, name = Name(forename = "John", surname = "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1), mobile = "07700900000", email = "john@example.com"),
     )
     return checkinRepository.save(
       OffenderCheckin(
@@ -473,6 +543,7 @@ class CheckinCancellationIT : IntegrationTestBase() {
         dueDate = dueDate,
         createdAt = Instant.now(),
         createdBy = offender.practitionerId,
+        linkStatus = linkStatus,
       ),
     )
   }
