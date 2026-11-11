@@ -228,7 +228,7 @@ class CheckinCreationJob(
         offender = offender,
         reason = ineligibility.auditNote,
         contactDetails = contactDetails,
-        practitionerMessageFragment = "triggered the following rule: ${ineligibility.description}",
+        practitionerMessageFragment = ineligibility.practitionerMessageFragment,
         auditEventType = ineligibility.auditEventType,
         expectedCurrentEvent = offenderInfo.currentEvent,
       )

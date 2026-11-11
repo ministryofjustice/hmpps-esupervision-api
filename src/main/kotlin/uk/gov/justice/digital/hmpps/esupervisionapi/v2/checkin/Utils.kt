@@ -76,18 +76,26 @@ enum class CheckinIneligibilityReason(
   val description: String,
   /** The audit event type recorded when a scheduled job stops check-ins for this reason. */
   val auditEventType: OffenderAuditEventType,
+  /**
+   * This needs to fit the "reason" param in the template:
+   * '..., because ((name)) ((reason))'
+   */
+  val practitionerMessageFragment: String,
 ) {
   CONTACT_SUSPENDED(
     "contact is suspended (in reset) in NDelius",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED,
+    "has had contact suspended (in reset) in NDelius",
   ),
   NO_ACTIVE_EVENTS(
     "no active sentence",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS,
+    "has no active sentence",
   ),
   SELECTED_EVENT_NO_LONGER_ACTIVE(
     "the selected probation event is no longer active in NDelius",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
+    "is no longer on the sentence their online check-ins were set up for",
   ),
   ;
 
