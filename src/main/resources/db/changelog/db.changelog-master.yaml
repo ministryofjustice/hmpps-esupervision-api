@@ -195,3 +195,7 @@ databaseChangeLog:
       file: db/changelog/changesets/97_offender_schedule_updated_at.sql
   - include:
       file: db/changelog/changesets/98_pilot_eligibility_message.sql
+  - include:
+      file: db/changelog/changesets/99_checkin_holds_date_function.sql
+  - include:
+      file: db/changelog/changesets/100_upcoming_assignment_trusts_next_date.sql
