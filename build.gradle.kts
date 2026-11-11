@@ -1,10 +1,15 @@
 import org.gradle.kotlin.dsl.implementation
 
 plugins {
-  id("uk.gov.justice.hmpps.gradle-spring-boot") version "11.0.12"
-  kotlin("plugin.jpa") version "2.4.20"
-  kotlin("plugin.spring") version "2.4.20"
+  id("uk.gov.justice.hmpps.gradle-spring-boot") version "11.0.15"
+  kotlin("plugin.jpa") version "2.4.21"
+  kotlin("plugin.spring") version "2.4.21"
 }
+
+// Boot 4.1.2 manages jackson 3.1.7 / 2.21.7, both vulnerable to CVE-2026-110879.
+// Drop these overrides once the Boot BOM ships >= 3.1.8 / 2.21.8.
+extra["jackson-bom.version"] = "3.1.8"
+extra["jackson-2-bom.version"] = "2.21.8"
 
 // utils/CheckinNoteExportTool.kt has its own main(), so Spring Boot cannot infer this one.
 springBoot {
@@ -26,10 +31,10 @@ dependencies {
   // 3.0.x is the Spring Framework 7 / Boot 4 line; 2.8.x is Spring 6 and is binary-incompatible here.
   implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
   // springdoc pulls the swagger-ui webjar, whose bundled DOMPurify carries its own CVEs.
-  // The Boot BOM lags behind; 5.33.2 ships DOMPurify 3.4.16, which fixes CVE-2026-109344 and
-  // CVE-2026-109345. Keep ahead of the BOM until it catches up, and keep
+  // The Boot BOM lags behind; 5.34.1 ships DOMPurify 3.4.17, which fixes CVE-2026-116802,
+  // CVE-2026-116803 and CVE-2026-116804. Keep ahead of the BOM until it catches up, and keep
   // springdoc.swagger-ui.version in application.yml in lockstep with this pin.
-  implementation("org.webjars:swagger-ui:5.33.2")
+  implementation("org.webjars:swagger-ui:5.34.1")
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
   implementation("net.javacrumbs.shedlock:shedlock-spring:7.7.0")
   implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.7.0")
@@ -51,9 +56,13 @@ dependencies {
   implementation("org.jetbrains.kotlin:kotlin-reflect")
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")
   implementation("uk.gov.service.notify:notifications-java-client:5.2.1-RELEASE")
-  // Boot 4.1 manages 42.7.13, which is vulnerable to CVE-2026-107314 (failing open).
-  // Drop this pin once the Boot BOM ships >= 42.7.14.
-  implementation("org.postgresql:postgresql:42.7.14")
+  constraints {
+    // notifications-java-client (up to 6.2.1) pulls org.json 20231013, vulnerable to CVE-2026-59171.
+    implementation("org.json:json:20260814") {
+      because("CVE-2026-59171: unbounded numeric string DoS in JSONTokener, fixed in 20260719")
+    }
+  }
+  implementation("org.postgresql:postgresql")
   runtimeOnly("org.liquibase:liquibase-core")
   // Boot 4 extracted LiquibaseAutoConfiguration out of spring-boot-autoconfigure into this dedicated
   // module; without it migrations never run and Hibernate validates against an empty schema.
