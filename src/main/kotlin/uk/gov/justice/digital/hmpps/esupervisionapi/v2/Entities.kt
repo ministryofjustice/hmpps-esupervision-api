@@ -304,9 +304,19 @@ open class OffenderCheckin(
   open var cancelledBy: String? = null,
 ) : V2BaseEntity() {
   /**
+   * Whether this check-in takes its date, so no other check-in is created or scheduled for it:
+   * one that was opened (whatever happened next), one whose invite couldn't be sent, or one a
+   * practitioner cancelled (see [holdsCancelledDate]). Must match the SQL function
+   * checkin_holds_date (changeset 99), which CheckinHoldsDateParityIT checks.
+   */
+  fun holdsDate(): Boolean = status in STATUSES_HOLDING_DATE ||
+    linkStatus == CheckinLinkStatus.FAILED ||
+    holdsCancelledDate()
+
+  /**
    * Whether a practitioner cancelled this check-in after the schedule was last set, so its date
    * is held: no other check-in is created or scheduled for it until the practitioner sets the
-   * schedule again. Must match OffenderRepository.findEligibleForCheckinCreation.
+   * schedule again.
    */
   fun holdsCancelledDate(): Boolean {
     if (status != CheckinStatus.CANCELLED || cancelledBy == null) return false
@@ -907,3 +917,6 @@ open class OutboxItem(
   @Column("updated_at", nullable = true)
   open var updatedAt: Instant? = null,
 ) : V2BaseEntity()
+
+/** A check-in in one of these statuses was opened, so it takes its date (see [OffenderCheckin.holdsDate]). */
+private val STATUSES_HOLDING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED, CheckinStatus.EXPIRED)

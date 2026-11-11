@@ -215,15 +215,8 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
         WHERE c.offender_id = o.id
           AND :lowerBoundInclusive <= c.due_date
           AND c.due_date < :upperBoundExclusive
-          -- a check-in a practitioner cancelled (cancelled_by set) holds its date, so it isn't
-          -- recreated, until the practitioner sets the schedule again after cancelling: rebooking
-          -- the date must create it. One the system cancelled doesn't. Must match
-          -- OffenderCheckin.holdsCancelledDate.
-          AND (c.status IN ('CREATED', 'SUBMITTED', 'REVIEWED')
-            OR (c.status = 'CANCELLED' AND c.cancelled_by IS NOT NULL
-                AND (o.schedule_updated_at IS NULL OR c.cancelled_at > o.schedule_updated_at))
-            -- ESUP-2223: the invite couldn't be sent; don't create another for the same day
-            OR (c.status = 'CANCELLED' AND c.link_status = 'FAILED'))
+          -- including one a practitioner cancelled, until they set the schedule again (changeset 99)
+          AND checkin_holds_date(c, o)
       )
       AND o.id > coalesce(:lastOffenderId, 0)
     ORDER BY o.id
@@ -253,6 +246,7 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
    * - Next checkin due date matches (today + 4)
    * - No reminder sent yet for the next checkin
    * - No (upcoming) question list assignment for the offender exists
+   * - The practitioner hasn't cancelled the check-in on that date
    */
   @Query(
     value = """
@@ -272,6 +266,14 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
               and o.first_checkin != :today
               and MOD(CAST(((cast(:today as date) + '4 day'::interval)::date - o.first_checkin) AS integer), CAST(EXTRACT(DAY FROM o.checkin_interval) AS integer)) = 0)
             or (o.checkin_mode = 'AD_HOC' and o.first_checkin is not null and o.first_checkin = (cast(:today as date) + '4 day'::interval)::date)
+          )
+          -- no check-in will be created for a date the practitioner cancelled, so there is nothing to
+          -- ask questions for (changeset 99)
+          and not exists (
+            select 1 from offender_checkin_v2 c
+            where c.offender_id = o.id
+              and c.due_date = (cast(:today as date) + '4 day'::interval)::date
+              and checkin_holds_date(c, o)
           )
       )
       select * from the_offenders

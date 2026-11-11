@@ -32,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequ
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.BESPOKE_QUESTION_HINT
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsHint
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
@@ -42,6 +43,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationReposi
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Language
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
@@ -64,6 +66,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -544,14 +547,9 @@ class QuestionsIT(
     val upcomingAfterSubmission = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
     assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), upcomingAfterSubmission.expectedCheckinDate)
 
-    val info = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
-      offender.id,
-      clock.today(),
-      dueDate,
-      checkinWindow.toDays(),
-    )
-    // assertNull(info.dueDate)
-    assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), info.dueDate)
+    // changeset 100: the service works out the next date, which the query takes as given
+    val info = questionService.upcomingAssignment(offender)
+    assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), info.expectedCheckinDate)
 
     clock.advanceBy(Duration.ofDays(1))
 
@@ -585,6 +583,147 @@ class QuestionsIT(
     assertEquals(dueDate.plusDays(offender.checkinInterval!!.toDays()), upcomingAfterSubmission.expectedCheckinDate)
     assertNull(upcomingAfterSubmission.checkinUuid)
   }
+
+  @Test
+  fun `QuestionService - a check-in the practitioner cancelled is skipped for the expected check-in date`() {
+    val dueDate = clock.today().plusDays(2)
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000003", firstCheckin = dueDate).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    val interval = offender.checkinInterval!!.toDays()
+    val cancelled = saveCancelledCheckin(offender, dueDate, cancelledBy = "PRACTITIONER")
+
+    val upcoming = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(dueDate.plusDays(interval), upcoming.expectedCheckinDate)
+    assertNull(upcoming.checkinUuid)
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val response = questionService.assignCustomQuestions(offender.crn, makeAssignCustomQuestionsRequest(Language.ENGLISH, templates))
+    assertEquals(dueDate.plusDays(interval), response.expectedCheckinDate)
+
+    // Setting the schedule again releases the date: it can be booked again
+    offender.scheduleUpdatedAt = cancelled.cancelledAt!!.plusSeconds(1)
+    offenderRepository.save(offender)
+    assertEquals(dueDate, questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH).expectedCheckinDate)
+  }
+
+  @Test
+  fun `QuestionService - ad-hoc check-in open today is too late for questions, not missing`() {
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = clock.today()).toEntity(),
+    )
+    offenderCheckinService.debugCreateCheckin(offender, clock)
+
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    val exception = assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, makeAssignCustomQuestionsRequest(Language.ENGLISH, templates))
+    }
+    assertEquals("Offender is due for a checkin. Too late to assign questions.", exception.message)
+  }
+
+  @Test
+  fun `QuestionService - after today's check-in, a cancelled date one interval on is skipped`() {
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today()).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    val interval = offender.checkinInterval!!.toDays()
+    // today's was cancelled by the system, which doesn't hold the date; the practitioner cancelled the next
+    saveCancelledCheckin(offender, clock.today(), cancelledBy = null)
+    saveCancelledCheckin(offender, clock.today().plusDays(interval), cancelledBy = "PRACTITIONER")
+
+    assertEquals(clock.today().plusDays(2 * interval), questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH).expectedCheckinDate)
+  }
+
+  @Test
+  fun `QuestionService - today's check-in booked again after the system cancelled it is the expected one`() {
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000003", firstCheckin = clock.today()).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    saveCancelledCheckin(offender, clock.today(), cancelledBy = null)
+    val rebooked = offenderCheckinRepository.save(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.SCHEDULED,
+        dueDate = clock.today(),
+        createdAt = clock.instant(),
+        createdBy = "SYSTEM",
+      ),
+    )
+
+    val upcoming = questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH)
+    assertEquals(clock.today(), upcoming.expectedCheckinDate)
+    assertEquals(rebooked.uuid, upcoming.checkinUuid)
+  }
+
+  @Test
+  fun `QuestionService - consecutive held dates are all skipped for the expected check-in date`() {
+    val dueDate = clock.today().plusDays(2)
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000003", firstCheckin = dueDate).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    val interval = offender.checkinInterval!!.toDays()
+    saveCancelledCheckin(offender, dueDate, cancelledBy = "PRACTITIONER")
+    // the invite for the next one couldn't be sent, which holds its date too
+    saveCancelledCheckin(offender, dueDate.plusDays(interval), cancelledBy = null, linkStatus = CheckinLinkStatus.FAILED)
+
+    assertEquals(dueDate.plusDays(2 * interval), questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH).expectedCheckinDate)
+  }
+
+  @Test
+  fun `QuestionService - a check-in the system cancelled keeps its date as the expected check-in date`() {
+    val dueDate = clock.today().plusDays(2)
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000003", firstCheckin = dueDate).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    saveCancelledCheckin(offender, dueDate, cancelledBy = null)
+
+    assertEquals(dueDate, questionService.upcomingQuestionListItems(offender.crn, Language.ENGLISH).expectedCheckinDate)
+  }
+
+  @Test
+  fun `QuestionService - an ad-hoc check-in the practitioner cancelled leaves no expected check-in date`() {
+    val dueDate = clock.today().plusDays(2)
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000003", mode = CheckinMode.AD_HOC, checkinInterval = null, firstCheckin = dueDate).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    saveCancelledCheckin(offender, dueDate, cancelledBy = "PRACTITIONER")
+
+    assertNull(questionService.upcomingAssignment(offender).expectedCheckinDate)
+    val templates = questionService.listQuestionTemplates(Language.ENGLISH, "BARRY.WHITE")
+    assertThrows(BadArgumentException::class.java) {
+      questionService.assignCustomQuestions(offender.crn, makeAssignCustomQuestionsRequest(Language.ENGLISH, templates))
+    }
+  }
+
+  /** [cancelledBy] null: the system cancelled it, which records neither who nor when. */
+  private fun saveCancelledCheckin(
+    offender: Offender,
+    dueDate: LocalDate,
+    cancelledBy: String?,
+    linkStatus: CheckinLinkStatus? = null,
+  ): OffenderCheckin = offenderCheckinRepository.save(
+    OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinStatus.CANCELLED,
+      dueDate = dueDate,
+      createdAt = clock.instant(),
+      createdBy = "SYSTEM",
+      linkStatus = linkStatus,
+    ).also {
+      if (cancelledBy != null) {
+        it.cancelledAt = clock.instant()
+        it.cancelledBy = cancelledBy
+      }
+    },
+  )
 
   @Test
   fun `QuestionService - assigning and fetching questions for ad-hoc check-ins`() {
@@ -866,15 +1005,10 @@ class QuestionsIT(
     offenderCheckinService.submitCheckin(checkin1.uuid, SubmitCheckinRequest(mapOf("version" to "whatever")))
 
     val assignment1 = questionService.assignCustomQuestions(offender.crn, addQuestionsRequest)
-    val upcoming1 = questionListAssignmentRepository.upcomingAssignmentAndDueDate(
-      offender.id,
-      clock.today(),
-      clock.today(),
-      checkinWindow.toDays(),
-    )
-    assertNotNull(upcoming1)
-    assertEquals(assignment1.listId, upcoming1.questionListId)
-    assertEquals(dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming1.dueDate)
+    // today's check-in is done, so the expected one is the next (changeset 100: worked out by the service)
+    val upcoming1 = questionService.upcomingAssignment(offender)
+    assertEquals(assignment1.listId, upcoming1.questionList)
+    assertEquals(dueDate.plusDays(offender.checkinInterval?.toDays()!!), upcoming1.expectedCheckinDate)
 
     // ----- DAY 2
     clock.advanceBy(Duration.ofDays(1))
@@ -939,6 +1073,33 @@ class QuestionsIT(
     assertFalse(candidates.containsKey("A000004")) // already has a question list assignment
     assertFalse(candidates.containsKey("A000002"))
     assertTrue(candidates.containsKey("A000003"))
+  }
+
+  @Test
+  @Transactional
+  fun `CustomQuestionsReminderJob - no reminder for a check-in the practitioner cancelled`() {
+    val dueDate = clock.today().plusDays(4)
+    val cancelled = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000001", firstCheckin = dueDate, uuid = UUID.randomUUID()).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    val systemCancelled = offenderRepository.save(
+      offenderTemplate.copy(crn = "A000002", firstCheckin = dueDate, uuid = UUID.randomUUID()).toEntity()
+        .also { it.scheduleUpdatedAt = clock.instant().minusSeconds(60) },
+    )
+    saveCancelledCheckin(cancelled, dueDate, cancelledBy = "PRACTITIONER")
+    saveCancelledCheckin(systemCancelled, dueDate, cancelledBy = null)
+
+    val candidates = offenderRepository.findEligibleForPractitionerCustomQuestionsReminder(
+      clock.today(),
+      NotificationType.PractitionerCustomQuestionsReminder.name,
+      clock.today().atStartOfDay(clock.zone).toInstant(),
+    )
+      .toList()
+      .associateBy { it.crn }
+
+    assertFalse(candidates.containsKey("A000001"))
+    assertTrue(candidates.containsKey("A000002"))
   }
 }
 

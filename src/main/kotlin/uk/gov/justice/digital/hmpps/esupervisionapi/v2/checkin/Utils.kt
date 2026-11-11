@@ -4,7 +4,10 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ActiveEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSchedule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -164,4 +167,25 @@ enum class CheckinScheduleLowerBound {
 fun nextCheckinDay(schedule: CheckinSchedule, today: LocalDate, bounds: CheckinScheduleLowerBound): LocalDate = when (bounds) {
   CheckinScheduleLowerBound.EXCLUDE_TODAY -> nextCheckinDay(schedule, today)
   CheckinScheduleLowerBound.INCLUDE_TODAY -> nextCheckinDay(schedule, today.minusDays(1))
+}
+
+/**
+ * The offender's next check-in date on or after [from] that none of [checkins] holds (see
+ * [OffenderCheckin.holdsDate]), such as one the practitioner cancelled: no check-in will be
+ * created for those. Null when there's none, including an ad-hoc booked date before [from].
+ *
+ * @param checkins the offender's check-ins due on or after [from]; others are ignored
+ */
+fun nextCheckinDate(offender: Offender, from: LocalDate, checkins: List<OffenderCheckin>): LocalDate? {
+  val firstCheckin = offender.firstCheckin ?: return null
+  val held = checkins.filter { it.dueDate >= from && it.holdsDate() }.map { it.dueDate }.toSet()
+  return when (offender.mode) {
+    CheckinMode.AD_HOC -> firstCheckin.takeIf { it >= from && it !in held }
+    CheckinMode.SCHEDULED -> {
+      if (offender.checkinInterval == null) return null
+      var next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
+      while (next in held) next = nextCheckinDay(offender, next)
+      next
+    }
+  }
 }
