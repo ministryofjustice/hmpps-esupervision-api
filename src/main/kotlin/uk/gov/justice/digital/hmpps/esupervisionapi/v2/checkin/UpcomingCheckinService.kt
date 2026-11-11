@@ -11,7 +11,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
@@ -20,7 +19,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventNotes
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinCreationJob
@@ -126,7 +124,7 @@ class UpcomingCheckinService(
 
     // An upcoming check-in due today counts today, so it's left alone if the schedule still has today.
     val from = if (creationJobStarted && scheduled?.dueDate != today) today.plusDays(1) else today
-    val dueDate = nextCheckinDate(offender, from)
+    val dueDate = findNextCheckinDate(offender, from)
     if (scheduled != null) {
       when (dueDate) {
         scheduled.dueDate -> {}
@@ -167,43 +165,13 @@ class UpcomingCheckinService(
     checkinDeliusEventService.record(DomainEventType.V2_CHECKIN_RESCHEDULED, scheduled, CheckinDeliusEventNotes.rescheduled(dueDate), eventNumber = null, date = dueDate)
   }
 
-  /** The offender's next check-in date on or after [from] that doesn't have a check-in yet. */
-  private fun nextCheckinDate(offender: Offender, from: LocalDate): LocalDate? {
-    val firstCheckin = offender.firstCheckin ?: return null
-    return when (offender.mode) {
-      CheckinMode.AD_HOC -> firstCheckin.takeIf { it >= from && !hasCheckin(offender, it) }
-      CheckinMode.SCHEDULED -> {
-        if (offender.checkinInterval == null) return null
-        val taken = checkinRepository.findAllByOffenderAndDueDateGreaterThanEqual(offender, from)
-          .filter(::holdsDate).map { it.dueDate }.toSet()
-        var next = nextCheckinDay(offender, from, CheckinScheduleLowerBound.INCLUDE_TODAY)
-        while (next in taken) next = nextCheckinDay(offender, next)
-        next
-      }
-    }
-  }
+  /** [uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDate], with the offender's check-ins loaded. */
+  private fun findNextCheckinDate(offender: Offender, from: LocalDate): LocalDate? = nextCheckinDate(offender, from, checkinRepository.findAllByOffenderAndDueDateGreaterThanEqual(offender, from))
 
   private fun creationJobStarted(today: LocalDate) = jobLogRepository.existsByJobTypeAndCreatedAtGreaterThanEqual(CheckinCreationJob.JOB_TYPE, today.atStartOfDay(clock.zone).toInstant())
 
-  private fun hasCheckin(offender: Offender, date: LocalDate) = checkinRepository.findAllByOffenderAndDueDate(offender, date).any(::holdsDate)
-
-  /**
-   * Whether [checkin] takes its date: no other check-in is scheduled for it. A check-in a
-   * practitioner cancelled holds it until the schedule is next set, as the creation job won't
-   * create one for that date until then (see OffenderRepository.findEligibleForCheckinCreation).
-   */
-  private fun holdsDate(checkin: OffenderCheckin) = checkin.status in STATUSES_HOLDING_DATE ||
-    checkin.linkStatus == CheckinLinkStatus.FAILED ||
-    checkin.holdsCancelledDate()
-
   companion object {
     private val LOGGER = logger<UpcomingCheckinService>()
-
-    /**
-     * A check-in in one of these statuses takes its date: no other check-in is scheduled for it.
-     * So does one cancelled because its invite couldn't be sent.
-     */
-    private val STATUSES_HOLDING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED, CheckinStatus.EXPIRED)
 
     // TODO ESUP-2223: agreed for now; to change or remove if probation integration take over the NDelius note text
     const val NOT_CREATED_REASON = "The check in was not opened on its due date"

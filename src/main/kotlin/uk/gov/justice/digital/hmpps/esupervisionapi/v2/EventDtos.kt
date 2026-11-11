@@ -158,9 +158,11 @@ data class CheckinCancelledEvent(
   override val offenderContactPreference: ContactPreference,
   /** The status it was cancelled from */
   val previousStatus: CheckinStatus,
+  val linkStatus: CheckinLinkStatus?,
 ) : ICheckinEvent {
-  /** Only an open check-in was sent to the offender, so only then do they hear it was cancelled. */
-  val notifyOffender: Boolean get() = previousStatus == CheckinStatus.CREATED
+  /** Legacy open check-ins have no link status, but their invites were sent when created. */
+  val inviteSent: Boolean get() = linkStatus == CheckinLinkStatus.SENT ||
+    (linkStatus == null && previousStatus == CheckinStatus.CREATED)
 }
 
 /**

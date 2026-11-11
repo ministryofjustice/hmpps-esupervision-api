@@ -23,6 +23,7 @@ object NotificationContext {
       NotificationType.OffenderCheckinReminder -> "OREM-$date-$env"
       NotificationType.OffenderAdHocCheckinScheduled -> "OAHC-$date-$env"
       NotificationType.OffenderCheckinCancelled -> "OCAN-$date-$env"
+      NotificationType.OffenderCheckinCancelledBeforeInvite -> "OCBI-$date-$env"
       NotificationType.OffenderCheckinDateChanged -> "ODCH-$date-$env"
       NotificationType.OffenderCheckinsFrequencyChanged -> "OFCH-$date-$env"
 

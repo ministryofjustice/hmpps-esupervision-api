@@ -437,7 +437,7 @@ class CheckinService(
 
   /**
    * A practitioner cancels a check-in that is upcoming (SCHEDULED) or open (CREATED). The offender
-   * is told if it was open, since they have the link.
+   * is told using one of cancellation templates (one when invite already sent, other when not).
    *
    * @throws ResponseStatusException 404 if not found, 409 if it can't be cancelled in its status
    */
@@ -467,6 +467,7 @@ class CheckinService(
         checkin = cancelled.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
         offenderContactPreference = cancelled.offender.contactPreference,
         previousStatus = previousStatus,
+        linkStatus = cancelled.linkStatus,
       )
     } ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin $uuid changed while it was being cancelled")
     LOGGER.info("Checkin cancelled: {} (was {}) by {}", uuid, previousStatus, request.cancelledBy)

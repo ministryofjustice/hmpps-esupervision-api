@@ -415,38 +415,66 @@ class NotificationOrchestratorServiceTest {
     )
   }
 
-  @Test
-  fun `sendCheckinCancelledNotifications - an open check-in sends the cancelled template to the offender`() {
-    val offender = createOffender()
-    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED).apply { dueDate = LocalDate.of(2025, 12, 3) }
+  @ParameterizedTest
+  @CsvSource(
+    "CREATED,SENT,PHONE,OffenderCheckinCancelled",
+    "CREATED,SENT,EMAIL,OffenderCheckinCancelled",
+    "CREATED,,PHONE,OffenderCheckinCancelled",
+    "CREATED,,EMAIL,OffenderCheckinCancelled",
+    "SCHEDULED,,PHONE,OffenderCheckinCancelledBeforeInvite",
+    "SCHEDULED,,EMAIL,OffenderCheckinCancelledBeforeInvite",
+    "CREATED,SENDING,PHONE,OffenderCheckinCancelledBeforeInvite",
+    "CREATED,SENDING,EMAIL,OffenderCheckinCancelledBeforeInvite",
+    "CREATED,FAILED,PHONE,OffenderCheckinCancelledBeforeInvite",
+    "CREATED,FAILED,EMAIL,OffenderCheckinCancelledBeforeInvite",
+  )
+  fun `sendCheckinCancelledNotifications - selects the template using invitation state`(
+    previousStatus: CheckinStatus,
+    linkStatus: CheckinLinkStatus?,
+    contactPreference: ContactPreference,
+    notificationType: NotificationType,
+  ) {
+    val offender = createOffender().apply { this.contactPreference = contactPreference }
+    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED).apply {
+      dueDate = LocalDate.of(2025, 12, 3)
+      this.linkStatus = linkStatus
+    }
     val contactDetails = createContactDetails()
+    val channel = if (contactPreference == ContactPreference.PHONE) "SMS" else "EMAIL"
     val notification = GenericNotification(
       notificationId = UUID.randomUUID(),
-      eventType = NotificationType.OffenderCheckinCancelled.name,
+      eventType = notificationType.name,
       recipientType = "OFFENDER",
-      channel = "SMS",
+      channel = channel,
       offenderId = offender.id,
       reference = "OCAN-001",
       templateId = "cancelled-template",
       createdAt = clock.instant(),
     )
-    val recipient = "07700900123"
+    val recipient = if (contactPreference == ContactPreference.PHONE) "07700900123" else "test@test.com"
     whenever(
       notificationPersistence.buildOffenderNotifications(
         eq(offender.id),
         eq(offender.crn),
         eq(offender.contactPreference),
         eq(contactDetails),
-        eq(NotificationType.OffenderCheckinCancelled),
+        eq(notificationType),
       ),
     ).thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
     whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
     whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
 
-    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, contactDetails, CheckinStatus.CREATED))
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, contactDetails, previousStatus))
 
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(contactPreference),
+      eq(contactDetails),
+      eq(notificationType),
+    )
     verify(notifyGateway).send(
-      eq("SMS"),
+      eq(channel),
       eq("cancelled-template"),
       eq(recipient),
       eq(mapOf("name" to "John", "date" to "Wednesday 3 December 2025")),
@@ -455,22 +483,13 @@ class NotificationOrchestratorServiceTest {
     verifyNoInteractions(domainEventService)
   }
 
-  @Test
-  fun `sendCheckinCancelledNotifications - an upcoming check-in sends nothing`() {
+  @ParameterizedTest
+  @CsvSource("CREATED", "SCHEDULED")
+  fun `sendCheckinCancelledNotifications - without contact details sends nothing`(previousStatus: CheckinStatus) {
     val offender = createOffender()
     val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED)
 
-    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, createContactDetails(), CheckinStatus.SCHEDULED))
-
-    verifyNoInteractions(notificationPersistence, notifyGateway, domainEventService)
-  }
-
-  @Test
-  fun `sendCheckinCancelledNotifications - without contact details sends nothing`() {
-    val offender = createOffender()
-    val checkin = createCheckin(offender, status = CheckinStatus.CANCELLED)
-
-    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, null, CheckinStatus.CREATED))
+    service.sendCheckinCancelledNotifications(cancelledEvent(offender, checkin, null, previousStatus))
 
     verifyNoInteractions(notificationPersistence, notifyGateway)
   }
@@ -482,6 +501,7 @@ class NotificationOrchestratorServiceTest {
     checkin = checkin.dto(contactDetails, clock = clock),
     offenderContactPreference = offender.contactPreference,
     previousStatus = previousStatus,
+    linkStatus = checkin.linkStatus,
   )
 
   @Test
