@@ -22,6 +22,7 @@ enum class NotificationType {
   PractitionerCustomQuestionsReminder,
   OffenderAdHocCheckinScheduled,
   OffenderCheckinCancelled,
+  OffenderCheckinCancelledBeforeInvite,
   OffenderCheckinDateChanged,
   OffenderCheckinsFrequencyChanged,
 }

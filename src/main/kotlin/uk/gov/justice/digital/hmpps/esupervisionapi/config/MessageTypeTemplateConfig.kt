@@ -19,6 +19,7 @@ class MessageTypeTemplateConfig(
   private val popCheckinsRestartedAdHoc: String,
   private val popAdHocCheckinScheduled: String,
   private val popCheckinCancelled: String,
+  private val popCheckinCancelledBeforeInvite: String,
   private val popCheckinDateChanged: String,
   private val popCheckinsFrequencyChanged: String,
   private val practitionerCheckinsStoppedAuto: String,
@@ -41,6 +42,7 @@ class MessageTypeTemplateConfig(
     NotificationType.OffenderCheckinsRestartedAdHoc -> this.popCheckinsRestartedAdHoc
     NotificationType.OffenderAdHocCheckinScheduled -> this.popAdHocCheckinScheduled
     NotificationType.OffenderCheckinCancelled -> this.popCheckinCancelled
+    NotificationType.OffenderCheckinCancelledBeforeInvite -> this.popCheckinCancelledBeforeInvite
     NotificationType.OffenderCheckinDateChanged -> this.popCheckinDateChanged
     NotificationType.OffenderCheckinsFrequencyChanged -> this.popCheckinsFrequencyChanged
   }

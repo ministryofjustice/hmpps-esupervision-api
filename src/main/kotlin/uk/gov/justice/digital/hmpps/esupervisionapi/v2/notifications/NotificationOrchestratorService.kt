@@ -547,11 +547,10 @@ class NotificationOrchestratorService(
   }
 
   /**
-   * Tell the offender their open check-in was cancelled. NDelius hears through the check-in's
+   * Tell the offender their upcoming or open check-in was cancelled. NDelius hears through the check-in's
    * events (see CheckinPersistenceService.checkinCancellation), not from here.
    */
   fun sendCheckinCancelledNotifications(event: CheckinCancelledEvent) {
-    if (!event.notifyOffender) return
     val checkin = event.checkin
     val contactDetails = checkin.personalDetails
     if (contactDetails == null) {
@@ -568,7 +567,7 @@ class NotificationOrchestratorService(
         crn = checkin.crn,
         contactPreference = event.offenderContactPreference,
         contactDetails = contactDetails,
-        notificationType = NotificationType.OffenderCheckinCancelled,
+        notificationType = if (event.inviteSent) NotificationType.OffenderCheckinCancelled else NotificationType.OffenderCheckinCancelledBeforeInvite,
       )
       processAndSendNotifications(notifications, personalisation)
     } catch (e: Exception) {

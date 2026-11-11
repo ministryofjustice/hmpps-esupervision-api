@@ -247,7 +247,12 @@ POST /v2/offender_checkins/{uuid}/cancel
 - Custom questions stay with the cancelled checkin and are not asked at the next one: an
   upcoming checkin's pending question list assignment is attached to it (an open checkin's
   already is).
-- If the checkin was open, the person on probation is sent the "check-in cancelled" message.
+- The person on probation is sent a cancellation message for both upcoming and open checkins,
+  whether recurring or ad hoc. The template depends on whether the invite has been sent:
+  `link_status = SENT` uses the invite-sent template; `SENDING`, `FAILED`, or an upcoming checkin
+  with no link status uses the invite-not-sent template. Legacy open checkins with no link status
+  use the invite-sent template. `SENT` means Notify accepted (or may have accepted) the invite,
+  not confirmed delivery.
 - With `ESUP_2223` on, if NDelius has the checkin (it was recorded as scheduled), a
   `check-in.cancelled` event is recorded with the reason as its note.
 - The cancelled checkin holds its date: neither the daily creation job nor scheduling the next
