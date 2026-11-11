@@ -92,7 +92,7 @@ enum class CheckinIneligibilityReason(
   SELECTED_EVENT_NO_LONGER_ACTIVE(
     "the selected probation event is no longer active in NDelius",
     OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE,
-    "the selected probation event is no longer active in NDelius",
+    "has an associated event that's no longer active",
   ),
   ;
 
