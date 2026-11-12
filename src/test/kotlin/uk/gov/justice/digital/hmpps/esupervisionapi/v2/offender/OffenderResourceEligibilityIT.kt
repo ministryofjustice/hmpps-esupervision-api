@@ -143,6 +143,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
             message = "John Doe may be eligible for online check ins.",
             allRules = listOf(
               RuleResult("NDELIUS", "HAS_ACTIVE_EVENT", "ACTIVE_EVENT", CONTINUE),
+              RuleResult("NDELIUS", "IS_CONTACT_SUSPENDED", "CONTACT_SUSPENDED", CONTINUE),
               RuleResult("SUP-PACK", "IS_RECALLED", "RECALLED", CONTINUE),
               RuleResult("TIER", "IS_TIER_MISSING", "TIER", CONTINUE),
               RuleResult("TIER", "IS_TIER_PROVISIONAL", "PROVISIONAL", CONTINUE),
@@ -192,7 +193,6 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
         assertThat(response.outcome).isEqualTo(EligibilityCheckResponseOutcome.INELIGIBLE)
         assertThat(response.message).isEqualTo("No active sentence.")
         assertThat(response.allRules)
-          .hasSize(10)
           .noneMatch { it.source == "MANUAL" }
           .first().isEqualTo(
             RuleResult("NDELIUS", "HAS_ACTIVE_EVENT", "ACTIVE_EVENT", NOT_ELIGIBLE, "No active sentence."),

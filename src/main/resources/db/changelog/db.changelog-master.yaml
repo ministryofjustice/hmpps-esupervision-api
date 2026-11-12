@@ -199,3 +199,5 @@ databaseChangeLog:
       file: db/changelog/changesets/99_checkin_holds_date_function.sql
   - include:
       file: db/changelog/changesets/100_upcoming_assignment_trusts_next_date.sql
+  - include:
+      file: db/changelog/changesets/101_eligibility_reset_rule.sql
