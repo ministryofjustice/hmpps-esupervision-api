@@ -16,4 +16,4 @@ values
      'is suspended (in reset) in NDelius',
      null);
 
---rollback delete from offender_eligibility_rule where source = 'NDELIUS' and code = 'IS_CONTACT_SUSPENDED';
+--rollback delete from offender_eligibility_rule where rule_set = 'OFFENDER_ELIGIBILITY' and source = 'NDELIUS' and code = 'IS_CONTACT_SUSPENDED';
