@@ -22,6 +22,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
     assertThat(rules).extracting<String> { it.code }
       .containsExactly(
         "HAS_ACTIVE_EVENT",
+        "IS_CONTACT_SUSPENDED",
         "IS_RECALLED",
         "IS_TIER_MISSING",
         "IS_TIER_PROVISIONAL",
@@ -39,6 +40,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
     assertThat(rules.map { it.deliusOutcomeCode })
       .containsExactly(
         "ESPNA",
+        "ESPRS",
         "ESPRC",
         "ESPME",
         "ESPIT",
@@ -64,6 +66,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         mapOf(
           "ACTIVE_EVENT" to Any(),
           "PRACTITIONER_ASSIGNED" to true,
+          "CONTACT_SUSPENDED" to false,
         ),
       ),
       "SUP-PACK" to CompletableFuture.completedFuture(
