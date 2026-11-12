@@ -32,7 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CustomQuestionsReminderJob
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -42,7 +42,7 @@ import java.util.UUID
 class MockNotificationServiceConfiguration {
   @Bean
   @Primary
-  fun notificationService(): NotificationService = mock()
+  fun notificationService(): NotificationOrchestratorService = mock()
 }
 
 @TestConfiguration
@@ -73,7 +73,7 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
   lateinit var ndiliusApiClient: INdiliusApiClient
 
   @Autowired
-  lateinit var notificationService: NotificationService
+  lateinit var notificationService: NotificationOrchestratorService
 
   @Autowired
   lateinit var offenderRepository: OffenderRepository

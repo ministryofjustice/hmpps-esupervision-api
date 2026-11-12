@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventDetailResponse
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.util.UUID
 
 /** V2 Event Detail Endpoints Callback URLs for Ndilius to query event details */
@@ -20,7 +20,7 @@ import java.util.UUID
 @RequestMapping("/v2/events")
 @Tag(name = "V2 Events", description = "Event detail callback endpoints for Ndilius")
 class EventResource(
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
 ) {
   @PreAuthorize("hasAnyRole('ROLE_ESUPERVISION__CHECK_IN__RO', 'ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @GetMapping("/checkin-created/{uuid}")

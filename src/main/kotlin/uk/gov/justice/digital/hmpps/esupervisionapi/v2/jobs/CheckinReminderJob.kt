@@ -19,7 +19,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Duration
@@ -36,7 +36,7 @@ class CheckinReminderJob(
   private val clock: Clock,
   private val checkinRepository: OffenderCheckinRepository,
   private val ndiliusApiClient: INdiliusApiClient,
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
   private val offenderDeactivationService: OffenderDeactivationService,
   private val jobLogRepository: JobLogRepository,
   private val transactionTemplate: TransactionTemplate,
@@ -136,7 +136,7 @@ class CheckinReminderJob(
                 "not sent (${if (deactivated) "deactivated" else "could not deactivate"}: ${ineligibility.name})"
               }
               else -> {
-                notificationService.sendCheckinReminderNotifications(checkin, contactDetails)
+                notificationService.sendReminderCheckinNotifications(checkin, contactDetails)
                 sentNotifications.add(Pair(checkin, contactDetails))
                 "sent"
               }

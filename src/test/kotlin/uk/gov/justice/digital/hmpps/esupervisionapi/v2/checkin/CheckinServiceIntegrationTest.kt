@@ -35,7 +35,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SurveyVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.net.URI
 import java.time.Instant
 import java.time.LocalDate
@@ -65,7 +65,7 @@ class CheckinServiceIntegrationTest : IntegrationTestBase() {
   private lateinit var ndiliusApiClient: INdiliusApiClient
 
   @MockitoBean
-  private lateinit var notificationService: NotificationService
+  private lateinit var notificationService: NotificationOrchestratorService
 
   @MockitoBean
   private lateinit var s3UploadService: S3UploadService

@@ -81,12 +81,13 @@ uk.gov.justice.digital.hmpps.esupervisionapi.v2/
 ├── V2Dtos.kt                  # Data Transfer Objects
 ├── V2Repositories.kt          # Spring Data repositories
 ├── CheckinV2Service.kt        # Core checkin logic
-├── NotificationV2Service.kt   # Notification facade
 ├── DomainEventService.kt      # Domain event publishing
 │
 ├── checkin/                   # Checkin endpoints and services
 ├── setup/                     # Offender setup flow
 ├── offender/                  # Offender management
+├── notifications/
+│   └── NotificationOrchestratorService.kt # Notification orchestration
 ├── audit/                     # Event audit logging
 ├── jobs/                      # Background jobs
 ├── domain/                    # Domain value objects

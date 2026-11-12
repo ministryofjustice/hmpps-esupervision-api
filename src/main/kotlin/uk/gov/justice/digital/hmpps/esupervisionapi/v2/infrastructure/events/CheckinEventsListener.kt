@@ -13,7 +13,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ICheckinEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -22,7 +22,7 @@ import java.util.concurrent.CompletableFuture
  */
 @Service
 class CheckinEventsListener(
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
   private val transactionTemplate: TransactionTemplate,
   private val outboxItemRepository: OutboxItemRepository,
 ) {

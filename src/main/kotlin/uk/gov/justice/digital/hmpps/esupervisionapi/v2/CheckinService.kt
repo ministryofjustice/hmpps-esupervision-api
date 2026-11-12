@@ -32,7 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.net.URL
 import java.time.Clock
 import java.time.Duration
@@ -53,7 +53,7 @@ class CheckinService(
   private val genericNotificationRepository: GenericNotificationRepository,
   private val offenderEventLogRepository: OffenderEventLogRepository,
   private val ndiliusApiClient: INdiliusApiClient,
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
   private val checkinCreationService: CheckinCreationService,
   private val s3UploadService: S3UploadService,
   private val compareFacesService: OffenderIdVerifier,
@@ -1078,7 +1078,7 @@ class CheckinService(
       }
 
     if (contactDetails != null) {
-      notificationService.sendCheckinReminderNotifications(checkin, contactDetails)
+      notificationService.sendReminderCheckinNotifications(checkin, contactDetails)
     } else {
       LOGGER.warn("Skipping manual reminder notification for checkin {}: contact details not found", uuid)
     }

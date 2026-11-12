@@ -9,12 +9,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.IOffenderEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.util.concurrent.CompletableFuture
 
 @Service
 class OffenderEventListener(
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
   private val outboxItemRepository: OutboxItemRepository,
 ) {
 
