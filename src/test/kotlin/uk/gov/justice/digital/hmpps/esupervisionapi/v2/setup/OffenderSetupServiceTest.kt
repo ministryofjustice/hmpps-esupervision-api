@@ -50,7 +50,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -69,7 +69,7 @@ class OffenderSetupServiceTest {
   private val offenderRepository: OffenderRepository = mock()
   private val offenderSetupRepository: OffenderSetupRepository = mock()
   private val s3UploadService: S3UploadService = mock()
-  private val notificationService: NotificationService = mock()
+  private val notificationService: NotificationOrchestratorService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService = mock()

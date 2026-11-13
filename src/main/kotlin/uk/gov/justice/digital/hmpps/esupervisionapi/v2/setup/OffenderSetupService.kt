@@ -36,7 +36,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -121,7 +121,7 @@ class OffenderSetupService(
   private val offenderRepository: OffenderRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
   private val s3UploadService: S3UploadService,
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
   private val ndiliusApiClient: INdiliusApiClient,
   private val transactionTemplate: TransactionTemplate,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,

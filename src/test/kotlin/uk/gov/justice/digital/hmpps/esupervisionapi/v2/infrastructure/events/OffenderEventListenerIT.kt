@@ -44,7 +44,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.OffenderEligibilitySyncJob
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.LocalDate
@@ -56,7 +56,7 @@ import java.util.concurrent.TimeUnit
 class OffenderEventListenerIT : IntegrationTestBase() {
 
   @Autowired
-  private lateinit var notificationService: NotificationService
+  private lateinit var notificationService: NotificationOrchestratorService
 
   @Autowired
   @Qualifier("offenderEventExecutor")
@@ -188,6 +188,6 @@ class OffenderEventListenerIT : IntegrationTestBase() {
   class TestConfig {
     @Bean
     @Primary
-    fun notificationV2Service(): NotificationService = mock()
+    fun notificationV2Service(): NotificationOrchestratorService = mock()
   }
 }

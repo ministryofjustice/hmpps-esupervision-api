@@ -67,7 +67,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligi
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
@@ -91,7 +91,7 @@ class OffenderResourceTest {
   private val checkinCreationService: CheckinCreationService = mock()
   private val eventAuditService: EventAuditService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
-  private val notificationService: NotificationService = mock()
+  private val notificationService: NotificationOrchestratorService = mock()
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val offenderSetupService: OffenderSetupService = mock()
   private val offenderDeactivationService: OffenderDeactivationService = mock()

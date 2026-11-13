@@ -25,7 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SurveyVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -148,6 +148,6 @@ class CheckinEventsListenerIT : IntegrationTestBase() {
   class TestConfig {
     @Bean
     @Primary
-    fun notificationV2Service(): NotificationService = mock()
+    fun notificationV2Service(): NotificationOrchestratorService = mock()
   }
 }

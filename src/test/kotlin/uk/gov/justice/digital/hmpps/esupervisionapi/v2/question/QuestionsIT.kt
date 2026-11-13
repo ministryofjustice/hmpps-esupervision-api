@@ -60,7 +60,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.ScheduleAdHocCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.placeholders
 import java.time.Clock
@@ -130,7 +130,7 @@ class QuestionsIT(
   lateinit var ndiliusApiClient: INdiliusApiClient
 
   @MockitoBean
-  lateinit var notificationService: NotificationService
+  lateinit var notificationService: NotificationOrchestratorService
 
   @BeforeEach
   fun setUp() {

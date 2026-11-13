@@ -75,7 +75,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.S3ObjectCoordinate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.net.URI
 import java.time.Clock
 import java.time.Duration
@@ -94,7 +94,7 @@ class CheckinServiceTest {
   private val offenderEventLogRepository: OffenderEventLogRepository = mock()
   private val genericNotificationRepository: GenericNotificationRepository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
-  private val notificationService: NotificationService = mock()
+  private val notificationService: NotificationOrchestratorService = mock()
   private val checkinCreationService: CheckinCreationService = mock()
   private val s3UploadService: S3UploadService = mock()
   private val compareFacesService: OffenderIdVerifier = mock()
@@ -185,7 +185,7 @@ class CheckinServiceTest {
     )
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     service.sendReminder(uuid)
-    verify(notificationService).sendCheckinReminderNotifications(checkin, contactDetails)
+    verify(notificationService).sendReminderCheckinNotifications(checkin, contactDetails)
   }
 
   @Test

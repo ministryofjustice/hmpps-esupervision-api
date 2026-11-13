@@ -21,7 +21,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEven
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -41,7 +41,7 @@ class CheckinCreationService(
   private val offenderRepository: OffenderRepository,
   private val checkinRepository: OffenderCheckinRepository,
   private val ndiliusApiClient: INdiliusApiClient,
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
   private val eventAuditService: EventAuditService,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val transactionTemplate: TransactionTemplate,

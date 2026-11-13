@@ -32,7 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventT
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
 import java.time.Instant
@@ -46,7 +46,7 @@ class CheckinReminderJobTest {
   private val clock = Clock.fixed(Instant.parse("2025-12-10T09:00:00Z"), ZoneId.of("UTC"))
   private val checkinRepository: OffenderCheckinRepository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
-  private val notificationService: NotificationService = mock()
+  private val notificationService: NotificationOrchestratorService = mock()
   private val deactivationService: OffenderDeactivationService = mock()
   private val jobLogRepository: JobLogRepository = mock {
     on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
@@ -83,7 +83,7 @@ class CheckinReminderJobTest {
 
     job.process()
 
-    verify(notificationService).sendCheckinReminderNotifications(same(checkin), eq(cd))
+    verify(notificationService).sendReminderCheckinNotifications(same(checkin), eq(cd))
     verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
   }
 
@@ -105,7 +105,7 @@ class CheckinReminderJobTest {
       expectedCurrentEvent = eq(1L),
       deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
-    verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
+    verify(notificationService, never()).sendReminderCheckinNotifications(any(), any())
 
     val captor = argumentCaptor<Iterable<Pair<OffenderCheckin, ContactDetails?>>>()
     verify(eventAuditService).recordCheckinReminded(captor.capture())
@@ -131,7 +131,7 @@ class CheckinReminderJobTest {
       expectedCurrentEvent = eq(2L),
       deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
     )
-    verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
+    verify(notificationService, never()).sendReminderCheckinNotifications(any(), any())
   }
 
   @Test
@@ -153,7 +153,7 @@ class CheckinReminderJobTest {
       expectedCurrentEvent = eq(1L),
       deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
-    verify(notificationService, never()).sendCheckinReminderNotifications(any(), any())
+    verify(notificationService, never()).sendReminderCheckinNotifications(any(), any())
   }
 
   @Test
@@ -180,8 +180,8 @@ class CheckinReminderJobTest {
       anyOrNull(),
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
-    verify(notificationService).sendCheckinReminderNotifications(same(eligible), eq(eligibleCd))
-    verify(notificationService, never()).sendCheckinReminderNotifications(same(ineligible), any())
+    verify(notificationService).sendReminderCheckinNotifications(same(eligible), eq(eligibleCd))
+    verify(notificationService, never()).sendReminderCheckinNotifications(same(ineligible), any())
 
     // the deactivated checkin must NOT appear in any CHECKIN_REMINDER audit (it was cancelled)
     val captor = argumentCaptor<Iterable<Pair<OffenderCheckin, ContactDetails?>>>()

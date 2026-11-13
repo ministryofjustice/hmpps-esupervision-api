@@ -16,7 +16,7 @@ flowchart TB
         E5[Checkin Expired]
     end
 
-    subgraph "NotificationOrchestratorV2Service"
+    subgraph "NotificationOrchestratorService"
         direction TB
         BUILD[Build Notifications<br/>Determine Recipients]
         PERSIST[Persist to<br/>GenericNotificationV2]
@@ -71,7 +71,7 @@ flowchart TB
 sequenceDiagram
     autonumber
     participant Trigger as Event Trigger
-    participant Orch as NotificationOrchestratorV2Service
+    participant Orch as NotificationOrchestratorService
     participant Persist as NotificationPersistenceService
     participant Gateway as NotifyGatewayService
     participant Notify as GOV.UK Notify API
@@ -111,17 +111,11 @@ sequenceDiagram
 
 ## Service Components
 
+Callers inject `NotificationOrchestratorService` directly.
+
 ```mermaid
 classDiagram
-    class NotificationV2Service {
-        +sendSetupCompletedNotifications(offender, contactDetails)
-        +sendCheckinCreatedNotifications(checkin, contactDetails)
-        +sendCheckinSubmittedNotifications(checkin, contactDetails)
-        +sendCheckinReviewedNotifications(checkin, contactDetails)
-        +sendCheckinExpiredNotifications(checkin, contactDetails)
-    }
-
-    class NotificationOrchestratorV2Service {
+    class NotificationOrchestratorService {
         -notificationPersistence
         -notifyGateway
         -domainEventService
@@ -145,9 +139,9 @@ classDiagram
         +send(channel, templateId, recipient, personalisation, reference)
     }
 
-    NotificationV2Service --> NotificationOrchestratorV2Service
-    NotificationOrchestratorV2Service --> NotificationPersistenceService
-    NotificationOrchestratorV2Service --> NotifyGatewayService
+    Callers --> NotificationOrchestratorService
+    NotificationOrchestratorService --> NotificationPersistenceService
+    NotificationOrchestratorService --> NotifyGatewayService
 ```
 
 ---

@@ -27,7 +27,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliu
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -42,7 +42,7 @@ class CheckinExpiryJobTest {
     on { findEligibleForExpiry(any()) } doAnswer { Stream.of(checkin()) }
   }
   private val ndiliusApiClient: INdiliusApiClient = mock()
-  private val notificationService: NotificationService = mock()
+  private val notificationService: NotificationOrchestratorService = mock()
   private val jobLogRepository: JobLogRepository = mock {
     on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
   }

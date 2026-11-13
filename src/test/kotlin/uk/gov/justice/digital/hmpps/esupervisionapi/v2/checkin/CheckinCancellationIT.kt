@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin
 
 import org.assertj.core.api.Assertions.assertThat
+import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -10,6 +11,8 @@ import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.EnumSource
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doCallRealMethod
+import org.mockito.kotlin.doNothing
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
@@ -20,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.transaction.support.TransactionTemplate
@@ -55,11 +59,11 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.Dom
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.events.DomainEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class CheckinCancellationIT : IntegrationTestBase() {
 
@@ -93,14 +97,11 @@ class CheckinCancellationIT : IntegrationTestBase() {
   @Autowired
   private lateinit var upcomingCheckinService: UpcomingCheckinService
 
-  @Autowired
-  private lateinit var notificationOrchestratorService: NotificationOrchestratorService
-
   @MockitoBean
   private lateinit var ndiliusApiClient: INdiliusApiClient
 
-  @MockitoBean
-  private lateinit var notificationService: NotificationService
+  @MockitoSpyBean
+  private lateinit var notificationService: NotificationOrchestratorService
 
   @MockitoBean
   private lateinit var notifyGatewayService: NotifyGatewayService
@@ -117,6 +118,7 @@ class CheckinCancellationIT : IntegrationTestBase() {
   fun setUp() {
     featuresBefore = appConfig.enabledFeatures
     reset(notificationService)
+    doNothing().whenever(notificationService).sendCheckinCancelledNotifications(any())
   }
 
   @AfterEach
@@ -188,6 +190,7 @@ class CheckinCancellationIT : IntegrationTestBase() {
   ) {
     val checkin = saveCheckin(previousStatus, linkStatus = linkStatus, contactPreference = contactPreference)
     whenever(notifyGatewayService.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+    doCallRealMethod().whenever(notificationService).sendCheckinCancelledNotifications(any())
 
     cancel(checkin.uuid).expectStatus().isOk
 
@@ -196,19 +199,19 @@ class CheckinCancellationIT : IntegrationTestBase() {
     val event = captor.firstValue
     assertThat(event.linkStatus).isEqualTo(linkStatus)
 
-    notificationOrchestratorService.sendCheckinCancelledNotifications(event)
-
-    verify(notifyGatewayService).send(
-      eq(channel),
-      eq(templateId),
-      eq(if (contactPreference == ContactPreference.PHONE) "07700900000" else "john@example.com"),
-      any(),
-      any(),
-    )
-    val notification = jdbcTemplate.queryForMap("select * from generic_notification_v2 where offender_id = ?", event.offenderId)
-    assertThat(notification["template_id"]).isEqualTo(templateId)
-    assertThat(notification["event_type"]).isEqualTo(notificationType.name)
-    assertThat(notification["status"]).isEqualTo("sent")
+    await().atMost(5, TimeUnit.SECONDS).untilAsserted {
+      verify(notifyGatewayService).send(
+        eq(channel),
+        eq(templateId),
+        eq(if (contactPreference == ContactPreference.PHONE) "07700900000" else "john@example.com"),
+        any(),
+        any(),
+      )
+      val notification = jdbcTemplate.queryForMap("select * from generic_notification_v2 where offender_id = ?", event.offenderId)
+      assertThat(notification["template_id"]).isEqualTo(templateId)
+      assertThat(notification["event_type"]).isEqualTo(notificationType.name)
+      assertThat(notification["status"]).isEqualTo("sent")
+    }
   }
 
   @Test

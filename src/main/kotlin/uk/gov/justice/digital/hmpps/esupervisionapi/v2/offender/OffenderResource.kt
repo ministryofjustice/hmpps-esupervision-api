@@ -76,7 +76,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Upload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.findLastCompletionException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.supervisionpackages.SupervisionPackageService
@@ -98,7 +98,7 @@ class OffenderResource(
   private val checkinCreationService: CheckinCreationService,
   private val eventAuditService: EventAuditService,
   private val ndiliusApiClient: INdiliusApiClient,
-  private val notificationService: NotificationService,
+  private val notificationService: NotificationOrchestratorService,
   private val checkinRepository: OffenderCheckinRepository,
   private val offenderSetupService: OffenderSetupService,
   private val offenderDeactivationService: OffenderDeactivationService,
