@@ -44,14 +44,14 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
   // Pilot cases: people in online check ins before the pilot cut-off (`in_pilot`), leaving out setups
-  // that never completed (INITIAL). Exact id matches, like the other practitioner queries, so the
-  // practitioner_id indexes apply. See PilotPractitionerLookup.
+  // that never completed (INITIAL). Practitioner ids are matched ignoring case, using the
+  // upper(practitioner_id) indexes. See PilotPractitionerLookup.
 
   /** Is a pilot case allocated to [practitionerId] now? */
   @Query(
     """
     SELECT COUNT(o) > 0 FROM Offender o
-    WHERE o.practitionerId = :practitionerId AND o.inPilot = true
+    WHERE UPPER(o.practitionerId) = UPPER(:practitionerId) AND o.inPilot = true
       AND o.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
     """,
   )
@@ -61,25 +61,25 @@ interface OffenderRepository : JpaRepository<Offender, Long> {
   @Query(
     """
     SELECT COUNT(s) > 0 FROM OffenderSetup s
-    WHERE s.practitionerId = :practitionerId AND s.offender.inPilot = true
+    WHERE UPPER(s.practitionerId) = UPPER(:practitionerId) AND s.offender.inPilot = true
       AND s.offender.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
     """,
   )
   fun hasSetUpPilotCase(@Param("practitionerId") practitionerId: ExternalUserId): Boolean
 
-  /** Every practitioner a pilot case is allocated to now. */
+  /** Every practitioner a pilot case is allocated to now, upper-cased. */
   @Query(
     """
-    SELECT DISTINCT o.practitionerId FROM Offender o
+    SELECT DISTINCT UPPER(o.practitionerId) FROM Offender o
     WHERE o.inPilot = true AND o.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
     """,
   )
   fun findPilotCaseAllocatedPractitionerIds(): Set<String>
 
-  /** Every practitioner who set up a pilot case. */
+  /** Every practitioner who set up a pilot case, upper-cased. */
   @Query(
     """
-    SELECT DISTINCT s.practitionerId FROM OffenderSetup s
+    SELECT DISTINCT UPPER(s.practitionerId) FROM OffenderSetup s
     WHERE s.offender.inPilot = true AND s.offender.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
     """,
   )

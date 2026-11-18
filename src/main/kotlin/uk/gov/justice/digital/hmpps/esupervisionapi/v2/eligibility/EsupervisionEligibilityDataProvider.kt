@@ -38,7 +38,8 @@ class EsupervisionEligibilityDataProvider(
 /**
  * Answers "has this practitioner ever had a pilot case" - a person in online check ins before the
  * pilot cut-off (`offender_v2.in_pilot`), allocated to them now or set up by them at any point -
- * for the PRACTITIONER_PILOT data point. Setups that never completed don't count.
+ * for the PRACTITIONER_PILOT data point. Setups that never completed don't count. Practitioner ids
+ * are matched ignoring case.
  */
 @Service
 class PilotPractitionerLookup(private val offenderRepository: OffenderRepository) {
@@ -48,11 +49,11 @@ class PilotPractitionerLookup(private val offenderRepository: OffenderRepository
     return offenderRepository.isAllocatedPilotCase(id) || offenderRepository.hasSetUpPilotCase(id)
   }
 
-  /** For batch callers: every practitioner who has had a pilot case. Check with [isPilotPractitioner]. */
+  /** For batch callers: every practitioner who has had a pilot case, upper-cased. Check with [isPilotPractitioner]. */
   fun allPilotPractitionerIds(): Set<String> = offenderRepository.findPilotCaseAllocatedPractitionerIds() + offenderRepository.findPilotCaseSetupPractitionerIds()
 
   companion object {
-    fun isPilotPractitioner(pilotPractitionerIds: Set<String>, practitionerId: ExternalUserId?): Boolean = !practitionerId.isNullOrBlank() && practitionerId.trim() in pilotPractitionerIds
+    fun isPilotPractitioner(pilotPractitionerIds: Set<String>, practitionerId: ExternalUserId?): Boolean = !practitionerId.isNullOrBlank() && practitionerId.trim().uppercase() in pilotPractitionerIds
   }
 }
 

@@ -89,3 +89,12 @@ values
 --rollback update offender_eligibility_rule set delius_outcome_code = null where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'IS_TIER_C';
 --rollback update offender_eligibility_rule set rule_order = 15, delius_outcome_code = null, applies_when_source = null, applies_when_data_point = null, applies_when_operator = null, applies_when_comparison_value = null where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'ON_YOUTH_SENTENCE';
 --rollback update offender_eligibility_rule set rule_order = 14 where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'ON_ACCREDITED_PROGRAMME';
+
+--changeset hmpps:102_eligibility_package_and_pilot_practitioner_rules-3 splitStatements:false
+
+-- The pilot practitioner lookup matches practitioner ids ignoring case
+create index idx_offender_v2_practitioner_upper on offender_v2 (upper(practitioner_id));
+create index idx_setup_v2_practitioner_upper on offender_setup_v2 (upper(practitioner_id));
+
+--rollback drop index idx_setup_v2_practitioner_upper;
+--rollback drop index idx_offender_v2_practitioner_upper;

@@ -4,6 +4,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.jdbc.core.JdbcTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
@@ -23,6 +24,8 @@ class PilotPractitionerLookupIT : IntegrationTestBase() {
 
   @Autowired private lateinit var lookup: PilotPractitionerLookup
 
+  @Autowired private lateinit var jdbcTemplate: JdbcTemplate
+
   private val offenderIds = mutableListOf<Long>()
 
   @AfterEach
@@ -38,6 +41,31 @@ class PilotPractitionerLookupIT : IntegrationTestBase() {
 
     assertThat(lookup.hasHadPilotCase(" ALLOCATED.PRACT ")).isTrue()
     assertThat(lookup.allPilotPractitionerIds()).contains("ALLOCATED.PRACT")
+  }
+
+  @Test
+  fun `practitioner ids match whatever their case`() {
+    val offender = saveOffender("X100006", practitionerId = "Mixed.Case", inPilot = true)
+    offenderSetupRepository.saveAndFlush(
+      OffenderSetup(uuid = UUID.randomUUID(), offender = offender, practitionerId = "setup.pract", createdAt = Instant.now()),
+    )
+
+    assertThat(lookup.hasHadPilotCase("MIXED.CASE")).isTrue()
+    assertThat(lookup.hasHadPilotCase("mixed.case")).isTrue()
+    assertThat(lookup.hasHadPilotCase("SETUP.PRACT")).isTrue()
+    val ids = lookup.allPilotPractitionerIds()
+    assertThat(PilotPractitionerLookup.isPilotPractitioner(ids, "mixed.CASE")).isTrue()
+    assertThat(PilotPractitionerLookup.isPilotPractitioner(ids, "Setup.Pract")).isTrue()
+  }
+
+  @Test
+  fun `the lookups have upper-case practitioner indexes to use`() {
+    val indexes = jdbcTemplate.queryForList(
+      "select indexdef from pg_indexes where indexname in ('idx_offender_v2_practitioner_upper', 'idx_setup_v2_practitioner_upper')",
+      String::class.java,
+    )
+
+    assertThat(indexes).hasSize(2).allMatch { it?.contains("upper((practitioner_id)::text)") == true }
   }
 
   @Test
