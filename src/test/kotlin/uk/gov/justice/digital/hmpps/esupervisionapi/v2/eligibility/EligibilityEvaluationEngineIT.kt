@@ -23,6 +23,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       .containsExactly(
         "HAS_ACTIVE_EVENT",
         "IS_CONTACT_SUSPENDED",
+        "ON_SUPERVISION_PACKAGE",
         "IS_RECALLED",
         "IS_TIER_MISSING",
         "IS_TIER_PROVISIONAL",
@@ -31,6 +32,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "HAS_DEVICE_RESTRICTION",
         "IS_TIER_D_TO_G",
         "IS_PILOT_USER",
+        "PRACTITIONER_HAS_PILOT_CASE",
         "IS_TIER_C",
         "ON_ACCREDITED_PROGRAMME",
         "ON_YOUTH_SENTENCE",
@@ -41,6 +43,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       .containsExactly(
         "ESPNA",
         "ESPRS",
+        null, // ON_SUPERVISION_PACKAGE: NDelius outcome code not agreed yet
         "ESPRC",
         "ESPME",
         "ESPIT",
@@ -49,6 +52,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "ESPDI",
         null,
         null,
+        null, // PRACTITIONER_HAS_PILOT_CASE only ever makes someone eligible
         null,
         "ESPAP",
         null,
@@ -71,6 +75,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       ),
       "SUP-PACK" to CompletableFuture.completedFuture(
         mapOf(
+          "ON_PACKAGE" to true,
           "RECALLED" to false,
           "FINAL_THIRD" to false,
           "EARLY_ENGAGEMENT" to false,
@@ -85,6 +90,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       "ESUP" to CompletableFuture.completedFuture(
         mapOf(
           "PILOT_USER" to true,
+          "PRACTITIONER_PILOT" to false,
         ),
       ),
       "MANUAL" to CompletableFuture.completedFuture(
@@ -104,7 +110,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
     assertThat(result.triggeredRuleCode).isEqualTo("IS_PILOT_USER")
 
     prePopulatedCache["TIER"] = CompletableFuture.completedFuture(mapOf("TIER" to "C", "PROVISIONAL" to "false"))
-    prePopulatedCache["ESUP"] = CompletableFuture.completedFuture(mapOf("PILOT_USER" to false))
+    prePopulatedCache["ESUP"] = CompletableFuture.completedFuture(mapOf("PILOT_USER" to false, "PRACTITIONER_PILOT" to false))
     val resultC = eligibilityEvaluationEngine
       .evaluate("X123456", DEFAULT_RULE_SET, prePopulatedCache)
       .join()
@@ -112,5 +118,25 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
     assertThat(resultC.outcome).isEqualTo(EligibilityCheckOutcome.INELIGIBLE)
     assertThat(resultC.dashboardMessage).isEqualTo("{{offender}} is not eligible for online check ins because they are in Tier C.")
     assertThat(resultC.triggeredRuleCode).isEqualTo("IS_TIER_C")
+
+    // a practitioner who has had a pilot case can sign up Tier C
+    prePopulatedCache["ESUP"] = CompletableFuture.completedFuture(mapOf("PILOT_USER" to false, "PRACTITIONER_PILOT" to true))
+    val resultPilotPractitioner = eligibilityEvaluationEngine
+      .evaluate("X123456", DEFAULT_RULE_SET, prePopulatedCache)
+      .join()
+
+    assertThat(resultPilotPractitioner.outcome).isEqualTo(EligibilityCheckOutcome.ELIGIBLE)
+    assertThat(resultPilotPractitioner.triggeredRuleCode).isEqualTo("PRACTITIONER_HAS_PILOT_CASE")
+
+    // nobody off a supervision package is eligible
+    prePopulatedCache["SUP-PACK"] = CompletableFuture.completedFuture(
+      mapOf("ON_PACKAGE" to false, "RECALLED" to false, "FINAL_THIRD" to false, "EARLY_ENGAGEMENT" to false),
+    )
+    val resultNoPackage = eligibilityEvaluationEngine
+      .evaluate("X123456", DEFAULT_RULE_SET, prePopulatedCache)
+      .join()
+
+    assertThat(resultNoPackage.outcome).isEqualTo(EligibilityCheckOutcome.INELIGIBLE)
+    assertThat(resultNoPackage.triggeredRuleCode).isEqualTo("ON_SUPERVISION_PACKAGE")
   }
 }

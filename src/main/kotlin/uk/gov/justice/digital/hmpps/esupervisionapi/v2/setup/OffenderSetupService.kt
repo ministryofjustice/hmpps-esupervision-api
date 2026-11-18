@@ -32,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.validateScheduleSe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
@@ -127,6 +128,7 @@ class OffenderSetupService(
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService,
   private val eligibilityChecker: EligibilityChecker,
+  private val pilotPractitionerLookup: PilotPractitionerLookup,
   private val appConfig: AppConfig,
 ) {
 
@@ -210,7 +212,8 @@ class OffenderSetupService(
     eligibility: EligibilityAnswers?,
     offender: Offender,
   ) {
-    val cache = makeCache(offender, contactDetails, eligibility)
+    // offender.practitionerId is the practitioner doing this setup
+    val cache = makeCache(offender, contactDetails, eligibility, pilotPractitionerLookup.hasHadPilotCase(offender.practitionerId))
     val result = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (result.outcome != EligibilityCheckOutcome.ELIGIBLE) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, result.dashboardMessage ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"}")

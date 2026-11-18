@@ -141,7 +141,14 @@ app:
       callback: "If they need us to contact them before their next appointment"
       callbackDetails: "What they want to talk about"
   offender-eligibility:
+    # setup, reactivation and GET /v2/offenders/crn/{crn}/eligibility
     rule-set: ${APP_OFFENDER_ELIGIBILITY_RULE_SET:PILOT_2026_08}
+    # POST /v2/offenders/crn/{crn}/eligibility - what the UIs use to drive the eligibility journey
+    check-rule-set: ${APP_OFFENDER_ELIGIBILITY_CHECK_RULE_SET:OFFENDER_ELIGIBILITY}
+    # nightly eligibility sync job
+    sync-rule-set: ${APP_OFFENDER_ELIGIBILITY_SYNC_RULE_SET:${app.offender-eligibility.rule-set}}
+    # when true the sync job logs who it would deactivate, but deactivates no one
+    sync-dry-run: ${APP_OFFENDER_ELIGIBILITY_SYNC_DRY_RUN:false}
     # How long we wait before timing out the source request
     source-timeout-ms: ${APP_OFFENDER_ELIGIBILITY_SOURCE_TIMEOUT_MS:2000}
 

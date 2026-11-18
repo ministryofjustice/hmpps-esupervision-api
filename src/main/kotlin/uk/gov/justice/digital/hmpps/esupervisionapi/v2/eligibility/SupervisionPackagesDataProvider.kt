@@ -25,6 +25,7 @@ class SupervisionPackagesDataProvider(
 }
 
 fun SupervisionPackageDetails.eligibilityData(): Map<String, Any?> = mapOf(
+  "ON_PACKAGE" to this.isOnSupervisionPackage,
   "RECALLED" to this.isRecalled,
   "FINAL_THIRD" to this.isInFinalThird,
   "EARLY_ENGAGEMENT" to this.isInEarlyEngagement,

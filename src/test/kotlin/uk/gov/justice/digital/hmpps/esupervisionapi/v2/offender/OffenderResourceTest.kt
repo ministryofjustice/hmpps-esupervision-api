@@ -64,6 +64,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEv
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligibilityRule
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
@@ -99,6 +100,7 @@ class OffenderResourceTest {
   private val offenderPersistenceService: OffenderPersistenceService = mock()
   private val offenderService: OffenderService = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
+  private val pilotPractitionerLookup: PilotPractitionerLookup = mock()
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
   private val supervisionPackageService: SupervisionPackageService = mock()
   private val questionService: QuestionService = mock()
@@ -132,6 +134,7 @@ class OffenderResourceTest {
       offenderService,
       eligibilityEvaluationEngine,
       eligibilityChecker,
+      pilotPractitionerLookup,
       supervisionPackageService,
       questionService,
       transactionTemplate,

@@ -43,6 +43,48 @@ import java.util.stream.Stream
 interface OffenderRepository : JpaRepository<Offender, Long> {
   fun findByUuid(uuid: UUID): Optional<Offender>
 
+  // Pilot cases: people in online check ins before the pilot cut-off (`in_pilot`), leaving out setups
+  // that never completed (INITIAL). Exact id matches, like the other practitioner queries, so the
+  // practitioner_id indexes apply. See PilotPractitionerLookup.
+
+  /** Is a pilot case allocated to [practitionerId] now? */
+  @Query(
+    """
+    SELECT COUNT(o) > 0 FROM Offender o
+    WHERE o.practitionerId = :practitionerId AND o.inPilot = true
+      AND o.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
+    """,
+  )
+  fun isAllocatedPilotCase(@Param("practitionerId") practitionerId: ExternalUserId): Boolean
+
+  /** Did [practitionerId] ever set up a pilot case? */
+  @Query(
+    """
+    SELECT COUNT(s) > 0 FROM OffenderSetup s
+    WHERE s.practitionerId = :practitionerId AND s.offender.inPilot = true
+      AND s.offender.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
+    """,
+  )
+  fun hasSetUpPilotCase(@Param("practitionerId") practitionerId: ExternalUserId): Boolean
+
+  /** Every practitioner a pilot case is allocated to now. */
+  @Query(
+    """
+    SELECT DISTINCT o.practitionerId FROM Offender o
+    WHERE o.inPilot = true AND o.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
+    """,
+  )
+  fun findPilotCaseAllocatedPractitionerIds(): Set<String>
+
+  /** Every practitioner who set up a pilot case. */
+  @Query(
+    """
+    SELECT DISTINCT s.practitionerId FROM OffenderSetup s
+    WHERE s.offender.inPilot = true AND s.offender.status <> uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus.INITIAL
+    """,
+  )
+  fun findPilotCaseSetupPractitionerIds(): Set<String>
+
   @Query("SELECT o.id AS id, o.uuid AS uuid, o.crn AS crn, o.status AS status FROM Offender o WHERE o.uuid = :uuid")
   fun findUpdateInfoByUuid(@Param("uuid") uuid: UUID): Optional<IOffenderUpdateInfo>
 

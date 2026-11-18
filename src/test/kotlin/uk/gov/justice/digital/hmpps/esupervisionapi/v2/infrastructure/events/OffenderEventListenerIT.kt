@@ -128,7 +128,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       on { getContactDetailsForMultiple(any()) }.thenReturn(listOf(details))
     }
     val eligibilityChecker: EligibilityChecker = mock {
-      on { check(any(), any(), any()) }
+      on { check(any(), any(), any(), any()) }
         .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible", "RULE"))
     }
     val appConfig: AppConfig = mock {
@@ -156,6 +156,9 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       appConfig = appConfig,
       offenderEventExecutor = offenderEventExecutor,
       batchEnabled = true,
+      pilotPractitionerLookup = mock(),
+      ruleSet = "TEST_RULE_SET",
+      dryRun = false,
     )
     val runner = Executors.newSingleThreadExecutor()
     try {

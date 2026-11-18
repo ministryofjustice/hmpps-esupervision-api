@@ -42,8 +42,14 @@ class EligibilityDataUnavailableException(val ruleCode: String, val source: Stri
 class EligibilityEvaluationEngine(
   private val ruleRepository: EligibilityRuleRepository,
   private val providerRegistry: EligibilityDataProviderRegistry,
+  /** Used by setup, reactivation and GET /crn/{crn}/eligibility. */
   @Value($$"${app.offender-eligibility.rule-set}") val activeRuleSet: String,
   @Value($$"${app.offender-eligibility.source-timeout-ms:2000}") val sourceTimeoutMs: Long,
+  /**
+   * Used by POST /crn/{crn}/eligibility, which the UIs call to decide the journey. Kept apart from
+   * [activeRuleSet] so the UIs can move to the full rules before the server enforces them.
+   */
+  @Value($$"${app.offender-eligibility.check-rule-set}") val checkRuleSet: String = DEFAULT_RULE_SET,
 ) {
   typealias DataSource = String // e.g. "NDELIUS", "NOMIS" etc
   typealias Cache = Map<DataSource, CompletableFuture<Map<String, Any?>>>

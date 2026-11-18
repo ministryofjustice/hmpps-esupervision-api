@@ -48,6 +48,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
@@ -73,6 +74,7 @@ class OffenderSetupServiceTest {
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
   private val offenderSetupPersistenceService: OffenderSetupPersistenceService = mock()
+  private val pilotPractitionerLookup: PilotPractitionerLookup = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
   private val appConfig: AppConfig = mock()
 
@@ -91,6 +93,7 @@ class OffenderSetupServiceTest {
       Duration.ofDays(3),
       offenderSetupPersistenceService,
       eligibilityChecker,
+      pilotPractitionerLookup,
       appConfig,
     )
 
@@ -110,6 +113,7 @@ class OffenderSetupServiceTest {
       transactionTemplate,
       offenderSetupPersistenceService,
       eligibilityChecker,
+      pilotPractitionerLookup,
       appConfig,
     )
   }
