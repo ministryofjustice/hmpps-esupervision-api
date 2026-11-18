@@ -32,6 +32,7 @@ generic-service:
     APP_FEATURES_ESUP_1239: "true"
     APP_FEATURES_ESUP_1763: "true"
     APP_FEATURES_ESUP_2305: "true"
+    APP_FEATURES_ESUP_2223: "true"
     APP_FEATURES_ESUP_2186_TIER_V3_FROM: "2026-10-01T00:00:00+01:00"
 
 # CloudPlatform AlertManager receiver to route prometheus alerts to slack
