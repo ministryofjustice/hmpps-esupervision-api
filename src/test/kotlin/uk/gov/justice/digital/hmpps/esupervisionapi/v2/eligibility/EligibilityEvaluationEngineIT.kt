@@ -40,29 +40,44 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         "ON_ACCREDITED_PROGRAMME",
       )
 
-    assertThat(rules.map { it.deliusOutcomeCode })
-      .containsExactly(
-        "ESPNA",
-        "ESPRS",
-        null, // ON_SUPERVISION_PACKAGE: NDelius outcome code not agreed yet
-        "ESPRC",
-        "ESPME",
-        "ESPIT",
-        "ESPFT",
-        "ESPNP",
-        "ESPDI",
-        null,
-        null,
-        null, // the pilot practitioner rules only ever make someone eligible
-        null,
-        null,
-        "ESPEE",
-        null,
-        "ESPAP",
+    // The code NDelius records on the setup contact (ESPCHS) when the nightly sync stops check ins
+    // because of the rule. Rules that can only make someone eligible have none.
+    assertThat(rules.associate { it.code to it.deliusOutcomeCode })
+      .containsExactlyEntriesOf(
+        linkedMapOf(
+          "HAS_ACTIVE_EVENT" to "ESPNA",
+          "IS_CONTACT_SUSPENDED" to "ESPRS",
+          "ON_SUPERVISION_PACKAGE" to "ESPSP",
+          "IS_RECALLED" to "ESPRC",
+          "IS_TIER_MISSING" to "ESPME",
+          "IS_TIER_PROVISIONAL" to "ESPIT",
+          "IN_FINAL_THIRD" to "ESPFT",
+          "IS_PRACTITIONER_ASSIGNED" to "ESPNP",
+          "HAS_DEVICE_RESTRICTION" to "ESPDI",
+          "IS_TIER_D_TO_G" to null,
+          "IS_PILOT_USER" to null,
+          "PRACTITIONER_HAS_PILOT_CASE_TIER_C" to null,
+          "IS_TIER_C" to "ESPIT",
+          "ON_YOUTH_SENTENCE" to "ESPYS",
+          "IN_EARLY_ENGAGEMENT" to "ESPEE",
+          "PRACTITIONER_HAS_PILOT_CASE_TIER_A_B" to null,
+          "ON_ACCREDITED_PROGRAMME" to "ESPAP",
+        ),
       )
 
     val pilotRules = eligibilityRuleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc("PILOT_2026_08")
     assertThat(pilotRules.filter { it.deliusOutcomeCode == null }).isEmpty()
+  }
+
+  @Test
+  fun `every rule that can stop check ins tells NDelius why`() {
+    listOf(DEFAULT_RULE_SET, "PILOT_2026_08").forEach { ruleSet ->
+      val rulingOut = eligibilityRuleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(ruleSet)
+        .filter { it.outcomeOnMatch == EligibilityRuleOutcome.NOT_ELIGIBLE || it.outcomeOnNoMatch == EligibilityRuleOutcome.NOT_ELIGIBLE }
+
+      assertThat(rulingOut).describedAs(ruleSet).isNotEmpty()
+      assertThat(rulingOut.filter { it.deliusOutcomeCode == null }.map { it.code }).describedAs(ruleSet).isEmpty()
+    }
   }
 
   @Test

@@ -33,8 +33,13 @@ alter table offender_eligibility_rule
 update offender_eligibility_rule set rule_order = 17
 where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'ON_ACCREDITED_PROGRAMME';
 
+-- Ineligible Tier, as for a provisional tier
+update offender_eligibility_rule set delius_outcome_code = 'ESPIT'
+where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'IS_TIER_C';
+
 update offender_eligibility_rule
 set rule_order = 14,
+    delius_outcome_code = 'ESPYS', -- Youth sentence
     applies_when_source = 'MANUAL', applies_when_data_point = 'ACCREDITED_PROGRAMME',
     applies_when_operator = 'EQUALS', applies_when_comparison_value = 'true'
 where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'ON_YOUTH_SENTENCE';
@@ -53,9 +58,9 @@ insert into offender_eligibility_rule
      ineligibility_message, ineligibility_auto_message,
      comment)
 values
-    -- TODO: NDelius outcome code for "not on a supervision package" still to be agreed
+    -- ESPSP: Not on a supervision package
     (2.5, 'ON_SUPERVISION_PACKAGE', 'Are they on a supervision package (SPA-SPG)?',
-     'SUP-PACK', 'ON_PACKAGE', 'EQUALS', 'true', null,
+     'SUP-PACK', 'ON_PACKAGE', 'EQUALS', 'true', 'ESPSP',
      null, null, null, null,
      'CONTINUE', 'NOT_ELIGIBLE',
      '{{offender}} is not eligible for online check ins because they are not on a supervision package.',
@@ -81,5 +86,6 @@ values
 
 --rollback delete from offender_eligibility_rule where rule_set = 'OFFENDER_ELIGIBILITY' and code in ('ON_SUPERVISION_PACKAGE', 'PRACTITIONER_HAS_PILOT_CASE_TIER_C', 'PRACTITIONER_HAS_PILOT_CASE_TIER_A_B');
 --rollback update offender_eligibility_rule set rule_order = 16, applies_when_source = null, applies_when_data_point = null, applies_when_operator = null, applies_when_comparison_value = null where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'IN_EARLY_ENGAGEMENT';
---rollback update offender_eligibility_rule set rule_order = 15, applies_when_source = null, applies_when_data_point = null, applies_when_operator = null, applies_when_comparison_value = null where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'ON_YOUTH_SENTENCE';
+--rollback update offender_eligibility_rule set delius_outcome_code = null where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'IS_TIER_C';
+--rollback update offender_eligibility_rule set rule_order = 15, delius_outcome_code = null, applies_when_source = null, applies_when_data_point = null, applies_when_operator = null, applies_when_comparison_value = null where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'ON_YOUTH_SENTENCE';
 --rollback update offender_eligibility_rule set rule_order = 14 where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'ON_ACCREDITED_PROGRAMME';
