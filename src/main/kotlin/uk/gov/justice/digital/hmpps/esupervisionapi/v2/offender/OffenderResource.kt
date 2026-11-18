@@ -277,7 +277,7 @@ class OffenderResource(
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
   @Operation(
     summary = "Check eligibility by CRN, with the practitioner's answers",
-    description = """Evaluates the eligibility check rule set (`app.offender-eligibility.check-rule-set`) for the
+    description = """Evaluates the active eligibility rule set (`app.offender-eligibility.rule-set`) for the
       given CRN, using NDelius, Tier, Supervision Packages and e-supervision data, plus the practitioner's
       answers when supplied. Does not require the person to already be registered for e-supervision.
 
@@ -318,7 +318,7 @@ class OffenderResource(
     )
     request.eligibilityAnswers?.let { cacheData["MANUAL"] = CompletableFuture.completedFuture(it.eligibilityData()) }
 
-    return evaluateEligibility(normalisedCrn, eligibilityEvaluationEngine.checkRuleSet, cacheData, contactDetails.name)
+    return evaluateEligibility(normalisedCrn, eligibilityEvaluationEngine.activeRuleSet, cacheData, contactDetails.name)
   }
 
   /**
@@ -671,7 +671,10 @@ class OffenderResource(
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
-    val cache = makeCache(offender, contactDetails, request.eligibilityAnswers, pilotPractitionerLookup.hasHadPilotCase(request.requestedBy))
+    // The pilot practitioner is the allocated one, as at setup and in the nightly sync, so the three
+    // agree; the person restarting check ins may be someone else.
+    val pilotPractitioner = contactDetails.practitioner?.username ?: offender.practitionerId
+    val cache = makeCache(offender, contactDetails, request.eligibilityAnswers, pilotPractitionerLookup.hasHadPilotCase(pilotPractitioner))
     val outcome = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(

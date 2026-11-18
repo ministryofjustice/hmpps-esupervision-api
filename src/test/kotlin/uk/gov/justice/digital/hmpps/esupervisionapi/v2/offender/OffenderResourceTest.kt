@@ -48,6 +48,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceServic
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
@@ -401,6 +402,8 @@ class OffenderResourceTest {
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
+    // NDelius names no practitioner here, so the pilot check falls back to the one recorded at setup
+    verify(pilotPractitionerLookup).hasHadPilotCase(offender.practitionerId)
   }
 
   @Test
@@ -421,6 +424,7 @@ class OffenderResourceTest {
       mobile = "07700900123",
       events = listOf(anEvent, anEvent.copy(number = 2L)),
       dateOfBirth = LocalDate.of(1980, 1, 1),
+      practitioner = PractitionerDetails(name = Name("Jane", "Smith"), username = "ALLOCATED.PP"),
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
@@ -445,6 +449,8 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(2L, offender.currentEvent)
     assertEquals(2L, result.body?.currentEvent)
+    // the allocated practitioner, as at setup and in the nightly sync - not the requester
+    verify(pilotPractitionerLookup).hasHadPilotCase("ALLOCATED.PP")
   }
 
   @Test

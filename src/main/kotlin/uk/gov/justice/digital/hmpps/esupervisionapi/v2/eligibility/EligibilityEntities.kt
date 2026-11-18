@@ -74,6 +74,25 @@ open class OffenderEligibilityRule(
   @Column(name = "ineligibility_auto_message", nullable = true, columnDefinition = "text")
   open var ineligibilityAutoMessage: String? = null,
 
+  /**
+   * Optional condition for the rule to apply at all: when [appliesWhenSource] is set and its
+   * [appliesWhenDataPoint] doesn't satisfy [appliesWhenOperator]/[appliesWhenComparisonValue], the
+   * rule is skipped (CONTINUE). Lets a rule hold only on one branch, e.g. youth sentence only
+   * counts for people on an accredited programme.
+   */
+  @Column(name = "applies_when_source", nullable = true, columnDefinition = "varchar(32)")
+  open var appliesWhenSource: String? = null,
+
+  @Column(name = "applies_when_data_point", nullable = true, columnDefinition = "varchar(128)")
+  open var appliesWhenDataPoint: String? = null,
+
+  @Column(name = "applies_when_operator", nullable = true)
+  @Enumerated(EnumType.STRING)
+  open var appliesWhenOperator: EligibilityRuleOperator? = null,
+
+  @Column(name = "applies_when_comparison_value", nullable = true, columnDefinition = "text")
+  open var appliesWhenComparisonValue: String? = null,
+
   @Column(name = "enabled", nullable = false)
   open var enabled: Boolean = true,
 

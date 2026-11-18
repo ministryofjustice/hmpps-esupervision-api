@@ -154,15 +154,12 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
               RuleResult("NDELIUS", "IS_PRACTITIONER_ASSIGNED", "PRACTITIONER_ASSIGNED", CONTINUE),
               RuleResult("TIER", "IS_TIER_D_TO_G", "TIER", CONTINUE),
               RuleResult("ESUP", "IS_PILOT_USER", "PILOT_USER", CONTINUE),
-              RuleResult("ESUP", "PRACTITIONER_HAS_PILOT_CASE", "PRACTITIONER_PILOT", CONTINUE),
+              // only applies to Tier C
+              RuleResult("ESUP", "PRACTITIONER_HAS_PILOT_CASE_TIER_C", "PRACTITIONER_PILOT", CONTINUE),
               RuleResult("TIER", "IS_TIER_C", "TIER", CONTINUE),
-              RuleResult(
-                "SUP-PACK",
-                "IN_EARLY_ENGAGEMENT",
-                "EARLY_ENGAGEMENT",
-                NOT_ELIGIBLE,
-                "John Doe is not eligible for online check ins because they are in Tier A or B, on an accredited programme, but are in early engagement.",
-              ),
+              // only applies on an accredited programme, which is unanswered here
+              RuleResult("SUP-PACK", "IN_EARLY_ENGAGEMENT", "EARLY_ENGAGEMENT", CONTINUE),
+              RuleResult("ESUP", "PRACTITIONER_HAS_PILOT_CASE_TIER_A_B", "PRACTITIONER_PILOT", CONTINUE),
             ),
           ),
         )
@@ -280,7 +277,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
           assertNotNull(response)
           if (pilotPractitioner) {
             assertThat(response.outcome).isEqualTo(EligibilityCheckResponseOutcome.ELIGIBLE)
-            assertThat(response.ruleCode).isEqualTo("PRACTITIONER_HAS_PILOT_CASE")
+            assertThat(response.ruleCode).isEqualTo("PRACTITIONER_HAS_PILOT_CASE_TIER_C")
           } else {
             assertThat(response.outcome).isEqualTo(EligibilityCheckResponseOutcome.INELIGIBLE)
             assertThat(response.ruleCode).isEqualTo("IS_TIER_C")
