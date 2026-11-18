@@ -100,6 +100,9 @@ and permanent test-support cleanup. The local S3 implementation keeps the existi
 bucket and `setup-{offenderUuid}` key. Status rules, setup transitions, and face matching
 remain in V2; check-in snapshots and videos are not part of this boundary.
 
+Photo presence checks retain the legacy behavior: they call the AWS SDK without using the
+application-level `awsS3` retry or circuit breaker.
+
 The client runs in-process. A later extraction can move the implementation and its shared S3
 helpers into a JVM-compatible library, or replace the local implementation with a remote client.
 No new module, deployment, or storage migration is needed for this step.

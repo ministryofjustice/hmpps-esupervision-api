@@ -15,6 +15,8 @@ import io.github.resilience4j.retry.RetryRegistry
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -28,13 +30,19 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse
+import software.amazon.awssdk.services.s3.model.S3Exception
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import uk.gov.service.notify.NotificationClientApi
 import uk.gov.service.notify.NotificationClientException
 import java.net.SocketTimeoutException
+import java.util.UUID
 
 /**
  * Pins the resilience4j aspect nesting to CircuitBreaker( Retry( call ) ).
@@ -60,6 +68,12 @@ class ResilienceAspectOrderIntegrationTest : IntegrationTestBase() {
 
   @Autowired
   private lateinit var retryRegistry: RetryRegistry
+
+  @Autowired
+  private lateinit var photoClient: OffenderPhotoClient
+
+  @MockitoBean(name = "MOJ")
+  private lateinit var s3: S3Client
 
   @MockitoBean
   private lateinit var notificationClient: NotificationClientApi
@@ -92,6 +106,36 @@ class ResilienceAspectOrderIntegrationTest : IntegrationTestBase() {
 
   private fun stubContactDetails(status: Int) {
     upstreams.stubFor(get(urlEqualTo("/case/$CRN")).willReturn(aResponse().withStatus(status)))
+  }
+
+  @Test
+  fun `reference photo presence propagates the first SDK failure without recording it in the S3 breaker`() {
+    val breaker = circuitBreakerRegistry.circuitBreaker("awsS3")
+    breaker.reset()
+    try {
+      val failure = S3Exception.builder().statusCode(503).build()
+      whenever(s3.headObject(any<HeadObjectRequest>())).thenThrow(failure).thenReturn(HeadObjectResponse.builder().build())
+
+      assertSame(failure, assertThrows<S3Exception> { photoClient.isUploaded(UUID.randomUUID()) })
+      verify(s3).headObject(any<HeadObjectRequest>())
+      assertEquals(0, breaker.metrics.numberOfBufferedCalls)
+    } finally {
+      breaker.reset()
+    }
+  }
+
+  @Test
+  fun `reference photo presence still reaches S3 when the shared breaker is open`() {
+    val breaker = circuitBreakerRegistry.circuitBreaker("awsS3")
+    breaker.transitionToForcedOpenState()
+    try {
+      whenever(s3.headObject(any<HeadObjectRequest>())).thenReturn(HeadObjectResponse.builder().build())
+
+      assertTrue(photoClient.isUploaded(UUID.randomUUID()))
+      verify(s3).headObject(any<HeadObjectRequest>())
+    } finally {
+      breaker.reset()
+    }
   }
 
   @Test

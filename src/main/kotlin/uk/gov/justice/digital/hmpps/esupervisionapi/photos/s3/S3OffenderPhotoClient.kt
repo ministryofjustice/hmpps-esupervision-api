@@ -1,7 +1,5 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.photos.s3
 
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
-import io.github.resilience4j.retry.annotation.Retry
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -34,8 +32,7 @@ internal class S3OffenderPhotoClient(
 
   override fun presignRead(offenderUuid: UUID): URL = presigner.presignGet(bucket, photoKey(offenderUuid), Duration.ofMinutes(5))
 
-  @CircuitBreaker(name = "awsS3")
-  @Retry(name = "awsS3")
+  // The legacy HEAD check bypassed Spring advice via self-invocation. Preserve that behavior here.
   override fun isUploaded(offenderUuid: UUID): Boolean = try {
     s3Client.headObject(HeadObjectRequest.builder().bucket(bucket).key(photoKey(offenderUuid)).build())
     true
