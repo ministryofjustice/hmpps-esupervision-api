@@ -22,4 +22,6 @@ COPY --from=builder --chown=appuser:appgroup /builder/extracted/spring-boot-load
 COPY --from=builder --chown=appuser:appgroup /builder/extracted/snapshot-dependencies/ ./
 COPY --from=builder --chown=appuser:appgroup /builder/extracted/application/ ./
 
-ENTRYPOINT ["java", "-XX:+ExitOnOutOfMemoryError", "-XX:+AlwaysActAsServerClassMachine", "-javaagent:agent.jar", "-jar", "app.jar"]
+# TEMP: mitigates CVE-2026-114938 (AVX-512 Base64 intrinsic heap overflow, pre-auth RCE via JWT/Basic auth decoding).
+# Remove once the base image ships Temurin 21.0.13.1 / 25.0.5.1 or later.
+ENTRYPOINT ["java", "-XX:-UseBASE64Intrinsics", "-XX:+ExitOnOutOfMemoryError", "-XX:+AlwaysActAsServerClassMachine", "-javaagent:agent.jar", "-jar", "app.jar"]
