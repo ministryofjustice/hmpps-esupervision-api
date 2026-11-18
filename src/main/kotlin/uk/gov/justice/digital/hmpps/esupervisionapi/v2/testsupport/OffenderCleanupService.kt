@@ -7,9 +7,9 @@ import org.springframework.dao.PessimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3PurgeResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import java.util.UUID
 
@@ -41,6 +41,7 @@ class OffenderCleanupService(
   private val ndiliusApiClient: INdiliusApiClient,
   private val cleanupRepository: OffenderCleanupRepository,
   private val s3UploadService: S3UploadService,
+  private val offenderPhotoClient: OffenderPhotoClient,
 ) {
 
   fun deleteOffenderNotInDelius(rawCrn: String): OffenderCleanupResponse {
@@ -109,18 +110,28 @@ class OffenderCleanupService(
   private fun deleteS3Objects(offenderUuid: UUID, checkinUuids: List<UUID>): Pair<Int, Int> {
     var deleted = 0
     var failed = 0
-    fun purge(what: String, block: () -> S3PurgeResult) {
+    fun record(keysDeleted: Int, keysFailed: Int) {
+      deleted += keysDeleted
+      failed += keysFailed
+    }
+    fun purge(what: String, block: () -> Unit) {
       try {
-        val result = block()
-        deleted += result.keysDeleted
-        failed += result.keysFailed
+        block()
       } catch (e: Exception) {
         LOGGER.warn("Test support: could not delete S3 objects for {}: {}", what, e.javaClass.simpleName)
         failed++
       }
     }
-    purge("offender $offenderUuid") { s3UploadService.purgeSetupPhoto(offenderUuid) }
-    checkinUuids.forEach { uuid -> purge("checkin $uuid") { s3UploadService.purgeCheckinObjects(uuid) } }
+    purge("offender $offenderUuid") {
+      val result = offenderPhotoClient.purge(offenderUuid)
+      record(result.keysDeleted, result.keysFailed)
+    }
+    checkinUuids.forEach { uuid ->
+      purge("checkin $uuid") {
+        val result = s3UploadService.purgeCheckinObjects(uuid)
+        record(result.keysDeleted, result.keysFailed)
+      }
+    }
     return deleted to failed
   }
 

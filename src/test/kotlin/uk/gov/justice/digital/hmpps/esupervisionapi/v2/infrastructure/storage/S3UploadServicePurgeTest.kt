@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -27,13 +26,11 @@ import java.util.UUID
  */
 class S3UploadServicePurgeTest {
 
-  private val imageBucket = "image-bucket"
   private val videoBucket = "video-bucket"
   private val s3: S3Client = mock()
-  private val service = S3UploadService(s3, mock<S3Presigner>(), imageBucket, videoBucket)
+  private val service = S3UploadService(s3, mock<S3Presigner>(), videoBucket, S3VersionPurger(s3))
 
   private val checkin = UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
-  private val offender = UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
   private fun version(key: String, id: String) = ObjectVersion.builder().key(key).versionId(id).build()
   private fun marker(key: String, id: String) = DeleteMarkerEntry.builder().key(key).versionId(id).build()
@@ -93,33 +90,6 @@ class S3UploadServicePurgeTest {
       "checkin-$checkin/1" to "dm1",
     )
     assertThat(result).isEqualTo(S3PurgeResult(keysDeleted = 3, keysFailed = 0))
-  }
-
-  @Test
-  fun `the setup photo is removed from the image bucket, and only its exact key`() {
-    whenever(s3.listObjectVersions(any<ListObjectVersionsRequest>())).thenReturn(
-      page(
-        versions = listOf(version("setup-$offender", "v1"), version("setup-${offender}x", "other")),
-        markers = listOf(marker("setup-$offender", "dm1")),
-      ),
-    )
-    deletesSucceed()
-
-    val result = service.purgeSetupPhoto(offender)
-
-    val request = deleted().single()
-    assertThat(request.bucket()).isEqualTo(imageBucket)
-    assertThat(request.delete().objects().map { it.key() to it.versionId() })
-      .containsExactlyInAnyOrder("setup-$offender" to "v1", "setup-$offender" to "dm1")
-    assertThat(result).isEqualTo(S3PurgeResult(keysDeleted = 1, keysFailed = 0))
-  }
-
-  @Test
-  fun `nothing stored means nothing deleted and nothing counted`() {
-    whenever(s3.listObjectVersions(any<ListObjectVersionsRequest>())).thenReturn(page())
-
-    assertThat(service.purgeSetupPhoto(offender)).isEqualTo(S3PurgeResult(keysDeleted = 0, keysFailed = 0))
-    verify(s3, never()).deleteObjects(any<DeleteObjectsRequest>())
   }
 
   @Test

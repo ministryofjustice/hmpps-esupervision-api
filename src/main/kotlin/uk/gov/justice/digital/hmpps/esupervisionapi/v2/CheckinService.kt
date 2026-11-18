@@ -12,6 +12,7 @@ import tools.jackson.databind.ObjectMapper
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinRequestApplicator.applyRequest
@@ -30,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognitio
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessCredentialsResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.LivenessSessionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.S3ObjectCoordinate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
@@ -56,6 +58,7 @@ class CheckinService(
   private val notificationService: NotificationOrchestratorService,
   private val checkinCreationService: CheckinCreationService,
   private val s3UploadService: S3UploadService,
+  private val offenderPhotoClient: OffenderPhotoClient,
   private val compareFacesService: OffenderIdVerifier,
   private val livenessSessionService: LivenessSessionService,
   private val livenessCredentialsService: LivenessCredentialsProvider,
@@ -98,7 +101,11 @@ class CheckinService(
     // Get video read URL if video has been uploaded
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
-    val photoUrl = s3UploadService.getOffenderPhoto(checkin.offender)
+    val photoUrl = if (checkin.offender.status != OffenderStatus.INITIAL) {
+      offenderPhotoClient.presignRead(checkin.offender.uuid)
+    } else {
+      null
+    }
 
     val events = offenderEventLogRepository.findAllCheckinEvents(
       checkin,
@@ -897,7 +904,7 @@ class CheckinService(
     val offender = checkin.offender
 
     // Check setup photo exists
-    if (!s3UploadService.isSetupPhotoUploaded(offender)) {
+    if (!offenderPhotoClient.isUploaded(offender.uuid)) {
       throw ResponseStatusException(
         HttpStatus.BAD_REQUEST,
         "Setup photo not available for facial recognition",
@@ -905,7 +912,8 @@ class CheckinService(
     }
 
     // Get S3 coordinates - reference from setup, snapshots from checkin
-    val referenceCoordinate = s3UploadService.setupPhotoObjectCoordinate(offender)
+    val referenceLocation = offenderPhotoClient.referenceLocation(offender.uuid)
+    val referenceCoordinate = S3ObjectCoordinate(referenceLocation.bucket, referenceLocation.key)
     val snapshotCoordinates =
       (0 until numSnapshots).map { index ->
         s3UploadService.checkinObjectCoordinate(checkin, index)

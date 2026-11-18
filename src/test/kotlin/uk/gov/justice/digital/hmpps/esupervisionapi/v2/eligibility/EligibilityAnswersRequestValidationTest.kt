@@ -17,8 +17,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.HmppsESupervisionExceptionHandler
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupDto
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupResource
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
 import java.time.Instant
@@ -26,9 +26,9 @@ import java.util.UUID
 
 class EligibilityAnswersRequestValidationTest {
   private val service: OffenderSetupService = mock()
-  private val uploadService: S3UploadService = mock()
+  private val offenderPhotoClient: OffenderPhotoClient = mock()
   private val validator = LocalValidatorFactoryBean().apply { afterPropertiesSet() }
-  private val mvc = standaloneSetup(OffenderSetupResource(service, uploadService))
+  private val mvc = standaloneSetup(OffenderSetupResource(service, offenderPhotoClient))
     .setControllerAdvice(HmppsESupervisionExceptionHandler())
     .setValidator(validator)
     .build()
@@ -58,7 +58,7 @@ class EligibilityAnswersRequestValidationTest {
         .andExpect(jsonPath("$.userMessage", containsString("eligibilityAnswers.youthSentence")))
         .andExpect(jsonPath("$.userMessage", containsString("accreditedProgramme and youthSentence")))
     }
-    verifyNoInteractions(service, uploadService)
+    verifyNoInteractions(service, offenderPhotoClient)
   }
 
   @ParameterizedTest
