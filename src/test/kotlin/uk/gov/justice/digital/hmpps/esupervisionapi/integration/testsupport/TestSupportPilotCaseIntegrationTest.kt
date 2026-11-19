@@ -9,6 +9,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.OffenderCleanupRepository
 import java.util.UUID
 
@@ -18,6 +19,8 @@ class TestSupportPilotCaseIntegrationTest : IntegrationTestBase() {
   @Autowired lateinit var offenderRepository: OffenderRepository
 
   @Autowired lateinit var cleanupRepository: OffenderCleanupRepository
+
+  @Autowired lateinit var pilotPractitionerLookup: PilotPractitionerLookup
 
   private val pilotCase = "T200001"
   private val bystander = "T200002"
@@ -55,6 +58,18 @@ class TestSupportPilotCaseIntegrationTest : IntegrationTestBase() {
     setPilot(pilotCase, false).expectStatus().isOk
       .expectBody().jsonPath("$.inPilot").isEqualTo(false)
     assertThat(inPilot(pilotCase)).isFalse()
+  }
+
+  @Test
+  fun `makes the person's practitioner a pilot practitioner for the eligibility rules, and back again`() {
+    val person = seed(pilotCase)
+    assertThat(pilotPractitionerLookup.hasHadPilotCase(person.practitionerId)).isFalse()
+
+    setPilot(pilotCase, true).expectStatus().isOk
+    assertThat(pilotPractitionerLookup.hasHadPilotCase(person.practitionerId)).isTrue()
+
+    setPilot(pilotCase, false).expectStatus().isOk
+    assertThat(pilotPractitionerLookup.hasHadPilotCase(person.practitionerId)).isFalse()
   }
 
   @Test
