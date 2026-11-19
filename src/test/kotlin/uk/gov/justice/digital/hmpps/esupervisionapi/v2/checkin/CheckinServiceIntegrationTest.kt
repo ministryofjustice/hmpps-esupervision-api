@@ -15,6 +15,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -71,6 +72,9 @@ class CheckinServiceIntegrationTest : IntegrationTestBase() {
   private lateinit var s3UploadService: S3UploadService
 
   @MockitoBean
+  private lateinit var offenderPhotoClient: OffenderPhotoClient
+
+  @MockitoBean
   private lateinit var offenderIdVerifier: OffenderIdVerifier
 
   @MockitoBean
@@ -119,6 +123,8 @@ class CheckinServiceIntegrationTest : IntegrationTestBase() {
 
     whenever(s3UploadService.getCheckinVideo(any())).thenReturn(URI.create("https://s3/video.mp4").toURL())
     whenever(s3UploadService.getCheckinSnapshot(any(), eq(0))).thenReturn(URI.create("https://s3/snapshot.jpg").toURL())
+    val photoUrl = URI.create("https://s3/photo.jpg").toURL()
+    whenever(offenderPhotoClient.presignRead(offender.uuid)).thenReturn(photoUrl)
 
     val result = checkinService.getCheckin(checkin.uuid, includePersonalDetails = false)
 
@@ -127,6 +133,7 @@ class CheckinServiceIntegrationTest : IntegrationTestBase() {
     assertEquals(CheckinStatus.EXPIRED, result.status)
     assertNotNull(result.videoUrl)
     assertNotNull(result.snapshotUrl)
+    assertEquals(photoUrl, result.photoUrl)
     assertNull(result.personalDetails)
     assertEquals(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED, result.checkinLogs.logs[0].logEntryType)
   }

@@ -30,6 +30,8 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.validation.BeanPropertyBindingResult
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
@@ -65,8 +67,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRe
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligibilityRule
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.PresignedUpload
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.setup.OffenderSetupService
@@ -87,7 +87,7 @@ class OffenderResourceTest {
   private val clock = Clock.fixed(Instant.parse("2025-12-10T10:00:00Z"), ZoneId.of("UTC"))
   private val appConfig: AppConfig = mock()
   private val offenderRepository: OffenderRepository = mock()
-  private val s3UploadService: S3UploadService = mock()
+  private val offenderPhotoClient: OffenderPhotoClient = mock()
   private val checkinCreationService: CheckinCreationService = mock()
   private val eventAuditService: EventAuditService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
@@ -111,6 +111,7 @@ class OffenderResourceTest {
 
   @BeforeEach
   fun setUp() {
+    whenever(offenderPhotoClient.presignRead(any())).thenReturn(URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL())
     whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     whenever(transactionTemplate.execute<Any>(any())).thenAnswer {
       val callback = it.getArgument<TransactionCallback<Any>>(0)
@@ -118,7 +119,7 @@ class OffenderResourceTest {
     }
     resource = OffenderResource(
       offenderRepository,
-      s3UploadService,
+      offenderPhotoClient,
       clock,
       checkinCreationService,
       eventAuditService,
@@ -320,7 +321,6 @@ class OffenderResourceTest {
       dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
-    val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(
@@ -339,9 +339,6 @@ class OffenderResourceTest {
       o.status = OffenderStatus.INACTIVE
       true
     }
-    // mock s3
-    whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
-
     val result = resource.deactivateOffender(uuid, request)
 
     assertEquals(HttpStatus.OK, result.statusCode)
@@ -627,7 +624,6 @@ class OffenderResourceTest {
       dateOfBirth = LocalDate.of(1980, 1, 1),
     )
 
-    val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
     val setupId = UUID.randomUUID()
     val setupInfo = mockSetupInfo(103L, setupId)
     whenever(offenderPersistenceService.offenderReactivation(any(), any())).thenAnswer {
@@ -642,7 +638,6 @@ class OffenderResourceTest {
     }
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
-    whenever(s3UploadService.getOffenderPhoto(any())).thenReturn(presignedUrl)
     whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
 
@@ -960,15 +955,16 @@ class OffenderResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.jpg?presigned=true").toURL()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/jpeg"), any<Duration>(), eq("hash123")))
-      .thenReturn(PresignedUpload(presignedUrl, mapOf("x-amz-checksum-sha256" to "hash123")))
+    whenever(offenderPhotoClient.presignUpload(uuid, "image/jpeg", Duration.ofMinutes(5), "hash123"))
+      .thenReturn(OffenderPhotoUpload(presignedUrl, mapOf("x-amz-checksum-sha256" to "hash123")))
 
-    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", UploadHashRequest(sha256 = "hash123"))
+    val result = resource.getPhotoUploadLocation(uuid, "image/jpeg", UploadHashRequest(sha256 = " hash123 "))
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertNotNull(result.body?.locationInfo)
     assertEquals(presignedUrl.toString(), result.body?.locationInfo?.url.toString())
     assertEquals("image/jpeg", result.body?.locationInfo?.contentType)
+    assertEquals(mapOf("x-amz-checksum-sha256" to "hash123"), result.body?.locationInfo?.requiredHeaders)
   }
 
   @Test
@@ -1042,8 +1038,8 @@ class OffenderResourceTest {
     val presignedUrl = URI("https://s3.amazonaws.com/bucket/photo.png?presigned=true").toURL()
 
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
-    whenever(s3UploadService.generatePresignedUpload(eq(offender), eq("image/png"), any<Duration>(), eq("hash123")))
-      .thenReturn(PresignedUpload(presignedUrl, mapOf("x-amz-checksum-sha256" to "hash123")))
+    whenever(offenderPhotoClient.presignUpload(uuid, "image/png", Duration.ofMinutes(5), "hash123"))
+      .thenReturn(OffenderPhotoUpload(presignedUrl, mapOf("x-amz-checksum-sha256" to "hash123")))
 
     val result = resource.getPhotoUploadLocation(uuid, "image/png", UploadHashRequest(sha256 = "hash123"))
 
@@ -1417,6 +1413,18 @@ class OffenderResourceTest {
     val resultWithDetails = resource.getOffenderByCrn(offender.crn, includePersonalDetails = true)
     assertNotNull(resultWithDetails.body?.details)
     verify(ndiliusApiClient, times(1)).getContactDetails(offender.crn)
+  }
+
+  @Test
+  fun `getOffenderByCrn does not presign a photo for an INITIAL offender`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.INITIAL)
+    whenever(offenderRepository.findByCrn(offender.crn)).thenReturn(Optional.of(offender))
+
+    val result = resource.getOffenderByCrn(offender.crn, includePersonalDetails = false)
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertNull(result.body?.photoUrl)
+    verify(offenderPhotoClient, never()).presignRead(any())
   }
 
   @Test

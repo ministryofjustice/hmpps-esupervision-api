@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import tools.jackson.databind.annotation.JsonDeserialize
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
@@ -74,7 +75,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Locati
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.findLastCompletionException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
@@ -93,7 +93,7 @@ import kotlin.jvm.optionals.getOrNull
 @Tag(name = "V2 Offenders", description = "V2 offender endpoints")
 class OffenderResource(
   private val offenderRepository: OffenderRepository,
-  private val s3UploadService: S3UploadService,
+  private val offenderPhotoClient: OffenderPhotoClient,
   private val clock: Clock,
   private val checkinCreationService: CheckinCreationService,
   private val eventAuditService: EventAuditService,
@@ -492,7 +492,7 @@ class OffenderResource(
     )
 
     val duration = Duration.ofMinutes(5)
-    val presigned = s3UploadService.generatePresignedUpload(offender, contentType, duration, hash)
+    val presigned = offenderPhotoClient.presignUpload(offender.uuid, contentType, duration, hash)
 
     LOGGER.info("Generated photo upload URL for offender uuid={}, crn={}", uuid, offender.crn)
 
@@ -929,11 +929,7 @@ is *today*.""",
     if (offender.status == OffenderStatus.INITIAL) {
       return null
     }
-    val url = s3UploadService.getOffenderPhoto(offender)
-    if (url == null) {
-      LOGGER.info("Photo not found in S3 for offender crn={}, uuid={}", offender.crn, offender.uuid)
-    }
-    return url?.toString()
+    return offenderPhotoClient.presignRead(offender.uuid).toString()
   }
 
   companion object {
