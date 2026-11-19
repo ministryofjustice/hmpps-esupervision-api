@@ -5,16 +5,25 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.OffenderCleanupRepository
 import java.util.UUID
 
+// The same properties and mocks as TestSupportResourceIntegrationTest, so both share one Spring
+// context: CI runs out of heap with another one cached.
 @TestPropertySource(properties = ["app.test-support.enabled=true", "app.env=DEV"])
 class TestSupportPilotCaseIntegrationTest : IntegrationTestBase() {
+
+  @MockitoBean lateinit var ndeliusApiClient: INdiliusApiClient
+
+  @MockitoBean lateinit var s3UploadService: S3UploadService
 
   @Autowired lateinit var offenderRepository: OffenderRepository
 
