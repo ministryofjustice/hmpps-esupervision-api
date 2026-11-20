@@ -45,6 +45,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.OffenderCleanupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.OffenderCleanupService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.PilotCaseService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.testsupport.TestSupportResource
 import java.time.Instant
 import java.time.LocalDate
@@ -485,6 +486,7 @@ private fun assertTestSupportAbsent(context: ApplicationContext, webTestClient: 
   assertThat(context.getBeansOfType(TestSupportResource::class.java)).isEmpty()
   assertThat(context.getBeansOfType(OffenderCleanupService::class.java)).isEmpty()
   assertThat(context.getBeansOfType(OffenderCleanupRepository::class.java)).isEmpty()
+  assertThat(context.getBeansOfType(PilotCaseService::class.java)).isEmpty()
   webTestClient.delete()
     .uri("/v2/test-support/offenders/crn/T100001")
     .headers(auth)

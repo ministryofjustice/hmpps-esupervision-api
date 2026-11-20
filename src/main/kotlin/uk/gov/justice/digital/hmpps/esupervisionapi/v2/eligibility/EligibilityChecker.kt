@@ -28,13 +28,16 @@ class EligibilityChecker(
    * @throws EligibilityDataUnavailableException if any data provider is unavailable
    * @throws ResourceNotFoundException when a data provider fails with a 404 error
    */
-  fun check(offender: Offender, name: Name, cache: EligibilityEvaluationEngine.Cache): EligibilityResult {
+  fun check(offender: Offender, name: Name, cache: EligibilityEvaluationEngine.Cache): EligibilityResult = check(offender, name, cache, eligibilityEvaluationEngine.activeRuleSet)
+
+  /** As [check], against [ruleSet] rather than the active rule set. */
+  fun check(offender: Offender, name: Name, cache: EligibilityEvaluationEngine.Cache, ruleSet: String): EligibilityResult {
     val fetchCache = eligibilityEvaluationEngine.newFetchCache(cache)
     val result = try {
       eligibilityEvaluationEngine
         .evaluate(
           offender.crn,
-          eligibilityEvaluationEngine.activeRuleSet,
+          ruleSet,
           fetchCache,
         ).get() // we rely on the engine already having timeouts for each data provider
     } catch (_: CancellationException) {

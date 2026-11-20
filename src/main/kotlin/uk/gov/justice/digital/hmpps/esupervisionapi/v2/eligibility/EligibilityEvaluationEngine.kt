@@ -42,6 +42,7 @@ class EligibilityDataUnavailableException(val ruleCode: String, val source: Stri
 class EligibilityEvaluationEngine(
   private val ruleRepository: EligibilityRuleRepository,
   private val providerRegistry: EligibilityDataProviderRegistry,
+  /** Used by setup, reactivation and both GET and POST /crn/{crn}/eligibility. The nightly sync has its own. */
   @Value($$"${app.offender-eligibility.rule-set}") val activeRuleSet: String,
   @Value($$"${app.offender-eligibility.source-timeout-ms:2000}") val sourceTimeoutMs: Long,
 ) {
@@ -144,10 +145,45 @@ class EligibilityEvaluationEngine(
     crn: CRN,
     fetchCache: FetchCache,
   ): CompletableFuture<Pair<EligibilityRuleOutcome, String?>> {
+    val guardSource = rule.appliesWhenSource
+    val guardDataPoint = rule.appliesWhenDataPoint
+    val guardOperator = rule.appliesWhenOperator
+    if (guardSource == null || guardDataPoint == null || guardOperator == null) {
+      return evaluateCondition(rule, crn, fetchCache)
+    }
+    return fetchDataPoint(rule, guardSource, guardDataPoint, crn, fetchCache).thenCompose { value ->
+      if (EligibilityConditionEvaluator.evaluate(guardOperator, value, rule.appliesWhenComparisonValue)) {
+        evaluateCondition(rule, crn, fetchCache)
+      } else {
+        // the rule doesn't apply on this branch
+        CompletableFuture.completedFuture(EligibilityRuleOutcome.CONTINUE to null)
+      }
+    }
+  }
+
+  private fun evaluateCondition(
+    rule: OffenderEligibilityRule,
+    crn: CRN,
+    fetchCache: FetchCache,
+  ): CompletableFuture<Pair<EligibilityRuleOutcome, String?>> = fetchDataPoint(rule, rule.source, rule.dataPoint, crn, fetchCache)
+    .thenApply { value ->
+      val matched = EligibilityConditionEvaluator.evaluate(rule.operator, value, rule.comparisonValue)
+      val outcome = if (matched) rule.outcomeOnMatch else rule.outcomeOnNoMatch
+      outcome to rule.ineligibilityMessage.takeIf { outcome == EligibilityRuleOutcome.NOT_ELIGIBLE }
+    }
+
+  /** [dataPoint] from [source] for [rule], failing with [EligibilityDataUnavailableException] when it can't be had. */
+  private fun fetchDataPoint(
+    rule: OffenderEligibilityRule,
+    source: DataSource,
+    dataPoint: String,
+    crn: CRN,
+    fetchCache: FetchCache,
+  ): CompletableFuture<Any?> {
     val sourceFuture = try {
       // NOTE: the WebClient executing the actual request should have
       // appropriate timeouts configured
-      fetchCache.getOrFetch(rule.source, crn).thenApply { it }.orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
+      fetchCache.getOrFetch(source, crn).thenApply { it }.orTimeout(sourceTimeoutMs, TimeUnit.MILLISECONDS)
     } catch (e: Exception) {
       return CompletableFuture.failedFuture(e)
     }
@@ -157,17 +193,15 @@ class EligibilityEvaluationEngine(
         val cause = throwable.cause ?: throwable
         when (cause) {
           is ResourceNotFoundException -> CompletableFuture.failedFuture(cause)
-          else -> CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, rule.source, cause))
+          else -> CompletableFuture.failedFuture(EligibilityDataUnavailableException(rule.code, source, cause))
         }
       }
       .thenApply { sourceData ->
-        if (!sourceData.containsKey(rule.dataPoint)) {
+        if (!sourceData.containsKey(dataPoint)) {
           // we could get here if our data providers and rules are not in sync
-          throw EligibilityDataUnavailableException(rule.code, rule.source, RuntimeException("Data point ${rule.dataPoint} missing for source=${rule.source}, rule=${rule.code}"))
+          throw EligibilityDataUnavailableException(rule.code, source, RuntimeException("Data point $dataPoint missing for source=$source, rule=${rule.code}"))
         }
-        val matched = EligibilityConditionEvaluator.evaluate(rule.operator, sourceData[rule.dataPoint], rule.comparisonValue)
-        val outcome = if (matched) rule.outcomeOnMatch else rule.outcomeOnNoMatch
-        outcome to rule.ineligibilityMessage.takeIf { outcome == EligibilityRuleOutcome.NOT_ELIGIBLE }
+        sourceData[dataPoint]
       }
   }
 

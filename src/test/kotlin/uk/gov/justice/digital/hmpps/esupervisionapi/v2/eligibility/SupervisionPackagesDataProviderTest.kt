@@ -49,7 +49,7 @@ class SupervisionPackagesDataProviderTest {
     )
 
     assertEquals(
-      mapOf("RECALLED" to true, "FINAL_THIRD" to true, "EARLY_ENGAGEMENT" to false),
+      mapOf("ON_PACKAGE" to true, "RECALLED" to true, "FINAL_THIRD" to true, "EARLY_ENGAGEMENT" to false),
       provider.fetch("X123456").join(),
     )
   }

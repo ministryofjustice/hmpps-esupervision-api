@@ -66,6 +66,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDa
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
@@ -107,6 +108,7 @@ class OffenderResource(
   private val offenderService: OffenderService,
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine,
   private val eligibilityChecker: EligibilityChecker,
+  private val pilotPractitionerLookup: PilotPractitionerLookup,
   private val supervisionPackageService: SupervisionPackageService,
   private val questionService: QuestionService,
   private val transactionTemplate: TransactionTemplate,
@@ -210,41 +212,14 @@ class OffenderResource(
     // the MANUAL data provider will throw
     val cacheData = mutableMapOf(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
-      "ESUP" to CompletableFuture.completedFuture(offender?.eligibilityData() ?: nonOnboardedEligibilityData),
+      // No practitioner is passed here, so the pilot practitioner is the one the person is allocated to, if any
+      "ESUP" to CompletableFuture.completedFuture(
+        offender?.eligibilityData(pilotPractitionerLookup.hasHadPilotCase(offender.practitionerId)) ?: nonOnboardedEligibilityData(false),
+      ),
     )
 
-    fun <R> handleMissingManualData(throwable: Throwable, body: () -> CompletableFuture<R>): CompletableFuture<R> {
-      val cause = findLastCompletionException(throwable)
-      if (cause is EligibilityDataUnavailableException && cause.source == "MANUAL") {
-        return body()
-      }
-      return CompletableFuture.failedFuture(throwable)
-    }
-
     if (!itemise) {
-      val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
-      return eligibilityEvaluationEngine.evaluate(normalisedCrn, ruleSet, cache)
-        .thenApply { result ->
-          ResponseEntity.ok(
-            EligibilityCheckResponse(
-              outcome = result.outcome.toResponseOutcome(),
-              message = result.dashboardMessage?.let { applyTemplate(it, contactDetails.name) },
-            ),
-          )
-        }
-        // for missing MANUAL data, we want to return UNKNOWN and not error
-        .exceptionallyCompose { throwable ->
-          handleMissingManualData(throwable) {
-            CompletableFuture.completedFuture(
-              ResponseEntity.ok(
-                EligibilityCheckResponse(
-                  outcome = EligibilityCheckResponseOutcome.UNKNOWN,
-                  message = applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name),
-                ),
-              ),
-            )
-          }
-        }
+      return evaluateEligibility(normalisedCrn, ruleSet, cacheData, contactDetails.name)
     }
 
     val cache = eligibilityEvaluationEngine.newFetchCache(cacheData)
@@ -273,7 +248,7 @@ class OffenderResource(
               EligibilityCheckResponse(
                 outcome = if (evalIssue == EvalIssue.MANUAL_DATA_MISSING) EligibilityCheckResponseOutcome.UNKNOWN else evalResult.outcome.toResponseOutcome(),
                 message = if (evalIssue == EvalIssue.MANUAL_DATA_MISSING) {
-                  applyTemplate("{{offender}} may be eligible for online check ins.", contactDetails.name)
+                  applyTemplate(MAY_BE_ELIGIBLE_MESSAGE, contactDetails.name)
                 } else {
                   evalResult.dashboardMessage?.let { applyTemplate(it, contactDetails.name) }
                 },
@@ -297,6 +272,95 @@ class OffenderResource(
             )
           }
       }
+  }
+
+  @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
+  @Operation(
+    summary = "Check eligibility by CRN, with the practitioner's answers",
+    description = """Evaluates the active eligibility rule set (`app.offender-eligibility.rule-set`) for the
+      given CRN, using NDelius, Tier, Supervision Packages and e-supervision data, plus the practitioner's
+      answers when supplied. Does not require the person to already be registered for e-supervision.
+
+      Without `eligibilityAnswers`, rules are evaluated in order until the first one that needs an answer;
+      a person not ruled out by then is UNKNOWN, so the UI can rule some people out before asking anything.
+      Rules after the first answer-based rule (e.g. Tier C) are only evaluated once answers are supplied.
+      With them, the outcome is ELIGIBLE or INELIGIBLE.
+      `ruleCode` is the rule that decided the outcome, and `message` is that rule's reason; null when
+      every rule passed or the outcome is UNKNOWN.""",
+  )
+  @ApiResponse(responseCode = "200", description = "Eligibility evaluated")
+  @ApiResponse(responseCode = "400", description = "Invalid request", content = [Content()])
+  @ApiResponse(responseCode = "404", description = "CRN not found in NDelius", content = [Content()])
+  @ApiResponse(
+    responseCode = "503",
+    description = "A required data source could not be fetched",
+    content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+  )
+  @PostMapping("/crn/{crn}/eligibility")
+  fun checkEligibilityByCrn(
+    @Parameter(description = "Case Reference Number", required = true) @PathVariable crn: String,
+    @RequestBody @Valid request: EligibilityCheckRequest,
+    binding: BindingResult,
+  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> {
+    if (binding.hasErrors()) {
+      throw intoResponseStatusException(binding)
+    }
+    val normalisedCrn = crn.trim().uppercase()
+
+    val contactDetails = ndiliusApiClient.getContactDetailsStrict(normalisedCrn)
+      ?: return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.NOT_FOUND).build())
+    val offender = offenderRepository.findByCrn(normalisedCrn).getOrNull()
+    val practitionerPilot = pilotPractitionerLookup.hasHadPilotCase(request.practitionerId)
+
+    val cacheData = mutableMapOf(
+      "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
+      "ESUP" to CompletableFuture.completedFuture(offender?.eligibilityData(practitionerPilot) ?: nonOnboardedEligibilityData(practitionerPilot)),
+    )
+    request.eligibilityAnswers?.let { cacheData["MANUAL"] = CompletableFuture.completedFuture(it.eligibilityData()) }
+
+    return evaluateEligibility(normalisedCrn, eligibilityEvaluationEngine.activeRuleSet, cacheData, contactDetails.name)
+  }
+
+  /**
+   * Evaluates [ruleSet] to a single outcome. Missing MANUAL data - no practitioner answers - is
+   * UNKNOWN rather than an error, since the person may still be eligible once they're given.
+   */
+  private fun evaluateEligibility(
+    crn: String,
+    ruleSet: String,
+    cacheData: EligibilityEvaluationEngine.Cache,
+    name: Name,
+  ): CompletableFuture<ResponseEntity<EligibilityCheckResponse>> = eligibilityEvaluationEngine
+    .evaluate(crn, ruleSet, eligibilityEvaluationEngine.newFetchCache(cacheData))
+    .thenApply { result ->
+      ResponseEntity.ok(
+        EligibilityCheckResponse(
+          outcome = result.outcome.toResponseOutcome(),
+          message = result.dashboardMessage?.let { applyTemplate(it, name) },
+          ruleCode = result.triggeredRuleCode,
+        ),
+      )
+    }
+    .exceptionallyCompose { throwable ->
+      handleMissingManualData(throwable) {
+        CompletableFuture.completedFuture(
+          ResponseEntity.ok(
+            EligibilityCheckResponse(
+              outcome = EligibilityCheckResponseOutcome.UNKNOWN,
+              message = applyTemplate(MAY_BE_ELIGIBLE_MESSAGE, name),
+            ),
+          ),
+        )
+      }
+    }
+
+  /** Runs [body] when [throwable] is missing MANUAL data (no practitioner answers); otherwise propagates it. */
+  private fun <R> handleMissingManualData(throwable: Throwable, body: () -> CompletableFuture<R>): CompletableFuture<R> {
+    val cause = findLastCompletionException(throwable)
+    if (cause is EligibilityDataUnavailableException && cause.source == "MANUAL") {
+      return body()
+    }
+    return CompletableFuture.failedFuture(throwable)
   }
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -607,7 +671,10 @@ class OffenderResource(
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
-    val cache = makeCache(offender, contactDetails, request.eligibilityAnswers)
+    // The pilot practitioner is the allocated one, as at setup and in the nightly sync, so the three
+    // agree; the person restarting check ins may be someone else.
+    val pilotPractitioner = contactDetails.practitioner?.username ?: offender.practitionerId
+    val cache = makeCache(offender, contactDetails, request.eligibilityAnswers, pilotPractitionerLookup.hasHadPilotCase(pilotPractitioner))
     val outcome = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
@@ -935,6 +1002,7 @@ is *today*.""",
   companion object {
     private val CHECKIN_STATUSES_OCCUPYING_DATE = setOf(CheckinStatus.CREATED, CheckinStatus.SUBMITTED, CheckinStatus.REVIEWED)
     private val LOGGER = logger<OffenderResource>()
+    private const val MAY_BE_ELIGIBLE_MESSAGE = "{{offender}} may be eligible for online check ins."
   }
 }
 
@@ -974,11 +1042,24 @@ enum class EligibilityCheckResponseOutcome {
   UNKNOWN,
 }
 
+/** Request to check eligibility for a CRN on behalf of a practitioner. */
+data class EligibilityCheckRequest(
+  @field:Schema(description = "Id of the practitioner the check is for; decides whether they have ever had a pilot case", required = true)
+  @field:NotBlank
+  val practitionerId: ExternalUserId,
+
+  @field:Schema(description = "The practitioner's answers. Omit to check only the rules that need no answers.", required = false)
+  @field:Valid
+  val eligibilityAnswers: EligibilityAnswers? = null,
+)
+
 /** Result of evaluating the offender eligibility rule set for a CRN. */
 data class EligibilityCheckResponse(
   val outcome: EligibilityCheckResponseOutcome,
   val message: String? = null,
   val allRules: List<RuleResult>? = null,
+  @field:Schema(description = "Code of the rule that decided the outcome; null when every rule passed or the outcome is UNKNOWN", required = false)
+  val ruleCode: String? = null,
 ) {
   data class RuleResult(
     val source: String,
