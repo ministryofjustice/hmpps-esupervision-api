@@ -81,6 +81,11 @@ class OffenderEligibilityRulesIT : IntegrationTestBase() {
     }
 
     @Test
+    fun `no tier yet, and so no supervision package yet - told about the tier`() {
+      assertThat(decide(tierD.copy(tier = "MISSING", onSupervisionPackage = false))).isEqualTo(notEligible("IS_TIER_MISSING"))
+    }
+
+    @Test
     fun `provisional tier`() {
       assertThat(decide(tierD.copy(tierProvisional = true))).isEqualTo(notEligible("IS_TIER_PROVISIONAL"))
     }
@@ -102,9 +107,9 @@ class OffenderEligibilityRulesIT : IntegrationTestBase() {
 
     @Test
     fun `only the first reason is given, in rule order`() {
-      val recalledInFinalThirdWithoutTier = tierD.copy(recalled = true, inFinalThird = true, tier = "MISSING")
+      val recalledInFinalThirdWithNoPractitioner = tierD.copy(recalled = true, inFinalThird = true, practitionerAssigned = false)
 
-      assertThat(decide(recalledInFinalThirdWithoutTier)).isEqualTo(notEligible("IS_RECALLED"))
+      assertThat(decide(recalledInFinalThirdWithNoPractitioner)).isEqualTo(notEligible("IS_RECALLED"))
     }
   }
 

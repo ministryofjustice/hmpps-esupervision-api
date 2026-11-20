@@ -23,9 +23,9 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
       .containsExactly(
         "HAS_ACTIVE_EVENT",
         "IS_CONTACT_SUSPENDED",
+        "IS_TIER_MISSING",
         "ON_SUPERVISION_PACKAGE",
         "IS_RECALLED",
-        "IS_TIER_MISSING",
         "IS_TIER_PROVISIONAL",
         "IN_FINAL_THIRD",
         "IS_PRACTITIONER_ASSIGNED",
@@ -47,9 +47,9 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
         linkedMapOf(
           "HAS_ACTIVE_EVENT" to "ESPNA",
           "IS_CONTACT_SUSPENDED" to "ESPRS",
+          "IS_TIER_MISSING" to "ESPME",
           "ON_SUPERVISION_PACKAGE" to "ESPSP",
           "IS_RECALLED" to "ESPRC",
-          "IS_TIER_MISSING" to "ESPME",
           "IS_TIER_PROVISIONAL" to "ESPIT",
           "IN_FINAL_THIRD" to "ESPFT",
           "IS_PRACTITIONER_ASSIGNED" to "ESPNP",

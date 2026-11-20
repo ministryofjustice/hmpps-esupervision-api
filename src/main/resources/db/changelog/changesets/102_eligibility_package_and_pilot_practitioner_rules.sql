@@ -98,3 +98,13 @@ create index idx_setup_v2_practitioner_upper on offender_setup_v2 (upper(practit
 
 --rollback drop index idx_setup_v2_practitioner_upper;
 --rollback drop index idx_offender_v2_practitioner_upper;
+
+--changeset hmpps:102_eligibility_package_and_pilot_practitioner_rules-4 splitStatements:false
+
+-- OFFENDER_ELIGIBILITY only. Someone waiting for a tier also has no supervision package yet, so with
+-- the package rule first the missing tier rule could never be reached, and the practitioner was told
+-- "not on a supervision package" rather than that the tier is still to come and to check again.
+update offender_eligibility_rule set rule_order = 2.4
+where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'IS_TIER_MISSING';
+
+--rollback update offender_eligibility_rule set rule_order = 6.5 where rule_set = 'OFFENDER_ELIGIBILITY' and code = 'IS_TIER_MISSING';
