@@ -66,6 +66,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEv
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.allocatedPractitionerUsername
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.applyTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
@@ -212,9 +213,11 @@ class OffenderResource(
     // the MANUAL data provider will throw
     val cacheData = mutableMapOf(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
-      // No practitioner is passed here, so the pilot practitioner is the one the person is allocated to, if any
+      // The pilot practitioner is the one the person is allocated to in NDelius, if any
       "ESUP" to CompletableFuture.completedFuture(
-        offender?.eligibilityData(pilotPractitionerLookup.hasHadPilotCase(offender.practitionerId)) ?: nonOnboardedEligibilityData(false),
+        pilotPractitionerLookup.hasHadPilotCase(contactDetails.allocatedPractitionerUsername()).let { practitionerPilot ->
+          offender?.eligibilityData(practitionerPilot) ?: nonOnboardedEligibilityData(practitionerPilot)
+        },
       ),
     )
 
@@ -310,7 +313,8 @@ class OffenderResource(
     val contactDetails = ndiliusApiClient.getContactDetailsStrict(normalisedCrn)
       ?: return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.NOT_FOUND).build())
     val offender = offenderRepository.findByCrn(normalisedCrn).getOrNull()
-    val practitionerPilot = pilotPractitionerLookup.hasHadPilotCase(request.practitionerId)
+    // The allocated practitioner in NDelius, whoever is asking: request.practitionerId is ignored
+    val practitionerPilot = pilotPractitionerLookup.hasHadPilotCase(contactDetails.allocatedPractitionerUsername())
 
     val cacheData = mutableMapOf(
       "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
@@ -671,10 +675,9 @@ class OffenderResource(
 
     // Don't reactivate a POP who is no longer eligible for online check-ins (in reset, or no active
     // events). Otherwise reactivation would send a check-in invite that the daily job then undoes.
-    // The pilot practitioner is the allocated one, as at setup and in the nightly sync, so the three
-    // agree; the person restarting check ins may be someone else.
-    val pilotPractitioner = contactDetails.practitioner?.username ?: offender.practitionerId
-    val cache = makeCache(offender, contactDetails, request.eligibilityAnswers, pilotPractitionerLookup.hasHadPilotCase(pilotPractitioner))
+    // The pilot practitioner is the one allocated in NDelius, as at setup and in the nightly sync, so
+    // they agree; the person restarting check ins may be someone else. No allocated username, no pilot.
+    val cache = makeCache(offender, contactDetails, request.eligibilityAnswers, pilotPractitionerLookup.hasHadPilotCase(contactDetails.allocatedPractitionerUsername()))
     val outcome = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (outcome.outcome == EligibilityCheckOutcome.INELIGIBLE) {
       throw ResponseStatusException(
@@ -1046,11 +1049,14 @@ enum class EligibilityCheckResponseOutcome {
   UNKNOWN,
 }
 
-/** Request to check eligibility for a CRN on behalf of a practitioner. */
+/** Request to check eligibility for a CRN. */
 data class EligibilityCheckRequest(
-  @field:Schema(description = "Id of the practitioner the check is for; decides whether they have ever had a pilot case", required = true)
-  @field:NotBlank
-  val practitionerId: ExternalUserId,
+  @field:Schema(
+    description = "Ignored, and may be omitted: the rules judge the practitioner the person is allocated to in NDelius",
+    required = false,
+    deprecated = true,
+  )
+  val practitionerId: ExternalUserId? = null,
 
   @field:Schema(description = "The practitioner's answers. Omit to check only the rules that need no answers.", required = false)
   @field:Valid

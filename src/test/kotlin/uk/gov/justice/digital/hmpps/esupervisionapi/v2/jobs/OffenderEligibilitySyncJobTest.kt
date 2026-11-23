@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -276,9 +277,14 @@ class OffenderEligibilitySyncJobTest {
 
   @Test
   fun `pilot practitioners are looked up once and passed as ESUP data`() {
-    val pilotCase = offender("X000012", id = 12)
-    val otherCase = offender("X000013", id = 13).also { it.practitionerId = "OTHER01" }
-    givenPage(listOf(pilotCase, otherCase), listOf(contactDetails(pilotCase.crn), contactDetails(otherCase.crn)))
+    // Judged on the practitioner allocated in NDelius now, not the one recorded at setup: the two
+    // are swapped here to show it.
+    val pilotCase = offender("X000012", id = 12).also { it.practitionerId = "OTHER01" }
+    val otherCase = offender("X000013", id = 13).also { it.practitionerId = "PRACT001" }
+    givenPage(
+      listOf(pilotCase, otherCase),
+      listOf(contactDetails(pilotCase.crn, allocatedUsername = "pract001"), contactDetails(otherCase.crn, allocatedUsername = "OTHER01")),
+    )
     whenever(pilotPractitionerLookup.allPilotPractitionerIds()).thenReturn(setOf("PRACT001"))
     whenever(eligibilityChecker.check(any(), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
@@ -412,12 +418,13 @@ class OffenderEligibilitySyncJobTest {
     override val setupCounter = setupCounter
   }
 
-  private fun contactDetails(crn: String) = ContactDetails(
+  private fun contactDetails(crn: String, allocatedUsername: String? = null) = ContactDetails(
     crn = crn,
     name = Name("John", "Doe"),
     events = emptyList(),
     contactSuspended = false,
     dateOfBirth = LocalDate.of(1980, 1, 1),
+    practitioner = allocatedUsername?.let { PractitionerDetails(name = Name("Jane", "Smith"), username = it) },
   )
 
   companion object {

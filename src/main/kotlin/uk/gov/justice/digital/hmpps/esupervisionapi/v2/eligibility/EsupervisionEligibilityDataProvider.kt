@@ -14,22 +14,22 @@ import kotlin.jvm.optionals.getOrElse
 @Service
 class EsupervisionEligibilityDataProvider(
   private val offenderRepository: OffenderRepository,
-  private val pilotPractitionerLookup: PilotPractitionerLookup,
   @Qualifier("eligibilityDataFetchExecutor") private val eligibilityDataFetchExecutor: Executor,
 ) : EligibilityDataProvider {
   override val sourceKey: String
     get() = "ESUP"
 
   /**
-   * Only reached when a caller didn't pre-fill ESUP. With no practitioner to hand, the pilot
-   * practitioner is the one the person is allocated to in online check ins.
+   * Only reached when a caller didn't pre-fill ESUP; every caller in the app does, judging the
+   * practitioner allocated in NDelius. Without NDelius to hand there's no allocated practitioner to
+   * judge, so this never counts the pilot rather than guessing from the practitioner recorded at setup.
    */
   override fun fetch(crn: CRN): CompletableFuture<Map<String, Any?>> = CompletableFuture.supplyAsync(
     {
       val offender = offenderRepository.findByCrn(crn).getOrElse {
         throw ResourceNotFoundException("Could not fetch eligibility details from $sourceKey for CRN: $crn")
       }
-      offender.eligibilityData(pilotPractitionerLookup.hasHadPilotCase(offender.practitionerId))
+      offender.eligibilityData(practitionerPilot = false)
     },
     eligibilityDataFetchExecutor,
   )

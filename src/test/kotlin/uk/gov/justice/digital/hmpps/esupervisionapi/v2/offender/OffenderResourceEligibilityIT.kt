@@ -57,7 +57,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
             "crn": "$crn",
             "name": {"forename": "John", "surname": "Doe"},
             "dateOfBirth": "1980-01-01",
-            "practitioner": {"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}},
+            "practitioner": {"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}, "username": "JANE.SMITH"},
             "events": [{"number": 1, "mainOffence": {"code": "001", "description": "An offence"}, "sentence": null}]
           }
           """.trimIndent(),
@@ -178,7 +178,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
             "crn": "$crn",
             "name": {"forename": "John", "surname": "Doe"},
             "dateOfBirth": "1980-01-01",
-            "practitioner": {"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}},
+            "practitioner": {"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}, "username": "JANE.SMITH"},
             "events": []
           }
           """.trimIndent(),
@@ -266,10 +266,13 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
       .also { it.inPilot = true }
     val pilotCaseId = offenderRepository.saveAndFlush(pilotCase).id
     try {
-      val practitionerId = if (pilotPractitioner) "PILOT.PRACT" else "OTHER.PRACT"
+      // Judged on the practitioner allocated in NDelius. The request's practitionerId says the
+      // opposite, to show it's ignored.
+      stubAllocatedPractitioner(if (pilotPractitioner) "pilot.pract" else "OTHER.PRACT")
+      val sentPractitionerId = if (pilotPractitioner) "OTHER.PRACT" else "PILOT.PRACT"
       checkEligibility(
         crn,
-        """{"practitionerId": "$practitionerId", "eligibilityAnswers": {"deviceRestriction": false, "accreditedProgramme": null, "youthSentence": null}}""",
+        """{"practitionerId": "$sentPractitionerId", "eligibilityAnswers": {"deviceRestriction": false, "accreditedProgramme": null, "youthSentence": null}}""",
       )
         .expectStatus().isOk
         .expectBody(EligibilityCheckResponse::class.java)
@@ -289,9 +292,58 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
   }
 
   @Test
-  fun `checkEligibilityByCrn requires a practitioner`() {
-    checkEligibility(crn, """{"practitionerId": " "}""")
-      .expectStatus().isBadRequest
+  fun `checkEligibilityByCrn needs no practitionerId`() {
+    checkEligibility(crn, """{}""")
+      .expectStatus().isOk
+      .expectBody(EligibilityCheckResponse::class.java)
+      .value { assertThat(it?.outcome).isEqualTo(EligibilityCheckResponseOutcome.UNKNOWN) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings = [
+      """{"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}}""",
+      """{"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}, "username": " "}""",
+      """{"code": "N01UATU", "name": {"forename": "Unallocated", "surname": "Staff"}, "unallocated": true, "username": "UNALLOCATED"}""",
+    ],
+  )
+  fun `checkEligibilityByCrn rules out a person whose practitioner can't sign in`(practitioner: String) {
+    stubAllocatedPractitionerJson(practitioner)
+
+    // Whoever is asking: the signed-in user isn't a stand-in for the allocated practitioner
+    checkEligibility(crn, """{"practitionerId": "SIGNED.IN.USER"}""")
+      .expectStatus().isOk
+      .expectBody(EligibilityCheckResponse::class.java)
+      .value { response ->
+        assertNotNull(response)
+        assertThat(response!!.outcome).isEqualTo(EligibilityCheckResponseOutcome.INELIGIBLE)
+        assertThat(response.ruleCode).isEqualTo("IS_PRACTITIONER_ASSIGNED")
+        assertThat(response.message).isEqualTo(
+          "John Doe must have probation practitioner assigned to them before they can be set up to use online check ins",
+        )
+      }
+  }
+
+  private fun stubAllocatedPractitioner(username: String) = stubAllocatedPractitionerJson(
+    """{"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}, "username": "$username"}""",
+  )
+
+  private fun stubAllocatedPractitionerJson(practitioner: String) {
+    upstreams.stubFor(
+      get(urlEqualTo("/case/$crn")).atPriority(1).willReturn(
+        json(
+          """
+          {
+            "crn": "$crn",
+            "name": {"forename": "John", "surname": "Doe"},
+            "dateOfBirth": "1980-01-01",
+            "practitioner": $practitioner,
+            "events": [{"number": 1, "mainOffence": {"code": "001", "description": "An offence"}, "sentence": null}]
+          }
+          """.trimIndent(),
+        ),
+      ),
+    )
   }
 
   @Test

@@ -24,6 +24,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.allocatedPractitionerUsername
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
@@ -122,7 +123,8 @@ class OffenderEligibilitySyncJob(
                 offender,
                 contactDetails,
                 EligibilityAnswers(accreditedProgramme = true, deviceRestriction = false, youthSentence = false),
-                PilotPractitionerLookup.isPilotPractitioner(pilotPractitionerIds, offender.practitionerId),
+                // The practitioner allocated in NDelius now, not the one recorded at setup
+                PilotPractitionerLookup.isPilotPractitioner(pilotPractitionerIds, contactDetails.allocatedPractitionerUsername()),
               ),
               ruleSet,
             )

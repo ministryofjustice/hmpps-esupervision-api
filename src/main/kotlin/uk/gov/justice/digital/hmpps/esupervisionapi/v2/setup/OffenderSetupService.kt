@@ -33,6 +33,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityDataUnavailableException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.allocatedPractitionerUsername
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
@@ -212,8 +213,8 @@ class OffenderSetupService(
     eligibility: EligibilityAnswers?,
     offender: Offender,
   ) {
-    // offender.practitionerId is the practitioner doing this setup
-    val cache = makeCache(offender, contactDetails, eligibility, pilotPractitionerLookup.hasHadPilotCase(offender.practitionerId))
+    // The practitioner allocated in NDelius, not whoever is doing this setup
+    val cache = makeCache(offender, contactDetails, eligibility, pilotPractitionerLookup.hasHadPilotCase(contactDetails.allocatedPractitionerUsername()))
     val result = eligibilityChecker.check(offender, contactDetails.name, cache)
     if (result.outcome != EligibilityCheckOutcome.ELIGIBLE) {
       throw ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, result.dashboardMessage ?: "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"}")

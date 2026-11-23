@@ -402,8 +402,8 @@ class OffenderResourceTest {
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
-    // NDelius names no practitioner here, so the pilot check falls back to the one recorded at setup
-    verify(pilotPractitionerLookup).hasHadPilotCase(offender.practitionerId)
+    // NDelius names no practitioner here, so no pilot practitioner: no fall back to the one recorded at setup
+    verify(pilotPractitionerLookup).hasHadPilotCase(null)
   }
 
   @Test

@@ -33,5 +33,17 @@ class NdeliusEligibilityDataProvider(
 fun ContactDetails.eligibilityData(): Map<String, Any?> = mapOf(
   "ACTIVE_EVENT" to this.events.firstOrNull(),
   "CONTACT_SUSPENDED" to this.contactSuspended,
-  "PRACTITIONER_ASSIGNED" to (this.practitioner != null),
+  "PRACTITIONER_ASSIGNED" to (this.allocatedPractitionerUsername() != null),
 )
+
+/**
+ * The NDelius username of the practitioner the person is allocated to, or null when there isn't one:
+ * no practitioner, an unallocated placeholder, or a staff record with no user account. The eligibility
+ * rules judge this practitioner - never whoever is making the request - so a person counts as having
+ * a practitioner only when that practitioner can sign in.
+ */
+fun ContactDetails.allocatedPractitionerUsername(): String? = practitioner
+  ?.takeIf { it.unallocated != true }
+  ?.username
+  ?.trim()
+  ?.takeIf { it.isNotEmpty() }
