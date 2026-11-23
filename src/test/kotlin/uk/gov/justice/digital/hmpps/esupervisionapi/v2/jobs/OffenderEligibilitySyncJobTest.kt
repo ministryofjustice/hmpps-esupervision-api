@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -38,6 +39,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEvaluationEngine
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.eligibilityData
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
@@ -70,7 +72,9 @@ class OffenderEligibilitySyncJobTest {
     whenever(eventPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)).thenReturn(true)
   }
 
-  private fun job(batchEnabled: Boolean = true) = OffenderEligibilitySyncJob(
+  private val pilotPractitionerLookup: PilotPractitionerLookup = mock()
+
+  private fun job(batchEnabled: Boolean = true, dryRun: Boolean = false) = OffenderEligibilitySyncJob(
     clock = clock,
     jobLogRepository = jobLogRepository,
     offenderRepository = offenderRepository,
@@ -82,6 +86,9 @@ class OffenderEligibilitySyncJobTest {
     appConfig = appConfig,
     offenderEventExecutor = offenderEventExecutor,
     batchEnabled = batchEnabled,
+    pilotPractitionerLookup = pilotPractitionerLookup,
+    ruleSet = SYNC_RULE_SET,
+    dryRun = dryRun,
   )
 
   private val job get() = job()
@@ -193,14 +200,14 @@ class OffenderEligibilitySyncJobTest {
     val details = contactDetails(offender.crn)
     givenPage(listOf(offender), listOf(details))
     val reason = "John Doe is not eligible for online check ins because they have been recalled."
-    whenever(eligibilityChecker.check(same(offender), eq(details.name), any()))
+    whenever(eligibilityChecker.check(same(offender), eq(details.name), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, reason, "IS_RECALLED", "ESPRC"))
 
     job.process()
 
     verify(ndiliusApiClient).getContactDetailsForMultiple(listOf(offender.crn))
     val cacheCaptor = argumentCaptor<EligibilityEvaluationEngine.Cache>()
-    verify(eligibilityChecker).check(same(offender), eq(details.name), cacheCaptor.capture())
+    verify(eligibilityChecker).check(same(offender), eq(details.name), cacheCaptor.capture(), eq(SYNC_RULE_SET))
     val cache = cacheCaptor.firstValue
     assertThat(cache.getValue("NDELIUS").get()).isEqualTo(details.eligibilityData())
     assertThat(cache.getValue("MANUAL").get()).isEqualTo(
@@ -234,8 +241,8 @@ class OffenderEligibilitySyncJobTest {
     ).thenReturn(listOf(failing), listOf(ineligible), emptyList())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(failing.crn))).thenReturn(listOf(failingDetails))
     whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(ineligible.crn))).thenReturn(listOf(ineligibleDetails))
-    whenever(eligibilityChecker.check(same(failing), any(), any())).thenThrow(IllegalStateException("source unavailable"))
-    whenever(eligibilityChecker.check(same(ineligible), any(), any()))
+    whenever(eligibilityChecker.check(same(failing), any(), any(), eq(SYNC_RULE_SET))).thenThrow(IllegalStateException("source unavailable"))
+    whenever(eligibilityChecker.check(same(ineligible), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible reason", "RULE"))
 
     job.process()
@@ -254,17 +261,57 @@ class OffenderEligibilitySyncJobTest {
   }
 
   @Test
+  fun `dry run reports ineligible offenders without deactivating them`() {
+    val offender = offender("X000011", id = 11)
+    val details = contactDetails(offender.crn)
+    givenPage(listOf(offender), listOf(details))
+    whenever(eligibilityChecker.check(same(offender), eq(details.name), any(), eq(SYNC_RULE_SET)))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible reason", "IS_TIER_C"))
+
+    job(dryRun = true).process()
+
+    verify(eligibilityChecker).check(same(offender), eq(details.name), any(), eq(SYNC_RULE_SET))
+    verify(deactivationService, never()).deactivateOffender(any(), any())
+    verify(offenderSetupRepository, never()).findLatestByOffenderIdIn(any())
+  }
+
+  @Test
+  fun `pilot practitioners are looked up once and passed as ESUP data`() {
+    // Judged on the practitioner allocated in NDelius now, not the one recorded at setup: the two
+    // are swapped here to show it.
+    val pilotCase = offender("X000012", id = 12).also { it.practitionerId = "OTHER01" }
+    val otherCase = offender("X000013", id = 13).also { it.practitionerId = "PRACT001" }
+    givenPage(
+      listOf(pilotCase, otherCase),
+      listOf(contactDetails(pilotCase.crn, allocatedUsername = "pract001"), contactDetails(otherCase.crn, allocatedUsername = "OTHER01")),
+    )
+    whenever(pilotPractitionerLookup.allPilotPractitionerIds()).thenReturn(setOf("PRACT001"))
+    whenever(eligibilityChecker.check(any(), any(), any(), eq(SYNC_RULE_SET)))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
+
+    job.process()
+
+    verify(pilotPractitionerLookup, times(1)).allPilotPractitionerIds()
+    val pilotCache = argumentCaptor<EligibilityEvaluationEngine.Cache>()
+    verify(eligibilityChecker).check(same(pilotCase), any(), pilotCache.capture(), eq(SYNC_RULE_SET))
+    assertThat(pilotCache.firstValue.getValue("ESUP").get()["PRACTITIONER_PILOT"]).isEqualTo(true)
+    val otherCache = argumentCaptor<EligibilityEvaluationEngine.Cache>()
+    verify(eligibilityChecker).check(same(otherCase), any(), otherCache.capture(), eq(SYNC_RULE_SET))
+    assertThat(otherCache.firstValue.getValue("ESUP").get()["PRACTITIONER_PILOT"]).isEqualTo(false)
+  }
+
+  @Test
   fun `missing NDelius details are skipped without stopping the page`() {
     val missingDetailsOffender = offender("X000004", id = 4)
     val ineligible = offender("X000005", id = 5)
     val details = contactDetails(ineligible.crn)
     givenPage(listOf(missingDetailsOffender, ineligible), listOf(details))
-    whenever(eligibilityChecker.check(same(ineligible), any(), any()))
+    whenever(eligibilityChecker.check(same(ineligible), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible reason", "RULE"))
 
     job.process()
 
-    verify(eligibilityChecker, times(1)).check(any(), any(), any())
+    verify(eligibilityChecker, times(1)).check(any(), any(), any(), eq(SYNC_RULE_SET))
     verify(deactivationService).deactivateOffender(
       same(ineligible),
       argThat {
@@ -290,11 +337,11 @@ class OffenderEligibilitySyncJobTest {
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenAnswer { invocation ->
       (invocation.arguments[0] as List<*>).map { contactDetails(it as String) }
     }
-    whenever(eligibilityChecker.check(any(), any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible reason", "RULE"))
-    whenever(eligibilityChecker.check(same(eligible), any(), any()))
+    whenever(eligibilityChecker.check(same(eligible), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
-    whenever(eligibilityChecker.check(same(allEligible), any(), any()))
+    whenever(eligibilityChecker.check(same(allEligible), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
     val firstSetup = latestSetup(first.id, setupPrimaryKey = 61, setupCounter = 1)
     val secondSetup = latestSetup(second.id, setupPrimaryKey = 81, setupCounter = 2)
@@ -328,7 +375,7 @@ class OffenderEligibilitySyncJobTest {
     ).thenReturn(listOf(failing), listOf(ineligible), emptyList())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(failing.crn))).thenReturn(listOf(contactDetails(failing.crn)))
     whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(ineligible.crn))).thenReturn(listOf(contactDetails(ineligible.crn)))
-    whenever(eligibilityChecker.check(any(), any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible reason", "RULE"))
     whenever(offenderSetupRepository.findLatestByOffenderIdIn(listOf(failing.id)))
       .thenThrow(IllegalStateException("database unavailable"))
@@ -348,7 +395,7 @@ class OffenderEligibilitySyncJobTest {
       ),
     ).thenReturn(offenders, emptyList())
     whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(details)
-    whenever(eligibilityChecker.check(any(), any(), any()))
+    whenever(eligibilityChecker.check(any(), any(), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
   }
 
@@ -371,11 +418,16 @@ class OffenderEligibilitySyncJobTest {
     override val setupCounter = setupCounter
   }
 
-  private fun contactDetails(crn: String) = ContactDetails(
+  private fun contactDetails(crn: String, allocatedUsername: String? = null) = ContactDetails(
     crn = crn,
     name = Name("John", "Doe"),
     events = emptyList(),
     contactSuspended = false,
     dateOfBirth = LocalDate.of(1980, 1, 1),
+    practitioner = allocatedUsername?.let { PractitionerDetails(name = Name("Jane", "Smith"), username = it) },
   )
+
+  companion object {
+    const val SYNC_RULE_SET = "SYNC_RULES"
+  }
 }

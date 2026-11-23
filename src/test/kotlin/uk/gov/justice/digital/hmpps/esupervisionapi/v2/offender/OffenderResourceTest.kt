@@ -50,6 +50,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderPersistenceServic
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
@@ -66,6 +67,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityEv
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityRuleOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.OffenderEligibilityRule
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.question.QuestionService
@@ -99,6 +101,7 @@ class OffenderResourceTest {
   private val offenderPersistenceService: OffenderPersistenceService = mock()
   private val offenderService: OffenderService = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
+  private val pilotPractitionerLookup: PilotPractitionerLookup = mock()
   private val eligibilityEvaluationEngine: EligibilityEvaluationEngine = mock()
   private val supervisionPackageService: SupervisionPackageService = mock()
   private val questionService: QuestionService = mock()
@@ -133,6 +136,7 @@ class OffenderResourceTest {
       offenderService,
       eligibilityEvaluationEngine,
       eligibilityChecker,
+      pilotPractitionerLookup,
       supervisionPackageService,
       questionService,
       transactionTemplate,
@@ -395,6 +399,8 @@ class OffenderResourceTest {
 
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(OffenderStatus.VERIFIED, result.body?.status)
+    // NDelius names no practitioner here, so no pilot practitioner: no fall back to the one recorded at setup
+    verify(pilotPractitionerLookup).hasHadPilotCase(null)
   }
 
   @Test
@@ -415,6 +421,7 @@ class OffenderResourceTest {
       mobile = "07700900123",
       events = listOf(anEvent, anEvent.copy(number = 2L)),
       dateOfBirth = LocalDate.of(1980, 1, 1),
+      practitioner = PractitionerDetails(name = Name("Jane", "Smith"), username = "ALLOCATED.PP"),
     )
     whenever(offenderRepository.findByUuid(uuid)).thenReturn(Optional.of(offender))
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
@@ -439,6 +446,8 @@ class OffenderResourceTest {
     assertEquals(HttpStatus.OK, result.statusCode)
     assertEquals(2L, offender.currentEvent)
     assertEquals(2L, result.body?.currentEvent)
+    // the allocated practitioner, as at setup and in the nightly sync - not the requester
+    verify(pilotPractitionerLookup).hasHadPilotCase("ALLOCATED.PP")
   }
 
   @Test

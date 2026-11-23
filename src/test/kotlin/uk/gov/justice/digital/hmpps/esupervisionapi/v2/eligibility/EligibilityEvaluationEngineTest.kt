@@ -79,6 +79,56 @@ class EligibilityEvaluationEngineTest {
     return provider
   }
 
+  private fun OffenderEligibilityRule.appliesWhen(source: String, dataPoint: String, value: String) = apply {
+    appliesWhenSource = source
+    appliesWhenDataPoint = dataPoint
+    appliesWhenOperator = EligibilityRuleOperator.EQUALS
+    appliesWhenComparisonValue = value
+  }
+
+  @Test
+  fun `a rule whose condition holds is applied`() {
+    val youth = rule("ON_YOUTH_SENTENCE", 1.0, "MANUAL", "YOUTH_SENTENCE", EligibilityRuleOperator.EQUALS)
+      .apply { comparisonValue = "false" }
+      .appliesWhen("MANUAL", "ACCREDITED_PROGRAMME", "true")
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET)).thenReturn(listOf(youth))
+    val cache = mapOf("MANUAL" to CompletableFuture.completedFuture(mapOf<String, Any?>("ACCREDITED_PROGRAMME" to true, "YOUTH_SENTENCE" to true)))
+
+    val result = engine.evaluate("X123456", DEFAULT_RULE_SET, cache).join()
+
+    assertEquals(EligibilityCheckOutcome.INELIGIBLE, result.outcome)
+    assertEquals("ON_YOUTH_SENTENCE", result.triggeredRuleCode)
+  }
+
+  @Test
+  fun `a rule whose condition does not hold is skipped without fetching its source`() {
+    val earlyEngagement = rule("IN_EARLY_ENGAGEMENT", 1.0, "SUP-PACK", "EARLY_ENGAGEMENT", EligibilityRuleOperator.EQUALS)
+      .apply { comparisonValue = "false" }
+      .appliesWhen("MANUAL", "ACCREDITED_PROGRAMME", "true")
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET)).thenReturn(listOf(earlyEngagement))
+    val supPack = mockProvider("SUP-PACK", mapOf("EARLY_ENGAGEMENT" to true))
+    val cache = mapOf("MANUAL" to CompletableFuture.completedFuture(mapOf<String, Any?>("ACCREDITED_PROGRAMME" to false)))
+
+    val result = engine.evaluate("X123456", DEFAULT_RULE_SET, cache).join()
+
+    assertEquals(EligibilityCheckOutcome.ELIGIBLE, result.outcome)
+    assertNull(result.triggeredRuleCode)
+    verify(supPack, never()).fetch(any())
+  }
+
+  @Test
+  fun `a condition on a missing data point is an error, not a skip`() {
+    val youth = rule("ON_YOUTH_SENTENCE", 1.0, "MANUAL", "YOUTH_SENTENCE", EligibilityRuleOperator.EQUALS)
+      .apply { comparisonValue = "false" }
+      .appliesWhen("MANUAL", "ACCREDITED_PROGRAMME", "true")
+    whenever(ruleRepository.findByRuleSetAndEnabledTrueOrderByRuleOrderAsc(DEFAULT_RULE_SET)).thenReturn(listOf(youth))
+    val cache = mapOf("MANUAL" to CompletableFuture.completedFuture(mapOf<String, Any?>("YOUTH_SENTENCE" to true)))
+
+    val exception = assertThrows<CompletionException> { engine.evaluate("X123456", DEFAULT_RULE_SET, cache).join() }
+
+    assertInstanceOf(EligibilityDataUnavailableException::class.java, exception.cause)
+  }
+
   @Test
   fun `all rules continue - eligible with no message`() {
     val ndeliusRule = rule("IS_ALIVE", 1.0, "NDELIUS", "DECEASED_DATE", EligibilityRuleOperator.IS_NULL)

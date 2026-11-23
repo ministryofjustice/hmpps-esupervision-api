@@ -78,6 +78,11 @@ private fun renderRule(rule: OffenderEligibilityRule): String {
     mapOf(
       "statusClass" to statusClass,
       "code" to escapeHtml(rule.code),
+      "appliesWhen" to escapeHtml(
+        rule.appliesWhenSource?.let {
+          listOfNotNull(it, rule.appliesWhenDataPoint, rule.appliesWhenOperator?.name, rule.appliesWhenComparisonValue).joinToString(" ")
+        } ?: "always",
+      ),
       "ruleOrder" to rule.ruleOrder.toString(),
       "badgeClass" to badgeClass,
       "badgeText" to badgeText,

@@ -23,6 +23,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCheckOutcome
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityChecker
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.allocatedPractitionerUsername
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.offender.OffenderDeactivationService
 import java.time.Clock
@@ -48,6 +50,9 @@ class OffenderEligibilitySyncJob(
   private val appConfig: AppConfig,
   @param:Qualifier("offenderEventExecutor") private val offenderEventExecutor: ThreadPoolTaskExecutor,
   @param:Value("\${app.batch.enabled:false}") private val batchEnabled: Boolean,
+  private val pilotPractitionerLookup: PilotPractitionerLookup,
+  @param:Value("\${app.offender-eligibility.sync-rule-set}") private val ruleSet: String,
+  @param:Value("\${app.offender-eligibility.sync-dry-run:false}") private val dryRun: Boolean,
 ) {
   fun process() {
     if (!appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
@@ -60,15 +65,18 @@ class OffenderEligibilitySyncJob(
 
     val now = clock.instant()
     val logEntry = jobLogRepository.saveAndFlush(JobLog(jobType = JOB_TYPE, createdAt = now))
-    LOGGER.info("Offender Eligibility Sync Job(id={}) started", logEntry.id)
+    LOGGER.info("Offender Eligibility Sync Job(id={}) started: ruleSet={}, dryRun={}", logEntry.id, ruleSet, dryRun)
 
     var pages = 0
     var processed = 0
     var deactivated = 0
+    var wouldDeactivate = 0
     var failed = 0
     var processingFailure: Throwable? = null
 
     try {
+      // One lookup for the whole run rather than one per person
+      val pilotPractitionerIds = pilotPractitionerLookup.allPilotPractitionerIds()
       var lastOffenderId = 0L
       while (true) {
         val offenders = offenderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
@@ -111,7 +119,14 @@ class OffenderEligibilitySyncJob(
             val result = eligibilityChecker.check(
               offender,
               contactDetails.name,
-              makeCache(offender, contactDetails, EligibilityAnswers(accreditedProgramme = true, deviceRestriction = false, youthSentence = false)),
+              makeCache(
+                offender,
+                contactDetails,
+                EligibilityAnswers(accreditedProgramme = true, deviceRestriction = false, youthSentence = false),
+                // The practitioner allocated in NDelius now, not the one recorded at setup
+                PilotPractitionerLookup.isPilotPractitioner(pilotPractitionerIds, contactDetails.allocatedPractitionerUsername()),
+              ),
+              ruleSet,
             )
             processed += 1
             if (result.outcome == EligibilityCheckOutcome.INELIGIBLE) {
@@ -124,6 +139,14 @@ class OffenderEligibilitySyncJob(
         }
 
         if (ineligible.isEmpty()) continue
+
+        if (dryRun) {
+          wouldDeactivate += ineligible.size
+          for ((offender, _, result) in ineligible) {
+            LOGGER.info("Dry run: would stop online check-ins for CRN {}: triggered rule code={}", offender.crn, result.triggeredRuleCode)
+          }
+          continue
+        }
 
         val setupsByOffenderId = try {
           offenderSetupRepository.findLatestByOffenderIdIn(ineligible.map { it.offender.id })
@@ -180,11 +203,12 @@ class OffenderEligibilitySyncJob(
       logEntry.endedAt = endTime
       jobLogRepository.saveAndFlush(logEntry)
       LOGGER.info(
-        "Offender Eligibility Sync Job(id={}) {}: processed={}, deactivated={}, failed={}, pages={}, took={}",
+        "Offender Eligibility Sync Job(id={}) {}: processed={}, deactivated={}, wouldDeactivate={}, failed={}, pages={}, took={}",
         logEntry.id,
         if (processingFailure == null) "completed" else "failed",
         processed,
         deactivated,
+        wouldDeactivate,
         failed,
         pages,
         Duration.between(now, endTime),

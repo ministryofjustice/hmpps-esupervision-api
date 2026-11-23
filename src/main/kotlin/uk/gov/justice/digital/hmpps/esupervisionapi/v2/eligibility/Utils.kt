@@ -14,11 +14,13 @@ fun EligibilityAnswers.eligibilityData(): Map<String, Any?> = mapOf(
 
 /**
  * Creates a cache pre-filled with eligibility data from NDELIUS, ESUP and practitioners (manual).
+ *
+ * @param practitionerPilot whether the practitioner the check is made for has ever had a pilot case
  */
-fun makeCache(offender: Offender, contactDetails: ContactDetails, answers: EligibilityAnswers?): Map<String, CompletableFuture<Map<String, Any?>>> {
+fun makeCache(offender: Offender, contactDetails: ContactDetails, answers: EligibilityAnswers?, practitionerPilot: Boolean): Map<String, CompletableFuture<Map<String, Any?>>> {
   val m = mutableMapOf(
     "NDELIUS" to CompletableFuture.completedFuture(contactDetails.eligibilityData()),
-    "ESUP" to CompletableFuture.completedFuture(offender.eligibilityData()),
+    "ESUP" to CompletableFuture.completedFuture(offender.eligibilityData(practitionerPilot)),
   )
   if (answers != null) {
     m["MANUAL"] = CompletableFuture.completedFuture(answers.eligibilityData())
