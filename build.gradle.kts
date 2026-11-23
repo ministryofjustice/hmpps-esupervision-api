@@ -1,15 +1,10 @@
 import org.gradle.kotlin.dsl.implementation
 
 plugins {
-  id("uk.gov.justice.hmpps.gradle-spring-boot") version "11.0.15"
+  id("uk.gov.justice.hmpps.gradle-spring-boot") version "11.1.2"
   kotlin("plugin.jpa") version "2.4.21"
   kotlin("plugin.spring") version "2.4.21"
 }
-
-// Boot 4.1.2 manages jackson 3.1.7 / 2.21.7, both vulnerable to CVE-2026-110879.
-// Drop these overrides once the Boot BOM ships >= 3.1.8 / 2.21.8.
-extra["jackson-bom.version"] = "3.1.8"
-extra["jackson-2-bom.version"] = "2.21.8"
 
 // utils/CheckinNoteExportTool.kt has its own main(), so Spring Boot cannot infer this one.
 springBoot {
