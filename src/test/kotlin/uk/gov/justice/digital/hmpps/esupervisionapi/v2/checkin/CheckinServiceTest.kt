@@ -32,6 +32,8 @@ import tools.jackson.module.kotlin.readValue
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationType
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.ReferencePhotoLocation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
@@ -97,6 +99,7 @@ class CheckinServiceTest {
   private val notificationService: NotificationOrchestratorService = mock()
   private val checkinCreationService: CheckinCreationService = mock()
   private val s3UploadService: S3UploadService = mock()
+  private val offenderPhotoClient: OffenderPhotoClient = mock()
   private val compareFacesService: OffenderIdVerifier = mock()
   private val livenessSessionService: LivenessSessionService = mock()
   private val livenessCredentialsProvider: LivenessCredentialsProvider = mock()
@@ -112,7 +115,7 @@ class CheckinServiceTest {
 
   @BeforeEach
   fun setUp() {
-    reset(s3UploadService)
+    reset(s3UploadService, offenderPhotoClient)
     whenever(appConfig.esup2305DeliusEventSelection).thenReturn(true)
     service = buildService(allowPastDueDate = false)
 
@@ -130,6 +133,7 @@ class CheckinServiceTest {
     notificationService,
     checkinCreationService,
     s3UploadService,
+    offenderPhotoClient,
     compareFacesService,
     livenessSessionService,
     livenessCredentialsProvider,
@@ -236,7 +240,7 @@ class CheckinServiceTest {
 
     whenever(checkinPersistenceService.findCheckin(uuid)).thenReturn(checkin)
     whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
-    whenever(s3UploadService.isSetupPhotoUploaded(offender)).thenReturn(false)
+    whenever(offenderPhotoClient.isUploaded(offender.uuid)).thenReturn(false)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
 
     val result = service.submitCheckin(uuid, request)
@@ -285,7 +289,7 @@ class CheckinServiceTest {
     ).also { it.linkStatus = linkStatus }
     whenever(checkinPersistenceService.findCheckin(checkin.uuid)).thenReturn(checkin)
     whenever(s3UploadService.isCheckinVideoUploaded(checkin)).thenReturn(true)
-    whenever(s3UploadService.isSetupPhotoUploaded(offender)).thenReturn(false)
+    whenever(offenderPhotoClient.isUploaded(offender.uuid)).thenReturn(false)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
     return checkin
   }
@@ -1094,6 +1098,13 @@ class CheckinServiceTest {
 
     assertEquals(AutomatedIdVerificationResult.MATCH, checkin.autoIdCheck)
     assertEquals(95.5f, checkin.autoIdCheckScore)
+    verify(compareFacesService).verifyCheckinImages(
+      argThat {
+        reference == S3ObjectCoordinate("reference-bucket", "setup.jpg") &&
+          snapshots == listOf(S3ObjectCoordinate("bucket", "snapshot.jpg"))
+      },
+      eq(faceSimilarityThreshold),
+    )
     verify(offenderEventLogRepository, never()).save(any())
   }
 
@@ -1408,9 +1419,9 @@ class CheckinServiceTest {
     whenever(checkinRepository.findByUuid(checkin.uuid)).thenReturn(Optional.of(checkin))
     whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(s3UploadService.isCheckinSnapshotUploaded(eq(checkin), any())).thenReturn(true)
-    whenever(s3UploadService.isSetupPhotoUploaded(eq(checkin.offender))).thenReturn(true)
-    whenever(s3UploadService.setupPhotoObjectCoordinate(eq(checkin.offender)))
-      .thenReturn(S3ObjectCoordinate("bucket", "setup.jpg"))
+    whenever(offenderPhotoClient.isUploaded(checkin.offender.uuid)).thenReturn(true)
+    whenever(offenderPhotoClient.referenceLocation(checkin.offender.uuid))
+      .thenReturn(ReferencePhotoLocation("reference-bucket", "setup.jpg"))
     whenever(s3UploadService.checkinObjectCoordinate(eq(checkin), any()))
       .thenReturn(S3ObjectCoordinate("bucket", "snapshot.jpg"))
     whenever(s3UploadService.uploadCheckinSnapshot(eq(checkin), any(), any(), any()))

@@ -7,23 +7,13 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.model.Delete
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectResponse
-import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest
-import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
-import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
-import software.amazon.awssdk.services.s3.model.ObjectIdentifier
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
-import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetup
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.S3ObjectCoordinate
 import java.net.URL
 import java.net.http.HttpClient
@@ -31,12 +21,6 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.UUID
-
-/** A presigned URL together with the headers a client must echo on the PUT. */
-data class PresignedUpload(
-  val url: URL,
-  val requiredHeaders: Map<String, String>,
-)
 
 /**
  * Resolve a client-supplied base64 SHA-256 to forward to S3.
@@ -64,9 +48,6 @@ fun resolveUploadHash(
 sealed class S3Keyable {
   fun toKey(): String {
     when (this) {
-      is SetupPhotoKey -> {
-        return "setup-${this.offender}"
-      }
       is CheckinVideoKey -> {
         return "checkin-${this.checkin}/video"
       }
@@ -80,13 +61,6 @@ sealed class S3Keyable {
 /**
  * Ensure we're being consistent with object keys in S3
  */
-data class SetupPhotoKey(
-  val offender: UUID,
-) : S3Keyable()
-
-/**
- * Ensure we're being consistent with object keys in S3
- */
 data class CheckinVideoKey(
   val checkin: UUID,
 ) : S3Keyable()
@@ -96,32 +70,14 @@ data class CheckinPhotoKey(
   val index: Int,
 ) : S3Keyable()
 
-/** Keys whose every version and delete marker was removed, and keys S3 refused to delete. */
-data class S3PurgeResult(val keysDeleted: Int, val keysFailed: Int)
-
-/**
- * V2 S3 Upload Service
- * Handles S3 operations for V2 entities only
- * Complete independence from V1
- */
+/** Storage for V2 check-in media. */
 @Service("v2S3UploadService")
 class S3UploadService(
   @Qualifier("MOJ") private val s3uploadClient: S3Client,
   private val s3Presigner: S3Presigner,
-  @Value("\${aws.s3.image-uploads}") private val imageUploadBucket: String,
   @Value("\${aws.s3.video-uploads}") private val videoUploadBucket: String,
+  private val versionPurger: S3VersionPurger,
 ) {
-
-  private fun putObjectRequest(bucket: String, key: String, contentType: String, checksumSha256Base64: String? = null): PutObjectRequest {
-    val builder = PutObjectRequest.builder()
-      .bucket(bucket)
-      .key(key)
-      .contentType(contentType)
-    if (checksumSha256Base64 != null) {
-      builder.checksumSHA256(checksumSha256Base64)
-    }
-    return builder.build()
-  }
 
   @CircuitBreaker(name = "awsS3")
   @Retry(name = "awsS3")
@@ -164,22 +120,8 @@ class S3UploadService(
     return destination
   }
 
-  private fun bucketFor(key: S3Keyable): String {
-    when (key) {
-      is SetupPhotoKey -> {
-        return this.imageUploadBucket
-      }
-      is CheckinVideoKey -> {
-        return this.videoUploadBucket
-      }
-      is CheckinPhotoKey -> {
-        return this.videoUploadBucket
-      }
-    }
-  }
-
   private fun getHeadObjectRequest(key: S3Keyable): HeadObjectRequest = HeadObjectRequest.builder()
-    .bucket(this.bucketFor(key))
+    .bucket(videoUploadBucket)
     .key(key.toKey())
     .build()
 
@@ -199,20 +141,7 @@ class S3UploadService(
     }
   }
 
-  private fun getObjectRequestFor(key: S3Keyable): GetObjectRequest = GetObjectRequest.builder()
-    .bucket(this.bucketFor(key))
-    .key(key.toKey())
-    .build()
-
-  private fun presignedGetUrlFor(key: S3Keyable): URL {
-    val getRequest = getObjectRequestFor(key)
-    val presignRequest = GetObjectPresignRequest.builder()
-      .signatureDuration(Duration.ofMinutes(5))
-      .getObjectRequest(getRequest)
-      .build()
-    val presigned = this.s3Presigner.presignGetObject(presignRequest)
-    return presigned.url()
-  }
+  private fun presignedGetUrlFor(key: S3Keyable): URL = s3Presigner.presignGet(videoUploadBucket, key.toKey(), Duration.ofMinutes(5))
 
   private fun generatePresignedUploadUrl(
     keyable: S3Keyable,
@@ -225,20 +154,7 @@ class S3UploadService(
     contentType: String,
     duration: Duration,
     checksumSha256Base64: String?,
-  ): PresignedUpload {
-    val putRequest = putObjectRequest(bucketFor(keyable), keyable.toKey(), contentType, checksumSha256Base64)
-    val presignRequest = PutObjectPresignRequest.builder()
-      .putObjectRequest(putRequest)
-      .signatureDuration(duration)
-      .build()
-    val url = s3Presigner.presignPutObject(presignRequest).url()
-    val headers = if (checksumSha256Base64 != null) {
-      mapOf("x-amz-checksum-sha256" to checksumSha256Base64)
-    } else {
-      emptyMap()
-    }
-    return PresignedUpload(url, headers)
-  }
+  ): PresignedUpload = s3Presigner.presignPut(videoUploadBucket, keyable.toKey(), contentType, duration, checksumSha256Base64)
 
   private fun deleteObjectRequest(bucket: String, key: String): DeleteObjectRequest {
     val request = DeleteObjectRequest.builder()
@@ -246,87 +162,6 @@ class S3UploadService(
       .key(key)
       .build()
     return request
-  }
-
-  // ============================================================
-  // V2 Public API - Setup Photo Operations
-  // ============================================================
-
-  /**
-   * V2 Setup - generates presigned upload URL for setup photo
-   */
-  fun generatePresignedUploadUrl(
-    setup: OffenderSetup,
-    contentType: String = "application/octet-stream",
-    duration: Duration,
-  ): URL = generatePresignedUploadUrl(SetupPhotoKey(setup.offender.uuid), contentType, duration)
-
-  /**
-   * V2 Setup - generates presigned upload, optionally signed with a content hash.
-   */
-  fun generatePresignedUpload(
-    setup: OffenderSetup,
-    contentType: String = "application/octet-stream",
-    duration: Duration,
-    checksumSha256Base64: String? = null,
-  ): PresignedUpload = generatePresignedUpload(SetupPhotoKey(setup.offender.uuid), contentType, duration, checksumSha256Base64)
-
-  /**
-   * V2 Offender - generates presigned upload URL for updating offender photo
-   */
-  fun generatePresignedUploadUrl(
-    offender: Offender,
-    contentType: String = "application/octet-stream",
-    duration: Duration,
-  ): URL = generatePresignedUploadUrl(SetupPhotoKey(offender.uuid), contentType, duration)
-
-  /**
-   * V2 Offender - generates presigned upload, optionally signed with a content hash.
-   */
-  fun generatePresignedUpload(
-    offender: Offender,
-    contentType: String = "application/octet-stream",
-    duration: Duration,
-    checksumSha256Base64: String? = null,
-  ): PresignedUpload = generatePresignedUpload(SetupPhotoKey(offender.uuid), contentType, duration, checksumSha256Base64)
-
-  /**
-   * V2 Setup - checks if setup photo is uploaded
-   */
-  fun isSetupPhotoUploaded(setup: OffenderSetup): Boolean {
-    val photoKey = SetupPhotoKey(setup.offender.uuid)
-    return keyExists(photoKey)
-  }
-
-  /**
-   * V2 Offender - checks if setup photo is uploaded (overload for direct offender check)
-   */
-  fun isSetupPhotoUploaded(offender: Offender): Boolean {
-    val photoKey = SetupPhotoKey(offender.uuid)
-    return keyExists(photoKey)
-  }
-
-  /**
-   * V2 Offender - gets presigned download URL for offender photo
-   */
-  fun getOffenderPhoto(offender: Offender): URL? {
-    if (offender.status != OffenderStatus.INITIAL) {
-      val photoKey = SetupPhotoKey(offender.uuid)
-      return presignedGetUrlFor(photoKey)
-    } else {
-      return null
-    }
-  }
-
-  /**
-   * V2 Offender - gets S3 object coordinate for setup photo (used by Rekognition)
-   */
-  fun setupPhotoObjectCoordinate(offender: Offender): S3ObjectCoordinate {
-    val key = SetupPhotoKey(offender.uuid)
-    return S3ObjectCoordinate(
-      bucket = imageUploadBucket,
-      key = key.toKey(),
-    )
   }
 
   // ============================================================
@@ -422,9 +257,9 @@ class S3UploadService(
   @Retry(name = "awsS3")
   fun uploadCheckinSnapshot(checkin: OffenderCheckin, index: Int, bytes: ByteArray, contentType: String): S3ObjectCoordinate {
     val key = CheckinPhotoKey(checkin.uuid, index)
-    val putReq = putObjectRequest(bucketFor(key), key.toKey(), contentType)
+    val putReq = PutObjectRequest.builder().bucket(videoUploadBucket).key(key.toKey()).contentType(contentType).build()
     s3uploadClient.putObject(putReq, RequestBody.fromBytes(bytes))
-    return S3ObjectCoordinate(bucket = bucketFor(key), key = key.toKey())
+    return S3ObjectCoordinate(bucket = videoUploadBucket, key = key.toKey())
   }
 
   /**
@@ -445,7 +280,7 @@ class S3UploadService(
   @Retry(name = "awsS3")
   fun deleteCheckinSnapshot(uuid: UUID, index: Int): DeleteObjectResponse? {
     val key = CheckinPhotoKey(uuid, index)
-    val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
+    val delReq = deleteObjectRequest(videoUploadBucket, key.toKey())
     return s3uploadClient.deleteObject(delReq)
   }
 
@@ -456,74 +291,12 @@ class S3UploadService(
   @Retry(name = "awsS3")
   fun deleteCheckinVideo(uuid: UUID): DeleteObjectResponse? {
     val key = CheckinVideoKey(uuid)
-    val delReq = deleteObjectRequest(bucketFor(key), key.toKey())
+    val delReq = deleteObjectRequest(videoUploadBucket, key.toKey())
     return s3uploadClient.deleteObject(delReq)
   }
 
-  /**
-   * Permanently deletes a person's setup photo: every version and delete marker, since the bucket
-   * is versioned and a plain delete only hides the object behind a marker.
-   *
-   * For the dev-only test support cleanup. Deliberately outside the `awsS3` circuit breaker and
-   * retry, so a cleanup failure (say, a missing s3:ListBucketVersions permission) cannot open the
-   * breaker the rest of the app depends on.
-   */
-  fun purgeSetupPhoto(offenderUuid: UUID): S3PurgeResult {
-    val key = SetupPhotoKey(offenderUuid)
-    val exactKey = key.toKey()
-    return purgeAllVersions(bucketFor(key), prefix = exactKey) { it == exactKey }
-  }
-
-  /**
-   * Permanently deletes everything stored for a check-in - the video and however many snapshots -
-   * as [purgeSetupPhoto] does for the setup photo.
-   */
-  fun purgeCheckinObjects(checkinUuid: UUID): S3PurgeResult {
-    // The video and the snapshots share this prefix and bucket.
-    return purgeAllVersions(bucketFor(CheckinVideoKey(checkinUuid)), prefix = "checkin-$checkinUuid/") { true }
-  }
-
-  private fun purgeAllVersions(bucket: String, prefix: String, matches: (String) -> Boolean): S3PurgeResult {
-    val targets = mutableListOf<ObjectIdentifier>()
-    var keyMarker: String? = null
-    var versionIdMarker: String? = null
-    do {
-      val page = s3uploadClient.listObjectVersions(
-        ListObjectVersionsRequest.builder()
-          .bucket(bucket)
-          .prefix(prefix)
-          .keyMarker(keyMarker)
-          .versionIdMarker(versionIdMarker)
-          .build(),
-      )
-      page.versions().filter { matches(it.key()) }
-        .mapTo(targets) { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
-      page.deleteMarkers().filter { matches(it.key()) }
-        .mapTo(targets) { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
-      keyMarker = page.nextKeyMarker()
-      versionIdMarker = page.nextVersionIdMarker()
-    } while (page.isTruncated == true)
-
-    val failedKeys = mutableSetOf<String>()
-    // DeleteObjects takes at most 1000 identifiers per request. A batch that fails outright counts
-    // all its keys as failed, and the rest still go: one bad batch should not hide what did work.
-    targets.chunked(1000).forEach { chunk ->
-      try {
-        val response = s3uploadClient.deleteObjects(
-          DeleteObjectsRequest.builder()
-            .bucket(bucket)
-            .delete(Delete.builder().objects(chunk).quiet(true).build())
-            .build(),
-        )
-        response.errors().mapTo(failedKeys) { it.key() }
-      } catch (e: Exception) {
-        LOG.warn("Could not delete a batch of {} object versions under {}/{}: {}", chunk.size, bucket, prefix, e.javaClass.simpleName)
-        chunk.mapTo(failedKeys) { it.key() }
-      }
-    }
-    val keys = targets.map { it.key() }.toSet()
-    return S3PurgeResult(keysDeleted = (keys - failedKeys).size, keysFailed = failedKeys.size)
-  }
+  /** Permanently deletes the video and all snapshots for a check-in, including delete markers. */
+  fun purgeCheckinObjects(checkinUuid: UUID): S3PurgeResult = versionPurger.purgeAllVersions(videoUploadBucket, prefix = "checkin-$checkinUuid/") { true }
 
   companion object {
     val LOG = org.slf4j.LoggerFactory.getLogger(S3UploadService::class.java)!!

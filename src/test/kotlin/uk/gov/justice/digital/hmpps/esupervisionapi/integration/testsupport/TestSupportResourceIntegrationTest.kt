@@ -22,6 +22,8 @@ import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoPurgeResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNoteResend
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinNoteResendRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -81,13 +83,15 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
 
   @MockitoBean lateinit var s3UploadService: S3UploadService
 
+  @MockitoBean lateinit var offenderPhotoClient: OffenderPhotoClient
+
   private val orphan = "T100001"
   private val bystander = "T100002"
   private val sharedListCrn = "T100003"
 
   @org.junit.jupiter.api.BeforeEach
   fun stubS3() {
-    whenever(s3UploadService.purgeSetupPhoto(any())).thenReturn(S3PurgeResult(keysDeleted = 1, keysFailed = 0))
+    whenever(offenderPhotoClient.purge(any())).thenReturn(OffenderPhotoPurgeResult(keysDeleted = 1, keysFailed = 0))
     whenever(s3UploadService.purgeCheckinObjects(any())).thenReturn(S3PurgeResult(keysDeleted = 2, keysFailed = 0))
   }
 
@@ -97,7 +101,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
     cleanupRepository.deleteByCrn(bystander)
     cleanupRepository.deleteByCrn(sharedListCrn)
     jdbc.update("delete from question_list where author = 'test-support'")
-    reset(ndeliusApiClient, s3UploadService)
+    reset(ndeliusApiClient, s3UploadService, offenderPhotoClient)
   }
 
   private fun delete(crn: String, roles: List<String> = listOf(UI_ROLE)) = webTestClient.delete()
@@ -129,7 +133,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
 
     assertThat(rowsFor(orphanKeys)).allSatisfy { _, n -> assertThat(n).isZero() }
     assertThat(rowsFor(bystanderKeys)).isEqualTo(bystanderBefore)
-    verify(s3UploadService).purgeSetupPhoto(seeded.offenderUuid)
+    verify(offenderPhotoClient).purge(seeded.offenderUuid)
     verify(s3UploadService).purgeCheckinObjects(seeded.checkinUuid)
 
     // The person's own unnamed list goes, with its items; the named list and one still assigned to
@@ -150,7 +154,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
     delete(orphan).expectStatus().isEqualTo(409)
 
     assertThat(rowsFor(keys)).isEqualTo(before)
-    verify(s3UploadService, never()).purgeSetupPhoto(any())
+    verify(offenderPhotoClient, never()).purge(any())
   }
 
   @Test
@@ -168,7 +172,7 @@ class TestSupportResourceIntegrationTest : IntegrationTestBase() {
   @Test
   fun `S3 failures are reported but do not undo the delete`() {
     seedPerson(orphan)
-    doThrow(RuntimeException("S3 down")).whenever(s3UploadService).purgeSetupPhoto(any())
+    doThrow(RuntimeException("S3 down")).whenever(offenderPhotoClient).purge(any())
 
     delete(orphan).expectStatus().isOk
       .expectBody().jsonPath("$.s3Failures").isEqualTo(1)

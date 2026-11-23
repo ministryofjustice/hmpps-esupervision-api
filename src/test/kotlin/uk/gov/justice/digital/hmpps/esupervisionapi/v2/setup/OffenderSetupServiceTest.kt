@@ -26,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -50,7 +51,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityCh
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.EligibilityResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.PilotPractitionerLookup
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Duration
@@ -69,7 +69,7 @@ class OffenderSetupServiceTest {
   private val clock = Clock.fixed(Instant.parse("2025-12-03T10:00:00Z"), ZoneId.of("UTC"))
   private val offenderRepository: OffenderRepository = mock()
   private val offenderSetupRepository: OffenderSetupRepository = mock()
-  private val s3UploadService: S3UploadService = mock()
+  private val offenderPhotoClient: OffenderPhotoClient = mock()
   private val notificationService: NotificationOrchestratorService = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val transactionTemplate: TransactionTemplate = mock()
@@ -86,7 +86,7 @@ class OffenderSetupServiceTest {
       clock,
       offenderRepository,
       offenderSetupRepository,
-      s3UploadService,
+      offenderPhotoClient,
       notificationService,
       ndiliusApiClient,
       transactionTemplate,
@@ -107,7 +107,7 @@ class OffenderSetupServiceTest {
     reset(
       offenderRepository,
       offenderSetupRepository,
-      s3UploadService,
+      offenderPhotoClient,
       notificationService,
       ndiliusApiClient,
       transactionTemplate,
@@ -288,7 +288,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
     whenever(transactionTemplate.execute<Pair<Offender, Any?>>(any())).thenAnswer {
       val callback =
@@ -305,7 +305,7 @@ class OffenderSetupServiceTest {
     assertNotNull(result)
     assertEquals(offender.uuid, result.uuid)
     assertEquals(1, setup.setupCounter)
-    verify(s3UploadService).isSetupPhotoUploaded(setup)
+    verify(offenderPhotoClient).isUploaded(setup.offender.uuid)
     verify(offenderSetupPersistenceService).completeOffenderSetupAndMaybeCreateCheckin(
       argThat { status == OffenderStatus.VERIFIED },
       anyOrNull(),
@@ -352,7 +352,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setupUuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(false)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(false)
     whenever(ndiliusApiClient.getContactDetails(any())).thenReturn(null)
 
     // When / Then
@@ -373,7 +373,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     // Suspended even though an active event is present - suspension wins.
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(
@@ -406,7 +406,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(
         crn = offender.crn,
@@ -439,7 +439,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(null)
     whenever(offenderSetupPersistenceService.completeOffenderSetupAndMaybeCreateCheckin(any(), anyOrNull(), any()))
       .thenReturn(OffenderSetupPersistenceService.CompletionResult(checkin = UUID.randomUUID()))
@@ -466,7 +466,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(
         crn = offender.crn,
@@ -504,7 +504,7 @@ class OffenderSetupServiceTest {
       dateOfBirth = LocalDate.of(1980, 1, 1),
     )
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(contactDetails)
     whenever(eligibilityChecker.check(any(), any(), any()))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.ELIGIBLE, null, null))
@@ -530,7 +530,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(
         crn = offender.crn,
@@ -567,7 +567,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(
         crn = offender.crn,
@@ -598,7 +598,7 @@ class OffenderSetupServiceTest {
     )
 
     whenever(offenderSetupRepository.findByUuid(setup.uuid)).thenReturn(Optional.of(setup))
-    whenever(s3UploadService.isSetupPhotoUploaded(setup)).thenReturn(true)
+    whenever(offenderPhotoClient.isUploaded(setup.offender.uuid)).thenReturn(true)
     whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(
       ContactDetails(
         crn = offender.crn,

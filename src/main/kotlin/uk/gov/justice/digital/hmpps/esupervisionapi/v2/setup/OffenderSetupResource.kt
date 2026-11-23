@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupCompletionDto
@@ -24,7 +25,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.Locati
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadHashRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.dto.UploadLocationResponse
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.resolveUploadHash
 import java.time.Duration
 import java.util.UUID
@@ -35,7 +35,7 @@ import java.util.UUID
 @Tag(name = "V2 Offender Setup", description = "V2 offender registration/setup endpoints")
 class OffenderSetupResource(
   private val offenderSetupService: OffenderSetupService,
-  private val s3UploadService: S3UploadService,
+  private val offenderPhotoClient: OffenderPhotoClient,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -105,7 +105,7 @@ class OffenderSetupResource(
     )
 
     val duration = Duration.ofMinutes(5)
-    val presigned = s3UploadService.generatePresignedUpload(setup.get(), contentType, duration, hash)
+    val presigned = offenderPhotoClient.presignUpload(setup.get().offender.uuid, contentType, duration, hash)
 
     LOGGER.debug("Generated V2 setup photo upload URL for setup={}", uuid)
 

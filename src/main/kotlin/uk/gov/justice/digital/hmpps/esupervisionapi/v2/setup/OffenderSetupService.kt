@@ -12,6 +12,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.server.ResponseStatusException
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
+import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EligibilityAnswers
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
@@ -37,7 +38,6 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.allocatedPrac
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility.makeCache
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.BadArgumentException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.exceptions.ResourceNotFoundException
-import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
 import java.time.Clock
 import java.time.Duration
@@ -122,7 +122,7 @@ class OffenderSetupService(
   private val clock: Clock,
   private val offenderRepository: OffenderRepository,
   private val offenderSetupRepository: OffenderSetupRepository,
-  private val s3UploadService: S3UploadService,
+  private val offenderPhotoClient: OffenderPhotoClient,
   private val notificationService: NotificationOrchestratorService,
   private val ndiliusApiClient: INdiliusApiClient,
   private val transactionTemplate: TransactionTemplate,
@@ -242,7 +242,7 @@ class OffenderSetupService(
     val setup = offenderSetupRepository.findByUuid(uuid).getOrElse {
       throw BadArgumentException("No setup for given uuid=$uuid")
     }
-    val photoUploaded = s3UploadService.isSetupPhotoUploaded(setup)
+    val photoUploaded = offenderPhotoClient.isUploaded(setup.offender.uuid)
     if (!photoUploaded) {
       throw InvalidOffenderSetupState("No uploaded photo for setup uuid=$uuid", setup)
     }
