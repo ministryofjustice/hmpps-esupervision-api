@@ -59,13 +59,16 @@ class TestSupportPilotCaseIntegrationTest : IntegrationTestBase() {
       .expectBody()
       .jsonPath("$.crn").isEqualTo(pilotCase)
       .jsonPath("$.inPilot").isEqualTo(true)
+      .jsonPath("$.previousInPilot").isEqualTo(false)
       .jsonPath("$.practitionerId").isEqualTo(person.practitionerId)
       .jsonPath("$.status").isEqualTo(person.status.name)
     assertThat(inPilot(pilotCase)).isTrue()
     assertThat(inPilot(bystander)).isFalse()
 
     setPilot(pilotCase, false).expectStatus().isOk
-      .expectBody().jsonPath("$.inPilot").isEqualTo(false)
+      .expectBody()
+      .jsonPath("$.inPilot").isEqualTo(false)
+      .jsonPath("$.previousInPilot").isEqualTo(true)
     assertThat(inPilot(pilotCase)).isFalse()
   }
 

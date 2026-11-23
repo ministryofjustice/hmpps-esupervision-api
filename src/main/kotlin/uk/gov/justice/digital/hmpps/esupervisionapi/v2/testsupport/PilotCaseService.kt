@@ -16,6 +16,8 @@ data class PilotCaseRequest(
 data class PilotCaseResponse(
   val crn: String,
   val inPilot: Boolean,
+  /** The value before this change, so a test can put it back. */
+  val previousInPilot: Boolean,
   /** The practitioner who now has, or no longer has, this pilot case. */
   val practitionerId: String,
   val status: String,
@@ -40,9 +42,10 @@ class PilotCaseService(
     }
     val offender = offenderRepository.findByCrn(crn)
       .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "No person on probation with CRN $crn") }
+    val previousInPilot = offender.inPilot
     offender.inPilot = inPilot
-    LOGGER.info("Test support: crn={} in_pilot={}", crn, inPilot)
-    return PilotCaseResponse(crn, inPilot, offender.practitionerId, offender.status.name)
+    LOGGER.info("Test support: crn={} in_pilot={} (was {})", crn, inPilot, previousInPilot)
+    return PilotCaseResponse(crn, inPilot, previousInPilot, offender.practitionerId, offender.status.name)
   }
 
   companion object {
