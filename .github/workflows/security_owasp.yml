@@ -18,4 +18,5 @@ jobs:
       # legacy NVD JSON 1.1 feeds, which NIST decommissioned — they now return HTTP 403,
       # so dependencyCheckAnalyze fails before writing the SARIF report.
       nvd_feed_version: '2'
+      java_version: "25"
     secrets: inherit

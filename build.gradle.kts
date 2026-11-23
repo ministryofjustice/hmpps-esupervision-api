@@ -88,7 +88,7 @@ dependencies {
 }
 
 kotlin {
-  jvmToolchain(21)
+  jvmToolchain(25)
 }
 
 // Project-specific OWASP suppressions, applied alongside the plugin-generated
@@ -99,7 +99,7 @@ dependencyCheck {
 
 tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+    compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25
     // Pin the Kotlin module name: it becomes the `$suffix` on JVM-mangled `internal`
     // members, which Jackson leaks into JSON (e.g. QuestionTemplateDto.policy ->
     // "policy$hmpps_esupervision_api"). Frozen so gradle-plugin bumps don't shift the
