@@ -109,5 +109,9 @@ tasks {
   }
   withType<Test> {
     useJUnitPlatform()
+    // Spring caches a context per distinct test configuration (each set of @MockitoBeans makes
+    // another), and Gradle's default 512m test heap no longer holds them all: QuestionsIT's context
+    // ran out of heap on main once the eligibility tests were added, depending on test order.
+    maxHeapSize = "2g"
   }
 }
