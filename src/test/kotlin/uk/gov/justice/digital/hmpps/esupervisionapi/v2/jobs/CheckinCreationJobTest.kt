@@ -15,7 +15,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.test.util.ReflectionTestUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -75,22 +74,6 @@ class CheckinCreationJobTest {
     entityManager,
     chunkSize = 100,
     Duration.ofDays(3),
-  )
-
-  private val dryRunJob = CheckinCreationJob(
-    clock,
-    offenderRepository,
-    checkinRepository,
-    ndiliusApiClient,
-    checkinCreationService,
-    deactivationService,
-    mock(),
-    appConfig,
-    jobLogRepository,
-    entityManager,
-    chunkSize = 100,
-    Duration.ofDays(3),
-    eligibilitySyncDryRun = true,
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -196,10 +179,10 @@ class CheckinCreationJobTest {
   }
 
   @Test
-  fun `stale selected event deactivates when new eligibility rules are enabled`() {
+  fun `stale selected event deactivates when the eligibility sync job stops people`() {
     val offender = offender("X000008").apply { currentEvent = 2L }
     stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent))))
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(true)
 
     job.process()
 
@@ -217,10 +200,10 @@ class CheckinCreationJobTest {
   }
 
   @Test
-  fun `in reset - left to the eligibility sync job when new eligibility rules are enabled`() {
+  fun `in reset - left to the eligibility sync job when it stops people`() {
     val offender = offender("X000009")
     stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)))
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(true)
 
     job.process()
 
@@ -232,9 +215,9 @@ class CheckinCreationJobTest {
   fun `in reset - still deactivates while the eligibility sync job is a dry run`() {
     val offender = offender("X000010")
     stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)))
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(false)
 
-    dryRunJob.process()
+    job.process()
 
     verify(deactivationService).deactivateOffender(
       same(offender),
@@ -253,9 +236,9 @@ class CheckinCreationJobTest {
   fun `no active events - still deactivates while the eligibility sync job is a dry run`() {
     val offender = offender("X000011")
     stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = emptyList())))
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(false)
 
-    dryRunJob.process()
+    job.process()
 
     verify(deactivationService).deactivateOffender(
       same(offender),

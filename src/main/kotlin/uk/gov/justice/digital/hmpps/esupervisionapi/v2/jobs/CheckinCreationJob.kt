@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
@@ -77,10 +76,6 @@ class CheckinCreationJob(
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
-  // While the eligibility sync job is a dry run it stops no one, so this job keeps stopping people
-  // who have no active sentence or are in reset, as it does without ESUP_2082. It only hands those
-  // over once the sync job really stops people.
-  @param:Value("\${app.offender-eligibility.sync-dry-run:false}") private val eligibilitySyncDryRun: Boolean = false,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -121,7 +116,8 @@ class CheckinCreationJob(
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
           val checkinsToCreate = ArrayList<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>(contactDetailsMap.size)
           val infoByCrn = chunk.associateBy { it.crn }
-          val syncJobStopsPeople = appConfig.enabledFeatures.contains(Feature.ESUP_2082) && !eligibilitySyncDryRun
+          // Left to the eligibility sync job once it stops people - see AppConfig.eligibilitySyncStopsPeople
+          val syncJobStopsPeople = appConfig.eligibilitySyncStopsPeople
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!

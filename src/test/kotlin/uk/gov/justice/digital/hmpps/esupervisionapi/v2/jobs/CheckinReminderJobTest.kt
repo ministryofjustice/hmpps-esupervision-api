@@ -15,7 +15,6 @@ import org.mockito.kotlin.whenever
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
@@ -73,20 +72,6 @@ class CheckinReminderJobTest {
     appConfig = appConfig,
   )
 
-  private val dryRunJob = CheckinReminderJob(
-    clock,
-    checkinRepository,
-    ndiliusApiClient,
-    notificationService,
-    deactivationService,
-    jobLogRepository,
-    transactionTemplate,
-    eventAuditService,
-    genericNotificationRepository,
-    appConfig = appConfig,
-    eligibilitySyncDryRun = true,
-  )
-
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
 
   @Test
@@ -127,10 +112,10 @@ class CheckinReminderJobTest {
   }
 
   @Test
-  fun `stale selected event deactivates when new eligibility rules are enabled`() {
+  fun `stale selected event deactivates when the eligibility sync job stops people`() {
     val checkin = checkin("X000005").apply { offender.currentEvent = 2L }
     val cd = details("X000005", events = listOf(anEvent))
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(true)
     stub(listOf(checkin), listOf(cd))
 
     job.process()
@@ -149,10 +134,10 @@ class CheckinReminderJobTest {
   }
 
   @Test
-  fun `in reset - left to the eligibility sync job when new eligibility rules are enabled`() {
+  fun `in reset - left to the eligibility sync job when it stops people`() {
     val checkin = checkin("X000007")
     val cd = details("X000007", events = listOf(anEvent), suspended = true)
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(true)
     stub(listOf(checkin), listOf(cd))
 
     job.process()
@@ -165,10 +150,10 @@ class CheckinReminderJobTest {
   fun `in reset - still deactivates while the eligibility sync job is a dry run`() {
     val checkin = checkin("X000008")
     val cd = details("X000008", events = listOf(anEvent), suspended = true)
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(false)
     stub(listOf(checkin), listOf(cd))
 
-    dryRunJob.process()
+    job.process()
 
     verify(deactivationService).deactivateOffender(
       same(checkin.offender),
@@ -184,10 +169,32 @@ class CheckinReminderJobTest {
   }
 
   @Test
+  fun `no active events - still deactivates while the eligibility sync job is a dry run`() {
+    val checkin = checkin("X000009")
+    val cd = details("X000009", events = emptyList())
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(false)
+    stub(listOf(checkin), listOf(cd))
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(checkin.offender),
+      eq("Automatically deactivated: no active sentence"),
+      anyOrNull<String>(),
+      eq(cd),
+      eq(false),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
+    )
+    verify(notificationService, never()).sendReminderCheckinNotifications(any(), any())
+  }
+
+  @Test
   fun `contact suspension keeps precedence when both it and the saved event are stale`() {
     val checkin = checkin("X000006").apply { offender.currentEvent = 1L }
     val cd = details("X000006", events = listOf(anEvent.copy(number = 2L)), suspended = true)
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(true)
     stub(listOf(checkin), listOf(cd))
 
     job.process()
