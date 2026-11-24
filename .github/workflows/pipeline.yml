@@ -50,7 +50,7 @@ jobs:
       gradle-command: 'BUILD_NUMBER=${{ needs.app_version.outputs.version }} ./gradlew assemble check'
       # Upload the jar whenever the docker image will be built
       upload-build-artifacts: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      java-version: "21"
+      java-version: "25"
   build:
     name: Build docker image from hmpps-github-actions
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
