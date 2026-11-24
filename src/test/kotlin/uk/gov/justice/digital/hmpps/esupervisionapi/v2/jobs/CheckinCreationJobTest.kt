@@ -77,6 +77,22 @@ class CheckinCreationJobTest {
     Duration.ofDays(3),
   )
 
+  private val dryRunJob = CheckinCreationJob(
+    clock,
+    offenderRepository,
+    checkinRepository,
+    ndiliusApiClient,
+    checkinCreationService,
+    deactivationService,
+    mock(),
+    appConfig,
+    jobLogRepository,
+    entityManager,
+    chunkSize = 100,
+    Duration.ofDays(3),
+    eligibilitySyncDryRun = true,
+  )
+
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
 
   init {
@@ -196,6 +212,60 @@ class CheckinCreationJobTest {
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
       expectedCurrentEvent = eq(2L),
       deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `in reset - left to the eligibility sync job when new eligibility rules are enabled`() {
+    val offender = offender("X000009")
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)))
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+
+    job.process()
+
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+    verify(checkinCreationService).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `in reset - still deactivates while the eligibility sync job is a dry run`() {
+    val offender = offender("X000010")
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)))
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+
+    dryRunJob.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      any(),
+      anyOrNull(),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `no active events - still deactivates while the eligibility sync job is a dry run`() {
+    val offender = offender("X000011")
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = emptyList())))
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+
+    dryRunJob.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      any(),
+      anyOrNull(),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
   }

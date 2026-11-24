@@ -73,6 +73,20 @@ class CheckinReminderJobTest {
     appConfig = appConfig,
   )
 
+  private val dryRunJob = CheckinReminderJob(
+    clock,
+    checkinRepository,
+    ndiliusApiClient,
+    notificationService,
+    deactivationService,
+    jobLogRepository,
+    transactionTemplate,
+    eventAuditService,
+    genericNotificationRepository,
+    appConfig = appConfig,
+    eligibilitySyncDryRun = true,
+  )
+
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
 
   @Test
@@ -130,6 +144,41 @@ class CheckinReminderJobTest {
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
       expectedCurrentEvent = eq(2L),
       deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
+    )
+    verify(notificationService, never()).sendReminderCheckinNotifications(any(), any())
+  }
+
+  @Test
+  fun `in reset - left to the eligibility sync job when new eligibility rules are enabled`() {
+    val checkin = checkin("X000007")
+    val cd = details("X000007", events = listOf(anEvent), suspended = true)
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    stub(listOf(checkin), listOf(cd))
+
+    job.process()
+
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+    verify(notificationService).sendReminderCheckinNotifications(same(checkin), eq(cd))
+  }
+
+  @Test
+  fun `in reset - still deactivates while the eligibility sync job is a dry run`() {
+    val checkin = checkin("X000008")
+    val cd = details("X000008", events = listOf(anEvent), suspended = true)
+    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    stub(listOf(checkin), listOf(cd))
+
+    dryRunJob.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(checkin.offender),
+      eq("Automatically deactivated: contact is suspended (in reset) in NDelius"),
+      anyOrNull<String>(),
+      eq(cd),
+      eq(false),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
     )
     verify(notificationService, never()).sendReminderCheckinNotifications(any(), any())
   }

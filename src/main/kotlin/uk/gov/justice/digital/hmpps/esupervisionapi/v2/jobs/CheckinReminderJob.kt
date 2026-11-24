@@ -2,6 +2,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -43,6 +44,10 @@ class CheckinReminderJob(
   private val eventAuditService: EventAuditService,
   private val genericNotificationRepository: GenericNotificationRepository,
   private val appConfig: AppConfig,
+  // While the eligibility sync job is a dry run it stops no one, so this job keeps stopping people
+  // who have no active sentence or are in reset, as it does without ESUP_2082. It only hands those
+  // over once the sync job really stops people.
+  @param:Value("\${app.offender-eligibility.sync-dry-run:false}") private val eligibilitySyncDryRun: Boolean = false,
 ) {
 
   @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
@@ -108,7 +113,7 @@ class CheckinReminderJob(
         // Send notifications with pre-fetched contact details - NO transaction
         val sentNotifications = mutableListOf<Pair<OffenderCheckin, ContactDetails>>()
         val notSentNotifications = mutableSetOf<Int>()
-        val newEligibilityRulesEnabled = appConfig.enabledFeatures.contains(Feature.ESUP_2082)
+        val syncJobStopsPeople = appConfig.enabledFeatures.contains(Feature.ESUP_2082) && !eligibilitySyncDryRun
         checkins.forEachIndexed { index, checkin ->
           try {
             val contactDetails = contactDetailsMap[checkin.offender.crn]
@@ -122,7 +127,7 @@ class CheckinReminderJob(
                 notSentNotifications.add(index)
                 "not sent (missing details)"
               }
-              ineligibility != null && (!newEligibilityRulesEnabled || savedSelectionIsInactive) -> {
+              ineligibility != null && (!syncJobStopsPeople || savedSelectionIsInactive) -> {
                 // POP is no longer eligible (no active events, or in reset) - stop their online check-ins.
                 // Deactivation cancels this check-in, so it is NOT recorded as a reminder (notSent) below.
                 val deactivated = offenderDeactivationService.deactivateOffender(
