@@ -6,29 +6,18 @@
 
 The eSupervision API provides backend services for remote probation check-ins, enabling offenders to complete video check-ins and practitioners to review submissions.
 
-## V2 Architecture
-
-The API has been refactored to **V2** with significant architectural improvements:
-
-| Feature | Description |
-|---------|-------------|
-| **No PII Storage** | Personal data fetched on-demand from NDelius (source of truth) |
-| **Complete Isolation** | V2 code in separate `v2` package with `_v2` database tables |
-| **Domain Events** | Full integration with AWS SQS for event publishing to NDelius |
-| **Performance** | Batch operations, fetch joins, lazy loading for S3 URLs |
-
 ### Documentation
 
 | Document | Description |
 |----------|-------------|
-| **[V2 Overview](docs/v2/README.md)** | Architecture overview and package structure |
+| **[Overview](docs/v2/README.md)** | Architecture overview and package structure |
 | **[User Journeys](docs/v2/USER_JOURNEYS.md)** | Setup, checkin, and review flows |
 | **[Domain Events](docs/v2/DOMAIN_EVENTS.md)** | Event publishing and NDelius integration |
 | **[Notifications](docs/v2/NOTIFICATIONS.md)** | SMS/Email notification system |
 | **[Background Jobs](docs/v2/BACKGROUND_JOBS.md)** | Scheduled jobs |
 | **[Data Model](docs/v2/DATA_MODEL.md)** | Entity relationships and schema |
+| **[Local Development](docs/local-development.md)** | Setup for local development |
 | **[Implementation Notes](docs/v2/IMPLEMENTATION_NOTES.md)** | UI changes, tests, GDS compliance |
-| **[V1→V2 Migration](docs/V1_TO_V2_MIGRATION.md)** | Data migration guide |
 
 ### Key V2 Endpoints
 
@@ -43,12 +32,12 @@ The API has been refactored to **V2** with significant architectural improvement
 ```mermaid
 flowchart LR
     subgraph Setup
-        A[Practitioner] -->|Register Offender| B[/v2/offender_setup]
+        A[Practitioner] --> |Register Offender| B["/v2/offender_setup"]
         B -->|Upload Photo| C[S3]
     end
 
     subgraph Checkin
-        D[Offender] -->|Complete Checkin| E[/v2/offender_checkins]
+        D[Offender] -->|Complete Checkin| E["/v2/offender_checkins"]
         E -->|Verify Face| F[Rekognition]
         E -->|Upload Video| C
     end
@@ -60,65 +49,14 @@ flowchart LR
     subgraph Events
         E -->|Publish| H[SQS]
         H -->|Callback| I[NDelius]
-        I -->|Get Details| J[/v2/events]
+        I -->|Get Details| J["/v2/events"]
     end
 ```
 
 ## HMPPS Documentation Links 
 
-Security policy is located [here](https://github.com/ministryofjustice/hmpps-template-kotlin/security/policy).
-
-Documentation to create new service is located [here](https://tech-docs.hmpps.service.justice.gov.uk/applicationplatform/newservice-GHA/).
-
-### Slack channel for release notifications
-
-By default, release notifications are only enabled for production. The circleci configuration can be amended to send
-release notifications for deployments to other environments if required. Note that if the configuration is amended,
-the slack channel should then be amended to your own team's channel as `dps-releases` is strictly for production release
-notifications. If the slack channel is set to something other than `dps-releases`, production release notifications
-will still automatically go to `dps-releases` as well. This is configured by `releases-slack-channel` in
-`.circleci/config.yml`.
-
-### Slack channel for pipeline security notifications
-
-Ths channel should be specific to your team and is for daily / weekly security scanning job results. It is your team's
-responsibility to keep up-to-date with security issues and update your application so that these jobs pass. You will
-only be notified if the jobs fail. The scan results can always be found in circleci for your project. This is
-configured by `alerts-slack-channel` in `.circleci/config.yml`.
-
-### Non production kubernetes alerts
-
-By default Prometheus alerts are created in the application namespaces to monitor your application e.g. if your
-application is crash looping, there are a significant number of errors from the ingress. Since Prometheus runs in
-cloud platform AlertManager needs to be setup first with your channel. Please see
-[Create your own custom alerts](https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html)
-in the Cloud Platform user guide. Once that is setup then the `custom severity label` can be used for
-`alertSeverity` in the `helm_deploy/values-*.yaml` configuration.
-
-Normally it is worth setting up two separate labels and therefore two separate slack channels - one for your production
-alerts and one for your non-production alerts. Using the same channel can mean that production alerts are sometimes
-lost within non-production issues.
-
-### Production kubernetes alerts
-
-This is the severity label for production, determined by the `custom severity label`. See the above
-#non-production-kubernetes-alerts for more information. This is configured in `helm_deploy/values-prod.yaml`.
-
-### Product ID
-
-This is so that we can link a component to a product and thus provide team and product information in the Developer
-Portal. Refer to the developer portal at https://developer-portal.hmpps.service.justice.gov.uk/products to find your
-product id. This is configured in `helm_deploy/<project_name>/values.yaml`.
-
-## Common Kotlin patterns
-
-Many patterns have evolved for HMPPS Kotlin applications. Using these patterns provides consistency across our suite of 
-Kotlin microservices and allows you to concentrate on building  your business needs rather than reinventing the 
-technical approach.
-
-Documentation for these patterns can be found in the [HMPPS tech docs](https://tech-docs.hmpps.service.justice.gov.uk/common-kotlin-patterns/). 
-If this documentation is incorrect or needs improving please report to [#ask-prisons-digital-sre](https://moj.enterprise.slack.com/archives/C06MWP0UKDE)
-or [raise a PR](https://github.com/ministryofjustice/hmpps-tech-docs). 
+* Security policy is located [here](https://github.com/ministryofjustice/hmpps-template-kotlin/security/policy).
+* Documentation to create new service is located [here](https://tech-docs.hmpps.service.justice.gov.uk/applicationplatform/newservice-GHA/).
 
 ## Running the application locally
 

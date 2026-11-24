@@ -7,18 +7,32 @@ Localstack is used for stubbing AWS services (execept AWS Rekognition). For othe
 
 ### HMPPS Auth (in a container)
 
-You should have the service running in a container from running docker compose.
+Start the dependencies without the application container:
 
-Log in at http://localhost:8090/auth/ui
+```sh
+podman compose up --scale hmpps-esupervision-api=0
+```
 
-Default username: `AUTH_ADM`
-Default password: `password123456`
+Once Auth is ready, run this separate command from the repository root (requires Python 3, no extra packages):
 
-In `hmpps-typescript-template` client, under "Authorities" add the following roles:
-- ESUPERVISION__PRACTITIONER__RW
+```sh
+./scripts/auth-local-setup.py
+```
+The default local credentials are username `AUTH_ADM` and password `password123456`.
+The command targets only `http://localhost:8090/auth`; it does not depend on Docker.
 
-In `hmpps-typescript-template-system` client, under "Authorities" add the following roles:
-- ESUPERVISION__ESUPERVISION_UI
+The command:
+
+- adds `ESUPERVISION__ESUPERVISION_UI` to the Authorities of the `hmpps-typescript-template-system` client
+- adds `ESUPERVISION__PRACTITIONER__RW` to the "Authorised roles" of the `hmpps-typescript-template`
+  service details (equivalent to "Add service details" on the client page), creating the service if needed,
+  and makes sure the service is enabled
+
+It preserves existing roles and other settings, then verifies the saved configuration.
+It is safe to rerun: existing roles are left unchanged. Rerun after recreating the Auth container.
+
+For manual inspection, log in at http://localhost:8090/auth/ui, then open
+http://localhost:8090/auth/new-ui/clients or http://localhost:8090/auth/ui/services.
 
 ### S3
 
