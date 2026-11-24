@@ -6,11 +6,6 @@ plugins {
   kotlin("plugin.spring") version "2.4.21"
 }
 
-// Boot 4.1.2 manages jackson 3.1.7 / 2.21.7, both vulnerable to CVE-2026-110879.
-// Drop these overrides once the Boot BOM ships >= 3.1.8 / 2.21.8.
-extra["jackson-bom.version"] = "3.1.8"
-extra["jackson-2-bom.version"] = "2.21.8"
-
 // utils/CheckinNoteExportTool.kt has its own main(), so Spring Boot cannot infer this one.
 springBoot {
   mainClass.set("uk.gov.justice.digital.hmpps.esupervisionapi.AppKt")
@@ -88,7 +83,7 @@ dependencies {
 }
 
 kotlin {
-  jvmToolchain(21)
+  jvmToolchain(25)
 }
 
 // Project-specific OWASP suppressions, applied alongside the plugin-generated
@@ -99,7 +94,7 @@ dependencyCheck {
 
 tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+    compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25
     // Pin the Kotlin module name: it becomes the `$suffix` on JVM-mangled `internal`
     // members, which Jackson leaks into JSON (e.g. QuestionTemplateDto.policy ->
     // "policy$hmpps_esupervision_api"). Frozen so gradle-plugin bumps don't shift the
