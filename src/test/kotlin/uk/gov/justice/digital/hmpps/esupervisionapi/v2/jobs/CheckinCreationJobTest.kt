@@ -15,7 +15,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.test.util.ReflectionTestUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
@@ -180,10 +179,10 @@ class CheckinCreationJobTest {
   }
 
   @Test
-  fun `stale selected event deactivates when new eligibility rules are enabled`() {
+  fun `stale selected event deactivates when the eligibility sync job stops people`() {
     val offender = offender("X000008").apply { currentEvent = 2L }
     stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent))))
-    whenever(appConfig.enabledFeatures).thenReturn(setOf(Feature.ESUP_2082))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(true)
 
     job.process()
 
@@ -196,6 +195,60 @@ class CheckinCreationJobTest {
       eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE),
       expectedCurrentEvent = eq(2L),
       deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_SELECTED_EVENT_NO_LONGER_ACTIVE.deliusOutcomeCode),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `in reset - left to the eligibility sync job when it stops people`() {
+    val offender = offender("X000009")
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(true)
+
+    job.process()
+
+    verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+    verify(checkinCreationService).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `in reset - still deactivates while the eligibility sync job is a dry run`() {
+    val offender = offender("X000010")
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = listOf(anEvent), suspended = true)))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(false)
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      any(),
+      anyOrNull(),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_CONTACT_SUSPENDED.deliusOutcomeCode),
+    )
+    verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `no active events - still deactivates while the eligibility sync job is a dry run`() {
+    val offender = offender("X000011")
+    stubEligible(listOf(offender), mapOf(offender.crn to details(offender.crn, events = emptyList())))
+    whenever(appConfig.eligibilitySyncStopsPeople).thenReturn(false)
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      any(),
+      anyOrNull(),
+      anyOrNull(),
+      any(),
+      eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS),
+      expectedCurrentEvent = eq(null),
+      deliusOutcomeCode = eq(OffenderAuditEventType.OFFENDER_AUTO_DEACTIVATED_NO_ACTIVE_EVENTS.deliusOutcomeCode),
     )
     verify(checkinCreationService, never()).prepareCheckinForOffender(any(), any(), anyOrNull())
   }
