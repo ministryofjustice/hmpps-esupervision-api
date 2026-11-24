@@ -16,6 +16,7 @@ class AppConfig(
   @Value($$"${app.features.esup-2082:false}") val esup2082NewEligibilityRules: Boolean,
   @Value($$"${app.features.esup-2305:false}") val esup2305DeliusEventSelection: Boolean,
   @Value($$"${app.features.esup-2223:false}") val esup2223UpcomingCheckins: Boolean,
+  @Value($$"${app.offender-eligibility.sync-dry-run:false}") val eligibilitySyncDryRun: Boolean,
   val enabledFeatures: Set<Feature> = listOfNotNull(
     if (esup1239ProxyLinks) Feature.ESUP_1239 else null,
     if (esup1763RemoveSnapshots) Feature.ESUP_1763 else null,
@@ -28,6 +29,15 @@ class AppConfig(
   init {
     LOG.info("Enabled features: $enabledFeatures")
   }
+
+  /**
+   * Does the nightly eligibility sync job stop people? Only with ESUP_2082 on and not as a dry run.
+   * Until it does, the check-in creation and reminder jobs keep stopping people who have no active
+   * sentence or are in reset; once it does, they leave those people to it. The sync job's CronJob
+   * must also be unsuspended in the same release, or no one stops them - the app can't see that.
+   */
+  val eligibilitySyncStopsPeople: Boolean
+    get() = Feature.ESUP_2082 in enabledFeatures && !eligibilitySyncDryRun
 
   // WARNING: this depends on the routes in the UI!
   fun checkinSubmitUrl(checkinUuid: UUID): URI = URI(

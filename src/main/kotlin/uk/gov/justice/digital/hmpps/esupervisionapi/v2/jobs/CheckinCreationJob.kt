@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
-import uk.gov.justice.digital.hmpps.esupervisionapi.config.Feature
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinCreatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinDto
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLogsDto
@@ -117,13 +116,14 @@ class CheckinCreationJob(
           val contactDetailsMap = getContactDetailsMap(chunk.map { it.crn }.toList(), metrics.chunks)
           val checkinsToCreate = ArrayList<Pair<OffenderCheckin, PartialCheckinCreatedEvent>>(contactDetailsMap.size)
           val infoByCrn = chunk.associateBy { it.crn }
-          val newEligibilityRulesEnabled = appConfig.enabledFeatures.contains(Feature.ESUP_2082)
+          // Left to the eligibility sync job once it stops people - see AppConfig.eligibilitySyncStopsPeople
+          val syncJobStopsPeople = appConfig.eligibilitySyncStopsPeople
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!
             val ineligibility = checkinIneligibilityReason(info, contactDetails)
             val savedSelectionIsInactive = info.currentEvent != null && contactDetails.events.none { it.number == info.currentEvent }
-            if (ineligibility != null && (!newEligibilityRulesEnabled || savedSelectionIsInactive)) {
+            if (ineligibility != null && (!syncJobStopsPeople || savedSelectionIsInactive)) {
               deactivateOffender(ineligibility, info, contactDetails, metrics)
             } else {
               prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id])?.let { checkinsToCreate.add(it) }
