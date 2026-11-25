@@ -294,7 +294,7 @@ class EventAuditService(
       )
 
       CheckinAuditEventType.CHECKIN_REVIEWED -> {
-        val notes = if (checkin.reviewedBy != null && checkin.reviewedBy != this.practitionerId) {
+        val notes = if (checkin.reviewedBy != null && !checkin.reviewedBy.equals(this.practitionerId, ignoreCase = true)) {
           "Reviewed by ${checkin.reviewedBy} (possibly covering for ${this.practitionerId})"
         } else {
           null

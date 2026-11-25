@@ -1,17 +1,23 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit
 
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAudit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ContactPreference
@@ -83,5 +89,59 @@ class EventAuditServiceTest {
     service.recordOffenderEvent(OffenderAuditEventType.OFFENDER_DEACTIVATED, offender.dto(null), null, "reason")
 
     verify(auditRepository).save(any())
+  }
+
+  @Test
+  fun `review by the assigned practitioner has no covering note`() {
+    val audit = recordReviewAudit(reviewedBy = "PRACT001")
+
+    assertEquals(CheckinAuditEventType.CHECKIN_REVIEWED.name, audit.eventType)
+    assertEquals("PRACT001", audit.practitionerId)
+    assertNull(audit.notes)
+  }
+
+  @Test
+  fun `review by the assigned practitioner with a different username case has no covering note`() {
+    val audit = recordReviewAudit(reviewedBy = "PrAcT001")
+
+    assertNull(audit.notes)
+  }
+
+  @Test
+  fun `review by a different practitioner records a covering note`() {
+    val audit = recordReviewAudit(reviewedBy = "OtherUser")
+
+    assertEquals("Reviewed by OtherUser (possibly covering for PRACT001)", audit.notes)
+  }
+
+  private fun recordReviewAudit(reviewedBy: String?): EventAudit {
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("John", "Doe"),
+      practitioner = PractitionerDetails(name = Name("P", "Q")),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+    )
+    val checkin = OffenderCheckin(
+      uuid = UUID.randomUUID(),
+      offender = offender,
+      status = CheckinStatus.REVIEWED,
+      dueDate = LocalDate.now(clock),
+      createdAt = clock.instant(),
+      createdBy = offender.practitionerId,
+      reviewedBy = reviewedBy,
+    )
+    val event = CheckinReviewedEvent(
+      checkinId = checkin.id,
+      offenderId = offender.id,
+      practitionerId = offender.practitionerId,
+      checkin = checkin.dto(details),
+      offenderContactPreference = ContactPreference.EMAIL,
+    )
+
+    service.recordCheckinReviewed(checkin, event)
+
+    val audit = argumentCaptor<EventAudit>()
+    verify(auditRepository).save(audit.capture())
+    return audit.firstValue
   }
 }
