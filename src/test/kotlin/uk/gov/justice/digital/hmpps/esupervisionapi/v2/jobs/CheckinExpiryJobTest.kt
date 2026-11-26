@@ -3,11 +3,14 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.same
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
@@ -22,6 +25,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.deliusevents.CheckinDeliusEventService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -55,6 +59,7 @@ class CheckinExpiryJobTest {
     on { enabled() } doAnswer { true }
   }
   private val eventAuditService: EventAuditService = mock()
+  private val practitionerReconciliationService: PractitionerReconciliationService = mock()
   private val appConfig: AppConfig = mock {
     on { esup2305DeliusEventSelection } doAnswer { true }
   }
@@ -70,6 +75,7 @@ class CheckinExpiryJobTest {
     upcomingCheckinService = mock(),
     checkinDeliusEventService = checkinDeliusEventService,
     appConfig = appConfig,
+    practitionerReconciliationService = practitionerReconciliationService,
   )
 
   @Test
@@ -118,6 +124,24 @@ class CheckinExpiryJobTest {
     verify(checkinDeliusEventService, never()).recordCheckinUpdate(any(), any(), any(), any())
     verify(notificationService, never()).sendCheckinExpiredNotifications(any(), any())
     verify(eventAuditService, never()).recordCheckinExpired(any())
+  }
+
+  @Test
+  fun `a reconciliation failure does not prevent expiry`() {
+    val failed = checkin()
+    val succeeding = checkin().also { it.offender.crn = "X654321" }
+    whenever(checkinRepository.findEligibleForExpiry(any())).thenAnswer { Stream.of(failed, succeeding) }
+    val firstDetails = ContactDetails(crn = failed.offender.crn, name = Name("First", "Last"), dateOfBirth = LocalDate.of(1980, 1, 1))
+    val secondDetails = firstDetails.copy(crn = succeeding.offender.crn)
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(listOf(firstDetails, secondDetails))
+    doThrow(DataAccessResourceFailureException("database failure")).whenever(practitionerReconciliationService).reconcile(same(failed.offender), eq(firstDetails))
+    whenever(checkinRepository.updateStatusForCheckinId(any(), eq(CheckinStatus.CREATED), eq(CheckinStatus.EXPIRED))).thenReturn(1)
+
+    job.process()
+
+    verify(practitionerReconciliationService).reconcile(succeeding.offender, secondDetails)
+    verify(notificationService).sendCheckinExpiredNotifications(succeeding, secondDetails)
+    verify(notificationService).sendCheckinExpiredNotifications(same(failed), eq(firstDetails))
   }
 
   private fun checkin(): OffenderCheckin {

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.reset
@@ -25,6 +26,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
@@ -37,6 +39,8 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -67,6 +71,12 @@ class OffenderEventListenerIT : IntegrationTestBase() {
 
   @Autowired
   private lateinit var offenderRepository: OffenderRepository
+
+  @Autowired
+  private lateinit var practitionerReconciliationService: PractitionerReconciliationService
+
+  @Autowired
+  private lateinit var eventAuditRepository: EventAuditRepository
 
   @Autowired
   private lateinit var offenderPersistenceService: OffenderPersistenceService
@@ -114,7 +124,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
   @DirtiesContext
   fun `batch waits for the committed deactivation listener before recording completion`() {
     val offender = offenderRepository.save(
-      offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED).toEntity(),
+      offenderTemplate.copy(firstCheckin = LocalDate.now(), status = OffenderStatus.VERIFIED, practitionerId = "OLD").toEntity(),
     )
     val setup = offenderSetupRepository.save(OffenderSetup(randomUUID(), offender, offender.practitionerId, clock.instant()))
     val details = ContactDetails(
@@ -123,6 +133,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       events = emptyList(),
       contactSuspended = false,
       dateOfBirth = LocalDate.of(1980, 1, 1),
+      practitioner = PractitionerDetails(name = Name("New", "Practitioner"), username = "NEW", email = "new@example.com"),
     )
     val ndelius: INdiliusApiClient = mock {
       on { getContactDetailsForMultiple(any()) }.thenReturn(listOf(details))
@@ -159,6 +170,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       pilotPractitionerLookup = mock(),
       ruleSet = "TEST_RULE_SET",
       dryRun = false,
+      practitionerReconciliationService = practitionerReconciliationService,
     )
     val runner = Executors.newSingleThreadExecutor()
     try {
@@ -168,6 +180,8 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       assertThat(result.isDone).isFalse()
       verify(jobLogs).saveAndFlush(any<JobLog>())
       assertThat(offenderRepository.findById(offender.id).orElseThrow().status).isEqualTo(OffenderStatus.INACTIVE)
+      assertThat(offenderRepository.findById(offender.id).orElseThrow().practitionerId).isEqualTo("NEW")
+      assertThat(eventAuditRepository.findByCrnOrderByOccurredAt(setOf(offender.crn)).last().practitionerId).isEqualTo("NEW")
       assertThat(
         outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, setup.id).orElseThrow().status,
       ).isEqualTo(OutboxItemStatus.INITIAL)
@@ -176,7 +190,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       result.get(5, TimeUnit.SECONDS)
 
       verify(jobLogs, times(2)).saveAndFlush(any<JobLog>())
-      verify(notificationService).sendDeactivationCompletedNotifications(any())
+      verify(notificationService).sendDeactivationCompletedNotifications(argThat { this.offender.practitionerId == "NEW" })
       assertThat(
         outboxItemRepository.findByTypeAndEntityId(OutboxItemType.OFFENDER_DEACTIVATED, setup.id).orElseThrow().status,
       ).isEqualTo(OutboxItemStatus.SENT)
@@ -184,6 +198,7 @@ class OffenderEventListenerIT : IntegrationTestBase() {
       finishListener.countDown()
       runner.shutdownNow()
       check(runner.awaitTermination(5, TimeUnit.SECONDS))
+      eventAuditRepository.deleteAll(eventAuditRepository.findByCrnOrderByOccurredAt(setOf(offender.crn)))
     }
   }
 

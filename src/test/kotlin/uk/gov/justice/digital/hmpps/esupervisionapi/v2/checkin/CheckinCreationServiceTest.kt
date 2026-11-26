@@ -49,7 +49,7 @@ class CheckinCreationServiceTest {
 
   // the offender's check-ins haven't been stopped
   private val offenderRepository: OffenderRepository = mock { on { findStatus(any()) } doReturn OffenderStatus.VERIFIED.name }
-  private val service = CheckinCreationService(clock, offenderRepository, mock(), mock(), mock(), mock(), Duration.ofDays(3), mock(), persistence, appConfig)
+  private val service = CheckinCreationService(clock, offenderRepository, mock(), mock(), mock(), mock(), Duration.ofDays(3), mock(), persistence, appConfig, mock())
   private val offender = offenderTemplate.toEntity()
   private val today = LocalDate.now(clock)
   private val sentence = Event.Sentence(today.minusMonths(1), "Community order", today.plusMonths(6))
@@ -147,6 +147,7 @@ class ScheduledCheckinActivationTest {
     transactionTemplate = mock(),
     checkinPersistenceService = checkinPersistenceService,
     appConfig = mock(),
+    practitionerReconciliationService = mock(),
   )
 
   private val offender = offenderTemplate.toEntity().also { ReflectionTestUtils.setField(it, "id", 7L) }

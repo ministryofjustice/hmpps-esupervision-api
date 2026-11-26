@@ -12,7 +12,9 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
@@ -35,6 +37,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.notifications.NotificationTy
 import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.photos.ReferencePhotoLocation
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinContactDetailsService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinLinkStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinPersistenceService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinReviewInfo
@@ -59,6 +62,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepositor
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PersonalDetailsVerificationUnavailableException
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.AutomatedIdVerificationResult
@@ -110,6 +114,7 @@ class CheckinServiceTest {
   private val appConfig: AppConfig = mock()
   private val objectMapper = jacksonObjectMapper()
   private val transactionTemplate: TransactionTemplate = mock()
+  private val practitionerReconciliationService: PractitionerReconciliationService = mock()
 
   private lateinit var service: CheckinService
 
@@ -147,6 +152,8 @@ class CheckinServiceTest {
     appConfig,
     transactionTemplate,
     allowPastDueDate,
+    practitionerReconciliationService,
+    CheckinContactDetailsService(ndiliusApiClient, practitionerReconciliationService),
   )
 
   @Test
@@ -751,6 +758,10 @@ class CheckinServiceTest {
     whenever(checkinRepository.findByUuid(uuid)).thenReturn(Optional.of(checkin))
     whenever(checkinRepository.save(any<OffenderCheckin>())).thenAnswer { it.getArgument<OffenderCheckin>(0) }
     whenever(offenderEventLogRepository.save(any<OffenderEventLog>())).thenAnswer { it.getArgument<OffenderEventLog>(0) }
+    doAnswer {
+      assertFalse(checkin.sensitive)
+      null
+    }.whenever(practitionerReconciliationService).reconcile(eq(offender), anyOrNull())
 
     val result = service.annotateCheckin(uuid, request)
 

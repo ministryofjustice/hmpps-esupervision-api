@@ -8,6 +8,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -16,6 +17,7 @@ import org.mockito.kotlin.same
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.test.util.ReflectionTestUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
@@ -30,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -60,6 +63,7 @@ class OffenderEligibilitySyncJobTest {
   private val offenderSetupRepository: OffenderSetupRepository = mock()
   private val ndiliusApiClient: INdiliusApiClient = mock()
   private val eligibilityChecker: EligibilityChecker = mock()
+  private val practitionerReconciliationService: PractitionerReconciliationService = mock()
   private val deactivationService: OffenderDeactivationService = mock()
   private val appConfig: AppConfig = mock()
   private val offenderEventExecutor: ThreadPoolTaskExecutor = mock()
@@ -89,6 +93,7 @@ class OffenderEligibilitySyncJobTest {
     pilotPractitionerLookup = pilotPractitionerLookup,
     ruleSet = SYNC_RULE_SET,
     dryRun = dryRun,
+    practitionerReconciliationService = practitionerReconciliationService,
   )
 
   private val job get() = job()
@@ -227,6 +232,38 @@ class OffenderEligibilitySyncJobTest {
   }
 
   @Test
+  fun `reconciles allocation before building deactivation event`() {
+    val offender = offender("X000001", id = 1).apply { practitionerId = "OLD" }
+    val details = contactDetails(offender.crn, allocatedUsername = "NEW")
+    givenPage(listOf(offender), listOf(details))
+    whenever(eligibilityChecker.check(same(offender), eq(details.name), any(), eq(SYNC_RULE_SET)))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible", "RULE"))
+    doAnswer { offender.practitionerId = "NEW" }.whenever(practitionerReconciliationService).reconcile(offender, details)
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(
+      same(offender),
+      argThat { this.offender.practitionerId == "NEW" },
+    )
+    verify(ndiliusApiClient).getContactDetailsForMultiple(listOf(offender.crn))
+  }
+
+  @Test
+  fun `reconciliation failure does not prevent deactivation`() {
+    val offender = offender("X000001", id = 1).apply { practitionerId = "OLD" }
+    val details = contactDetails(offender.crn, allocatedUsername = "NEW")
+    givenPage(listOf(offender), listOf(details))
+    whenever(eligibilityChecker.check(same(offender), eq(details.name), any(), eq(SYNC_RULE_SET)))
+      .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, "Ineligible", "RULE"))
+    doThrow(DataAccessResourceFailureException("database failure")).whenever(practitionerReconciliationService).reconcile(offender, details)
+
+    job.process()
+
+    verify(deactivationService).deactivateOffender(same(offender), argThat { this.offender.practitionerId == "OLD" })
+  }
+
+  @Test
   fun `eligibility failure for one offender does not stop later pages`() {
     val failing = offender("X000002", id = 2)
     val ineligible = offender("X000003", id = 3)
@@ -272,6 +309,7 @@ class OffenderEligibilitySyncJobTest {
 
     verify(eligibilityChecker).check(same(offender), eq(details.name), any(), eq(SYNC_RULE_SET))
     verify(deactivationService, never()).deactivateOffender(any(), any())
+    verify(practitionerReconciliationService, never()).reconcile(any<Offender>(), any())
     verify(offenderSetupRepository, never()).findLatestByOffenderIdIn(any())
   }
 

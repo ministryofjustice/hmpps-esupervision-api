@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.question
 
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
@@ -26,10 +27,12 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.TestClockConfiguration
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.QuestionListAssignmentRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CustomQuestionsReminderJob
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
@@ -149,5 +152,22 @@ class CustomQuestionReminderJobIT : IntegrationTestBase() {
 
     job.process()
     verify(notificationService, times(0)).sendPractitionerCustomQuestionsReminder(any())
+  }
+
+  @Test
+  fun `reminder reconciles the allocated practitioner before building the notification`() {
+    reset(ndiliusApiClient)
+    val details = dataProvider.provideCase("A000003").copy(
+      practitioner = PractitionerDetails(name = Name("New", "Practitioner"), username = "NEW", email = "new@example.com"),
+    )
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(any())).thenReturn(listOf(details))
+
+    job.process()
+
+    assertEquals("NEW", offenderRepository.findByCrn("A000003").orElseThrow().practitionerId)
+    verify(notificationService).sendPractitionerCustomQuestionsReminder(
+      argThat { info -> info.contactDetails.crn == "A000003" && info.practitionerId == "NEW" },
+    )
+    verify(ndiliusApiClient, times(1)).getContactDetailsForMultiple(any())
   }
 }

@@ -63,6 +63,21 @@ flowchart TB
 | Checkin Reviewed | No | No | No |
 | Checkin Expired | No | No | Yes |
 
+Practitioner notifications use the practitioner details returned by Delius for the check-in
+action. When an allocated username changes, the API updates the stored practitioner ID before
+creating new notification and audit records. Existing records retain their original attribution.
+Missing or unallocated practitioner details do not clear the stored ID; practitioner emails are
+logged as undeliverable when there is no allocated recipient.
+Reconciliation happens only when an existing journey fetches Delius contact details. Check-in
+actions that do not fetch those details do not independently refresh the allocation. Asynchronous
+notifications use the details captured for their triggering action; they do not re-fetch them at
+delivery time.
+Many check-in actions fetch and reconcile contact details together through the check-in
+contact-details service. Other paths reconcile previously fetched details. Batch jobs use their existing
+batch lookups and reconcile each case before producing attributed records. If a database access
+failure prevents reconciliation in a batch, it is logged and processing continues with the
+stored attribution.
+
 ---
 
 ## Notification Flow

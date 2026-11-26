@@ -6,12 +6,14 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.same
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
@@ -26,6 +28,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -58,6 +61,7 @@ class CheckinReminderJobTest {
   private val eventAuditService: EventAuditService = mock()
   private val genericNotificationRepository: GenericNotificationRepository = mock()
   private val appConfig: AppConfig = mock()
+  private val practitionerReconciliationService: PractitionerReconciliationService = mock()
 
   private val job = CheckinReminderJob(
     clock,
@@ -70,6 +74,7 @@ class CheckinReminderJobTest {
     eventAuditService,
     genericNotificationRepository,
     appConfig = appConfig,
+    practitionerReconciliationService = practitionerReconciliationService,
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -84,6 +89,24 @@ class CheckinReminderJobTest {
 
     verify(notificationService).sendReminderCheckinNotifications(same(checkin), eq(cd))
     verify(deactivationService, never()).deactivateOffender(any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+  }
+
+  @Test
+  fun `reconciliation failure does not prevent reminders`() {
+    val failed = checkin("X000001")
+    val succeeding = checkin("X000002")
+    val failedDetails = details(failed.offender.crn, events = listOf(anEvent))
+    val succeedingDetails = details(succeeding.offender.crn, events = listOf(anEvent))
+    stub(listOf(failed, succeeding), listOf(failedDetails, succeedingDetails))
+    doThrow(DataAccessResourceFailureException("database failure")).whenever(practitionerReconciliationService).reconcile(same(failed.offender), eq(failedDetails))
+
+    job.process()
+
+    verify(notificationService).sendReminderCheckinNotifications(same(failed), eq(failedDetails))
+    verify(notificationService).sendReminderCheckinNotifications(same(succeeding), eq(succeedingDetails))
+    val audits = argumentCaptor<Iterable<Pair<OffenderCheckin, ContactDetails?>>>()
+    verify(eventAuditService).recordCheckinReminded(audits.capture())
+    assertThat(audits.firstValue.map { it.first.offender.crn }).containsExactly(failed.offender.crn, succeeding.offender.crn)
   }
 
   @Test

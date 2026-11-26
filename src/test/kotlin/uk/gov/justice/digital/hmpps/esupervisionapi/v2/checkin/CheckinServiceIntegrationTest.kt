@@ -6,12 +6,18 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.timeout
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.reset
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.bean.override.mockito.MockitoBean
+import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.offenderTemplate
 import uk.gov.justice.digital.hmpps.esupervisionapi.datagen.toEntity
 import uk.gov.justice.digital.hmpps.esupervisionapi.integration.IntegrationTestBase
@@ -19,10 +25,15 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AnnotateCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinSubmittedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.GenericNotificationRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.LogEntryType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLog
@@ -30,14 +41,20 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderEventLogRepositor
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OutboxItemType
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ReviewCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SubmitCheckinRequest
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SurveyVersion
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ManualIdVerificationResult
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.rekognition.OffenderIdVerifier
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.infrastructure.storage.S3UploadService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs.CheckinExpiryJob
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationPersistenceService
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotifyGatewayService
 import java.net.URI
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -61,6 +78,21 @@ class CheckinServiceIntegrationTest : IntegrationTestBase() {
 
   @Autowired
   private lateinit var genericNotificationRepository: GenericNotificationRepository
+
+  @Autowired
+  private lateinit var eventAuditRepository: EventAuditRepository
+
+  @Autowired
+  private lateinit var notificationPersistenceService: NotificationPersistenceService
+
+  @Autowired
+  private lateinit var appConfig: AppConfig
+
+  @Autowired
+  private lateinit var clock: Clock
+
+  @Autowired
+  private lateinit var checkinExpiryJob: CheckinExpiryJob
 
   @MockitoBean
   private lateinit var ndiliusApiClient: INdiliusApiClient
@@ -136,6 +168,130 @@ class CheckinServiceIntegrationTest : IntegrationTestBase() {
     assertEquals(photoUrl, result.photoUrl)
     assertNull(result.personalDetails)
     assertEquals(LogEntryType.OFFENDER_CHECKIN_NOT_SUBMITTED, result.checkinLogs.logs[0].logEntryType)
+  }
+
+  @Test
+  fun `submissions retain historical attribution and reconcile reallocation without extra Delius calls`() {
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "X987650", practitionerId = "OLD").toEntity().apply {
+        updatedAt = Instant.parse("2020-01-01T00:00:00Z")
+      },
+    )
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("Case", "Person"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      practitioner = PractitionerDetails(name = Name("Old", "Practitioner"), username = "OLD", email = "old@example.com"),
+      events = listOf(Event(1L, CodedDescription("X", "Offence"), sentence = null)),
+    )
+    fun createCheckin(dueDate: LocalDate) = checkinV2Repository.save(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.CREATED,
+        dueDate = dueDate,
+        createdAt = Instant.now(),
+        createdBy = "SYSTEM",
+      ),
+    )
+    val first = createCheckin(LocalDate.now().minusDays(1))
+    val second = createCheckin(LocalDate.now())
+    val request = SubmitCheckinRequest(survey = mapOf("version" to SurveyVersion.V20260416Questions.version))
+    whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(details)
+    whenever(s3UploadService.isCheckinVideoUploaded(any())).thenReturn(true)
+    val gateway: NotifyGatewayService = mock()
+    whenever(gateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+    val orchestrator = NotificationOrchestratorService(
+      notificationPersistenceService, gateway, mock(), mock(), mock(), ndiliusApiClient,
+      appConfig, clock, Duration.ofDays(3), mock(),
+    )
+
+    try {
+      checkinService.submitCheckin(first.uuid, request)
+      assertEquals(Instant.parse("2020-01-01T00:00:00Z"), offenderRepository.findById(offender.id).orElseThrow().updatedAt)
+      val firstEvent = argumentCaptor<CheckinSubmittedEvent>()
+      verify(notificationService, timeout(5000)).sendCheckinSubmittedNotifications(firstEvent.capture())
+      orchestrator.sendCheckinSubmittedNotifications(firstEvent.firstValue)
+      val oldNotification = genericNotificationRepository.findAll()
+        .single { it.offenderId == offender.id && it.recipientType == "PRACTITIONER" }
+      assertEquals("OLD", oldNotification.practitionerId)
+
+      val reallocated = details.copy(practitioner = PractitionerDetails(name = Name("New", "Practitioner"), username = "NEW", email = "new@example.com"))
+      whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(reallocated)
+      checkinService.submitCheckin(second.uuid, request)
+
+      val saved = offenderRepository.findById(offender.id).orElseThrow()
+      assertEquals("NEW", saved.practitionerId)
+      val updatedAt = saved.updatedAt
+      val audits = eventAuditRepository.findByCrnOrderByOccurredAt(setOf(offender.crn))
+        .filter { it.checkinUuid == first.uuid || it.checkinUuid == second.uuid }
+        .associateBy { it.checkinUuid }
+      assertEquals("OLD", audits[first.uuid]?.practitionerId)
+      assertEquals("NEW", audits[second.uuid]?.practitionerId)
+
+      val submittedEvents = argumentCaptor<CheckinSubmittedEvent>()
+      verify(notificationService, timeout(5000).times(2)).sendCheckinSubmittedNotifications(submittedEvents.capture())
+      orchestrator.sendCheckinSubmittedNotifications(submittedEvents.allValues.single { it.checkin.uuid == second.uuid })
+
+      assertEquals("OLD", genericNotificationRepository.findById(oldNotification.id).orElseThrow().practitionerId)
+      val notificationIds = genericNotificationRepository.findAll()
+        .filter { it.offenderId == offender.id && it.recipientType == "PRACTITIONER" }
+        .mapNotNull { it.practitionerId }.toSet()
+      assertEquals(setOf("OLD", "NEW"), notificationIds)
+      val personalisation = argumentCaptor<Map<String, String>>()
+      verify(gateway).send(eq("EMAIL"), any(), eq("new@example.com"), personalisation.capture(), any())
+      assertEquals("New", personalisation.firstValue["practitionerName"])
+      verify(gateway, times(1)).send(eq("EMAIL"), any(), eq("old@example.com"), any(), any())
+
+      checkinService.getCheckin(second.uuid, includePersonalDetails = true)
+      assertEquals(updatedAt, offenderRepository.findById(offender.id).orElseThrow().updatedAt)
+      whenever(ndiliusApiClient.getContactDetails(offender.crn)).thenReturn(reallocated.copy(practitioner = null))
+      checkinService.getCheckin(second.uuid, includePersonalDetails = true)
+      val unallocated = offenderRepository.findById(offender.id).orElseThrow()
+      assertEquals("NEW", unallocated.practitionerId)
+      assertEquals(updatedAt, unallocated.updatedAt)
+      verify(ndiliusApiClient, times(4)).getContactDetails(offender.crn)
+    } finally {
+      eventAuditRepository.deleteAll(eventAuditRepository.findByCrnOrderByOccurredAt(setOf(offender.crn)))
+    }
+  }
+
+  @Test
+  fun `expiry batch persists the new practitioner before notification and audit`() {
+    val offender = offenderRepository.save(
+      offenderTemplate.copy(crn = "X987651", practitionerId = "OLD").toEntity(),
+    )
+    checkinV2Repository.save(
+      OffenderCheckin(
+        uuid = UUID.randomUUID(),
+        offender = offender,
+        status = CheckinStatus.CREATED,
+        dueDate = LocalDate.now().minusDays(5),
+        createdAt = Instant.now(),
+        createdBy = "SYSTEM",
+      ),
+    )
+    val details = ContactDetails(
+      crn = offender.crn,
+      name = Name("Case", "Person"),
+      dateOfBirth = LocalDate.of(1980, 1, 1),
+      practitioner = PractitionerDetails(name = Name("New", "Practitioner"), username = "NEW", email = "new@example.com"),
+      events = listOf(Event(1L, CodedDescription("X", "Offence"), sentence = null)),
+    )
+    whenever(ndiliusApiClient.getContactDetailsForMultiple(listOf(offender.crn))).thenReturn(listOf(details))
+
+    try {
+      checkinExpiryJob.process()
+
+      assertEquals("NEW", offenderRepository.findById(offender.id).orElseThrow().practitionerId)
+      val expired = argumentCaptor<OffenderCheckin>()
+      verify(notificationService).sendCheckinExpiredNotifications(expired.capture(), eq(details))
+      assertEquals("NEW", expired.firstValue.offender.practitionerId)
+      assertEquals("NEW", eventAuditRepository.findByCrnOrderByOccurredAt(setOf(offender.crn)).single().practitionerId)
+      verify(ndiliusApiClient, times(1)).getContactDetailsForMultiple(listOf(offender.crn))
+    } finally {
+      eventAuditRepository.deleteAll(eventAuditRepository.findByCrnOrderByOccurredAt(setOf(offender.crn)))
+    }
   }
 
   @Test

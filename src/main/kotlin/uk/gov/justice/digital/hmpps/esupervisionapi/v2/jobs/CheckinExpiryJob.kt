@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataAccessException
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
@@ -14,6 +15,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.UpcomingCheckinService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.activeEventNumber
@@ -40,6 +42,7 @@ class CheckinExpiryJob(
   private val upcomingCheckinService: UpcomingCheckinService,
   private val checkinDeliusEventService: CheckinDeliusEventService,
   private val appConfig: AppConfig,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
 ) {
   @Scheduled(cron = "\${app.scheduling.v2-checkin-expiry.cron}")
   @SchedulerLock(
@@ -91,6 +94,14 @@ class CheckinExpiryJob(
             contactDetailsMap.putAll(batchDetails)
           } catch (e: Exception) {
             LOGGER.warn("Failed to fetch contact details for batch {}", batchIndex + 1, e)
+          }
+        }
+
+        checkins.forEach { checkin ->
+          try {
+            practitionerReconciliationService.reconcile(checkin.offender, contactDetailsMap[checkin.offender.crn])
+          } catch (e: DataAccessException) {
+            LOGGER.error("Failed to reconcile practitioner for expiry of checkin {}; continuing with stored attribution", checkin.uuid, e)
           }
         }
 

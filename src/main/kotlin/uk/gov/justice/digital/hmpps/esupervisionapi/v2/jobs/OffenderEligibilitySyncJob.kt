@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataAccessException
 import org.springframework.data.domain.PageRequest
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
@@ -17,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Offender
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderDeactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderSetupRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -53,6 +55,7 @@ class OffenderEligibilitySyncJob(
   private val pilotPractitionerLookup: PilotPractitionerLookup,
   @param:Value("\${app.offender-eligibility.sync-rule-set}") private val ruleSet: String,
   @param:Value("\${app.offender-eligibility.sync-dry-run:false}") private val dryRun: Boolean,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
 ) {
   fun process() {
     if (!appConfig.enabledFeatures.contains(Feature.ESUP_2082)) {
@@ -159,6 +162,11 @@ class OffenderEligibilitySyncJob(
 
         for ((offender, contactDetails, result) in ineligible) {
           try {
+            try {
+              practitionerReconciliationService.reconcile(offender, contactDetails)
+            } catch (e: DataAccessException) {
+              LOGGER.error("Failed to reconcile practitioner for eligibility sync for CRN {}; continuing with stored attribution", offender.crn, e)
+            }
             val reason = "Eligibility rule ${result.triggeredRuleCode ?: "UNKNOWN"} found the offender ineligible for online check-ins."
             val event = OffenderDeactivatedEvent(
               offenderId = offender.id,

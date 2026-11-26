@@ -35,6 +35,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.photos.OffenderPhotoUpload
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.GeneratingStubDataProvider
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinContactDetailsService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
@@ -51,6 +52,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.SetupInfo
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
@@ -107,6 +109,7 @@ class OffenderResourceTest {
   private val questionService: QuestionService = mock()
   private val transactionTemplate: TransactionTemplate = mock()
   private val entityManager: EntityManager = mock()
+  private val practitionerReconciliationService: PractitionerReconciliationService = mock()
 
   private lateinit var resource: OffenderResource
 
@@ -143,6 +146,8 @@ class OffenderResourceTest {
       entityManager,
       mock(),
       appConfig,
+      practitionerReconciliationService,
+      CheckinContactDetailsService(ndiliusApiClient, practitionerReconciliationService),
     )
   }
 

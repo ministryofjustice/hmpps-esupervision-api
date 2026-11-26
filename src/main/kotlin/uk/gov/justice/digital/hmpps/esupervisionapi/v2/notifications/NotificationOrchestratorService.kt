@@ -341,14 +341,9 @@ class NotificationOrchestratorService(
    */
   private fun inviteFailed(event: CheckinCreatedEvent, reason: String) {
     if (!checkinLinkService.linkFailed(event.checkinId, reason)) return
-    val details = event.checkin.personalDetails ?: return
-    val practitioner = details.practitioner ?: return
+    val details = event.checkin.personalDetails
+    val practitioner = details?.practitioner
     try {
-      val personalisation = mapOf(
-        "practitionerName" to "${practitioner.name.forename} ${practitioner.name.surname}",
-        "name" to "${details.name.forename} ${details.name.surname}",
-        "popDashboardUrl" to appConfig.contactsUrl(event.checkin.crn).toString(),
-      )
       val notifications = notificationPersistence.buildPractitionerNotifications(
         offenderId = event.offenderId,
         crn = event.checkin.crn,
@@ -356,6 +351,12 @@ class NotificationOrchestratorService(
         checkin = event.checkin,
         notificationType = NotificationType.PractitionerInviteIssueGeneric,
         practitionerId = event.practitionerId,
+      )
+      if (details == null || practitioner == null) return
+      val personalisation = mapOf(
+        "practitionerName" to "${practitioner.name.forename} ${practitioner.name.surname}",
+        "name" to "${details.name.forename} ${details.name.surname}",
+        "popDashboardUrl" to appConfig.contactsUrl(event.checkin.crn).toString(),
       )
       processAndSendNotifications(notifications, personalisation)
     } catch (e: Exception) {
@@ -596,7 +597,7 @@ class NotificationOrchestratorService(
     )
     val notificationsWithRecipients = notificationPersistence.buildPractitionerNotifications(
       offenderId = null,
-      crn = null,
+      crn = info.contactDetails.crn,
       info.contactDetails.practitioner,
       null,
       NotificationType.PractitionerCustomQuestionsReminder,

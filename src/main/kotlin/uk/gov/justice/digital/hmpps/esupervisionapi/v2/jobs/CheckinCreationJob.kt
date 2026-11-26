@@ -6,6 +6,7 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataAccessException
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
@@ -22,6 +23,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.BatchCheckinCreationException
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinIneligibilityReason
@@ -76,6 +78,7 @@ class CheckinCreationJob(
   @PersistenceContext private val entityManager: EntityManager,
   @param:Value("\${app.scheduling.v2-checkin-creation.chunk-size}") private val chunkSize: Int,
   @param:Value("\${app.scheduling.checkin-notification.window:72h}") private val checkinWindow: Duration,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -121,12 +124,19 @@ class CheckinCreationJob(
           for (crn in contactDetailsMap.keys) {
             val info = infoByCrn[crn]!!
             val contactDetails = contactDetailsMap[crn]!!
+            val practitionerId = try {
+              practitionerReconciliationService.reconcile(info.id, info.practitionerId, contactDetails)
+            } catch (e: DataAccessException) {
+              LOGGER.error("Failed to reconcile practitioner for CRN {} in page {}; continuing with stored attribution", crn, metrics.chunks, e)
+              metrics.errors += 1
+              info.practitionerId
+            }
             val ineligibility = checkinIneligibilityReason(info, contactDetails)
             val savedSelectionIsInactive = info.currentEvent != null && contactDetails.events.none { it.number == info.currentEvent }
             if (ineligibility != null && (!syncJobStopsPeople || savedSelectionIsInactive)) {
               deactivateOffender(ineligibility, info, contactDetails, metrics)
             } else {
-              prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id])?.let { checkinsToCreate.add(it) }
+              prepareCheckin(info, today, contactDetails, scheduledByOffenderId[info.id], practitionerId)?.let { checkinsToCreate.add(it) }
             }
           }
 
@@ -179,6 +189,7 @@ class CheckinCreationJob(
     today: LocalDate,
     contactDetails: ContactDetails,
     scheduled: OffenderCheckin?,
+    practitionerId: String,
   ): Pair<OffenderCheckin, PartialCheckinCreatedEvent>? {
     val offenderRef = offenderRepository.getReferenceById(info.id)
     val checkin = checkinCreationService.prepareCheckinForOffender(offenderRef, today, scheduled)
@@ -187,7 +198,7 @@ class CheckinCreationJob(
     if (eventNumber != null) {
       val event = PartialCheckinCreatedEvent(
         offenderId = info.id,
-        practitionerId = info.practitionerId,
+        practitionerId = practitionerId,
         checkin = CheckinDto(
           uuid = checkin.uuid,
           dueDate = checkin.dueDate,
