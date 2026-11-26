@@ -1077,6 +1077,82 @@ class OffenderResourceTest {
   }
 
   @Test
+  fun `updateDetails - frequency change notification covers a simultaneous date change`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    val originalDate = clock.today().plusDays(7)
+    val updatedDate = originalDate.plusDays(7)
+    offender.firstCheckin = originalDate
+    stubUpdateInfo(offender)
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    resource.updateDetails(
+      offender.uuid,
+      OffenderDetailsUpdateRequest(
+        CheckinScheduleUpdateRequest("XYZ0111", updatedDate, CheckinInterval.TWO_WEEKS),
+      ),
+    )
+
+    verify(notificationService).sendCheckinScheduleChangedNotification(offender, true)
+  }
+
+  @Test
+  fun `updateDetails - sends date change notification when only the next date changes`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    val nextDate = clock.today().plusDays(14)
+    offender.firstCheckin = clock.today().plusDays(7)
+    stubUpdateInfo(offender)
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    resource.updateDetails(
+      offender.uuid,
+      OffenderDetailsUpdateRequest(
+        CheckinScheduleUpdateRequest("XYZ0111", nextDate, CheckinInterval.WEEKLY),
+      ),
+    )
+
+    verify(notificationService).sendCheckinScheduleChangedNotification(offender, false)
+  }
+
+  @Test
+  fun `updateDetails - does not notify for an unchanged schedule`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    stubUpdateInfo(offender)
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    resource.updateDetails(
+      offender.uuid,
+      OffenderDetailsUpdateRequest(
+        CheckinScheduleUpdateRequest("XYZ0111", offender.firstCheckin, CheckinInterval.WEEKLY),
+      ),
+    )
+
+    verify(notificationService, never()).sendCheckinScheduleChangedNotification(any(), any())
+  }
+
+  @Test
+  fun `updateDetails - allows switching to ad hoc without a check-in date`() {
+    val offender = createOffender(UUID.randomUUID(), OffenderStatus.VERIFIED)
+    stubUpdateInfo(offender)
+    whenever(offenderRepository.findByIdForUpdate(offender.id)).thenReturn(Optional.of(offender))
+    whenever(offenderRepository.save(offender)).thenReturn(offender)
+
+    val result = resource.updateDetails(
+      offender.uuid,
+      OffenderDetailsUpdateRequest(
+        CheckinScheduleUpdateRequest("XYZ0111", null, null, CheckinMode.AD_HOC),
+      ),
+    )
+
+    assertEquals(HttpStatus.OK, result.statusCode)
+    assertEquals(CheckinMode.AD_HOC, result.body?.mode)
+    assertNull(result.body?.firstCheckin)
+    verify(notificationService).sendCheckinScheduleChangedNotification(offender, true)
+  }
+
+  @Test
   fun `updateDetails - saves a selected event after validating it against NDelius`() {
     val uuid = UUID.randomUUID()
     val offender = createOffender(uuid, OffenderStatus.VERIFIED)

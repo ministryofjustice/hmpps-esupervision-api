@@ -188,6 +188,213 @@ class NotificationOrchestratorServiceTest {
     )
   }
 
+  @ParameterizedTest
+  @CsvSource(
+    "WEEKLY, 'every week'",
+    "TWO_WEEKS, 'every 2 weeks'",
+    "FOUR_WEEKS, 'every 4 weeks'",
+    "EIGHT_WEEKS, 'every 8 weeks'",
+  )
+  fun `sendCheckinScheduleChangedNotification - formats scheduled frequency`(
+    interval: CheckinInterval,
+    frequency: String,
+  ) {
+    val offender = createOffender().apply {
+      firstCheckin = LocalDate.of(2025, 12, 17)
+      checkinInterval = interval.duration
+      contactPreference = ContactPreference.EMAIL
+    }
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinsFrequencyChanged.name,
+      recipientType = "OFFENDER",
+      channel = "EMAIL",
+      offenderId = offender.id,
+      reference = "FREQUENCY-CHANGE-001",
+      templateId = "frequency-change-template",
+      createdAt = clock.instant(),
+    )
+    val recipient = "john.smith@example.com"
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, recipient, AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+
+    service.sendCheckinScheduleChangedNotification(offender, frequencyChanged = true)
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(ContactPreference.EMAIL),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsFrequencyChanged),
+    )
+    verify(notifyGateway).send(
+      eq("EMAIL"),
+      eq("frequency-change-template"),
+      eq(recipient),
+      eq(
+        mapOf(
+          "name" to "John Smith",
+          "date" to "Wednesday 17 December 2025",
+          "frequency" to frequency,
+        ),
+      ),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
+  fun `sendCheckinScheduleChangedNotification - sends date change with date-only personalisation`() {
+    val offender = createOffender().apply {
+      firstCheckin = LocalDate.of(2025, 12, 17)
+    }
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinDateChanged.name,
+      recipientType = "OFFENDER",
+      channel = "SMS",
+      offenderId = offender.id,
+      reference = "DATE-CHANGE-001",
+      templateId = "date-change-template",
+      createdAt = clock.instant(),
+    )
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, "07700900123", AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+
+    service.sendCheckinScheduleChangedNotification(offender, frequencyChanged = false)
+
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("date-change-template"),
+      eq("07700900123"),
+      eq(mapOf("name" to "John Smith", "date" to "Wednesday 17 December 2025")),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
+  fun `sendCheckinScheduleChangedNotification - sends ad hoc frequency change without a date`() {
+    val offender = createOffender().apply {
+      firstCheckin = null
+      mode = CheckinMode.AD_HOC
+      checkinInterval = null
+      contactPreference = ContactPreference.EMAIL
+    }
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinsFrequencyChangedAdHoc.name,
+      recipientType = "OFFENDER",
+      channel = "EMAIL",
+      offenderId = offender.id,
+      reference = "ADHOC-FREQUENCY-CHANGE-001",
+      templateId = "ad-hoc-frequency-change-template",
+      createdAt = clock.instant(),
+    )
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, "john.smith@example.com", AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+
+    service.sendCheckinScheduleChangedNotification(offender, frequencyChanged = true)
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(ContactPreference.EMAIL),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsFrequencyChangedAdHoc),
+    )
+    verify(notifyGateway).send(
+      eq("EMAIL"),
+      eq("ad-hoc-frequency-change-template"),
+      eq("john.smith@example.com"),
+      eq(mapOf("name" to "John Smith", "frequency" to "when your probation officer chooses to send one")),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
+  fun `sendCheckinScheduleChangedNotification - ad hoc template omits date and uses SMS preference`() {
+    val offender = createOffender().apply {
+      firstCheckin = LocalDate.of(2025, 12, 17)
+      mode = CheckinMode.AD_HOC
+      checkinInterval = null
+      contactPreference = ContactPreference.PHONE
+    }
+    val contactDetails = createContactDetails()
+    val notification = GenericNotification(
+      notificationId = UUID.randomUUID(),
+      eventType = NotificationType.OffenderCheckinsFrequencyChangedAdHoc.name,
+      recipientType = "OFFENDER",
+      channel = "SMS",
+      offenderId = offender.id,
+      reference = "ADHOC-FREQUENCY-CHANGE-SMS-001",
+      templateId = "ad-hoc-frequency-change-sms-template",
+      createdAt = clock.instant(),
+    )
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(contactDetails)
+    whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any()))
+      .thenReturn(listOf(NotificationWithRecipient(notification, "07700900123", AssociatedOffenderInfo(offender.crn))))
+    whenever(notificationPersistence.saveNotifications(any())).thenReturn(listOf(notification))
+    whenever(notifyGateway.send(any(), any(), any(), any(), any())).thenReturn(UUID.randomUUID())
+
+    service.sendCheckinScheduleChangedNotification(offender, frequencyChanged = true)
+
+    verify(notificationPersistence).buildOffenderNotifications(
+      eq(offender.id),
+      eq(offender.crn),
+      eq(ContactPreference.PHONE),
+      eq(contactDetails),
+      eq(NotificationType.OffenderCheckinsFrequencyChangedAdHoc),
+    )
+    verify(notifyGateway).send(
+      eq("SMS"),
+      eq("ad-hoc-frequency-change-sms-template"),
+      eq("07700900123"),
+      eq(mapOf("name" to "John Smith", "frequency" to "when your probation officer chooses to send one")),
+      eq(notification.reference),
+    )
+  }
+
+  @Test
+  fun `sendCheckinScheduleChangedNotification - skips notification when contact details are missing`() {
+    val offender = createOffender().apply {
+      firstCheckin = null
+      mode = CheckinMode.AD_HOC
+      checkinInterval = null
+    }
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenReturn(null)
+
+    service.sendCheckinScheduleChangedNotification(offender, frequencyChanged = true)
+
+    verify(notificationPersistence, never()).buildOffenderNotifications(any(), any(), any(), any(), any())
+    verifyNoInteractions(notifyGateway)
+  }
+
+  @Test
+  fun `sendCheckinScheduleChangedNotification - skips notification when contact lookup fails`() {
+    val offender = createOffender().apply {
+      firstCheckin = null
+      mode = CheckinMode.AD_HOC
+      checkinInterval = null
+    }
+    whenever(ndiliusApiClient.getContactDetailsStrict(offender.crn)).thenThrow(IllegalStateException("NDelius unavailable"))
+
+    service.sendCheckinScheduleChangedNotification(offender, frequencyChanged = true)
+
+    verify(notificationPersistence, never()).buildOffenderNotifications(any(), any(), any(), any(), any())
+    verifyNoInteractions(notifyGateway)
+  }
+
   @Test
   fun `sendSetupCompletedNotifications - missing contact details - still publishes event and records audit`() {
     val offender = createOffender()

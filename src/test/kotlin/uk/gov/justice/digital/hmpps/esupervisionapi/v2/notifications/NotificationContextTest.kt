@@ -26,6 +26,7 @@ class NotificationContextTest {
     assertEquals("OCAN-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinCancelled, clock, env))
     assertEquals("ODCH-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinDateChanged, clock, env))
     assertEquals("OFCH-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinsFrequencyChanged, clock, env))
+    assertEquals("OFAH-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.OffenderCheckinsFrequencyChangedAdHoc, clock, env))
     assertEquals("PSUB-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.PractitionerCheckinSubmitted, clock, env))
     assertEquals("PEXP-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.PractitionerCheckinMissed, clock, env))
     assertEquals("PING-2025-01-15-unit-test", NotificationContext.generateReference(NotificationType.PractitionerInviteIssueGeneric, clock, env))

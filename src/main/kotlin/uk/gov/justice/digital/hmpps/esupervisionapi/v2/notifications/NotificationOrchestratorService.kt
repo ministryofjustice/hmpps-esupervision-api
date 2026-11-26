@@ -383,6 +383,67 @@ class NotificationOrchestratorService(
     }
   }
 
+  /** Notify the POP when their next check-in date or recurring frequency changes. */
+  fun sendCheckinScheduleChangedNotification(offender: Offender, frequencyChanged: Boolean) {
+    val contactDetails = try {
+      ndiliusApiClient.getContactDetailsStrict(offender.crn)
+    } catch (e: Exception) {
+      LOGGER.warn(
+        "Failed to fetch contact details to send check-in schedule change notification for offender {}: {}",
+        offender.crn,
+        PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid),
+      )
+      return
+    }
+
+    if (contactDetails == null) {
+      LOGGER.warn("Skipping check-in schedule change notification for offender {}: contact details not found", offender.crn)
+      return
+    }
+
+    val adHocFrequencyChange = frequencyChanged && offender.mode == CheckinMode.AD_HOC
+    val nextCheckinDate = offender.firstCheckin
+    if (nextCheckinDate == null && !adHocFrequencyChange) {
+      LOGGER.warn("Skipping check-in schedule change notification for offender {}: next check-in date is not set", offender.crn)
+      return
+    }
+
+    try {
+      val notificationType = if (frequencyChanged) {
+        if (adHocFrequencyChange) {
+          NotificationType.OffenderCheckinsFrequencyChangedAdHoc
+        } else {
+          NotificationType.OffenderCheckinsFrequencyChanged
+        }
+      } else {
+        NotificationType.OffenderCheckinDateChanged
+      }
+      val personalisation = buildMap {
+        put("name", "${contactDetails.name.forename} ${contactDetails.name.surname}")
+        if (!adHocFrequencyChange) {
+          nextCheckinDate?.let { put("date", it.format(DATE_FORMATTER)) }
+        }
+        if (frequencyChanged) {
+          put("frequency", scheduleChangeFrequencyText(offender.mode, offender.checkinInterval?.let { CheckinInterval.fromDuration(it) }))
+        }
+      }
+      val notifications = notificationPersistence.buildOffenderNotifications(
+        offenderId = offender.id,
+        crn = offender.crn,
+        contactPreference = offender.contactPreference,
+        contactDetails = contactDetails,
+        notificationType = notificationType,
+      )
+      processAndSendNotifications(notifications, personalisation)
+    } catch (e: Exception) {
+      LOGGER.warn(
+        "Failed to send check-in schedule change notification for offender {}: {}",
+        offender.crn,
+        PiiSanitizer.sanitizeException(e, offender.crn, offender.uuid),
+      )
+    }
+  }
+
   /** Send reminder notifications for checkin */
   fun sendReminderCheckinNotifications(
     checkin: OffenderCheckin,
@@ -711,6 +772,16 @@ class NotificationOrchestratorService(
         formatCheckinFrequency(interval)
       }
       CheckinMode.AD_HOC -> AD_HOC_FREQUENCY_TEXT
+    }
+
+    private fun scheduleChangeFrequencyText(mode: CheckinMode, interval: CheckinInterval?): String = when (mode) {
+      CheckinMode.SCHEDULED -> when (requireNotNull(interval) { "interval must be present for scheduled checkins" }) {
+        CheckinInterval.WEEKLY -> "every week"
+        CheckinInterval.TWO_WEEKS -> "every 2 weeks"
+        CheckinInterval.FOUR_WEEKS -> "every 4 weeks"
+        CheckinInterval.EIGHT_WEEKS -> "every 8 weeks"
+      }
+      CheckinMode.AD_HOC -> "when your probation officer chooses to send one"
     }
   }
 }
