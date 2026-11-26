@@ -777,7 +777,8 @@ When updating the check-in schedule, the `mode` option determines whether the ch
 E.g., SCHEDULED requires a check-in interval, while AD_HOC does not.
 
 Updating the check-in schedule settings may trigger a notification if the new first check in date
-is *today*.""",
+is *today*. Changes to the next check-in date or frequency notify the person on probation using
+their preferred contact method.""",
   )
   @ApiResponse(responseCode = "200", description = "Offender details updated")
   @ApiResponse(responseCode = "204", description = "No update required")
@@ -857,7 +858,7 @@ is *today*.""",
       // completed check-ins occupy today.
       val todayIsOccupied = checkinRepository.findAllByOffenderAndDueDate(saved, clock.today())
         .any { it.status in CHECKIN_STATUSES_OCCUPYING_DATE }
-      UpdatedOffenderDetails(offenderBefore, saved.toSummaryDto(), todayIsOccupied)
+      UpdatedOffenderDetails(offenderBefore, saved, saved.toSummaryDto(), todayIsOccupied)
     }
 
     val result = updateResult ?: return ResponseEntity.noContent().build()
@@ -878,6 +879,18 @@ is *today*.""",
     }
     if (request.checkinSchedule != null) {
       upcomingCheckinService.scheduleNext(offenderInfo.id)
+
+      if (offenderAfter.status == OffenderStatus.VERIFIED) {
+        val dateChanged = result.offenderBefore.firstCheckin != offenderAfter.firstCheckin
+        val frequencyChanged =
+          result.offenderBefore.mode != offenderAfter.mode ||
+            result.offenderBefore.checkinInterval != offenderAfter.checkinInterval
+
+        if (dateChanged || frequencyChanged) {
+          // The frequency-change template includes the new date, so one notification covers both.
+          notificationService.sendCheckinScheduleChangedNotification(result.offender, frequencyChanged)
+        }
+      }
     }
     return ResponseEntity.ok(offenderAfter)
   }
@@ -1275,6 +1288,7 @@ data class OffenderDetailsUpdateRequest(
 
 private data class UpdatedOffenderDetails(
   val offenderBefore: OffenderSummaryDto,
+  val offender: Offender,
   val offenderAfter: OffenderSummaryDto,
   val todayIsOccupied: Boolean,
 )

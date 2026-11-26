@@ -26,6 +26,7 @@ object NotificationContext {
       NotificationType.OffenderCheckinCancelledBeforeInvite -> "OCBI-$date-$env"
       NotificationType.OffenderCheckinDateChanged -> "ODCH-$date-$env"
       NotificationType.OffenderCheckinsFrequencyChanged -> "OFCH-$date-$env"
+      NotificationType.OffenderCheckinsFrequencyChangedAdHoc -> "OFAH-$date-$env"
 
       // Practitioner notifications
       NotificationType.PractitionerCheckinSubmitted -> "PSUB-$date-$env"

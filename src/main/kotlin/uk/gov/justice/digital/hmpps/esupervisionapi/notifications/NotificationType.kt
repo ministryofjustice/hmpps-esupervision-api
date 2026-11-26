@@ -25,4 +25,5 @@ enum class NotificationType {
   OffenderCheckinCancelledBeforeInvite,
   OffenderCheckinDateChanged,
   OffenderCheckinsFrequencyChanged,
+  OffenderCheckinsFrequencyChangedAdHoc,
 }
