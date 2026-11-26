@@ -15,6 +15,13 @@ configurations {
   testImplementation { exclude(group = "org.junit.vintage") }
 }
 
+// Spring Boot BOM overrides for CVEs fixed ahead of the BOM. Drop each once the BOM catches up.
+// postgresql 42.7.14 -> 42.7.15: SNYK-JAVA-ORGPOSTGRESQL-22911540/22922528/22928030/22946104 (critical),
+//   22953403/22957226/22957227 (high), 22941089 (medium).
+extra["postgresql.version"] = "42.7.15"
+// opentelemetry-api 1.65.0 -> 1.68.0: SNYK-JAVA-IOOPENTELEMETRY-21816705 (ReDoS, fixed in 1.67.0).
+extra["opentelemetry.version"] = "1.68.0"
+
 dependencies {
   implementation("uk.gov.justice.service.hmpps:hmpps-kotlin-spring-boot-starter:2.5.0")
   implementation("org.springframework.boot:spring-boot-starter-webflux")
