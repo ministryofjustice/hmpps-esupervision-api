@@ -203,3 +203,5 @@ databaseChangeLog:
       file: db/changelog/changesets/101_eligibility_reset_rule.sql
   - include:
       file: db/changelog/changesets/102_eligibility_package_and_pilot_practitioner_rules.sql
+  - include:
+      file: db/changelog/changesets/103_recalled_eligibility_message.sql

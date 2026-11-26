@@ -204,7 +204,7 @@ class OffenderEligibilitySyncJobTest {
     val offender = offender("X000001", id = 1)
     val details = contactDetails(offender.crn)
     givenPage(listOf(offender), listOf(details))
-    val reason = "John Doe is not eligible for online check ins because they have been recalled."
+    val reason = "John Doe is not eligible for online check ins because they have been recalled to prison."
     whenever(eligibilityChecker.check(same(offender), eq(details.name), any(), eq(SYNC_RULE_SET)))
       .thenReturn(EligibilityResult(EligibilityCheckOutcome.INELIGIBLE, reason, "IS_RECALLED", "ESPRC"))
 
