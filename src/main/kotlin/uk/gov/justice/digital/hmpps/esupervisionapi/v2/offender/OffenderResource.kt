@@ -31,6 +31,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.utils.intoResponseStatusExce
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.logger
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.today
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.AssignCustomQuestionsRequest
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinContactDetailsService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetailsUpdateRequest
@@ -47,6 +48,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OrganizationalUnit
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialOffenderReactivatedEvent
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerDetails
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
@@ -116,6 +118,8 @@ class OffenderResource(
   private val entityManager: EntityManager,
   private val upcomingCheckinService: UpcomingCheckinService,
   private val appConfig: AppConfig,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
+  private val checkinContactDetailsService: CheckinContactDetailsService,
 ) {
 
   @PreAuthorize("hasRole('ROLE_ESUPERVISION__ESUPERVISION_UI')")
@@ -137,7 +141,7 @@ class OffenderResource(
       LOGGER.info("Offender not found for crn={}", crn)
       return ResponseEntity.notFound().build()
     }
-    val contactDetails = if (includePersonalDetails) ndiliusApiClient.getContactDetails(normalisedCrn) else null
+    val contactDetails = if (includePersonalDetails) checkinContactDetailsService.getContactDetails(offender) else null
 
     val detailsMesage = if (!includePersonalDetails) {
       "skipped"
@@ -638,6 +642,7 @@ class OffenderResource(
         "Could not verify contact details in NDelius for ${offender.crn}.",
       )
     }
+    practitionerReconciliationService.reconcile(offender, contactDetails)
     return contactDetails
   }
 
@@ -801,7 +806,7 @@ is *today*.""",
     if (request.currentEvent != null && !appConfig.esup2305DeliusEventSelection) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Delius event selection is not enabled")
     }
-    if (request.currentEvent != null) {
+    val selectedEventDetails = if (request.currentEvent != null) {
       val contactDetails = ndiliusApiClient.getContactDetailsStrict(offenderInfo.crn)
       if (contactDetails?.events?.none { it.number == request.currentEvent } != false) {
         throw ResponseStatusException(
@@ -809,12 +814,16 @@ is *today*.""",
           "Selected event ${request.currentEvent} is not active for offender ${offenderInfo.crn}",
         )
       }
+      contactDetails
+    } else {
+      null
     }
 
     val updateResult = transactionTemplate.execute<UpdatedOffenderDetails?> {
       val offender = offenderRepository.findByIdForUpdate(offenderInfo.id).orElse(null)
         ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Offender not found: $uuid")
       entityManager.refresh(offender)
+      practitionerReconciliationService.reconcile(offender, selectedEventDetails)
       if (offender.status == OffenderStatus.INACTIVE) {
         throw ResponseStatusException(
           HttpStatus.BAD_REQUEST,
@@ -902,7 +911,7 @@ is *today*.""",
     val offenderDto = offender.toSummaryDto()
     validateAdHocSchedule(offender, request.firstCheckin)
 
-    val contactDetails = ndiliusApiClient.getContactDetailsStrict(offender.crn)
+    val contactDetails = checkinContactDetailsService.getContactDetailsStrict(offender)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
     validateSameDayCheckinEligibility(offender, contactDetails)
 

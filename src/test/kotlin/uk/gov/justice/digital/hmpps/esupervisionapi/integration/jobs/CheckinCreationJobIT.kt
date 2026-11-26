@@ -29,6 +29,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CheckinStatus
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.CodedDescription
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.ContactDetails
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Event
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.EventAuditRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.Name
@@ -86,6 +87,9 @@ class CheckinCreationJobIT : IntegrationTestBase() {
 
   @Autowired
   lateinit var jobLogRepository: JobLogRepository
+
+  @Autowired
+  lateinit var eventAuditRepository: EventAuditRepository
 
   @Autowired
   lateinit var entityManager: EntityManager
@@ -176,6 +180,22 @@ class CheckinCreationJobIT : IntegrationTestBase() {
           .orElseThrow()
           .let { assertEquals(OutboxItemStatus.SENT, it.status) }
       }
+  }
+
+  @Test
+  fun `creation batch attributes new checkins to the current allocation`() {
+    whenever(ndeliusApiClient.getContactDetailsForMultiple(any())).thenAnswer {
+      contactDetailsFor(it.getArgument(0)).map { details ->
+        details.copy(practitioner = details.practitioner?.copy(username = "NEW"))
+      }
+    }
+
+    job.process()
+
+    listOf("A000001", "A000002").forEach { crn ->
+      assertEquals("NEW", offenderRepository.findByCrn(crn).orElseThrow().practitionerId)
+      assertEquals("NEW", eventAuditRepository.findByCrnOrderByOccurredAt(setOf(crn)).single().practitionerId)
+    }
   }
 
   @Test

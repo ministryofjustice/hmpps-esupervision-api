@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.dao.DataAccessException
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
@@ -16,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.checkinIneligibilityReason
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.notifications.NotificationOrchestratorService
@@ -42,6 +44,7 @@ class CheckinReminderJob(
   private val eventAuditService: EventAuditService,
   private val genericNotificationRepository: GenericNotificationRepository,
   private val appConfig: AppConfig,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
 ) {
 
   @Scheduled(cron = "\${app.scheduling.v2-checkin-reminder.cron}")
@@ -110,8 +113,13 @@ class CheckinReminderJob(
         // Left to the eligibility sync job once it stops people - see AppConfig.eligibilitySyncStopsPeople
         val syncJobStopsPeople = appConfig.eligibilitySyncStopsPeople
         checkins.forEachIndexed { index, checkin ->
+          val contactDetails = contactDetailsMap[checkin.offender.crn]
           try {
-            val contactDetails = contactDetailsMap[checkin.offender.crn]
+            practitionerReconciliationService.reconcile(checkin.offender, contactDetails)
+          } catch (e: DataAccessException) {
+            LOGGER.error("Failed to reconcile practitioner for checkin reminder {}; continuing with stored attribution", checkin.uuid, e)
+          }
+          try {
             val ineligibility = contactDetails?.let { checkinIneligibilityReason(checkin.offender, it) }
             val savedSelectionIsInactive =
               contactDetails != null &&

@@ -6,6 +6,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -13,6 +14,7 @@ import org.mockito.kotlin.same
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.test.util.ReflectionTestUtils
 import uk.gov.justice.digital.hmpps.esupervisionapi.config.AppConfig
 import uk.gov.justice.digital.hmpps.esupervisionapi.utils.CRN
@@ -30,6 +32,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.OffenderAuditEventType
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.CheckinCreationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinInterval
@@ -60,6 +63,9 @@ class CheckinCreationJobTest {
     on { saveAndFlush(any<JobLog>()) } doAnswer { it.arguments[0] as JobLog }
   }
   private val entityManager: EntityManager = mock()
+  private val practitionerReconciliationService: PractitionerReconciliationService = mock {
+    on { reconcile(any<Long>(), any<String>(), any<ContactDetails>()) } doAnswer { it.getArgument<String>(1) }
+  }
 
   private val job = CheckinCreationJob(
     clock,
@@ -74,6 +80,7 @@ class CheckinCreationJobTest {
     entityManager,
     chunkSize = 100,
     Duration.ofDays(3),
+    practitionerReconciliationService,
   )
 
   private val anEvent = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
@@ -274,6 +281,27 @@ class CheckinCreationJobTest {
     // reference identity (same()) rather than eq() to assert the correct offender each time.
     verify(deactivationService).deactivateOffender(same(ineligible), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     verify(checkinCreationService, times(1)).prepareCheckinForOffender(any(), any(), anyOrNull())
+  }
+
+  @Test
+  fun `a reconciliation failure does not prevent checkin creation`() {
+    val failing = offender("X000005")
+    val eligible = offender("X000006")
+    stubEligible(
+      listOf(failing, eligible),
+      mapOf(failing.crn to details(failing.crn, events = listOf(anEvent)), eligible.crn to details(eligible.crn, events = listOf(anEvent))),
+    )
+    doThrow(DataAccessResourceFailureException("database failure")).whenever(practitionerReconciliationService).reconcile(eq(failing.id), any(), any())
+
+    job.process()
+
+    verify(checkinCreationService).createCheckins(
+      argThat {
+        size == 2 &&
+          any { it.second.checkin.crn == failing.crn && it.second.practitionerId == failing.practitionerId } &&
+          any { it.second.checkin.crn == eligible.crn }
+      },
+    )
   }
 
   @Test

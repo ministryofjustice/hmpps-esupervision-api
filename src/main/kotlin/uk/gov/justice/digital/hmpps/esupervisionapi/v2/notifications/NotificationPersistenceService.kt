@@ -110,8 +110,12 @@ class NotificationPersistenceService(
     val notifications = mutableListOf<NotificationWithRecipient>()
     val channels = templateConfig.channels
     if (channels.practitionerEmailEnabled) {
-      if (contactDetails?.email == null) {
-        val reason = if (contactDetails == null) "details missing" else "no email"
+      if (contactDetails == null || contactDetails.unallocated == true || contactDetails.email.isNullOrBlank()) {
+        val reason = when {
+          contactDetails == null -> "details missing"
+          contactDetails.unallocated == true -> "unallocated"
+          else -> "no email"
+        }
         LOGGER.warn("NOTIFICATION_UNDELIVERABLE: [reason={} type={}, crn={}]", reason, notificationType, crn)
       } else {
         val emailTemplateId = templateConfig.templatesFor(Email(contactDetails.email)).getTemplate(notificationType)

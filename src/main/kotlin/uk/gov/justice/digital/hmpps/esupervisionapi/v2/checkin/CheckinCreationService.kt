@@ -18,6 +18,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckin
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderCheckinRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PartialCheckinCreatedEvent
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.audit.EventAuditService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.OffenderStatus
@@ -47,6 +48,7 @@ class CheckinCreationService(
   private val transactionTemplate: TransactionTemplate,
   private val checkinPersistenceService: CheckinPersistenceService,
   private val appConfig: AppConfig,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
 ) {
 
   val checkinWindowPeriod = Period.ofDays(checkinWindow.toDays().toInt())
@@ -106,13 +108,14 @@ class CheckinCreationService(
     createdBy: ExternalUserId,
     contactDetails: ContactDetails,
   ): OffenderCheckin? {
+    practitionerReconciliationService.reconcile(offender, contactDetails)
     val eventNumber = resolveEventNumber(offender.currentEvent, contactDetails)
     val scheduled = checkinRepository.findScheduledForOffenders(listOf(offender.id), dueDate).singleOrNull()
     val checkin = newOrActivatedCheckin(offender, dueDate, createdBy, scheduled)
 
     val event = PartialCheckinCreatedEvent(
       offenderId = checkin.offender.id,
-      practitionerId = checkin.createdBy,
+      practitionerId = offender.practitionerId,
       checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
       offenderContactPreference = checkin.offender.contactPreference,
       currentEvent = eventNumber,

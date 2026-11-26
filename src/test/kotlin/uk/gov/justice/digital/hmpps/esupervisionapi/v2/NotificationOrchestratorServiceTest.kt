@@ -366,6 +366,24 @@ class NotificationOrchestratorServiceTest {
       verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_CONTACT_DETAILS)
       verify(checkinLinkService).linkFailed(checkin.id, CheckinLinkService.NO_ACTIVE_EVENT)
     }
+
+    @Test
+    fun `failed invite with no practitioner builds an undeliverable notification`() {
+      whenever(checkinLinkService.linkFailed(any(), any())).thenReturn(true)
+      whenever(notificationPersistence.offenderChannelEnabled(any())).thenReturn(true)
+      whenever(notificationPersistence.buildOffenderNotifications(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+      service.sendCheckinCreatedNotifications(event(contactDetails = createContactDetails().copy(practitioner = null)))
+
+      verify(notificationPersistence).buildPractitionerNotifications(
+        eq(offender.id),
+        eq(offender.crn),
+        isNull(),
+        any(),
+        eq(NotificationType.PractitionerInviteIssueGeneric),
+        eq(offender.practitionerId),
+      )
+    }
   }
 
   @Test

@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.esupervisionapi.v2.jobs
 import jakarta.persistence.EntityManager
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.dao.DataAccessException
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
@@ -16,6 +17,7 @@ import uk.gov.justice.digital.hmpps.esupervisionapi.v2.INdiliusApiClient
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLog
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.JobLogRepository
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.OffenderRepository
+import uk.gov.justice.digital.hmpps.esupervisionapi.v2.PractitionerReconciliationService
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.checkin.nextCheckinDay
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.CheckinMode
 import uk.gov.justice.digital.hmpps.esupervisionapi.v2.domain.ExternalUserId
@@ -34,6 +36,7 @@ data class QuestionsReminderInfo(
 )
 
 private data class OffenderInfo(
+  val id: Long,
   val crn: CRN,
   val uuid: UUID,
   val practitioner: ExternalUserId,
@@ -61,6 +64,7 @@ class CustomQuestionsReminderJob(
   private val jobLogRepository: JobLogRepository,
   private val transactionTemplate: TransactionTemplate,
   private val entityManager: EntityManager,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
 ) {
 
   @Scheduled(cron = "\${app.scheduling.v2-practitioner-custom-questions-reminder.cron}")
@@ -93,7 +97,7 @@ class CustomQuestionsReminderJob(
           stream.asSequence()
             .chunked(INdiliusApiClient.MAX_BATCH_SIZE)
             .map { batch ->
-              val infosBatch = batch.map { OffenderInfo(it.crn, it.uuid, it.practitionerId, it.firstCheckin, it.checkinInterval, it.mode) }
+              val infosBatch = batch.map { OffenderInfo(it.id, it.crn, it.uuid, it.practitionerId, it.firstCheckin, it.checkinInterval, it.mode) }
               entityManager.flush()
               entityManager.clear()
               infosBatch
@@ -120,11 +124,17 @@ class CustomQuestionsReminderJob(
           }
           val contactDetails = crnToDetails[info.crn]
           if (contactDetails != null) {
+            val practitionerId = try {
+              practitionerReconciliationService.reconcile(info.id, info.practitioner, contactDetails)
+            } catch (e: DataAccessException) {
+              LOGGER.error("Failed to reconcile practitioner for custom questions reminder for CRN {}; continuing with stored attribution", info.crn, e)
+              info.practitioner
+            }
             val expectedCheckinDate = when (info.mode) {
               CheckinMode.SCHEDULED -> nextCheckinDay(info, today)
               CheckinMode.AD_HOC -> firstCheckin
             }
-            sendable.add(QuestionsReminderInfo(info.uuid, contactDetails, info.practitioner, expectedCheckinDate))
+            sendable.add(QuestionsReminderInfo(info.uuid, contactDetails, practitionerId, expectedCheckinDate))
           }
           if (contactDetails == null) {
             unsendable.add(info.crn)

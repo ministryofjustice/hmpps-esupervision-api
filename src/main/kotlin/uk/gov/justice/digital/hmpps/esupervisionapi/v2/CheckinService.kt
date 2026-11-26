@@ -79,6 +79,8 @@ class CheckinService(
   // expiry journeys can be tested without waiting. Shares the manual job trigger switch.
   @param:Value("\${app.jobs.manual-trigger.enabled:false}")
   private val allowPastDueDate: Boolean,
+  private val practitionerReconciliationService: PractitionerReconciliationService,
+  private val checkinContactDetailsService: CheckinContactDetailsService,
 ) {
 
   private val checkinWindowPeriod = Period.ofDays(gracePeriodDays)
@@ -93,7 +95,7 @@ class CheckinService(
     // Fetch personal details if requested
     val personalDetails =
       if (includePersonalDetails) {
-        ndiliusApiClient.getContactDetails(checkin.offender.crn)
+        checkinContactDetailsService.getContactDetails(checkin.offender)
       } else {
         null
       }
@@ -233,7 +235,7 @@ class CheckinService(
   fun submitCheckin(uuid: UUID, request: SubmitCheckinRequest): CheckinDto {
     val maybeCheckin = checkinPersistenceService.findCheckin(uuid)
     val checkin = validateCheckinForSubmission(uuid, maybeCheckin)
-    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val contactDetails = checkinContactDetailsService.getContactDetails(checkin.offender)
     val ineligibility = contactDetails?.let { checkinIneligibilityReason(checkin.offender, it) }
     if (ineligibility != null) {
       throw ResponseStatusException(
@@ -378,10 +380,9 @@ class CheckinService(
       )
     }
 
+    val personalDetails = checkinContactDetailsService.getContactDetails(checkin.offender)
     checkin.reviewStartedAt = clock.instant()
     checkin.reviewStartedBy = practitionerId
-
-    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
     return checkin.dto(personalDetails, videoUrl, snapshotUrl, clock = clock, checkinWindow = checkinWindowPeriod)
@@ -394,7 +395,7 @@ class CheckinService(
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin must be submitted or expired before being reviewed. Current status: ${checkin.status}")
     }
 
-    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val contactDetails = checkinContactDetailsService.getContactDetails(checkin.offender)
     val videoUrl = s3UploadService.getCheckinVideo(checkin)
     val snapshotUrl = s3UploadService.getCheckinSnapshot(checkin, 0)
 
@@ -427,8 +428,8 @@ class CheckinService(
       )
     }
 
+    val personalDetails = checkinContactDetailsService.getContactDetails(checkin.offender)
     checkin.sensitive = checkin.sensitive || request.sensitive
-    val personalDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
     val event = PartialCheckinAnnotatedEvent(
       checkinId = checkin.id,
       offenderId = checkin.offender.id,
@@ -459,7 +460,7 @@ class CheckinService(
       throw ResponseStatusException(HttpStatus.CONFLICT, "Checkin cannot be cancelled. Current status: $shownStatus")
     }
 
-    val contactDetails = ndiliusApiClient.getContactDetails(checkin.offender.crn)
+    val contactDetails = checkinContactDetailsService.getContactDetails(checkin.offender)
     val cancellation = CheckinCancellation(
       cancelledBy = request.cancelledBy,
       cancelledAt = clock.instant(),
@@ -999,7 +1000,7 @@ class CheckinService(
       LOGGER.warn("DEBUG: Creating checkin for offender {} with past due date {}", offender.uuid, dueDate)
     }
 
-    val personalDetails = ndiliusApiClient.getContactDetails(offender.crn)
+    val personalDetails = checkinContactDetailsService.getContactDetails(offender)
       ?: throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Failed to fetch contact details for CRN=${offender.crn}")
     if (activeEventNumber(offender, personalDetails, appConfig.esup2305DeliusEventSelection) == null) {
       throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Offender has no active event")
@@ -1031,6 +1032,7 @@ class CheckinService(
       }
 
     val offender = checkin.offender
+    practitionerReconciliationService.reconcile(offender, contactDetails)
     val currentEvent = if (contactDetails == null) {
       offender.currentEvent
     } else {
@@ -1044,7 +1046,7 @@ class CheckinService(
       val event = CheckinCreatedEvent(
         checkinId = checkin.id,
         offenderId = checkin.offender.id,
-        practitionerId = checkin.createdBy,
+        practitionerId = checkin.offender.practitionerId,
         checkin = checkin.dto(contactDetails, clock = clock, checkinWindow = checkinWindowPeriod),
         offenderContactPreference = checkin.offender.contactPreference,
         currentEvent = currentEvent,
@@ -1085,6 +1087,7 @@ class CheckinService(
         null
       }
 
+    practitionerReconciliationService.reconcile(checkin.offender, contactDetails)
     if (contactDetails != null) {
       notificationService.sendReminderCheckinNotifications(checkin, contactDetails)
     } else {
