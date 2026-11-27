@@ -16,7 +16,7 @@ import java.util.concurrent.CompletionException
  *
  * The rules run in order and the first one to decide wins:
  *
- *  1. Records, whatever the tier - no active sentence, suspended (in reset), not on a supervision
+ *  1. Records, whatever the tier - deceased, no active sentence, suspended (in reset), not on a supervision
  *     package, recalled, no tier, provisional tier, final third, no practitioner.
  *  2. The practitioner's device restriction answer.
  *  3. Tier D to G - eligible.
@@ -55,6 +55,11 @@ class OffenderEligibilityRulesIT : IntegrationTestBase() {
 
   @Nested
   inner class `Ruled out by their records, whatever their tier` {
+    @Test
+    fun `has a date of death`() {
+      assertThat(decide(tierD.copy(dateOfDeath = java.time.LocalDate.of(2026, 3, 4)))).isEqualTo(notEligible("IS_ALIVE"))
+    }
+
     @Test
     fun `no active sentence`() {
       assertThat(decide(tierD.copy(hasActiveSentence = false))).isEqualTo(notEligible("HAS_ACTIVE_EVENT"))
@@ -262,6 +267,7 @@ class OffenderEligibilityRulesIT : IntegrationTestBase() {
     val tierProvisional: Boolean = false,
     val hasActiveSentence: Boolean = true,
     val suspended: Boolean = false,
+    val dateOfDeath: java.time.LocalDate? = null,
     val practitionerAssigned: Boolean = true,
     val onSupervisionPackage: Boolean = true,
     val recalled: Boolean = false,
@@ -291,6 +297,7 @@ class OffenderEligibilityRulesIT : IntegrationTestBase() {
   private fun decide(person: Person): Decision {
     val data: MutableMap<String, Map<String, Any?>> = mutableMapOf(
       "NDELIUS" to mapOf(
+        "DECEASED_DATE" to person.dateOfDeath,
         "ACTIVE_EVENT" to (if (person.hasActiveSentence) "event 1" else null),
         "CONTACT_SUSPENDED" to person.suspended,
         "PRACTITIONER_ASSIGNED" to person.practitionerAssigned,

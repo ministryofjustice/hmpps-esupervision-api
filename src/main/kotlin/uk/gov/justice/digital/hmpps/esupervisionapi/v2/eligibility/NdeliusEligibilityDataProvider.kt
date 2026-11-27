@@ -31,6 +31,8 @@ class NdeliusEligibilityDataProvider(
 }
 
 fun ContactDetails.eligibilityData(): Map<String, Any?> = mapOf(
+  // Always present, null when NDelius returns no dateOfDeath, so the person counts as alive rather than as missing data.
+  "DECEASED_DATE" to this.dateOfDeath,
   "ACTIVE_EVENT" to this.events.firstOrNull(),
   "CONTACT_SUSPENDED" to this.contactSuspended,
   "PRACTITIONER_ASSIGNED" to (this.allocatedPractitionerUsername() != null),

@@ -144,6 +144,7 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
             outcome = EligibilityCheckResponseOutcome.UNKNOWN,
             message = "John Doe may be eligible for online check ins.",
             allRules = listOf(
+              RuleResult("NDELIUS", "IS_ALIVE", "DECEASED_DATE", CONTINUE),
               RuleResult("NDELIUS", "HAS_ACTIVE_EVENT", "ACTIVE_EVENT", CONTINUE),
               RuleResult("NDELIUS", "IS_CONTACT_SUSPENDED", "CONTACT_SUSPENDED", CONTINUE),
               RuleResult("TIER", "IS_TIER_MISSING", "TIER", CONTINUE),
@@ -195,12 +196,42 @@ class OffenderResourceEligibilityIT : IntegrationTestBase() {
         assertThat(response.message).isEqualTo("No active sentence.")
         assertThat(response.allRules)
           .noneMatch { it.source == "MANUAL" }
-          .first().isEqualTo(
+          .element(1).isEqualTo(
             RuleResult("NDELIUS", "HAS_ACTIVE_EVENT", "ACTIVE_EVENT", NOT_ELIGIBLE, "No active sentence."),
           )
       }
 
     verifySourcesFetchedOnce()
+  }
+
+  @Test
+  fun `getEligibilityByCrn with itemise true is ineligible when NDelius has a date of death`() {
+    upstreams.stubFor(
+      get(urlEqualTo("/case/$crn")).atPriority(1).willReturn(
+        json(
+          """
+          {
+            "crn": "$crn",
+            "name": {"forename": "John", "surname": "Doe"},
+            "dateOfBirth": "1980-01-01",
+            "dateOfDeath": "2026-03-04",
+            "practitioner": {"code": "N01A001", "name": {"forename": "Jane", "surname": "Smith"}, "username": "JANE.SMITH"},
+            "events": [{"number": 1, "mainOffence": {"code": "001", "description": "An offence"}, "sentence": null}]
+          }
+          """.trimIndent(),
+        ),
+      ),
+    )
+
+    fetchEligibility(crn, itemise = true)
+      .expectStatus().isOk
+      .expectBody(EligibilityCheckResponse::class.java)
+      .value { response ->
+        assertNotNull(response)
+        assertThat(response.outcome).isEqualTo(EligibilityCheckResponseOutcome.INELIGIBLE)
+        assertThat(response.allRules).first().extracting { it.code to it.outcome }.isEqualTo("IS_ALIVE" to NOT_ELIGIBLE)
+        assertThat(response.message).isEqualTo("John Doe is not eligible for online check ins because they have passed away.")
+      }
   }
 
   @Test

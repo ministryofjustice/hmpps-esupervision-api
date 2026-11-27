@@ -205,3 +205,5 @@ databaseChangeLog:
       file: db/changelog/changesets/102_eligibility_package_and_pilot_practitioner_rules.sql
   - include:
       file: db/changelog/changesets/103_recalled_eligibility_message.sql
+  - include:
+      file: db/changelog/changesets/104_eligibility_deceased_rule.sql

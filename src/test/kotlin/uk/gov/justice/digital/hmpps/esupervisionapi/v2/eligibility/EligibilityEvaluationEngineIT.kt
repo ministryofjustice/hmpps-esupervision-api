@@ -21,6 +21,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
 
     assertThat(rules).extracting<String> { it.code }
       .containsExactly(
+        "IS_ALIVE",
         "HAS_ACTIVE_EVENT",
         "IS_CONTACT_SUSPENDED",
         "IS_TIER_MISSING",
@@ -45,6 +46,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
     assertThat(rules.associate { it.code to it.deliusOutcomeCode })
       .containsExactlyEntriesOf(
         linkedMapOf(
+          "IS_ALIVE" to "ESPDT",
           "HAS_ACTIVE_EVENT" to "ESPNA",
           "IS_CONTACT_SUSPENDED" to "ESPRS",
           "IS_TIER_MISSING" to "ESPME",
@@ -85,6 +87,7 @@ class EligibilityEvaluationEngineIT : IntegrationTestBase() {
     val prePopulatedCache: MutableMap<String, CompletableFuture<Map<String, Any?>>> = mutableMapOf(
       "NDELIUS" to CompletableFuture.completedFuture(
         mapOf(
+          "DECEASED_DATE" to null,
           "ACTIVE_EVENT" to Any(),
           "PRACTITIONER_ASSIGNED" to true,
           "CONTACT_SUSPENDED" to false,
