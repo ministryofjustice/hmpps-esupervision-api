@@ -26,6 +26,7 @@ class WebClientConfiguration(
   @Value("\${api.base.url.manage-users-api}") val manageUsersApiBaseUri: String,
   @Value("\${api.base.url.ndilius-api}") val ndiliusApiBaseUri: String,
   @Value("\${api.base.url.tier-api}") val tierApiBaseUri: String,
+  @Value("\${api.base.url.offender-photo-api}") val offenderPhotoApiBaseUri: String,
   @Value("\${api.base.url.arns-api}") val arnsApiBaseUri: String,
   @Value("\${api.base.url.supervision-packages-api}") val supervisionPackagesApiBaseUri: String,
   @Value("\${hmpps-auth.url}") val hmppsAuthBaseUri: String,
@@ -172,6 +173,29 @@ class WebClientConfiguration(
     Duration.ofMillis(eligibilitySourceTimeoutMs),
   )
 
+  @Bean
+  fun offenderPhotoApiWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    authorizedClientService: OAuth2AuthorizedClientService,
+    builder: WebClient.Builder,
+  ): WebClient = builder
+    .filters {
+      it.add(
+        ExchangeFilterFunction.ofRequestProcessor { req ->
+          log.info("Requesting Offender Photo API URL: {}", req.url())
+          Mono.just(req)
+        },
+      )
+      it.add(RefreshTokenOnUnauthorizedFilter(OFFENDER_PHOTO_API_REGISTRATION_ID, authorizedClientService))
+      it.add(BackgroundClientCredentialsFilter(OFFENDER_PHOTO_API_REGISTRATION_ID, authorizedClientManager))
+    }
+    .pooledAuthorisedWebClient(
+      authorizedClientManager,
+      registrationId = OFFENDER_PHOTO_API_REGISTRATION_ID,
+      url = offenderPhotoApiBaseUri,
+      timeout = timeout,
+    )
+
   private fun buildTierApiWebClient(
     authorizedClientManager: OAuth2AuthorizedClientManager,
     authorizedClientService: OAuth2AuthorizedClientService,
@@ -290,6 +314,7 @@ class WebClientConfiguration(
       .withResolvedProxy()
 
     private const val TIER_API_REGISTRATION_ID = "tier-api"
+    private const val OFFENDER_PHOTO_API_REGISTRATION_ID = "offender-photo-api"
     private const val NDILIUS_API_REGISTRATION_ID = "ndilius-api"
     private const val MANAGE_USERS_API_REGISTRATION_ID = "manage-users-api"
     private const val ARNS_API_REGISTRATION_ID = "arns-api"
