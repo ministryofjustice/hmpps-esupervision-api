@@ -1,7 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.photos.s3
 
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
@@ -19,12 +21,17 @@ import java.time.Duration
 import java.util.UUID
 
 @Service
+@ConditionalOnProperty(name = ["app.features.esup-2349"], havingValue = "false", matchIfMissing = true)
 internal class S3OffenderPhotoClient(
   @Qualifier("MOJ") private val s3Client: S3Client,
   private val presigner: S3Presigner,
   @Value("\${aws.s3.image-uploads}") private val bucket: String,
   private val versionPurger: S3VersionPurger,
 ) : OffenderPhotoClient {
+  init {
+    LoggerFactory.getLogger(javaClass).info("Using S3OffenderPhotoClient")
+  }
+
   override fun presignUpload(offenderUuid: UUID, contentType: String, duration: Duration, checksumSha256Base64: String): OffenderPhotoUpload {
     val upload = presigner.presignPut(bucket, photoKey(offenderUuid), contentType, duration, checksumSha256Base64)
     return OffenderPhotoUpload(upload.url, upload.requiredHeaders)

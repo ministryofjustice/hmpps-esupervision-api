@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add the eSupervision roles to the local HMPPS Auth clients and services."""
+"""Ensure eSupervision roles and read/write scopes in local HMPPS Auth."""
 
 import argparse
 import getpass
@@ -16,6 +16,7 @@ BASE_URL = "http://localhost:8090/auth"
 CLIENT_ID = "hmpps-typescript-template-system"
 CLIENT_PATH = f"/new-ui/clients/{CLIENT_ID}"
 AUTHORITY = "ESUPERVISION__ESUPERVISION_UI"
+REQUIRED_SCOPES = {"read", "write"}
 SERVICE_CODE = "hmpps-typescript-template"
 SERVICE_FORM_PATH = "/ui/services/form"
 SERVICE_ROLE = "ESUPERVISION__PRACTITIONER__RW"
@@ -136,8 +137,8 @@ class LocalAuth:
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise SetupError(f"Cannot reach local Auth at {BASE_URL}: {error.reason if isinstance(error, urllib.error.URLError) else error}") from error
 
-    def client_form(self):
-        path = CLIENT_PATH + "/details"
+    def client_form(self, client_id=CLIENT_ID):
+        path = "/new-ui/clients/" + urllib.parse.quote(client_id, safe="") + "/details"
         url, html = self.request(path)
         if url != BASE_URL + path:
             raise SetupError("Could not access client details. Check admin login.")
@@ -147,7 +148,7 @@ class LocalAuth:
             "jiraNumber", "validDays", "ips", "authorities", "databaseUserName",
         ):
             one_value(fields, name)
-        if fields["clientId"] != [CLIENT_ID] or fields["grantType"] != ["client_credentials"]:
+        if fields["clientId"] != [client_id] or fields["grantType"] != ["client_credentials"]:
             raise SetupError("Unexpected client identity or grant type; no update submitted.")
         return fields
 
@@ -161,25 +162,41 @@ class LocalAuth:
         if urllib.parse.urlsplit(url).path == "/auth/sign-in":
             raise SetupError("Admin login failed. Check username and password.")
 
-    def configure(self, username, password):
+    def configure(self, username, password, client_id=CLIENT_ID):
         self.login(username, password)
-        return self.configure_client(), self.configure_service()
+        clients = {
+            target: self.configure_client(target)
+            for target in dict.fromkeys((CLIENT_ID, client_id))
+        }
+        return clients, self.configure_service()
 
-    def configure_client(self):
-        before = self.client_form()
+    def configure_client(self, client_id=CLIENT_ID):
+        before = self.client_form(client_id)
         existing = one_value(before, "authorities")
-        if AUTHORITY in authorities(existing):
+        existing_scopes = one_value(before, "scopes")
+        missing_scopes = REQUIRED_SCOPES - authorities(existing_scopes)
+        if AUTHORITY in authorities(existing) and not missing_scopes:
             return False
         updated = dict(before)
-        updated["authorities"] = [existing.rstrip() + ("\n" if existing.strip() else "") + AUTHORITY]
-        url, _ = self.request(CLIENT_PATH + "/details", updated)
-        if url != BASE_URL + CLIENT_PATH:
+        if AUTHORITY not in authorities(existing):
+            updated["authorities"] = [existing.rstrip() + ("\n" if existing.strip() else "") + AUTHORITY]
+        if missing_scopes:
+            updated["scopes"] = [
+                existing_scopes.rstrip()
+                + (", " if existing_scopes.strip() else "")
+                + ", ".join(sorted(missing_scopes))
+            ]
+        client_path = "/new-ui/clients/" + urllib.parse.quote(client_id, safe="")
+        url, _ = self.request(client_path + "/details", updated)
+        if url != BASE_URL + client_path:
             raise SetupError("Auth did not confirm the save. Check the client form for validation errors.")
 
-        after = self.client_form()
+        after = self.client_form(client_id)
         if authorities(one_value(after, "authorities")) != authorities(existing) | {AUTHORITY}:
             raise SetupError("Saved authorities do not match the requested update.")
-        for name in (before.keys() | after.keys()) - {"_csrf", "authorities"}:
+        if authorities(one_value(after, "scopes")) != authorities(existing_scopes) | REQUIRED_SCOPES:
+            raise SetupError("Saved scopes do not match the requested update.")
+        for name in (before.keys() | after.keys()) - {"_csrf", "authorities", "scopes"}:
             if before.get(name) != after.get(name):
                 raise SetupError(f"Client setting {name} changed unexpectedly; inspect the Auth UI.")
         return True
@@ -234,7 +251,13 @@ class LocalAuth:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--username", default="AUTH_ADM", help="Local Auth admin (default: AUTH_ADM)")
+    parser.add_argument(
+        "--client-id", default=os.environ.get("API_CLIENT_ID", CLIENT_ID),
+        help="Existing outbound client to configure in addition to the UI client (default: API_CLIENT_ID or the UI client)",
+    )
     args = parser.parse_args()
+    if not args.client_id.strip():
+        parser.error("The client ID must not be empty.")
     password = os.environ.get("HMPPS_AUTH_PASSWORD") or "password123456"
     # if password is None:
     #     if not sys.stdin.isatty():
@@ -243,12 +266,13 @@ def main():
     # if not password:
     #     parser.error("The admin password must not be empty.")
     try:
-        client_changed, service_changed = LocalAuth().configure(args.username, password)
+        clients, service_changed = LocalAuth().configure(args.username, password, args.client_id)
     except SetupError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
     status = {True: "added and verified", False: "already configured"}
-    print(f"{CLIENT_ID} client authority: {AUTHORITY} {status[client_changed]}.")
+    for client_id, changed in clients.items():
+        print(f"{client_id} client authority {AUTHORITY} and scopes read/write: {status[changed]}.")
     print(f"{SERVICE_CODE} service (enabled, role {SERVICE_ROLE}): {status[service_changed]}.")
     return 0
 

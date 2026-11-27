@@ -11,11 +11,11 @@ Authorization: Bearer {{hmpps_auth.token}}
 
 {
   "setupUuid": "{{$uuid}}",
-  "practitionerId": "??",
-  "crn": "X000004",
-  "firstCheckin": "2025-01-01",
+  "practitionerId": "HTTP.CLIENT",
+  "crn": "X000001",
+  "firstCheckin": "2026-11-28",
   "checkinInterval": "WEEKLY",
-  "contactPreference": "PHONE"
+  "contactPreference": "EMAIL"
 }
 
 > {%
@@ -27,7 +27,36 @@ Authorization: Bearer {{hmpps_auth.token}}
     }
 %}
 
-### Upload offender's reference image
+### [PHOTO API] Get upload location
+POST {{HOST_PHOTO_API}}/v1/offenders/by-uuid/{{offender_uuid}}/photo/reference/upload-location?content-type=image/png
+Authorization: Bearer {{hmpps_auth.token}}
+Content-Type: application/json
+
+{
+  "sha256": "NDNjODI4MDk4NTkyYTMyYzk1MDU4ZGRlZWY0MTkzMTZiMzhmNjEzMmM3MDljZDIzMGUyOTM3M2U0MmUxZDM3OQo="
+}
+
+> {%
+    client.global.set("photo_upload_url", response.body.url)
+    client.global.set("photo_upload_content_type", response.body.contentType)
+    client.global.set("photo_upload_required_headers", response.body.requiredHeaders)
+    Object.entries(response.body.requiredHeaders || {}).forEach(([name, value]) => {
+        client.global.headers.set(name, value)
+    })
+%}
+
+### [PHOTO API] Upload offender's reference image
+PUT {{photo_upload_url}}
+Content-Type: {{photo_upload_content_type}}
+
+< /Users/YOUR.NAME/Desktop/correct.png
+
+> {%
+    client.log("HELLO", client.global.get("photo_upload_required_headers"))
+    client.global.headers.set("x-amz-checksum-sha256", null)
+%}
+
+### [DEPRECATED] Upload offender's reference image
 PUT http://localhost:4566/image-uploads/setup-{{offender_uuid}}
 Content-Type: image/png
 
