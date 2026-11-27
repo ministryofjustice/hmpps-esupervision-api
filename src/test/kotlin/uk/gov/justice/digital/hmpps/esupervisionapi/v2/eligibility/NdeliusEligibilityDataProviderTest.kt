@@ -1,8 +1,9 @@
 package uk.gov.justice.digital.hmpps.esupervisionapi.v2.eligibility
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
@@ -32,17 +33,16 @@ class NdeliusEligibilityDataProviderTest {
     assertEquals("NDELIUS", provider.sourceKey)
   }
 
-  @Disabled("deceasedDate not yet available in NDelius integration")
   @Test
-  fun `fetch maps deceasedDate and current event from contact details`() {
+  fun `fetch maps dateOfDeath and current event from contact details`() {
     val event = Event(number = 1L, mainOffence = CodedDescription("X", "An offence"), sentence = null)
-    whenever(ndiliusApiClient.getContactDetails("X123456")).thenReturn(
+    whenever(ndiliusApiClient.getContactDetailsStrict("X123456")).thenReturn(
       ContactDetails(
         crn = "X123456",
         name = Name("John", "Doe"),
         dateOfBirth = LocalDate.of(1980, 1, 1),
         events = listOf(event),
-        // deceasedDate = LocalDate.of(2024, 1, 1),
+        dateOfDeath = LocalDate.of(2024, 1, 1),
       ),
     )
 
@@ -50,6 +50,18 @@ class NdeliusEligibilityDataProviderTest {
 
     assertEquals(LocalDate.of(2024, 1, 1), result["DECEASED_DATE"])
     assertEquals(event, result["ACTIVE_EVENT"])
+  }
+
+  @Test
+  fun `DECEASED_DATE is present and null when NDelius returns no dateOfDeath`() {
+    whenever(ndiliusApiClient.getContactDetailsStrict("X123456")).thenReturn(
+      ContactDetails(crn = "X123456", name = Name("John", "Doe"), dateOfBirth = LocalDate.of(1980, 1, 1)),
+    )
+
+    val result = provider.fetch("X123456").join()
+
+    assertTrue(result.containsKey("DECEASED_DATE"))
+    assertNull(result["DECEASED_DATE"])
   }
 
   @Test
